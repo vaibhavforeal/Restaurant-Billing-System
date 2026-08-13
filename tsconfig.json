@@ -8,8 +8,7 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@forkflow/sync": ["packages/sync/src/index.ts"],
-      "@forkflow/db": ["packages/db/src/index.ts"],
+      "@forkflow/domain": ["packages/domain/src/index.ts"],
       "@forkflow/core": ["packages/core/src/index.ts"]
     }
   },

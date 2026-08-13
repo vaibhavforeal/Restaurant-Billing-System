@@ -7,14 +7,12 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: {
-      "@forkflow/sync": pkg("sync"),
-      "@forkflow/db": pkg("db"),
+      "@forkflow/domain": pkg("domain"),
       "@forkflow/core": pkg("core"),
     },
   },
   test: {
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"],
-    // Sync tests spin up in-process Postgres (PGlite) + SQLite; give them room.
     testTimeout: 30_000,
   },
 });
