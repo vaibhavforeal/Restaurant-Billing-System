@@ -12,5 +12,6 @@
       "@forkflow/core": ["packages/core/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"]
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"],
+  "exclude": ["apps/ui"]
 }
