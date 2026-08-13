@@ -32,6 +32,17 @@ function startServer(): void {
     console.error(`server exited (code ${code}); restarting in ${delay}ms`);
     setTimeout(startServer, delay);
   });
+  server.on("error", (err) => {
+    if (quitting) return;
+    console.error("server spawn failed:", err);
+    if (restarts >= MAX_RESTARTS) {
+      app.quit();
+      return;
+    }
+    const delay = 500 * 2 ** restarts;
+    restarts += 1;
+    setTimeout(startServer, delay);
+  });
 }
 
 async function waitForHealth(timeoutMs = 15_000): Promise<void> {
@@ -39,7 +50,11 @@ async function waitForHealth(timeoutMs = 15_000): Promise<void> {
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`${SERVER_URL}/api/health`);
-      if (res.ok) return;
+      if (res.ok) {
+        // Reset restart counter on successful health check
+        restarts = 0;
+        return;
+      }
     } catch {
       /* not up yet */
     }

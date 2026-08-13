@@ -65,4 +65,10 @@ describe("migrate", () => {
     const db = openDb(":memory:");
     expect(() => migrate(db, [m2, m1])).toThrow(/order/i);
   });
+
+  it("rejects migrations with version < 1", () => {
+    const db = openDb(":memory:");
+    const zero: Migration = { version: 0, name: "zero", up: () => {} };
+    expect(() => migrate(db, [zero])).toThrow(/version 0 < 1/);
+  });
 });

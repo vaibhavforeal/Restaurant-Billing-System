@@ -12,6 +12,11 @@ export interface Migration {
  * migration it did not finish.
  */
 export function migrate(db: Database, migrations: Migration[]): void {
+  for (const m of migrations) {
+    if (m.version < 1) {
+      throw new Error(`migration ${m.name} has version ${m.version} < 1`);
+    }
+  }
   for (let i = 1; i < migrations.length; i++) {
     const prev = migrations[i - 1]!;
     const cur = migrations[i]!;

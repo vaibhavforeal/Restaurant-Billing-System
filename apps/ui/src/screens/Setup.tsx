@@ -26,7 +26,7 @@ export function Setup({ onDone }: { onDone: (user: User) => void }) {
       <h1>Set up ForkFlow</h1>
       <input placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
       <input placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
-      <input placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" onChange={(e) => setPin(e.target.value)} />
+      <input type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} />
       <button type="submit" style={{ padding: 12 }}>Start</button>
       <div style={{ color: "crimson" }}>{error}</div>
     </form>

@@ -29,5 +29,5 @@ const ROLES: Record<RoleName, Role> = {
 };
 
 export function roleFor(name: RoleName): Role {
-  return ROLES[name];
+  return ROLES[name] ?? { name, permissions: [] };
 }

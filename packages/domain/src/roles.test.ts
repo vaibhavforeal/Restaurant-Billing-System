@@ -33,4 +33,10 @@ describe("roleFor", () => {
     expect(can(kitchen, "orders.create")).toBe(false);
     expect(can(kitchen, "bills.create")).toBe(false);
   });
+
+  it("unknown role fails closed", () => {
+    const ghost = roleFor("ghost" as any);
+    expect(can(ghost, "orders.read")).toBe(false);
+    expect(can(ghost, "users.manage")).toBe(false);
+  });
 });
