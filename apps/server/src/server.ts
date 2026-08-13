@@ -1,6 +1,7 @@
 import type { Database } from "@forkflow/domain";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
+import { registerAuth } from "./auth.js";
 
 export interface ServerOptions {
   db: Database;
@@ -20,6 +21,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const message = typeof err === "object" && err !== null && "message" in err && typeof err.message === "string" ? err.message : "Internal server error";
     return reply.status(status).send({ error: message });
   });
+
+  registerAuth(app);
 
   app.get("/api/health", async () => ({ ok: true }));
 
