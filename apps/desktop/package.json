@@ -1,0 +1,15 @@
+{
+  "name": "@forkflow/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Thin Electron shell: supervises the server process and opens the POS window.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^43.4.0"
+  }
+}
