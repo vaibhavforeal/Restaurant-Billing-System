@@ -9,8 +9,8 @@ Pivot ForkFlow away from the cloud-synced, AI-first PetPooja alternative to a **
 
 ## Current state
 
-- `main` is at `ae76602`; **39/39 vitest tests green, typecheck clean across all workspaces**, working tree clean. No feature branches left.
-- **No git remote is configured** — everything is local-only history.
+- `main` is at `ae76602` (+ handoff commit); **39/39 vitest tests green, typecheck clean across all workspaces**, working tree clean. No feature branches left.
+- Remote: `origin` = https://github.com/vaibhavforeal/Restaurant-Billing-System.git, `main` pushed and tracking (added at end of session).
 - Working software: `npm run dev` (Fastify :4100 + Vite :5173 hot reload) and `npm run dev:desktop` (Electron window supervising the real server). First run creates `data/forkflow.db` and shows the setup screen.
 - **Blocked on the human:** nobody has ever clicked through the UI in a real browser/Electron window (subagents verified via inject/curl/process checks only). Acceptance = `npm run dev:desktop`, then setup → logout → login.
 - Milestones 2–7 are unplanned by design (one plan per milestone, written when reached).
@@ -82,4 +82,4 @@ Pivot ForkFlow away from the cloud-synced, AI-first PetPooja alternative to a **
 2. **Write the M2 (Catalog) plan** with superpowers:writing-plans against spec §9.2: categories/products/variants CRUD + settings + users admin. Must include: PIN-uniqueness enforcement at user creation (and fix the auth.ts comment), permission-gated routes using the existing `requirePermission` slugs (`catalog.*`, `users.manage`, `settings.manage`), zod schemas in packages/domain, and UI screens following the existing screens/ pattern.
 3. **Execute M2** subagent-driven (same loop; watch for the model-alias failures above).
 4. Later milestones in spec order: M3 Tables+KOT (WebSocket layer arrives here), M4 Billing, M5 Inventory, M6 Resilience+packaging (electron-rebuild/utilityProcess decision lands here), M7 Recipes.
-5. Consider adding a git remote/backup — the entire project history currently lives on one disk, which contradicts the spec's own data-safety posture.
+5. ~~Consider adding a git remote/backup~~ Done end of session: pushed to GitHub (origin/main). Push future milestone merges.
