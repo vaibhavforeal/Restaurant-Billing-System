@@ -38,6 +38,7 @@ Principles:
 
 - **One database, one writer process.** Only the server touches SQLite. Every client — including the main PC's own Electron window — uses the same REST/WS API. No special data paths.
 - **Single-system first-class.** Install → open → bill on one PC with zero network configuration. LAN clients are additive; Settings shows the server's LAN URL (client PCs type/bookmark it once) plus a QR of the same URL for phones. Connecting is not authenticating — every device lands on the PIN screen.
+- **Client PCs get an app-like shell for free:** the connect screen offers a downloadable desktop shortcut that launches Edge in app mode (`msedge --app=<server URL>`) — standalone window, own icon, no browser chrome; optionally placed in Startup so a counter boots into the POS. A dedicated ~3–5MB WebView2/Tauri kiosk wrapper (lockdown: no Alt-F4/escape, server auto-discovery) is a deferred option if lockdown is demanded.
 - **Server-side printing.** Any client can print; the server renders and dispatches to printers. Browsers never need drivers.
 - **Auth everywhere.** PIN login (fast on touchscreens); roles `admin` / `cashier` / `waiter` / `kitchen` enforced server-side on every endpoint. LAN peers are not trusted.
 
@@ -144,7 +145,7 @@ Known platform limits accepted for v1: LAN clients run over plain `http://` (ser
 3. **Tables + KOT** — orders, WS live updates, kitchen display, KOT printing.
 4. **Billing** — GST bills, payments/settle, receipt printing, day-end report.
 5. **Inventory (simple)** — stock items, auto-deduction via links, adjustments, low-stock alerts.
-6. **Resilience + packaging** — draft queue polish, backups, watchdog, Windows installer (firewall rule, autostart), LAN connect screen (URL for client PCs, QR of the URL for phones).
+6. **Resilience + packaging** — draft queue polish, backups, watchdog, Windows installer (firewall rule, autostart), LAN connect screen (URL for client PCs + downloadable Edge app-mode shortcut, QR of the URL for phones).
 7. **Recipes** — multi-ingredient `product_stock_links` UI + units; schema already supports it.
 
 ## 10. Accepted trade-offs
