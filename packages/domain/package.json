@@ -6,5 +6,11 @@
   "description": "SQLite schema, migrations, and business logic for the local-only POS.",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
   }
 }
