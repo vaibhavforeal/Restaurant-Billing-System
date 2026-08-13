@@ -8,6 +8,7 @@ build/
 *.db-journal
 *.db-wal
 .forkflow/
+data/
 
 .env
 .env.*
