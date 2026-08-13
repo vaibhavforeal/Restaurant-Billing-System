@@ -13,8 +13,6 @@ interface ThrottleState {
   cooldownUntil: number;
 }
 
-const loginThrottle = new Map<string, ThrottleState>();
-
 export interface AuthedUser {
   id: string;
   name: string;
@@ -30,6 +28,9 @@ interface SessionRow {
 }
 
 export function registerAuth(app: FastifyInstance): void {
+  // Plugin-scoped: each server instance gets its own throttle state.
+  const loginThrottle = new Map<string, ThrottleState>();
+
   const createSession = (userId: string): string => {
     const token = randomBytes(32).toString("hex");
     const now = Date.now();

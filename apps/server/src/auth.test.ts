@@ -120,10 +120,10 @@ describe("login / me / logout", () => {
     const { token } = await setup(app);
 
     // browsers may send content-type: application/json on bodyless POSTs
+    // (no payload at all — vanilla Fastify 400s this with FST_ERR_CTP_EMPTY_JSON_BODY)
     const out = await app.inject({
       method: "POST", url: "/api/logout",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      payload: "",
     });
     expect(out.statusCode).toBe(204);
 
@@ -204,5 +204,15 @@ describe("login throttling", () => {
       remoteAddress: "192.168.1.99",
     });
     expect(otherIp.statusCode).toBe(200);
+
+    // a fresh app instance is unaffected (throttle state is plugin-scoped, not module-scoped)
+    const app2 = freshApp();
+    try {
+      await setup(app2);
+      const fresh = await app2.inject({ method: "POST", url: "/api/login", payload: { pin: "1234" } });
+      expect(fresh.statusCode).toBe(200);
+    } finally {
+      await app2.close();
+    }
   });
 });
