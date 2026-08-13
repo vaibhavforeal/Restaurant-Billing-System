@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@forkflow/sync": ["packages/sync/src/index.ts"],
+      "@forkflow/db": ["packages/db/src/index.ts"],
+      "@forkflow/core": ["packages/core/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"]
+}

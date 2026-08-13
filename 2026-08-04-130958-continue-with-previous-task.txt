@@ -1,0 +1,1656 @@
+╭─── Claude Code v2.1.219 ─────────────────────────────────────────────────────╮
+│                                                  │ Tips for getting started  │
+│                   Welcome back!                  │ Run /init to create a CL… │
+│                                                  │ ───────────────────────── │
+│                      ▐▛███▜▌                     │ What's new                │
+│                     ▝▜█████▛▘                    │ Added Claude Opus 5 (`cl… │
+│                       ▘▘ ▝▝                      │ Added `sandbox.network.s… │
+│                                                  │ Added `DirectoryAdded` h… │
+│            Opus 5 · Microsoft Foundry            │ /release-notes for more   │
+│   D:\Software Ideas\Restauarant Billing System   │                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ continue with previous task                                                   
+
+● I'll check the previous task state before continuing.
+
+  Read 2 files, listed 3 directories, recalled 4 memories (ctrl+o to expand)
+
+● Bash(if [ -n "$ANTHROPIC_API_KEY" ]; then echo "KEY: present"; else echo "KEY:
+      absent"; fi; command -v ant >/dev/null && echo "ant CLI: present" || echo
+      "ant CLI: ab…)
+  ⎿  KEY: absent
+     ant CLI: absent
+     v24.14.1
+     11.11.0
+
+  Read 1 file (ctrl+o to expand)
+
+● Picked up the state. Here's where things stand:
+
+  - PROJECT_PLAN.md — complete (positioning, parity map, AI layer, hybrid
+  SQLite+Postgres architecture, 8-phase roadmap, Phase 1 scope).
+  - spikes/menu-ingestion/ — code complete (vision + forced JSON schema +
+  in-code review/flag layer). Still blocked: no ANTHROPIC_API_KEY and no ant CLI
+  in this environment, and no real menu file to test against. That blocker is
+  unchanged from last session and only you can clear it.
+  - No application code exists yet — Phase 0 (monorepo + Drizzle dual-dialect
+  schema + sync) has not been started.
+
+  So the unblocked continuation is Phase 0. Two decisions from PROJECT_PLAN.md
+  §12 actually change what I scaffold, so let me settle those first.
+
+● User answered Claude's questions:
+  ⎿  · What should I continue with now? → Scaffold Phase 0 (Recommended)
+     · Which sync engine for the SQLite⇄Postgres hybrid? → Decide later — 
+     scaffold sync-agnostic
+
+● Both settled. Before writing code, loading the TDD skill since Phase 0 is
+  mostly logic (HLC clocks, outbox, conflict resolution) that must be provably
+  correct.
+
+● Skill(superpowers:test-driven-development)
+  ⎿  Successfully loaded skill
+
+● Scaffolding at the existing project root (so PROJECT_PLAN.md, spikes/, and the
+  code live in one repo rather than nesting a forkflow/ folder inside).
+
+● Write(package.json)
+  ⎿  Wrote 23 lines to package.json
+       1 {
+       2   "name": "forkflow",
+       3   "version": "0.0.0",
+       4   "private": true,
+       5   "type": "module",
+         d SQLite (terminal) + PostgreSQL (cloud).",
+       7   "workspaces": [
+       8     "packages/*",
+       9     "apps/*"
+      10   ],
+     … +14 lines (ctrl+o to expand)
+
+● Write(tsconfig.base.json)
+  ⎿  Wrote 20 lines to tsconfig.base.json
+       1 {
+       2   "$schema": "https://json.schemastore.org/tsconfig",
+       3   "compilerOptions": {
+       4     "target": "ES2023",
+       5     "lib": ["ES2023"],
+       6     "module": "NodeNext",
+       7     "moduleResolution": "NodeNext",
+       8     "strict": true,
+       9     "noUncheckedIndexedAccess": true,
+      10     "exactOptionalPropertyTypes": true,
+     … +10 lines (ctrl+o to expand)
+
+● Write(vitest.config.ts)
+  ⎿  Wrote 9 lines to vitest.config.ts
+      1 import { defineConfig } from "vitest/config";
+      2 
+      3 export default defineConfig({
+      4   test: {
+      5     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.tes
+      6     // Sync tests spin up in-process Postgres (PGlite) + SQLite; 
+        give them room.
+      7     testTimeout: 30_000,
+      8   },
+      9 });
+     … +1 line (ctrl+o to expand)
+
+● Write(packages\sync\package.json)
+  ⎿  Wrote 10 lines to packages\sync\package.json
+       1 {
+       2   "name": "@forkflow/sync",
+       3   "version": "0.0.0",
+       4   "private": true,
+       5   "type": "module",
+         rid logical clocks, outbox drain, pluggable transport.",
+       7   "exports": {
+       8     ".": "./src/index.ts"
+       9   }
+      10 }
+     … +1 line (ctrl+o to expand)
+
+● Write(packages\core\package.json)
+  ⎿  Wrote 10 lines to packages\core\package.json
+       1 {
+       2   "name": "@forkflow/core",
+       3   "version": "0.0.0",
+       4   "private": true,
+       5   "type": "module",
+         ission checks.",
+       7   "exports": {
+       8     ".": "./src/index.ts"
+       9   }
+      10 }
+     … +1 line (ctrl+o to expand)
+
+● Write(packages\db\package.json)
+  ⎿  Wrote 18 lines to packages\db\package.json
+       1 {
+       2   "name": "@forkflow/db",
+       3   "version": "0.0.0",
+       4   "private": true,
+       5   "type": "module",
+         ompiled to both SQLite (terminal) and PostgreSQL (cloud).",
+       7   "exports": {
+       8     ".": "./src/index.ts"
+       9   },
+      10   "dependencies": {
+     … +9 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npm install 2>&1 |
+      tail -25)
+  ⎿  npm error gyp ERR! find VS not looking for VS2013 as it is only suppor
+     ted up to Node.js 8
+     npm error gyp ERR! find VS
+     … +28 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● better-sqlite3 needs a C++ toolchain that isn't installed. Switching to
+  prebuilt/WASM drivers instead — no native build step, which is also better for
+  the eventual Tauri terminal.
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && rm -rf node_modules
+      package-lock.json && npm install drizzle-orm@latest --no-save
+      --prefer-offline 2>&1 | t…)  ⎿  Error: Permission to use Bash with command cd "D:/Software 
+     Ideas/Restauarant Billing System" && rm -rf node_modules package-lock.json 
+     && npm install drizzle-orm@latest --no-save --prefer-offline 2>&1 has been 
+     denied.
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && ls
+      node_modules/drizzle-orm 2>/dev/null | grep -iE "sqlite|pglite|libsql" ||
+      echo "drizzle-orm not installe…)
+  ⎿  drizzle-orm not installed
+
+● Update(packages\db\package.json)
+  ⎿  Added 2 lines, removed 5 lines
+       8      ".": "./src/index.ts"
+       9    },
+      10    "dependencies": {
+      11 -    "drizzle-orm": "^0.38.2"                                   
+      12 -  },                                                           
+      13 -  "devDependencies": {                                         
+      11      "@electric-sql/pglite": "^0.2.15",
+      15 -    "better-sqlite3": "^11.7.0",                               
+      16 -    "@types/better-sqlite3": "^7.6.12"                         
+      12 +    "@libsql/client": "^0.14.0",                               
+      13 +    "drizzle-orm": "^0.38.2"                                   
+      14    }
+      15  }
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npm install 2>&1 |
+      tail -12)
+  ⎿  added 74 packages, and audited 78 packages in 13s
+
+     15 packages are looking for funding
+     … +8 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && node -e
+      "console.log('drizzle-orm',
+      require('./node_modules/drizzle-orm/package.json').version)" && ls node…)
+  ⎿  drizzle-orm 0.38.4
+     better-sqlite3
+     libsql
+     … +9 lines (ctrl+o to expand)
+
+● Both drizzle-orm@0.38 and vitest@2 have advisories against them. Checking and
+  bumping before building on top of them.
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npm audit 2>&1 |
+      grep -A4 -E "^(drizzle-orm|vitest)" | head -30; echo "=== latest ==="; npm
+      view drizzle-or…)
+  ⎿  drizzle-orm  <0.45.2
+     Severity: high
+     Drizzle ORM has SQL injection via improperly escaped SQL identifiers -
+     … +6 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npm pkg set
+      devDependencies.vitest="^4.1.10" && npm pkg set
+      dependencies.drizzle-orm="^0.45.2" --workspace…)
+  ⎿  added 15 packages, removed 15 packages, changed 16 packages, and audit
+     ed 78 packages in 47s
+     … +6 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● Clean install, 0 vulnerabilities. Now the TypeScript/test wiring, then TDD the
+  sync primitives.
+
+● Write(tsconfig.json)
+  ⎿  Wrote 17 lines to tsconfig.json
+       1 {
+       2   "extends": "./tsconfig.base.json",
+       3   "compilerOptions": {
+       4     "composite": false,
+       5     "declaration": false,
+       6     "declarationMap": false,
+       7     "noEmit": true,
+       8     "types": ["node"],
+       9     "baseUrl": ".",
+      10     "paths": {
+     … +8 lines (ctrl+o to expand)
+
+● Write(vitest.config.ts)
+  ⎿  Added 11 lines
+       1 +import { fileURLToPath } from "node:url";                      
+       2  import { defineConfig } from "vitest/config";
+       3  
+       4 +const pkg = (name: string) =>                                  
+       5 +  fileURLToPath(new URL(`./packages/${name}/src/index.ts`, impo
+         +rt.meta.url));                                                 
+       6 +                                                               
+       7  export default defineConfig({
+       8 +  resolve: {                                                   
+       9 +    alias: {                                                   
+      10 +      "@forkflow/sync": pkg("sync"),                           
+      11 +      "@forkflow/db": pkg("db"),                               
+      12 +      "@forkflow/core": pkg("core"),                           
+      13 +    },                                                         
+      14 +  },                                                           
+      15    test: {
+      16      include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.t
+          est.ts"],
+      17      // Sync tests spin up in-process Postgres (PGlite) + SQLite
+          ; give them room.
+
+● Update(package.json)
+  ⎿  Added 1 line, removed 1 line
+      11    "scripts": {
+      12      "test": "vitest run",
+      13      "test:watch": "vitest",
+      14 -    "typecheck": "tsc --build",                                
+      14 +    "typecheck": "tsc --noEmit",                               
+      15      "demo": "tsx apps/terminal-demo/src/main.ts"
+      16    },
+      17    "devDependencies": {
+
+● RED #1 — UUIDv7 ids (the plan requires client-side, time-ordered,
+  collision-free ids so offline terminals never clash).
+
+● Write(packages\sync\src\id.test.ts)
+  ⎿  Wrote 8 lines to packages\sync\src\id.test.ts
+      1 import { expect, test } from "vitest";
+      2 import { uuidv7 } from "./id.js";
+      3 
+      4 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9
+        a-f]{3}-[0-9a-f]{12}$/;
+      5 
+      6 test("generates a well-formed RFC 9562 version-7 uuid", () => {
+      7   expect(uuidv7()).toMatch(UUID_V7);
+      8 });
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync 2>&1 | tail -20)
+  ⎿  ⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+      FAIL  packages/sync/src/id.test.ts [ packages/sync/src/id.test.ts ]
+     … +18 lines (ctrl+o to expand)
+
+● Red — module missing, as expected. GREEN:
+
+● Write(packages\sync\src\id.ts)
+  ⎿  Wrote 25 lines to packages\sync\src\id.ts
+       1 import { randomBytes } from "node:crypto";
+       2 
+       4  * RFC 9562 UUIDv7 — 48-bit big-endian millisecond timestamp + 7
+         4 random bits.
+       5  *
+          time-ordered so
+       7  * inserts stay index-friendly and rows sort by creation time wi
+         thout a join.
+       9 export function uuidv7(): string {
+      10   const bytes = randomBytes(16);
+     … +19 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync 2>&1 | tail -8)
+  ⎿   RUN  v4.1.10 D:/Software Ideas/Restauarant Billing System
+     … +5 lines (ctrl+o to expand)
+
+● Green. RED #2 — the behavior that actually matters: ids minted in the same
+  millisecond must still sort in creation order (a busy terminal fires many
+  writes per ms).
+
+● Update(packages\sync\src\id.test.ts)  ⎿  Added 6 lines
+       6  test("generates a well-formed RFC 9562 version-7 uuid", () => {
+       7    expect(uuidv7()).toMatch(UUID_V7);
+       8  });
+       9 +                                                               
+      10 +test("ids minted within the same millisecond still sort in crea
+         +tion order", () => {                                           
+      11 +  const ids = Array.from({ length: 1000 }, () => uuidv7());    
+      12 +                                                               
+      13 +  expect(ids).toStrictEqual([...ids].sort());                  
+      14 +});                                                            
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync 2>&1 | grep -E "AssertionError|✓|×|Tests " | head -10)
+  ⎿     × ids minted within the same millisecond still sort in creation ord
+     er 73ms
+     ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+     … +2 lines (ctrl+o to expand)
+
+● Red for the right reason. GREEN — monotonic counter in the random field:
+
+● Write(packages\sync\src\id.ts)
+  ⎿  Added 34 lines, removed 14 lines
+       1  import { randomBytes } from "node:crypto";
+       2  
+       3 +const RAND_BITS = 74n; // rand_a (12) + rand_b (62)            
+       4 +const RAND_MAX = (1n << RAND_BITS) - 1n;                       
+       5 +const RAND_B_MASK = (1n << 62n) - 1n;                          
+       6 +                                                               
+       7 +let lastMs = -1;                                               
+       8 +let lastRand = 0n;                                             
+       9 +                                                               
+      10 +function randomTail(): bigint {                                
+      11 +  return BigInt(`0x${randomBytes(10).toString("hex")}`) & RAND_
+         +MAX;                                                           
+      12 +}                                                              
+      13 +                                                               
+      14  /**
+       4 - * RFC 9562 UUIDv7 — 48-bit big-endian millisecond timestamp + 
+         -74 random bits.                                                
+      15 + * RFC 9562 UUIDv7 — 48-bit big-endian millisecond timestamp + 
+         +74 random bits,                                                
+      16 + * with the random field used as a monotonic counter inside a s
+         +ingle millisecond.                                             
+      17   *
+       6 - * Generated client-side so offline terminals never collide, an
+         -d time-ordered so                                              
+       7 - * inserts stay index-friendly and rows sort by creation time w
+         -ithout a join.                                                 
+      18 + * Generated client-side so offline terminals never collide, an
+         +d strictly                                                     
+      19 + * time-ordered so a burst of writes during service sorts in cr
+         +eation order and                                               
+      20 + * inserts stay index-friendly. A backwards clock step (NTP cor
+         +rection) does not                                              
+      21 + * break ordering: we hold the last timestamp and keep counting
+         +.                                                              
+      22   */
+      23  export function uuidv7(): string {
+      10 -  const bytes = randomBytes(16);                               
+      11 -  const ms = Date.now();                                       
+      24 +  const now = Date.now();                                      
+      25  
+      13 -  bytes[0] = (ms / 2 ** 40) & 0xff;                            
+      14 -  bytes[1] = (ms / 2 ** 32) & 0xff;                            
+      15 -  bytes[2] = (ms / 2 ** 24) & 0xff;                            
+      16 -  bytes[3] = (ms / 2 ** 16) & 0xff;                            
+      17 -  bytes[4] = (ms / 2 ** 8) & 0xff;                             
+      18 -  bytes[5] = ms & 0xff;                                        
+      26 +  if (now > lastMs) {                                          
+      27 +    lastMs = now;                                              
+      28 +    lastRand = randomTail();                                   
+      29 +  } else if (lastRand < RAND_MAX) {                            
+      30 +    lastRand += 1n;                                            
+      31 +  } else {                                                     
+      32 +    lastMs += 1; // counter exhausted within the millisecond — 
+         +borrow from the next                                           
+      33 +    lastRand = randomTail();                                   
+      34 +  }                                                            
+      35  
+      20 -  bytes[6] = 0x70 | (bytes[6]! & 0x0f); // version 7           
+      21 -  bytes[8] = 0x80 | (bytes[8]! & 0x3f); // variant 10          
+      36 +  const value =                                                
+      37 +    (BigInt(lastMs) << 80n) | // unix_ts_ms   bits 127..80     
+      38 +    (0x7n << 76n) | //          version       bits  79..76     
+      39 +    ((lastRand >> 62n) << 64n) | // rand_a    bits  75..64     
+      40 +    (0b10n << 62n) | //         variant       bits  63..62     
+      41 +    (lastRand & RAND_B_MASK); //  rand_b      bits  61..0      
+      42  
+      23 -  const hex = bytes.toString("hex");                           
+      43 +  const hex = value.toString(16).padStart(32, "0");            
+      44    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12
+          , 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      45  }
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync 2>&1 | grep -E "✓|×|Tests |AssertionError" | head)
+  ⎿        Tests  2 passed (2)
+
+● Green. RED #3 — the hybrid logical clock, which is what makes last-write-wins
+  correct across terminals whose clocks disagree.
+
+● Write(packages\sync\src\hlc.test.ts)
+  ⎿  Wrote 11 lines to packages\sync\src\hlc.test.ts
+       1 import { expect, test } from "vitest";
+       2 import { HybridLogicalClock } from "./hlc.js";
+       3 
+          stands still", () => {
+       5   const clock = new HybridLogicalClock({ nodeId: "term-1", now: 
+         () => 1_700_000_000_000 });
+       6 
+       8 
+       9   expect(stamps).toStrictEqual([...stamps].sort());
+      10   expect(new Set(stamps).size).toBe(3);
+     … +3 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync/src/hlc 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './hlc.js' imported from D:/Software Ideas/R
+     estauarant Billing System/packages/sync/src/hlc.test.ts
+           Tests  no tests
+
+● Write(packages\sync\src\hlc.ts)
+  ⎿  Wrote 39 lines to packages\sync\src\hlc.ts
+       1 export interface HybridLogicalClockOptions {
+       2   /** Stable identity of this terminal — the final tiebreaker be
+       3   nodeId: string;
+       4   now?: () => number;
+       5 }
+       7 /**
+       8  * Hybrid Logical Clock — a wall-clock timestamp with a logical 
+         counter attached.
+      10  * Terminals in a restaurant have no shared clock, so plain `upd
+         ated_at` cannot
+     … +38 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync/src/hlc 2>&1 | grep -E "✓|×|Tests |Error" | head -5)
+  ⎿        Tests  1 passed (1)
+
+● Green. RED #4 — it must actually track wall time and reset the counter when
+  time advances:
+
+● Update(packages\sync\src\hlc.test.ts)
+  ⎿  Added 12 lines
+       9    expect(stamps).toStrictEqual([...stamps].sort());
+      10    expect(new Set(stamps).size).toBe(3);
+      11  });
+      12 +                                                               
+      13 +test("adopts the wall clock and resets the counter when real ti
+         +me moves forward", () => {                                     
+      14 +  let wall = 1_000;                                            
+      15 +  const clock = new HybridLogicalClock({ nodeId: "term-1", now:
+         + () => wall });                                                
+      16 +                                                               
+      17 +  const before = clock.tick();                                 
+      18 +  wall = 2_000;                                                
+      19 +  const after = clock.tick();                                  
+      20 +                                                               
+      21 +  expect(after > before).toBe(true);                           
+      22 +  expect(after).toBe("0000000007d0-0000-term-1"); // 2000ms, co
+         +unter reset                                                    
+      23 +});                                                            
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync/src/hlc 2>&1 | grep -E "×|Tests |expected" | head -5)
+  ⎿     × adopts the wall clock and resets the counter when real time moves
+      forward 4ms
+     ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+     … +3 lines (ctrl+o to expand)
+
+● Update(packages\sync\src\hlc.ts)
+  ⎿  Added 8 lines, removed 1 line
+      25  
+      26    /** Stamp a local event. */
+      27    tick(): string {
+      28 -    this.#counter += 1;                                        
+      28 +    const wall = this.#now();                                  
+      29 +    if (wall > this.#millis) {                                 
+      30 +      this.#millis = wall;                                     
+      31 +      this.#counter = 0;                                       
+      32 +    } else {                                                   
+      33 +      // Wall clock stalled or stepped backwards — keep orderin
+         +g via the counter.                                             
+      34 +      this.#counter += 1;                                      
+      35 +    }                                                          
+      36      return encode(this.#millis, this.#counter, this.nodeId);
+      37    }
+      38  }
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync/src/hlc 2>&1 | grep -E "×|Tests |expected" | head -5)
+  ⎿        Tests  2 passed (2)
+
+● Green. RED #5 — the causality guarantee: a write made after seeing a remote
+  event must sort after it, even if the local clock lags.
+
+● Update(packages\sync\src\hlc.test.ts)
+  ⎿  Added 11 lines
+      21    expect(after > before).toBe(true);
+      22    expect(after).toBe("0000000007d0-0000-term-1"); // 2000ms, co
+          unter reset
+      23  });
+      24 +                                                               
+      25 +test("a write that observed a remote event sorts after it despi
+         +te a lagging local clock", () => {                             
+      26 +  const local = new HybridLogicalClock({ nodeId: "term-1", now:
+         + () => 1_000 });                                               
+      27 +  const remoteStamp = new HybridLogicalClock({ nodeId: "term-2"
+         +, now: () => 5_000 }).tick();                                  
+      28 +                                                               
+      29 +  const observed = local.receive(remoteStamp);                 
+      30 +  const next = local.tick();                                   
+      31 +                                                               
+      32 +  expect(observed > remoteStamp).toBe(true);                   
+      33 +  expect(next > observed).toBe(true);                          
+      34 +});                                                            
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync/src/hlc 2>&1 | grep -E "×|Tests |Error|is not a function" |
+      head -5)
+  ⎿     × a write that observed a remote event sorts after it despite a lag
+     ging local clock 2ms
+     ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+     … +2 lines (ctrl+o to expand)
+
+● Update(packages\sync\src\hlc.ts)
+  ⎿  Added 42 lines
+      35      }
+      36      return encode(this.#millis, this.#counter, this.nodeId);
+      37    }
+      38 +                                                               
+      39 +  /**                                                          
+      40 +   * Merge an incoming remote stamp, then stamp the local event
+         + that observed it.                                             
+      41 +   * Guarantees the returned stamp sorts after `remote`, which 
+         +is what encodes                                                
+      42 +   * happens-before across terminals that never agreed on a wal
+         +l clock.                                                       
+      43 +   */                                                          
+      44 +  receive(remote: string): string {                            
+      45 +    const { millis: remoteMillis, counter: remoteCounter } = de
+         +code(remote);                                                  
+      46 +    const wall = this.#now();                                  
+      47 +    const millis = Math.max(this.#millis, remoteMillis, wall); 
+      48 +                                                               
+      49 +    if (millis === this.#millis && millis === remoteMillis) {  
+      50 +      this.#counter = Math.max(this.#counter, remoteCounter) + 
+         +1;                                                             
+      51 +    } else if (millis === this.#millis) {                      
+      52 +      this.#counter += 1;                                      
+      53 +    } else if (millis === remoteMillis) {                      
+      54 +      this.#counter = remoteCounter + 1;                       
+      55 +    } else {                                                   
+      56 +      this.#counter = 0; // the local wall clock is ahead of ev
+         +erything seen so far                                           
+      57 +    }                                                          
+      58 +                                                               
+      59 +    this.#millis = millis;                                     
+      60 +    return encode(this.#millis, this.#counter, this.nodeId);   
+      61 +  }                                                            
+      62  }
+      63  
+      64 +export interface DecodedHlc {                                  
+      65 +  millis: number;                                              
+      66 +  counter: number;                                             
+      67 +  nodeId: string;                                              
+      68 +}                                                              
+      69 +                                                               
+      70 +export function decode(stamp: string): DecodedHlc {            
+      71 +  const [millis, counter, ...node] = stamp.split("-");         
+      72 +  if (millis === undefined || counter === undefined || node.len
+         +gth === 0) {                                                   
+      73 +    throw new Error(`Malformed HLC timestamp: "${stamp}"`);    
+      74 +  }                                                            
+      75 +  return {                                                     
+      76 +    millis: Number.parseInt(millis, 16),                       
+      77 +    counter: Number.parseInt(counter, 16),                     
+      78 +    nodeId: node.join("-"), // nodeIds may themselves contain "
+         +-"                                                             
+      79 +  };                                                           
+      80 +}                                                              
+      81 +                                                               
+      82  /**
+      83   * Encodes to a fixed-width, lexicographically sortable string 
+          so it can be
+      84   * ORDER BY'd directly in either dialect: `<48-bit ms hex>-<16-
+          bit counter hex>-<nodeId>`.
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync 2>&1 | grep -E "×|Tests |expected" | head -5)
+  ⎿        Tests  5 passed (5)
+● All 5 green. Now the piece the whole hybrid rests on: one schema definition → 
+  two SQL dialects.
+
+● Write(packages\db\src\dialect.test.ts)
+  ⎿  Wrote 20 lines to packages\db\src\dialect.test.ts
+       1 import { getTableColumns } from "drizzle-orm";
+       2 import { expect, test } from "vitest";
+       3 import { defineTable } from "./dialect.js";
+       5 test("a table defined once exposes identical columns in both dia
+         lects", () => {
+       6   const demo = defineTable("demo_rows", {
+       7     id: { kind: "uuid", primaryKey: true },
+       9     amount_minor: { kind: "money", notNull: true },
+      10     is_active: { kind: "boolean", notNull: true, default: true }
+         ,
+     … +12 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './dialect.js' imported from D:/Software Ide
+     as/Restauarant Billing System/packages/db/src/dialect.test.ts
+           Tests  no tests
+
+● Write(packages\db\src\dialect.ts)
+  ⎿  Wrote 115 lines to packages\db\src\dialect.ts
+       1 import {
+       2   boolean as pgBoolean,
+       3   integer as pgInteger,
+       4   jsonb as pgJsonb,
+       5   pgTable,
+       6   text as pgText,
+       7   timestamp as pgTimestamp,
+       8   uuid as pgUuid,
+       9 } from "drizzle-orm/pg-core";
+      10 import {
+     … +123 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db 2>&1 | grep -E "×|Tests |expected|Error" | head -8)
+  ⎿        Tests  1 passed (1)
+
+● Green. Now DDL emission from that same definition, so a terminal can bootstrap
+  its own SQLite file. RED:
+
+● Write(packages\db\src\ddl.test.ts)
+  ⎿  Wrote 42 lines to packages\db\src\ddl.test.ts
+       1 import { expect, test } from "vitest";
+       2 import { createTableSql } from "./ddl.js";
+       3 import { defineTable } from "./dialect.js";
+       4 
+       5 const demo = defineTable("demo_rows", {
+       6   id: { kind: "uuid", primaryKey: true },
+       7   label: { kind: "text", notNull: true },
+       8   amount_minor: { kind: "money", notNull: true },
+       9   is_active: { kind: "boolean", notNull: true, default: true },
+      10   created_at: { kind: "timestamp", notNull: true },
+     … +34 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/ddl 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './ddl.js' imported from D:/Software Ideas/R
+     estauarant Billing System/packages/db/src/ddl.test.ts
+           Tests  no tests
+
+● Write(packages\db\src\ddl.ts)
+  ⎿  Wrote 55 lines to packages\db\src\ddl.ts
+       1 import type { ColumnSpec, DualTable } from "./dialect.js";
+       2 
+       3 export type Dialect = "sqlite" | "postgres";
+       4 
+       5 const SQL_TYPES: Record<Dialect, Record<ColumnSpec["kind"], stri
+       6   sqlite: {
+       7     uuid: "text",
+       8     text: "text",
+       9     integer: "integer",
+      10     money: "integer",
+     … +56 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db 2>&1 | grep -E "×|Tests |expected|Error" | head -8)
+  ⎿        Tests  3 passed (3)
+
+● Green. Now the Phase-0 schema and the proof that both dialects behave
+  identically. RED:
+
+● Write(packages\db\src\roundtrip.test.ts)
+  ⎿  Wrote 36 lines to packages\db\src\roundtrip.test.ts
+       1 import { uuidv7 } from "@forkflow/sync";
+       2 import { expect, test } from "vitest";
+       3 import { openCloud, openTerminal } from "./client.js";
+       4 import { defineTable } from "./dialect.js";
+       5 
+       6 const demo = defineTable("demo_rows", {
+       7   id: { kind: "uuid", primaryKey: true },
+       8   label: { kind: "text", notNull: true },
+       9   amount_minor: { kind: "money", notNull: true },
+      10   is_active: { kind: "boolean", notNull: true },
+     … +29 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/roundtrip 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find package '@forkflow/sync' imported from D:/Software
+     Ideas/Restauarant Billing System/packages/db/src/roundtrip.test.ts
+           Tests  no tests
+
+● @forkflow/sync has no entry point yet. Creating it:
+
+✻ Baked for 13m 17s
+
+※ recap: Building Phase 0 of the ForkFlow POS: a dual-dialect Drizzle schema plus offline sync primitives, all test-driven. UUIDv7, hybrid logical clocks, and DDL emission are green. Next I'm adding the sync package's index.ts so the SQLite/Postgres round-trip test can run. (disable recaps in /config)
+
+❯ continue                                                                      
+
+● Write(packages\sync\src\index.ts)
+  ⎿  Wrote 2 lines to packages\sync\src\index.ts
+      1 export { uuidv7 } from "./id.js";
+      2 export { HybridLogicalClock, decode, type DecodedHlc, type Hybrid
+        LogicalClockOptions } from "./hlc.js";
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/roundtrip 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './client.js' imported from D:/Software Idea
+     s/Restauarant Billing System/packages/db/src/roundtrip.test.ts
+           Tests  no tests
+
+● Red for the right reason. GREEN — a uniform handle over both engines:
+
+● Write(packages\db\src\client.ts)
+  ⎿  Wrote 84 lines to packages\db\src\client.ts
+      1 import { PGlite } from "@electric-sql/pglite";
+      2 import { createClient, type Client as LibsqlClient } from "@libsq
+        l/client";
+      3 import { sql } from "drizzle-orm";
+      4 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+      5 import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
+      6 import { createTableSql, type Dialect } from "./ddl.js";
+      7 import type { DualTable } from "./dialect.js";
+      8 
+      9 export type Row = Record<string, unknown>;
+     … +84 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/roundtrip 2>&1 | tail -30)  ⎿   RUN  v4.1.10 D:/Software Ideas/Restauarant Billing System
+     … +5 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● A real WASM Postgres and real SQLite agree byte-for-byte on the same insert —
+  the dual-dialect claim is now proven, not asserted. Next, the schema, with an
+  invariant test so nobody can add a table that silently breaks replication.
+  RED:
+
+● Write(packages\db\src\schema.test.ts)
+  ⎿  Wrote 28 lines to packages\db\src\schema.test.ts
+       1 import { expect, test } from "vitest";
+         ma.js";
+       3 
+       4 test("every synced table carries the replication envelope", () =
+       5   for (const table of SYNCED_TABLES) {
+       6     expect({ table: table.name, columns: Object.keys(table.spec)
+       7       table: table.name,
+       8       columns: expect.arrayContaining(["id", "org_id", "created_
+         at", "updated_at", "hlc", "deleted_at"]),
+      10   }
+     … +25 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/schema 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './schema.js' imported from D:/Software Idea
+     s/Restauarant Billing System/packages/db/src/schema.test.ts
+           Tests  no tests
+
+● Write(packages\db\src\schema.ts)
+  ⎿  Wrote 135 lines to packages\db\src\schema.ts
+       1 import { defineTable, type ColumnSpec, type DualTable, type Tabl
+       2 
+       3 /**
+         AN §6).
+       5  *
+         ble; `deleted_at`
+       7  * makes deletes replicable (a row that vanished locally is indi
+       8  * from one that never arrived); `synced_at` is the terminal's o
+         wn bookkeeping.
+      10 const envelope = {
+     … +144 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db 2>&1 | grep -E "×|Tests |expected|Error" | head -8)
+  ⎿        Tests  7 passed (7)
+  ⎿  (timeout 3m)
+
+● 7 green. Now the sync engine itself. Keeping packages/sync dependency-free (it
+  talks to an abstract store) so the transport stays swappable, per your
+  "decide later" call. RED:
+
+● Write(packages\sync\src\resolve.test.ts)
+  ⎿  Wrote 26 lines to packages\sync\src\resolve.test.ts
+      1 import { expect, test } from "vitest";
+      2 import { resolveConflict } from "./resolve.js";
+      3 
+      4 const stampAt = (millis: number, counter: number, node: string) =
+        >
+        ).padStart(4, "0")}-${node}`;
+      6 
+      7 test("the later write wins", () => {
+      8   const local = stampAt(1_000, 0, "term-1");
+      9   const remote = stampAt(2_000, 0, "term-2");
+     … +20 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync/src/resolve 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './resolve.js' imported from D:/Software Ide
+     as/Restauarant Billing System/packages/sync/src/resolve.test.ts
+           Tests  no tests
+
+● Write(packages\sync\src\resolve.ts)
+  ⎿  Wrote 17 lines to packages\sync\src\resolve.ts
+       1 export type ConflictWinner = "local" | "remote";
+       3 /**
+       4  * Decide which version of a row survives when two writes collid
+       5  *
+       6  * Last-write-wins by HLC (PROJECT_PLAN §5.4). Because an HLC en
+       7  * then counter, then node id — each fixed-width — a plain lexic
+         ographic compare
+         wo terminals
+       9  * examining the same pair reach the *same* verdict. Without tha
+      10  * two tills would each keep their own row and never converge.
+     … +13 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/sync 2>&1 | grep -E "×|Tests |expected" | head -8)
+  ⎿        Tests  8 passed (8)
+
+● 8 green. Now the local write path — every mutation must land in the table and
+  the outbox together. RED:
+
+● Write(packages\db\src\repository.test.ts)
+  ⎿  Wrote 41 lines to packages\db\src\repository.test.ts
+       1 import { uuidv7 } from "@forkflow/sync";
+       2 import { expect, test } from "vitest";
+       3 import { openTerminal } from "./client.js";
+       4 import { createRepository } from "./repository.js";
+       5 import { TERMINAL_TABLES, menu_categories, outbox } from "./sche
+       6 
+       7 const orgId = uuidv7();
+       8 const outletId = uuidv7();
+       9 
+      10 async function terminalRepo(nodeId: string) {
+     … +41 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/repository 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './repository.js' imported from D:/Software
+     Ideas/Restauarant Billing System/packages/db/src/repository.test.ts
+           Tests  no tests
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 3 lines
+      17  export interface DbHandle {
+      18    readonly dialect: Dialect;
+      19    insert(table: DualTable, row: Row): Promise<void>;
+      20 +  /** Insert, or replace the existing row with the same primary
+         + key. */                                                       
+      21 +  upsert(table: DualTable, row: Row): Promise<void>;           
+      22    selectAll(table: DualTable): Promise<Row[]>;
+      23 +  findById(table: DualTable, id: string): Promise<Row | null>; 
+      24    close(): Promise<void>;
+      25  }
+      26  
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 12 lines
+      48      async insert(table, row) {
+      49        await db.insert(table.sqlite).values(row as AnyRow);
+      50      },
+      51 +    async upsert(table, row) {                                 
+      52 +      const columns = getTableColumns(table.sqlite);           
+      53 +      await db                                                 
+      54 +        .insert(table.sqlite)                                  
+      55 +        .values(row as AnyRow)                                 
+      56 +        .onConflictDoUpdate({ target: columns.id ?? columns.key
+         +!, set: row as AnyRow });                                      
+      57 +    },                                                         
+      58      async selectAll(table) {
+      59        return (await db.select().from(table.sqlite)) as Row[];
+      60      },
+      61 +    async findById(table, id) {                                
+      62 +      const columns = getTableColumns(table.sqlite);           
+      63 +      const rows = await db.select().from(table.sqlite).where(e
+         +q(columns.id!, id));                                           
+      64 +      return (rows[0] as Row | undefined) ?? null;             
+      65 +    },                                                         
+      66      async close() {
+      67        client.close();
+      68      },
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 12 lines
+       89      async insert(table, row) {
+       90        await db.insert(table.pg).values(row as AnyRow);
+       91      },
+       92 +    async upsert(table, row) {                                
+       93 +      const columns = getTableColumns(table.pg);              
+       94 +      await db                                                
+       95 +        .insert(table.pg)                                     
+       96 +        .values(row as AnyRow)                                
+       97 +        .onConflictDoUpdate({ target: columns.id ?? columns.ke
+          +y!, set: row as AnyRow });                                    
+       98 +    },                                                        
+       99      async selectAll(table) {
+      100        return (await db.select().from(table.pg)) as Row[];
+      101      },
+      102 +    async findById(table, id) {                               
+      103 +      const columns = getTableColumns(table.pg);              
+      104 +      const rows = await db.select().from(table.pg).where(eq(c
+          +olumns.id!, id));                                             
+      105 +      return (rows[0] as Row | undefined) ?? null;            
+      106 +    },                                                        
+      107      async close() {
+      108        await pglite.close();
+      109      },
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { PGlite } from "@electric-sql/pglite";
+      2  import { createClient, type Client as LibsqlClient } from "@libs
+         ql/client";
+      3 -import { sql } from "drizzle-orm";                              
+      3 +import { eq, getTableColumns, sql } from "drizzle-orm";         
+      4  import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+      5  import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
+      6  import { createTableSql, type Dialect } from "./ddl.js";
+
+● Write(packages\db\src\repository.ts)
+  ⎿  Wrote 86 lines to packages\db\src\repository.ts
+       1 import { HybridLogicalClock, uuidv7 } from "@forkflow/sync";
+       2 import type { DbHandle, Row } from "./client.js";
+       3 import type { DualTable } from "./dialect.js";
+       4 import { outbox } from "./schema.js";
+       5 
+       6 export interface RepositoryOptions {
+       7   /** Stable terminal identity — becomes the HLC tiebreaker. */
+       8   nodeId: string;
+       9   orgId: string;
+      10   now?: () => number;
+     … +86 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/repository 2>&1 | tail -25)
+  ⎿   RUN  v4.1.10 D:/Software Ideas/Restauarant Billing System
+     … +5 lines (ctrl+o to expand)
+● Green. Now the Phase-0 headline: offline work reaching the cloud. RED:
+
+● Write(packages\db\src\sync-agent.test.ts)
+  ⎿  Wrote 57 lines to packages\db\src\sync-agent.test.ts
+       1 import { uuidv7 } from "@forkflow/sync";
+       2 import { expect, test } from "vitest";
+       3 import { openCloud, openTerminal } from "./client.js";
+       4 import { createRepository } from "./repository.js";
+       5 import { CLOUD_TABLES, TERMINAL_TABLES, menu_categories, outbox 
+       6 import { createSyncAgent } from "./sync-agent.js";
+       7 import { createDirectTransport } from "./transport-direct.js";
+       8 
+       9 const orgId = uuidv7();
+      10 const outletId = uuidv7();
+     … +57 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/sync-agent 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './sync-agent.js' imported from D:/Software
+     Ideas/Restauarant Billing System/packages/db/src/sync-agent.test.ts
+           Tests  no tests
+
+● Write(packages\sync\src\transport.ts)
+  ⎿  Wrote 36 lines to packages\sync\src\transport.ts
+       1 /** One replicated mutation, as it travels between terminal and 
+         cloud. */
+       2 export interface ChangeRecord {
+         nisable. */
+       4   id: string;
+       5   org_id: string;
+       6   entity: string;
+       8   op: "upsert" | "delete";
+       9   payload: Record<string, unknown>;
+      10   hlc: string;
+     … +32 lines (ctrl+o to expand)
+
+● Write(packages\sync\src\index.ts)
+  ⎿  Added 2 lines
+      1  export { uuidv7 } from "./id.js";
+      2  export { HybridLogicalClock, decode, type DecodedHlc, type Hybri
+         dLogicalClockOptions } from "./hlc.js";
+      3 +export { resolveConflict, type ConflictWinner } from "./resolve.
+        +js";                                                            
+      4 +export type { ChangeRecord, PullRequest, PullResult, SyncTranspo
+        +rt } from "./transport.js";                                     
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 4 lines
+      21    upsert(table: DualTable, row: Row): Promise<void>;
+      22    selectAll(table: DualTable): Promise<Row[]>;
+      23    findById(table: DualTable, id: string): Promise<Row | null>;
+      24 +  /** Outbox entries the cloud has not durably accepted yet, in
+         + creation order. */                                            
+      25 +  selectUnsynced(table: DualTable, limit: number): Promise<Row[
+         +]>;                                                            
+      26 +  /** Rows changed after an HLC cursor, oldest first — the pull
+         +-down query. */                                                
+      27 +  selectSince(table: DualTable, since: string | null, limit: nu
+         +mber): Promise<Row[]>;                                         
+      28    close(): Promise<void>;
+      29  }
+      30  
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 16 lines
+      67        const rows = await db.select().from(table.sqlite).where(e
+          q(columns.id!, id));
+      68        return (rows[0] as Row | undefined) ?? null;
+      69      },
+      70 +    async selectUnsynced(table, limit) {                       
+      71 +      const columns = getTableColumns(table.sqlite);           
+      72 +      return (await db                                         
+      73 +        .select()                                              
+      74 +        .from(table.sqlite)                                    
+      75 +        .where(isNull(columns.synced_at!))                     
+      76 +        .orderBy(asc(columns.id!))                             
+      77 +        .limit(limit)) as Row[];                               
+      78 +    },                                                         
+      79 +    async selectSince(table, since, limit) {                   
+      80 +      const columns = getTableColumns(table.sqlite);           
+      81 +      const query = db.select().from(table.sqlite);            
+      82 +      return (await (since === null ? query : query.where(gt(co
+         +lumns.hlc!, since)))                                           
+      83 +        .orderBy(asc(columns.hlc!))                            
+      84 +        .limit(limit)) as Row[];                               
+      85 +    },                                                         
+      86      async close() {
+      87        client.close();
+      88      },
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 16 lines
+      124        const rows = await db.select().from(table.pg).where(eq(c
+           olumns.id!, id));
+      125        return (rows[0] as Row | undefined) ?? null;
+      126      },
+      127 +    async selectUnsynced(table, limit) {                      
+      128 +      const columns = getTableColumns(table.pg);              
+      129 +      return (await db                                        
+      130 +        .select()                                             
+      131 +        .from(table.pg)                                       
+      132 +        .where(isNull(columns.synced_at!))                    
+      133 +        .orderBy(asc(columns.id!))                            
+      134 +        .limit(limit)) as Row[];                              
+      135 +    },                                                        
+      136 +    async selectSince(table, since, limit) {                  
+      137 +      const columns = getTableColumns(table.pg);              
+      138 +      const query = db.select().from(table.pg);               
+      139 +      return (await (since === null ? query : query.where(gt(c
+          +olumns.hlc!, since)))                                         
+      140 +        .orderBy(asc(columns.hlc!))                           
+      141 +        .limit(limit)) as Row[];                              
+      142 +    },                                                        
+      143      async close() {
+      144        await pglite.close();
+      145      },
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { PGlite } from "@electric-sql/pglite";
+      2  import { createClient, type Client as LibsqlClient } from "@libs
+         ql/client";
+      3 -import { eq, getTableColumns, sql } from "drizzle-orm";         
+      3 +import { asc, eq, getTableColumns, gt, isNull, sql } from "drizz
+        +le-orm";                                                        
+      4  import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+      5  import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
+      6  import { createTableSql, type Dialect } from "./ddl.js";
+
+● Now the serialization boundary and the transport/agent:
+
+● Write(packages\db\src\serialize.ts)
+  ⎿  Wrote 28 lines to packages\db\src\serialize.ts
+       1 import type { Row } from "./client.js";
+       2 import type { DualTable } from "./dialect.js";
+       3 import { schema } from "./schema.js";
+       5 const BY_NAME = new Map(Object.values(schema).map((table) => [ta
+         ble.name, table]));
+       6 
+       7 export function tableByName(name: string): DualTable {
+       9   if (!table) throw new Error(`Unknown entity "${name}" — not pa
+         rt of the schema.`);
+      10   return table;
+     … +24 lines (ctrl+o to expand)
+
+● Write(packages\db\src\transport-direct.ts)
+  ⎿  Wrote 53 lines to packages\db\src\transport-direct.ts
+       1 import { resolveConflict, type ChangeRecord, type SyncTransport 
+         } from "@forkflow/sync";
+       3 import { reviveRow, tableByName } from "./serialize.js";
+       4 
+       5 const PULL_LIMIT = 500;
+       7 /**
+       8  * A `SyncTransport` that writes straight into a cloud handle, i
+         n-process.
+      10  * Stands in for the network so the whole offline→online path ca
+         n be tested and
+     … +56 lines (ctrl+o to expand)
+
+● Write(packages\db\src\sync-agent.ts)
+  ⎿  Wrote 103 lines to packages\db\src\sync-agent.ts
+       1 import { resolveConflict, type ChangeRecord, type SyncTransport 
+         } from "@forkflow/sync";
+       2 import type { DbHandle, Row } from "./client.js";
+       3 import { reviveRow, tableByName } from "./serialize.js";
+       4 import { SYNCED_TABLES, outbox, sync_state } from "./schema.js";
+       6 const PUSH_BATCH = 500;
+       7 const CURSOR_KEY = "pull_cursor";
+       8 
+       9 export interface SyncAgentOptions {
+      10   db: DbHandle;
+     … +106 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/sync-agent 2>&1 | tail -30)
+  ⎿   RUN  v4.1.10 D:/Software Ideas/Restauarant Billing System
+     … +5 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Both green. Now the conflict case — a Phase-1 exit criterion: two terminals
+  editing the same row while offline. RED:
+
+● Write(packages\db\src\conflict.test.ts)
+  ⎿  Wrote 74 lines to packages\db\src\conflict.test.ts
+       1 import { uuidv7 } from "@forkflow/sync";
+       2 import { expect, test } from "vitest";
+       3 import { openCloud, openTerminal, type DbHandle } from "./client
+       4 import { createRepository } from "./repository.js";
+       5 import { CLOUD_TABLES, TERMINAL_TABLES, menu_categories } from "
+         ./schema.js";
+       6 import { createSyncAgent } from "./sync-agent.js";
+       8 
+       9 const orgId = uuidv7();
+      10 const outletId = uuidv7();
+     … +81 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/conflict 2>&1 | grep -E "×|Tests |Error|expected" | head
+      -12)
+  ⎿     × two terminals editing one row while offline converge on the later
+      edit 834ms
+        × a soft delete replicates rather than resurrecting the row 485ms
+     … +13 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Exactly the latent bug the test flushed out: sync_state is keyed on key, not
+  id. GREEN — resolve the primary key from the spec instead of assuming:
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 9 lines
+      32   *  built from a runtime spec, so the erased type is re-asserte
+          d here — in one place. */
+      33  type AnyRow = never;
+      34  
+      35 +/** Not every table is keyed on `id` — `sync_state` is keyed on
+         + `key`. */                                                     
+      36 +function primaryKeyOf(table: DualTable): string {              
+      37 +  const found = Object.entries(table.spec).find(               
+      38 +    ([, spec]) => "primaryKey" in spec && spec.primaryKey,     
+      39 +  );                                                           
+      40 +  if (!found) throw new Error(`Table "${table.name}" declares n
+         +o primary key.`);                                              
+      41 +  return found[0];                                             
+      42 +}                                                              
+      43 +                                                               
+      44  export interface TerminalOptions {
+      45    /** `:memory:` for tests, or `file:<path>` for a real termina
+          l. */
+      46    url: string;
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && python -c "
+      import io,re…)
+  ⎿  6
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/conflict 2>&1 | grep -E "×|Tests |Error|expected" | head
+      -12)
+  ⎿        Tests  2 passed (2)
+  ⎿  (timeout 3m)
+
+● Converged, and the soft delete replicates. Now auth + RBAC — the "logs in"
+  half of Phase 0. RED:
+
+● Write(packages\core\src\password.test.ts)
+  ⎿  Wrote 28 lines to packages\core\src\password.test.ts
+      1 import { expect, test } from "vitest";
+      2 import { hashPassword, verifyPassword } from "./password.js";
+      3 
+        c () => {
+      5   const stored = await hashPassword("chai-latte-42");
+      6 
+      7   expect(await verifyPassword("chai-latte-42", stored)).toBe(true
+      8   expect(await verifyPassword("chai-latte-43", stored)).toBe(fals
+        e);
+      9 });
+     … +24 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/core 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './password.js' imported from D:/Software Id
+     eas/Restauarant Billing System/packages/core/src/password.test.ts
+           Tests  no tests
+
+● Write(packages\core\src\password.ts)
+  ⎿  Wrote 38 lines to packages\core\src\password.ts
+       1 import { randomBytes, scrypt, timingSafeEqual } from "node:crypt
+         o";
+       2 import { promisify } from "node:util";
+       3 
+       4 const scryptAsync = promisify(scrypt) as (
+       6   salt: Buffer,
+       7   keylen: number,
+       8 ) => Promise<Buffer>;
+       9 
+      10 const KEY_LENGTH = 64;
+     … +35 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/core 2>&1 | grep -E "×|Tests |expected" | head -8)
+  ⎿        Tests  4 passed (4)
+
+● 4 green. Now RBAC — Phase 1 requires that an unauthorized void is blocked, and
+  discounts respect per-role caps. RED:
+
+● Write(packages\core\src\rbac.test.ts)
+  ⎿  Wrote 42 lines to packages\core\src\rbac.test.ts
+       1 import { expect, test } from "vitest";
+       2 import { can, withinDiscountCap, type Role } from "./rbac.js";
+       3 
+       5   name: "Cashier",
+       6   permissions: ["order.create", "bill.settle", "discount.apply"]
+         ,
+       7   limits: { max_discount_percent: 10 },
+       9 const manager: Role = { name: "Manager", permissions: ["bill.*",
+          "order.*", "discount.apply"] };
+      10 const owner: Role = { name: "Owner", permissions: ["*"] };
+     … +37 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/core/src/rbac 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './rbac.js' imported from D:/Software Ideas/
+     Restauarant Billing System/packages/core/src/rbac.test.ts
+           Tests  no tests
+
+● Write(packages\core\src\rbac.ts)
+  ⎿  Wrote 42 lines to packages\core\src\rbac.ts
+       1 export interface RoleLimits {
+       2   /** Largest discount this role may apply, in percent. */
+       3   max_discount_percent?: number;
+       4 }
+       5 
+       7   name: string;
+       8   /** Permission slugs. Supports `namespace.*` and the full `*`.
+          */
+       9   permissions: string[];
+      10   limits?: RoleLimits;
+     … +38 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/core 2>&1 | grep -E "×|Tests |expected" | head -8)
+  ⎿        Tests  10 passed (10)
+
+● 10 green. Now login against the local database — it has to work with the
+  network unplugged. RED:
+
+● Write(packages\db\src\auth.test.ts)
+  ⎿  Wrote 92 lines to packages\db\src\auth.test.ts
+       1 import { hashPassword } from "@forkflow/core";
+       2 import { uuidv7 } from "@forkflow/sync";
+       3 import { expect, test } from "vitest";
+       4 import { createAuthService } from "./auth.js";
+       5 import { openTerminal } from "./client.js";
+       7 import { TERMINAL_TABLES, audit_log, roles, user_outlet_access, 
+         users } from "./schema.js";
+       8 
+       9 const orgId = uuidv7();
+      10 const outletId = uuidv7();
+     … +99 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/auth 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find package '@forkflow/core' imported from D:/Software
+     Ideas/Restauarant Billing System/packages/db/src/auth.test.ts
+           Tests  no tests
+
+● Write(packages\core\src\index.ts)
+  ⎿  Wrote 2 lines to packages\core\src\index.ts
+      1 export { hashPassword, verifyPassword } from "./password.js";
+      2 export { can, withinDiscountCap, type Role, type RoleLimits } fro
+        m "./rbac.js";
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/auth 2>&1 | grep -E "Error|Tests " | head -5)
+  ⎿  Error: Cannot find module './auth.js' imported from D:/Software Ideas/
+     Restauarant Billing System/packages/db/src/auth.test.ts
+           Tests  no tests
+
+● Update(packages\db\src\client.ts)
+  ⎿  Added 2 lines
+      21    upsert(table: DualTable, row: Row): Promise<void>;
+      22    selectAll(table: DualTable): Promise<Row[]>;
+      23    findById(table: DualTable, id: string): Promise<Row | null>;
+      24 +  /** First row matching every column in `match`, or null. */  
+      25 +  findWhere(table: DualTable, match: Row): Promise<Row | null>;
+      26    /** Outbox entries the cloud has not durably accepted yet, in
+           creation order. */
+      27    selectUnsynced(table: DualTable, limit: number): Promise<Row[
+          ]>;
+      28    /** Rows changed after an HLC cursor, oldest first — the pull
+          -down query. */
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && python - <<'EOF'
+      import io…)
+  ⎿  findWhere added: 2
+
+● Write(packages\db\src\auth.ts)
+  ⎿  Wrote 104 lines to packages\db\src\auth.ts
+       1 import { verifyPassword, type Role } from "@forkflow/core";
+       2 import type { DbHandle } from "./client.js";
+       3 import type { Repository } from "./repository.js";
+       4 import { audit_log, roles, user_outlet_access, users } from "./s
+         chema.js";
+       6 export interface Session {
+       7   userId: string;
+       8   name: string;
+       9   outletId: string;
+      10   role: Role;
+     … +114 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/auth 2>&1 | grep -E "×|✓|Tests |expected|Error" | head
+      -12)  ⎿        Tests  5 passed (5)
+
+● All 5 pass. Full suite and typecheck:
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run 2>&1
+      | tail -12; echo "=== TYPECHECK ==="; npx tsc --noEmit 2>&1 | head -30)
+  ⎿   RUN  v4.1.10 D:/Software Ideas/Restauarant Billing System
+     … +25 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● 36 tests pass. One typecheck error from exactOptionalPropertyTypes — fixing
+  the cast:
+
+● Update(packages\db\src\auth.ts)
+  ⎿  Added 1 line, removed 1 line
+      1 -import { verifyPassword, type Role } from "@forkflow/core";     
+      1 +import { verifyPassword, type Role, type RoleLimits } from "@for
+        +kflow/core";                                                    
+      2  import type { DbHandle } from "./client.js";
+      3  import type { Repository } from "./repository.js";
+      4  import { audit_log, roles, user_outlet_access, users } from "./s
+         chema.js";
+
+● Update(packages\db\src\auth.ts)
+  ⎿  Added 1 line, removed 1 line
+       95            role: {
+       96              name: roleRow.name as string,
+       97              permissions: roleRow.permissions as string[],
+       98 -            ...(roleRow.limits ? { limits: roleRow.limits as R
+          -ole["limits"] } : {}),                                        
+       98 +            ...(roleRow.limits ? { limits: roleRow.limits as R
+          +oleLimits } : {}),                                            
+       99            },
+      100          },
+      101        };
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx tsc --noEmit
+      2>&1 | head -20; echo "exit=$?")
+  ⎿  exit=0
+  ⎿  (timeout 3m)
+
+● Typecheck clean, 36 green. Now the package entry point and a runnable demo
+  that exercises the Phase 0 exit criteria end to end.
+
+● Write(packages\db\src\index.ts)
+  ⎿  Wrote 24 lines to packages\db\src\index.ts
+      1 export { openCloud, openTerminal, type CloudOptions, type DbHandl
+        e, type Row, type TerminalOptions } from "./client.js";
+      3 export { defineTable, type ColumnSpec, type DualTable, type Table
+        Spec } from "./dialect.js";
+      4 export { createRepository, type Repository, type RepositoryOption
+      5 export { createAuthService, type AuthService, type LoginFailure, 
+        type LoginResult, type Session } from "./auth.js";
+      6 export { createSyncAgent, type SyncAgent, type SyncAgentOptions }
+      7 export { createDirectTransport } from "./transport-direct.js";
+      8 export { reviveRow, tableByName } from "./serialize.js";
+     … +19 lines (ctrl+o to expand)
+
+● Write(apps\terminal-demo\package.json)
+  ⎿  Wrote 15 lines to apps\terminal-demo\package.json
+       1 {
+       2   "name": "@forkflow/terminal-demo",
+       3   "version": "0.0.0",
+       4   "private": true,
+       5   "type": "module",
+          and syncs offline→online.",
+       7   "scripts": {
+       8     "start": "tsx src/main.ts"
+       9   },
+      10   "dependencies": {
+     … +6 lines (ctrl+o to expand)
+
+● Write(apps\terminal-demo\src\main.ts)
+  ⎿  Wrote 112 lines to apps\terminal-demo\src\main.ts
+       1 /**
+         in, and syncs a
+       3  * table offline → online, then takes a change back down from th
+       4  *
+       5  * The "cloud" here is an in-process PGlite (real PostgreSQL, co
+       6  * so the round trip crosses genuine dialect boundaries rather t
+         han a mock. What
+         ync engine.
+       8  *
+      10  */
+     … +127 lines (ctrl+o to expand)
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npm install 2>&1 |
+      tail -3 && npm run demo 2>&1 | tail -45)
+  ⎿    run `npm fund` for details
+
+     found 0 vulnerabilities
+     … +45 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● The demo surfaced a real design gap: the cloud has no outbox (correctly — it's
+  terminal-private), but the repository always writes one. Head-office edits
+  are a genuine use case, so this needs a test. RED:
+
+● Update(packages\db\src\repository.test.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      1  import { uuidv7 } from "@forkflow/sync";
+      2  import { expect, test } from "vitest";
+      3 -import { openTerminal } from "./client.js";                     
+      3 +import { openCloud, openTerminal } from "./client.js";          
+      4  import { createRepository } from "./repository.js";
+      5 -import { TERMINAL_TABLES, menu_categories, outbox } from "./sche
+        -ma.js";                                                         
+      5 +import { CLOUD_TABLES, TERMINAL_TABLES, menu_categories, outbox 
+        +} from "./schema.js";                                           
+      6  
+      7  const orgId = uuidv7();
+      8  const outletId = uuidv7();
+
+● Update(packages\db\src\repository.test.ts)
+  ⎿  Added 15 lines
+      39  
+      40    await db.close();
+      41  });
+      42 +                                                               
+      43 +test("head office can edit in the cloud, which keeps no outbox 
+         +of its own", async () => {                                     
+      44 +  const cloud = await openCloud({ tables: CLOUD_TABLES });     
+      45 +  const repo = createRepository(cloud, { nodeId: "cloud", orgId
+         +, captureChanges: false });                                    
+      46 +                                                               
+      47 +  const id = await repo.write(menu_categories, { outlet_id: out
+         +letId, name: "Bakery" });                                      
+      48 +                                                               
+      49 +  // The row still carries an HLC, which is what terminals pull
+         + against.                                                      
+      50 +  expect(await cloud.findById(menu_categories, id)).toMatchObje
+         +ct({                                                           
+      51 +    name: "Bakery",                                            
+      52 +    hlc: expect.stringMatching(/-cloud$/),                     
+      53 +  });                                                          
+      54 +                                                               
+      55 +  await cloud.close();                                         
+      56 +});                                                            
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/repository 2>&1 | grep -E "×|Tests |relation|Error" | head
+      -6)
+  ⎿     × head office can edit in the cloud, which keeps no outbox of its o
+     wn 1082ms
+     ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+     … +10 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Update(packages\db\src\repository.ts)
+  ⎿  Added 6 lines
+       8    nodeId: string;
+       9    orgId: string;
+      10    now?: () => number;
+      11 +  /**                                                          
+      12 +   * Append every mutation to the outbox. True on a terminal, w
+         +hich must queue                                                
+      13 +   * its work for the cloud; false in the cloud, which owns no 
+         +outbox — terminals                                             
+      14 +   * pull cloud changes by scanning row HLCs instead.          
+      15 +   */                                                          
+      16 +  captureChanges?: boolean;                                    
+      17  }
+      18  
+      19  export interface Repository {
+
+● Update(packages\db\src\repository.ts)
+  ⎿  Added 4 lines
+      38    );
+      39    const nowAt = () => new Date(options.now?.() ?? Date.now());
+      40  
+      41 +  const captureChanges = options.captureChanges ?? true;       
+      42 +                                                               
+      43    async function record(table: DualTable, row: Row, op: "upsert
+          " | "delete", hlc: string) {
+      44      const at = nowAt();
+      45      await db.upsert(table, row);
+      46 +    if (!captureChanges) return;                               
+      47 +                                                               
+      48      await db.insert(outbox, {
+      49        id: uuidv7(),
+      50        org_id: options.orgId,
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run
+      packages/db/src/repository 2>&1 | grep -E "×|Tests |Error" | head -6)
+  ⎿        Tests  3 passed (3)
+  ⎿  (timeout 3m)
+
+● Update(apps\terminal-demo\src\main.ts)
+  ⎿  Added 1 line, removed 1 line
+      90  
+      91    // 6 ── head office edits the menu; it flows back down
+      92    step(6, "Head office renames a category in the cloud");
+      93 -  const headOffice = createRepository(cloud, { nodeId: "cloud",
+         - orgId });                                                     
+      93 +  const headOffice = createRepository(cloud, { nodeId: "cloud",
+         + orgId, captureChanges: false });                              
+      94    const [firstCategory] = await cloud.selectAll(menu_categories
+          );
+      95    await headOffice.write(menu_categories, { ...firstCategory, n
+          ame: "Hot & Cold Beverages" });
+      96  
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npm run demo 2>&1 |
+      tail -40)  ⎿  > forkflow@0.0.0 demo
+     > tsx apps/terminal-demo/src/main.ts
+     … +28 lines (ctrl+o to expand)
+
+● Demo runs clean end to end. Final verification:
+
+● Bash(cd "D:/Software Ideas/Restauarant Billing System" && npx vitest run 2>&1
+      | tail -8; echo "=== TYPECHECK ==="; npx tsc --noEmit && echo "clean";
+      echo "=== TAURI…)
+  ⎿   RUN  v4.1.10 D:/Software Ideas/Restauarant Billing System
+     … +11 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● Write(.gitignore)
+  ⎿  Wrote 17 lines to .gitignore
+       1 node_modules/
+       2 dist/
+       3 build/
+       4 *.tsbuildinfo
+       5 
+       6 # Terminal databases and local state
+       7 *.db
+       8 *.db-journal
+       9 *.db-wal
+      10 .forkflow/
+     … +7 lines (ctrl+o to expand)
+
+● Write(README.md)
+  ⎿  Wrote 47 lines to README.md
+      1 # ForkFlow
+      2 
+         on each terminal is the source of truth during service, **Postgr
+        eSQL** in the cloud is the system of record for the business.
+      4 
+        .md).
+      6 
+      7 ## Status — Phase 0 (foundations) built
+      9 A terminal boots, logs in, and syncs offline → online, proven by 
+        tests and a runnable demo.
+     … +65 lines (ctrl+o to expand)
+
+● Update(PROJECT_PLAN.md)
+  ⎿  Added 3 lines, removed 3 lines
+       3  > Working name: **ForkFlow** (placeholder — rename freely)
+       4  > A next-generation, AI-native restaurant POS & billing platfor
+          m. **We are not cloning PetPooja — we are making a product that
+           is easier to adopt and smarter to run.** PetPooja's feature li
+          st is our floor, not our finish line. An offline-first hybrid S
+          QLite + PostgreSQL data architecture and an AI co-pilot are the
+           moat.
+       5  
+       6 -**Status:** Planning (no code yet)                             
+       7 -**Date:** 2026-07-09                                           
+       8 -**Decisions locked:** Deliverable = plan · First module = Billi
+         -ng/POS core · Stack = Next.js + PostgreSQL · Data = Hybrid SQLi
+         -te (local) + PostgreSQL (cloud)                                
+       6 +**Status:** Phase 0 (foundations) built — see [`README.md`](./R
+         +EADME.md). Phase 1 next.                                       
+       7 +**Date:** 2026-07-09 · plan · updated 2026-08-04               
+       8 +**Decisions locked:** Deliverable = plan · First module = Billi
+         +ng/POS core · Stack = Next.js + PostgreSQL · Data = Hybrid SQLi
+         +te (local) + PostgreSQL (cloud) · Sync transport = pluggable in
+         +terface, engine choice deferred (§12.2)                        
+       9  
+      10  ---
+      11  
+
+● Update(PROJECT_PLAN.md)
+  ⎿  Added 1 line, removed 1 line
+      308  
+      309  | Phase | Focus | Outcome |
+      310  |---|---|---|
+      311 -| **0 — Foundations** | Monorepo, Drizzle dual-dialect schema,
+          - auth/RBAC, org/outlet model, Tauri shell, SQLite⇄Postgres syn
+          -c spike | A terminal that boots, logs in, and syncs a trivial 
+          -table offline→online. |                                       
+      311 +| **0 — Foundations** ✅ *built 2026-08-04* | Monorepo, Drizzl
+          +e dual-dialect schema, auth/RBAC, org/outlet model, SQLite⇄Pos
+          +tgres sync (outbox + HLC conflict resolution, transport behind
+          + an interface). *Tauri shell deferred to Phase 1 — nothing to 
+          +wrap until there is a UI.* | A terminal that boots, logs in, a
+          +nd syncs a trivial table offline→online — `npm run demo`. |   
+      312  | **1 — Billing/POS core** ← *first build* | **AI zero-touch o
+           nboarding (menu ingestion)**, menu, tables/areas, order entry,
+            KOT + station printing, split/merge, taxes/discounts, payment
+           s, e-bill, offline-first, "Today" home screen. **+ AI: smart u
+           psell + anomaly guardrail.** | A restaurant **onboards itself 
+           in minutes** and bills offline, with AI hooks live. |
+      313  | **2 — Kitchen & floor ops** | KDS (with AI sequencing), Capt
+           ain PWA (voice ordering), token/queue, reservations | Full fro
+           nt-of-house + back-of-house. |
+      314  | **3 — Inventory + AI forecasting** | Recipes, stock ledger, 
+           POs, central kitchen; **demand forecast → auto-PO**, spoilage 
+           alerts | The wastage-reduction story. |
+
+● Updating the memory that recorded Phase 0 as unstarted:
+
+  Wrote 1 memory (ctrl+o to expand)
+
+● API Error: Connection closed mid-response. The response above may be 
+  incomplete.
+
+✻ Churned for 23m 3s
+
+※ recap: Building Phase 0 of the ForkFlow POS: a monorepo with a dual-dialect Drizzle schema and offline-first sync. UUIDv7, hybrid logical clocks, and DDL generation are done and tested. Next I'll add the sync package entry point so the SQLite/Postgres round-trip test can run. (disable recaps in /config)

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Terminal databases and local state
+*.db
+*.db-journal
+*.db-wal
+.forkflow/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db

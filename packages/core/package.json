@@ -1,0 +1,10 @@
+{
+  "name": "@forkflow/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared domain logic: authentication, RBAC permission checks.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

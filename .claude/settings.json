@@ -1,0 +1,28 @@
+{
+  "sandbox": {
+    "enabled": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "WebFetch(*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/keys/**)",
+      "Write(**/.env*)",
+      "Edit(**/.env*)",
+      "Bash(cat **/.env*)",
+      "Bash(rm -rf *)",
+      "Bash(rm -rf /*)",
+      "Bash(sudo rm*)",
+      "Bash(chmod 777 /*)",
+      "Bash(git push --force*)",
+      "Bash(curl* .env*)"
+    ]
+  }
+}

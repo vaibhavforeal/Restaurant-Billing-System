@@ -1,0 +1,10 @@
+{
+  "name": "@forkflow/sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first sync primitives: UUIDv7 ids, hybrid logical clocks, outbox drain, pluggable transport.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

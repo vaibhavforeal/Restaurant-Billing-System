@@ -1,0 +1,15 @@
+{
+  "name": "@forkflow/terminal-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 0 proof: a terminal that boots, logs in, and syncs offline→online.",
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@forkflow/core": "*",
+    "@forkflow/db": "*",
+    "@forkflow/sync": "*"
+  }
+}

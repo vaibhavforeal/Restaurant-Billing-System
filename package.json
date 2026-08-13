@@ -1,0 +1,23 @@
+{
+  "name": "forkflow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI-native restaurant POS — offline-first hybrid SQLite (terminal) + PostgreSQL (cloud).",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx apps/terminal-demo/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
+  }
+}
