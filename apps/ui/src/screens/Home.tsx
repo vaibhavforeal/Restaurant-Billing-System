@@ -4,6 +4,8 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   async function logout() {
     try {
       await apiFetch<void>("/api/logout", { method: "POST" });
+    } catch {
+      // ignore error - local session is cleared regardless
     } finally {
       session.clear();
       onLogout();

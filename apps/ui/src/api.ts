@@ -21,7 +21,7 @@ export class ApiError extends Error {
 /** fetch with the session token attached; clears the session on a 401. */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  headers.set("content-type", "application/json");
+  if (init?.body) headers.set("content-type", "application/json");
   const token = session.token;
   if (token) headers.set("authorization", `Bearer ${token}`);
 

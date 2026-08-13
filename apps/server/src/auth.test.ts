@@ -86,6 +86,54 @@ describe("login / me / logout", () => {
       (await app.inject({ method: "GET", url: "/api/me", headers: { authorization: "Bearer nope" } })).statusCode,
     ).toBe(401);
   });
+
+  it("rejects expired session", async () => {
+    app = freshApp();
+    const { token, user } = await setup(app);
+
+    // backdoor: expire the session
+    app.db.prepare("UPDATE sessions SET expires_at = ? WHERE token = ?").run(Date.now() - 1000, token);
+
+    const me = await app.inject({
+      method: "GET", url: "/api/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(me.statusCode).toBe(401);
+  });
+
+  it("rejects inactive user", async () => {
+    app = freshApp();
+    const { token, user } = await setup(app);
+
+    // backdoor: deactivate the user
+    app.db.prepare("UPDATE users SET is_active = 0 WHERE id = ?").run(user.id);
+
+    const me = await app.inject({
+      method: "GET", url: "/api/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(me.statusCode).toBe(401);
+  });
+
+  it("logout works with empty body and application/json content-type", async () => {
+    app = freshApp();
+    const { token } = await setup(app);
+
+    // browsers may send content-type: application/json on bodyless POSTs
+    const out = await app.inject({
+      method: "POST", url: "/api/logout",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      payload: "",
+    });
+    expect(out.statusCode).toBe(204);
+
+    // session must actually be deleted
+    const meAfter = await app.inject({
+      method: "GET", url: "/api/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(meAfter.statusCode).toBe(401);
+  });
 });
 
 describe("requirePermission", () => {
@@ -115,5 +163,46 @@ describe("requirePermission", () => {
       headers: { authorization: `Bearer ${waiter.token}` },
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+});
+
+describe("error handling", () => {
+  it("hides 500 error messages from clients", async () => {
+    app = freshApp();
+    // register a scratch route that throws
+    app.get("/api/_test-error", async () => {
+      throw new Error("sensitive internal details");
+    });
+
+    const res = await app.inject({ method: "GET", url: "/api/_test-error" });
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: "internal error" });
+  });
+});
+
+describe("login throttling", () => {
+  it("throttles after 5 consecutive failures", async () => {
+    app = freshApp();
+    await setup(app);
+
+    // 5 wrong PINs from same IP
+    for (let i = 0; i < 5; i++) {
+      const res = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "9999" } });
+      expect(res.statusCode).toBe(401);
+    }
+
+    // 6th attempt (even with correct PIN) → 429
+    const throttled = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "1234" } });
+    expect(throttled.statusCode).toBe(429);
+    expect(throttled.json().error).toBe("too many attempts");
+
+    // different IP is unaffected
+    const otherIp = await app.inject({
+      method: "POST",
+      url: "/api/login",
+      payload: { pin: "1234" },
+      remoteAddress: "192.168.1.99",
+    });
+    expect(otherIp.statusCode).toBe(200);
   });
 });

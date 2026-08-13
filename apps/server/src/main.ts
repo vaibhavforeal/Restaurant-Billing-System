@@ -12,7 +12,7 @@ mkdirSync(dataDir, { recursive: true });
 const db = openDb(join(dataDir, "forkflow.db"));
 migrate(db, MIGRATIONS);
 
-const app = buildServer({ db });
+const app = buildServer({ db, logger: true });
 
 // Serve the built UI when it exists (production / packaged). In dev, Vite serves the UI.
 const uiDist = resolve(here, "../../ui/dist");
