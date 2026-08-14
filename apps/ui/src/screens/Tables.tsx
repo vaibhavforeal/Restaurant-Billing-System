@@ -9,6 +9,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
   const [managing, setManaging] = useState(false);
   const [newTable, setNewTable] = useState({ name: "", area: "" });
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
 
   async function reload() {
     const [t, o] = await Promise.all([
@@ -76,23 +77,35 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
     if (table.status === "occupied" || table.status === "billed") {
       onOpenOrder(table.openOrderId!);
     } else {
+      if (creating) return;
+      setCreating(true);
       void run(async () => {
-        const { order } = await apiFetch<{ order: Order }>("/api/orders", {
-          method: "POST",
-          body: JSON.stringify({ clientRef: crypto.randomUUID(), type: "dine_in", tableId: table.id }),
-        });
-        onOpenOrder(order.id);
+        try {
+          const { order } = await apiFetch<{ order: Order }>("/api/orders", {
+            method: "POST",
+            body: JSON.stringify({ clientRef: crypto.randomUUID(), type: "dine_in", tableId: table.id }),
+          });
+          onOpenOrder(order.id);
+        } finally {
+          setCreating(false);
+        }
       });
     }
   }
 
   function newParcel() {
+    if (creating) return;
+    setCreating(true);
     void run(async () => {
-      const { order } = await apiFetch<{ order: Order }>("/api/orders", {
-        method: "POST",
-        body: JSON.stringify({ clientRef: crypto.randomUUID(), type: "parcel", tableId: null }),
-      });
-      onOpenOrder(order.id);
+      try {
+        const { order } = await apiFetch<{ order: Order }>("/api/orders", {
+          method: "POST",
+          body: JSON.stringify({ clientRef: crypto.randomUUID(), type: "parcel", tableId: null }),
+        });
+        onOpenOrder(order.id);
+      } finally {
+        setCreating(false);
+      }
     });
   }
 
@@ -113,7 +126,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h2>Tables</h2>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={newParcel} style={{ padding: "8px 16px", fontWeight: 700 }}>
+          <button onClick={newParcel} disabled={creating} style={{ padding: "8px 16px", fontWeight: 700 }}>
             New parcel
           </button>
           {isAdmin && (
@@ -171,6 +184,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
                     <button
                       key={t.id}
                       onClick={() => openTable(t)}
+                      disabled={t.status === "free" && creating}
                       style={{
                         padding: 16,
                         fontSize: 16,
