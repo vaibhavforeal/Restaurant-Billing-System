@@ -6,6 +6,7 @@ import { Home } from "./screens/Home";
 import { Login } from "./screens/Login";
 import { Settings } from "./screens/Settings";
 import { Setup } from "./screens/Setup";
+import { Tables } from "./screens/Tables";
 import { Users } from "./screens/Users";
 
 type State =
@@ -54,7 +55,7 @@ export function App() {
         <div>
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
           {page.name === "home" && <Home user={user} onNavigate={go} />}
-          {page.name === "tables" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Tables screen (Task 9)</p>}
+          {page.name === "tables" && <Tables user={user} onOpenOrder={onOpenOrder} />}
           {page.name === "order" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Order screen (Task 10)</p>}
           {page.name === "kitchen" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Kitchen display (Task 11)</p>}
           {page.name === "catalog" && <Catalog />}
