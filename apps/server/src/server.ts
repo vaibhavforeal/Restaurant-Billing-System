@@ -2,6 +2,7 @@ import type { Database } from "@forkflow/domain";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";
+import { registerCatalog } from "./catalog.js";
 import { registerUsers } from "./users.js";
 
 export interface ServerOptions {
@@ -43,6 +44,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   registerAuth(app);
+  registerCatalog(app);
   registerUsers(app);
 
   app.get("/api/health", async () => ({ ok: true }));
