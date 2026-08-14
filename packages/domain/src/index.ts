@@ -17,3 +17,9 @@ export { RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdate
 export { SettingsUpdate, type SettingsUpdateInput } from "./settings-schemas.js";
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
+export {
+  TableCreate, TableUpdate,
+  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel,
+  type TableCreateInput, type TableUpdateInput,
+  type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput,
+} from "./order-schemas.js";
