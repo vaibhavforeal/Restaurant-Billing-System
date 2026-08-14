@@ -25,7 +25,8 @@ export function App() {
         if (session.token) {
           try {
             const { user } = await apiFetch<{ user: User }>("/api/me");
-            return setState({ kind: "in", user, page: "home" });
+            const initialPage: Page = user.role === "kitchen" ? { name: "kitchen" } : { name: "home" };
+            return setState({ kind: "in", user, page: initialPage });
           } catch {
             /* token expired — fall through to login */
           }
@@ -41,19 +42,24 @@ export function App() {
     case "loading":
       return null;
     case "setup":
-      return <Setup onDone={(user) => setState({ kind: "in", user, page: "home" })} />;
+      return <Setup onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
     case "login":
-      return <Login onLogin={(user) => setState({ kind: "in", user, page: "home" })} />;
+      return <Login onLogin={(user) => setState({ kind: "in", user, page: user.role === "kitchen" ? { name: "kitchen" } : { name: "home" } })} />;
     case "in": {
       const { user, page } = state;
       const go = (next: Page) => setState({ kind: "in", user, page: next });
+      const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
+      const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
       return (
         <div>
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
-          {page === "home" && <Home user={user} onNavigate={go} />}
-          {page === "catalog" && <Catalog />}
-          {page === "users" && <Users />}
-          {page === "settings" && <Settings />}
+          {page.name === "home" && <Home user={user} onNavigate={go} />}
+          {page.name === "tables" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Tables screen (Task 9)</p>}
+          {page.name === "order" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Order screen (Task 10)</p>}
+          {page.name === "kitchen" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Kitchen display (Task 11)</p>}
+          {page.name === "catalog" && <Catalog />}
+          {page.name === "users" && <Users />}
+          {page.name === "settings" && <Settings />}
         </div>
       );
     }

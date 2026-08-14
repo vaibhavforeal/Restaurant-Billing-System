@@ -44,3 +44,68 @@ export interface SettingsData {
   fssai: string;
   receiptFooter: string;
 }
+
+export interface TableInfo {
+  id: string;
+  name: string;
+  area: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  status: "free" | "occupied" | "billed";
+  openOrderId: string | null;
+}
+
+export interface OrderItem {
+  id: string;
+  clientRef: string | null;
+  productId: string;
+  variantId: string | null;
+  name: string;
+  pricePaise: number;
+  gstRate: number;
+  qty: number;
+  status: "pending" | "sent" | "cancelled";
+  note: string | null;
+  cancelReason: string | null;
+  kotId: string | null;
+}
+
+export interface Order {
+  id: string;
+  clientRef: string;
+  type: "dine_in" | "parcel";
+  tableId: string | null;
+  status: "open" | "billed" | "settled" | "cancelled";
+  openedBy: string;
+  openedAt: number;
+  closedAt: number | null;
+  items: OrderItem[];
+  kots: Kot[];
+}
+
+export interface Kot {
+  id: string;
+  kotNo: number;
+  stationId: string;
+  orderId: string;
+  createdAt: number;
+  doneAt: number | null;
+}
+
+export interface KotWithContext {
+  id: string;
+  kotNo: number;
+  stationId: string;
+  orderId: string;
+  createdAt: number;
+  doneAt: number | null;
+  orderType: "dine_in" | "parcel";
+  tableName: string | null;
+  items: Array<{
+    id: string;
+    name: string;
+    qty: number;
+    note: string | null;
+    status: "pending" | "sent" | "cancelled";
+  }>;
+}
