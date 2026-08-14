@@ -122,8 +122,8 @@ export function registerAuth(app: FastifyInstance): void {
       .prepare("SELECT id, name, pin_hash, role FROM users WHERE is_active = 1")
       .all() as Array<{ id: string; name: string; pin_hash: string; role: RoleName }>;
 
-    // PIN alone identifies the user (POS convention). Uniqueness will be enforced
-    // when user creation lands (M2); until then the only users are setup-created admin + tests.
+    // PIN alone identifies the user (POS convention). Uniqueness across all
+    // users is enforced at creation/PIN-change time — see users.ts pinInUse().
     for (const u of users) {
       if (await verifyPassword(pin, u.pin_hash)) {
         // Success: reset throttle
