@@ -52,7 +52,7 @@ export function Users() {
       <h2>Users</h2>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
-        <input placeholder="PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} style={{ width: 130 }} />
+        <input type="password" placeholder="PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} style={{ width: 130 }} />
         <select value={role} onChange={(e) => setRole(e.target.value as AdminUser["role"])}>
           {ROLES.map((r) => (
             <option key={r} value={r}>{r}</option>
