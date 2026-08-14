@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";
 import { registerCatalog } from "./catalog.js";
 import { registerUsers } from "./users.js";
+import { registerSettings } from "./settings.js";
 
 export interface ServerOptions {
   db: Database;
@@ -46,6 +47,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerAuth(app);
   registerCatalog(app);
   registerUsers(app);
+  registerSettings(app);
 
   app.get("/api/health", async () => ({ ok: true }));
 
