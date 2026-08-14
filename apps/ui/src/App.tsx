@@ -5,6 +5,7 @@ import { Catalog } from "./screens/Catalog";
 import { Home } from "./screens/Home";
 import { Login } from "./screens/Login";
 import { Setup } from "./screens/Setup";
+import { Users } from "./screens/Users";
 
 type State =
   | { kind: "loading" }
@@ -50,7 +51,7 @@ export function App() {
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
           {page === "home" && <Home user={user} onNavigate={go} />}
           {page === "catalog" && <Catalog />}
-          {page === "users" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
+          {page === "users" && <Users />}
           {page === "settings" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
         </div>
       );
