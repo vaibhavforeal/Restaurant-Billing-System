@@ -1,0 +1,224 @@
+import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
+import type { FastifyInstance } from "fastify";
+import { httpError } from "./http-error.js";
+
+interface OrderRow {
+  id: string;
+  client_ref: string;
+  type: "dine_in" | "parcel";
+  table_id: string | null;
+  status: string;
+  opened_by: string;
+  opened_at: number;
+  closed_at: number | null;
+}
+
+interface OrderItemRow {
+  id: string;
+  client_ref: string | null;
+  order_id: string;
+  product_id: string;
+  variant_id: string | null;
+  kot_id: string | null;
+  name_snapshot: string;
+  price_paise_snapshot: number;
+  gst_rate_snapshot: number;
+  qty: number;
+  status: "pending" | "sent" | "cancelled";
+  note: string | null;
+  cancel_reason: string | null;
+}
+
+interface KotRow {
+  id: string;
+  kot_no: number;
+  station_id: string;
+  order_id: string;
+  created_at: number;
+  done_at: number | null;
+}
+
+const toKot = (r: KotRow) => ({
+  id: r.id,
+  kotNo: r.kot_no,
+  stationId: r.station_id,
+  orderId: r.order_id,
+  createdAt: r.created_at,
+  doneAt: r.done_at,
+});
+
+function toKotWithContext(
+  kot: KotRow,
+  order: OrderRow,
+  tableName: string | null,
+  items: OrderItemRow[],
+) {
+  return {
+    ...toKot(kot),
+    orderType: order.type,
+    tableName,
+    items: items.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),
+  };
+}
+
+export function registerKots(app: FastifyInstance): void {
+  const create = app.requirePermission("kots.create");
+  const read = app.requirePermission("kots.read");
+  const update = app.requirePermission("kots.update");
+
+  app.post("/api/orders/:id/send", { preHandler: create }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow | undefined;
+    if (!order) throw httpError(404, "order not found");
+    if (order.status !== "open") throw httpError(409, "order is not open");
+
+    interface PendingItem {
+      id: string;
+      product_id: string;
+      station_id: string | null;
+    }
+    const pendingItems = app.db
+      .prepare(
+        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id
+         FROM order_items oi
+         JOIN products p ON p.id = oi.product_id
+         WHERE oi.order_id = ? AND oi.status = 'pending'
+         ORDER BY oi.id`,
+      )
+      .all(id) as PendingItem[];
+
+    const byStation = new Map<string, string[]>();
+    for (const item of pendingItems) {
+      if (item.station_id) {
+        const list = byStation.get(item.station_id) ?? [];
+        list.push(item.id);
+        byStation.set(item.station_id, list);
+      }
+    }
+
+    if (byStation.size === 0) throw httpError(409, "nothing to send");
+
+    const createdKots: Array<{ id: string; stationId: string }> = [];
+
+    const write = app.db.transaction(() => {
+      const now = Date.now();
+      const dateKey = localDateKey(now);
+      for (const [stationId, itemIds] of byStation.entries()) {
+        const kotNo = nextSequence(app.db, "kot:" + dateKey);
+        const kotId = uuidv7();
+        app.db
+          .prepare("INSERT INTO kots (id, order_id, kot_no, station_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(kotId, id, kotNo, stationId, now, req.user.id);
+
+        for (const itemId of itemIds) {
+          app.db.prepare("UPDATE order_items SET status = 'sent', kot_id = ? WHERE id = ?").run(kotId, itemId);
+        }
+
+        createdKots.push({ id: kotId, stationId });
+      }
+    });
+    write();
+
+    const orderResult = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
+    const allItems = app.db
+      .prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY id")
+      .all(id) as OrderItemRow[];
+    const allKots = app.db
+      .prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at")
+      .all(id) as KotRow[];
+
+    const tableName = orderResult.table_id
+      ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(orderResult.table_id) as { name: string } | undefined)?.name ?? null
+      : null;
+
+    const kotsWithContext = createdKots.map((ck) => {
+      const kotRow = allKots.find((k) => k.id === ck.id)!;
+      const kotItems = allItems.filter((i) => i.kot_id === ck.id);
+      return toKotWithContext(kotRow, orderResult, tableName, kotItems);
+    });
+
+    for (const kot of kotsWithContext) {
+      app.broadcast("kot.created", { kot });
+    }
+
+    const toOrderItem = (i: OrderItemRow) => ({
+      id: i.id,
+      clientRef: i.client_ref,
+      productId: i.product_id,
+      variantId: i.variant_id,
+      name: i.name_snapshot,
+      pricePaise: i.price_paise_snapshot,
+      gstRate: i.gst_rate_snapshot,
+      qty: i.qty,
+      status: i.status,
+      note: i.note,
+      cancelReason: i.cancel_reason,
+      kotId: i.kot_id,
+    });
+
+    const orderFull = {
+      id: orderResult.id,
+      clientRef: orderResult.client_ref,
+      type: orderResult.type,
+      tableId: orderResult.table_id,
+      status: orderResult.status,
+      openedBy: orderResult.opened_by,
+      openedAt: orderResult.opened_at,
+      closedAt: orderResult.closed_at,
+      items: allItems.map(toOrderItem),
+      kots: allKots.map(toKot),
+    };
+
+    app.broadcast("order.updated", { order: orderFull });
+    if (orderResult.type === "dine_in") {
+      app.broadcast("table.changed", { tableId: orderResult.table_id! });
+    }
+
+    return reply.status(200).send({ order: orderFull, kots: kotsWithContext });
+  });
+
+  app.get("/api/kots", { preHandler: read }, async () => {
+    const rows = app.db
+      .prepare("SELECT * FROM kots WHERE done_at IS NULL ORDER BY created_at")
+      .all() as KotRow[];
+
+    const kots = rows.map((kot) => {
+      const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
+      const tableName = order.table_id
+        ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
+        : null;
+      const items = app.db
+        .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
+        .all(kot.id) as OrderItemRow[];
+      return toKotWithContext(kot, order, tableName, items);
+    });
+
+    return { kots };
+  });
+
+  app.post("/api/kots/:id/done", { preHandler: update }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow | undefined;
+    if (!kot) throw httpError(404, "kot not found");
+
+    if (kot.done_at) {
+      return reply.status(200).send({ kot: toKot(kot) });
+    }
+
+    const now = Date.now();
+    app.db.prepare("UPDATE kots SET done_at = ? WHERE id = ?").run(now, id);
+
+    const updated = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow;
+    const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(updated.order_id) as OrderRow;
+    const tableName = order.table_id
+      ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
+      : null;
+    const items = app.db
+      .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
+      .all(id) as OrderItemRow[];
+
+    app.broadcast("kot.updated", { kot: toKotWithContext(updated, order, tableName, items) });
+
+    return reply.status(200).send({ kot: toKot(updated) });
+  });
+}

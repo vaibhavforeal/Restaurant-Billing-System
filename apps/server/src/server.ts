@@ -8,6 +8,7 @@ import { registerUsers } from "./users.js";
 import { registerSettings } from "./settings.js";
 import { registerTables } from "./tables.js";
 import { registerOrders } from "./orders.js";
+import { registerKots } from "./kots.js";
 
 export interface ServerOptions {
   db: Database;
@@ -54,6 +55,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerSettings(app);
   registerTables(app);
   registerOrders(app);
+  registerKots(app);
 
   app.get("/api/health", async () => ({ ok: true }));
 
