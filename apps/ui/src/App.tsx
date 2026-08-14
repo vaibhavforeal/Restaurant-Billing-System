@@ -3,6 +3,7 @@ import { apiFetch, session, type User } from "./api";
 import { NavBar, type Page } from "./NavBar";
 import { Catalog } from "./screens/Catalog";
 import { Home } from "./screens/Home";
+import { Kitchen } from "./screens/Kitchen";
 import { Login } from "./screens/Login";
 import { OrderScreen } from "./screens/OrderScreen";
 import { Settings } from "./screens/Settings";
@@ -58,7 +59,7 @@ export function App() {
           {page.name === "home" && <Home user={user} onNavigate={go} />}
           {page.name === "tables" && <Tables user={user} onOpenOrder={onOpenOrder} />}
           {page.name === "order" && <OrderScreen user={user} orderId={page.orderId} onBack={onBack} />}
-          {page.name === "kitchen" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Kitchen display (Task 11)</p>}
+          {page.name === "kitchen" && <Kitchen />}
           {page.name === "catalog" && <Catalog />}
           {page.name === "users" && <Users />}
           {page.name === "settings" && <Settings />}
