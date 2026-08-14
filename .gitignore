@@ -9,6 +9,7 @@ build/
 *.db-wal
 .forkflow/
 data/
+.e2e-scratch/
 
 .env
 .env.*
