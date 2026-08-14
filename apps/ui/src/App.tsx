@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch, session, type User } from "./api";
 import { NavBar, type Page } from "./NavBar";
+import { Catalog } from "./screens/Catalog";
 import { Home } from "./screens/Home";
 import { Login } from "./screens/Login";
 import { Setup } from "./screens/Setup";
@@ -48,7 +49,7 @@ export function App() {
         <div>
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
           {page === "home" && <Home user={user} onNavigate={go} />}
-          {page === "catalog" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
+          {page === "catalog" && <Catalog />}
           {page === "users" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
           {page === "settings" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
         </div>
