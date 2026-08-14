@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch, session, type User } from "./api";
+import { NavBar, type Page } from "./NavBar";
 import { Home } from "./screens/Home";
 import { Login } from "./screens/Login";
 import { Setup } from "./screens/Setup";
@@ -8,7 +9,7 @@ type State =
   | { kind: "loading" }
   | { kind: "setup" }
   | { kind: "login" }
-  | { kind: "home"; user: User };
+  | { kind: "in"; user: User; page: Page };
 
 export function App() {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -21,7 +22,7 @@ export function App() {
         if (session.token) {
           try {
             const { user } = await apiFetch<{ user: User }>("/api/me");
-            return setState({ kind: "home", user });
+            return setState({ kind: "in", user, page: "home" });
           } catch {
             /* token expired — fall through to login */
           }
@@ -37,10 +38,21 @@ export function App() {
     case "loading":
       return null;
     case "setup":
-      return <Setup onDone={(user) => setState({ kind: "home", user })} />;
+      return <Setup onDone={(user) => setState({ kind: "in", user, page: "home" })} />;
     case "login":
-      return <Login onLogin={(user) => setState({ kind: "home", user })} />;
-    case "home":
-      return <Home user={state.user} onLogout={() => setState({ kind: "login" })} />;
+      return <Login onLogin={(user) => setState({ kind: "in", user, page: "home" })} />;
+    case "in": {
+      const { user, page } = state;
+      const go = (next: Page) => setState({ kind: "in", user, page: next });
+      return (
+        <div>
+          <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
+          {page === "home" && <Home user={user} onNavigate={go} />}
+          {page === "catalog" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
+          {page === "users" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
+          {page === "settings" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Coming in this milestone.</p>}
+        </div>
+      );
+    }
   }
 }

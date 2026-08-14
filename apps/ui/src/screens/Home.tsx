@@ -1,25 +1,24 @@
-import { apiFetch, session, type User } from "../api";
+import type { Page } from "../NavBar";
+import type { User } from "../api";
 
-export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
-  async function logout() {
-    try {
-      await apiFetch<void>("/api/logout", { method: "POST" });
-    } catch {
-      // ignore error - local session is cleared regardless
-    } finally {
-      session.clear();
-      onLogout();
-    }
-  }
+const tile = { padding: 20, fontSize: 18 } as const;
 
+export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
+  const isAdmin = user.role === "admin";
   return (
-    <div style={{ maxWidth: 480, margin: "10vh auto", textAlign: "center", fontFamily: "system-ui" }}>
-      <h1>ForkFlow</h1>
+    <div style={{ maxWidth: 480, margin: "8vh auto", textAlign: "center", fontFamily: "system-ui" }}>
       <p>
         Signed in as <strong>{user.name}</strong> ({user.role})
       </p>
-      <p>Milestone 1 foundation — modules arrive in Milestones 2-5.</p>
-      <button onClick={() => void logout()} style={{ padding: 12 }}>Log out</button>
+      {isAdmin ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          <button style={tile} onClick={() => onNavigate("catalog")}>Catalog</button>
+          <button style={tile} onClick={() => onNavigate("users")}>Users</button>
+          <button style={tile} onClick={() => onNavigate("settings")}>Settings</button>
+        </div>
+      ) : (
+        <p>Ordering and billing arrive in Milestones 3-4.</p>
+      )}
     </div>
   );
 }
