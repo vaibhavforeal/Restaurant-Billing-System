@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, apiFetch, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
+import { uuid } from "../uuid";
 
 export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderId: string) => void }) {
   const [tables, setTables] = useState<TableInfo[]>([]);
@@ -83,7 +84,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
         try {
           const { order } = await apiFetch<{ order: Order }>("/api/orders", {
             method: "POST",
-            body: JSON.stringify({ clientRef: crypto.randomUUID(), type: "dine_in", tableId: table.id }),
+            body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId: table.id }),
           });
           onOpenOrder(order.id);
         } finally {
@@ -100,7 +101,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
       try {
         const { order } = await apiFetch<{ order: Order }>("/api/orders", {
           method: "POST",
-          body: JSON.stringify({ clientRef: crypto.randomUUID(), type: "parcel", tableId: null }),
+          body: JSON.stringify({ clientRef: uuid(), type: "parcel", tableId: null }),
         });
         onOpenOrder(order.id);
       } finally {

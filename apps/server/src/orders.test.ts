@@ -446,6 +446,68 @@ describe("orders: items punch/update/cancel", () => {
     })).statusCode).toBe(404);
   });
 
+  it("rejects PATCH on item when parent order is not open", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { dalId } = await fixtures(app, admin.token);
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "order-closed", type: "parcel" },
+      headers: auth(admin.token),
+    });
+    const orderId = orderRes.json().order.id;
+
+    const punchRes = await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/items`,
+      payload: { items: [{ productId: dalId, qty: 1 }] },
+      headers: auth(admin.token),
+    });
+    const itemId = punchRes.json().order.items[0].id;
+
+    // Backdoor: close the order via SQL (like auth.test.ts)
+    app.db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(orderId);
+
+    const patchRes = await app.inject({
+      method: "PATCH", url: `/api/order-items/${itemId}`,
+      payload: { qty: 2 },
+      headers: auth(admin.token),
+    });
+    expect(patchRes.statusCode).toBe(409);
+    expect(patchRes.json().error).toBe("order is not open");
+  });
+
+  it("rejects cancel on item when parent order is not open", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { dalId } = await fixtures(app, admin.token);
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "order-closed-2", type: "parcel" },
+      headers: auth(admin.token),
+    });
+    const orderId = orderRes.json().order.id;
+
+    const punchRes = await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/items`,
+      payload: { items: [{ productId: dalId, qty: 1 }] },
+      headers: auth(admin.token),
+    });
+    const itemId = punchRes.json().order.items[0].id;
+
+    // Backdoor: close the order via SQL
+    app.db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(orderId);
+
+    const cancelRes = await app.inject({
+      method: "POST", url: `/api/order-items/${itemId}/cancel`,
+      payload: {},
+      headers: auth(admin.token),
+    });
+    expect(cancelRes.statusCode).toBe(409);
+    expect(cancelRes.json().error).toBe("order is not open");
+  });
+
   it("broadcasts order.updated via WS on item mutations", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

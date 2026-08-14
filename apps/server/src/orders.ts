@@ -154,8 +154,12 @@ export function registerOrders(app: FastifyInstance): void {
     if (!order) throw httpError(404, "order not found");
     if (order.status !== "open") throw httpError(409, "order is not open");
 
+    const incomingRefs = body.items.map((i) => i.clientRef).filter((r): r is string => !!r);
+    const placeholders = incomingRefs.map(() => "?").join(",");
     const existingRefs = new Set(
-      (app.db.prepare("SELECT client_ref FROM order_items WHERE client_ref IS NOT NULL").all() as Array<{ client_ref: string }>).map((r) => r.client_ref),
+      incomingRefs.length
+        ? (app.db.prepare(`SELECT client_ref FROM order_items WHERE client_ref IN (${placeholders})`).all(...incomingRefs) as Array<{ client_ref: string }>).map((r) => r.client_ref)
+        : [],
     );
 
     interface ProductRow {
@@ -249,6 +253,9 @@ export function registerOrders(app: FastifyInstance): void {
     const body = OrderItemUpdate.parse(req.body);
     const item = app.db.prepare("SELECT * FROM order_items WHERE id = ?").get(id) as OrderItemRow | undefined;
     if (!item) throw httpError(404, "item not found");
+    const order = getOrder(item.order_id);
+    if (!order) throw httpError(404, "order not found");
+    if (order.status !== "open") throw httpError(409, "order is not open");
     if (item.status !== "pending") throw httpError(409, "item is not pending");
 
     const qty = body.qty ?? item.qty;
@@ -266,6 +273,9 @@ export function registerOrders(app: FastifyInstance): void {
     const body = ItemCancel.parse(req.body);
     const item = app.db.prepare("SELECT * FROM order_items WHERE id = ?").get(id) as OrderItemRow | undefined;
     if (!item) throw httpError(404, "item not found");
+    const order = getOrder(item.order_id);
+    if (!order) throw httpError(404, "order not found");
+    if (order.status !== "open") throw httpError(409, "order is not open");
     if (item.status === "cancelled") throw httpError(409, "item already cancelled");
 
     if (item.status === "sent") {

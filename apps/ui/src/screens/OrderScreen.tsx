@@ -3,6 +3,7 @@ import { ApiError, apiFetch, type User } from "../api";
 import { paiseToRupees } from "../money";
 import type { Category, Order, OrderItem, Product } from "../types";
 import { connectWs } from "../ws";
+import { uuid } from "../uuid";
 
 interface DraftItem {
   clientRef: string;
@@ -72,7 +73,7 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
   }
 
   function addToDraft(productId: string, variantId: string | null, name: string, pricePaise: number) {
-    setDraft((d) => [...d, { clientRef: crypto.randomUUID(), productId, variantId, name, pricePaise, qty: 1, note: "" }]);
+    setDraft((d) => [...d, { clientRef: uuid(), productId, variantId, name, pricePaise, qty: 1, note: "" }]);
   }
 
   function updateDraft(clientRef: string, update: Partial<Pick<DraftItem, "qty" | "note">>) {
