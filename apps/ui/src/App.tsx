@@ -4,6 +4,7 @@ import { NavBar, type Page } from "./NavBar";
 import { Catalog } from "./screens/Catalog";
 import { Home } from "./screens/Home";
 import { Login } from "./screens/Login";
+import { OrderScreen } from "./screens/OrderScreen";
 import { Settings } from "./screens/Settings";
 import { Setup } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
@@ -56,7 +57,7 @@ export function App() {
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
           {page.name === "home" && <Home user={user} onNavigate={go} />}
           {page.name === "tables" && <Tables user={user} onOpenOrder={onOpenOrder} />}
-          {page.name === "order" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Order screen (Task 10)</p>}
+          {page.name === "order" && <OrderScreen user={user} orderId={page.orderId} onBack={onBack} />}
           {page.name === "kitchen" && <p style={{ fontFamily: "system-ui", padding: 16 }}>Kitchen display (Task 11)</p>}
           {page.name === "catalog" && <Catalog />}
           {page.name === "users" && <Users />}
