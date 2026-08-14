@@ -59,7 +59,7 @@ describe("kots: send-to-kitchen", () => {
   it("groups items by station and assigns per-day KOT numbers", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
-    const { biryaniId, biryaniHalfVariantId, kebabId } = await fixtures(app, admin.token);
+    const { biryaniId, biryaniHalfVariantId, kebabId, kitchenStationId, grillStationId } = await fixtures(app, admin.token);
 
     const orderRes = await app.inject({
       method: "POST", url: "/api/orders",
@@ -90,6 +90,10 @@ describe("kots: send-to-kitchen", () => {
     expect(kots[0].kotNo).toBe(1);
     expect(kots[1].kotNo).toBe(2);
     expect(order.items.every((i: { status: string }) => i.status === "sent")).toBe(true);
+    // Verify station assignments (order-independent)
+    const stationIds = new Set(kots.map((k: { stationId: string }) => k.stationId));
+    expect(stationIds).toContain(kitchenStationId);
+    expect(stationIds).toContain(grillStationId);
 
     const orderRes2 = await app.inject({
       method: "POST", url: "/api/orders",
@@ -324,19 +328,40 @@ describe("kots: board and done", () => {
     });
     const kotId = sendRes.json().kots[0].id;
 
-    const doneRes = await app.inject({
-      method: "POST", url: `/api/kots/${kotId}/done`,
-      headers: auth(admin.token),
-    });
-    expect(doneRes.statusCode).toBe(200);
-    expect(doneRes.json().kot.doneAt).toBeGreaterThan(0);
+    await app.ready();
+    const ws = await app.injectWS("/api/ws?token=" + admin.token);
+    const messages: unknown[] = [];
+    ws.on("message", (data: Buffer) => messages.push(JSON.parse(data.toString())));
 
-    const done2Res = await app.inject({
-      method: "POST", url: `/api/kots/${kotId}/done`,
-      headers: auth(admin.token),
-    });
-    expect(done2Res.statusCode).toBe(200);
-    expect(done2Res.json().kot.doneAt).toBe(doneRes.json().kot.doneAt);
+    try {
+      messages.length = 0;
+
+      const doneRes = await app.inject({
+        method: "POST", url: `/api/kots/${kotId}/done`,
+        headers: auth(admin.token),
+      });
+      expect(doneRes.statusCode).toBe(200);
+      expect(doneRes.json().kot.doneAt).toBeGreaterThan(0);
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      const kotUpdated = messages.filter(
+        (m): m is { event: string; data: { kot: { id: string; doneAt: number } } } =>
+          (m as { event?: string }).event === "kot.updated",
+      );
+      expect(kotUpdated).toHaveLength(1);
+      expect(kotUpdated[0]!.data.kot.id).toBe(kotId);
+      expect(kotUpdated[0]!.data.kot.doneAt).toBeGreaterThan(0);
+
+      const done2Res = await app.inject({
+        method: "POST", url: `/api/kots/${kotId}/done`,
+        headers: auth(admin.token),
+      });
+      expect(done2Res.statusCode).toBe(200);
+      expect(done2Res.json().kot.doneAt).toBe(doneRes.json().kot.doneAt);
+    } finally {
+      ws.terminate();
+    }
   });
 
   it("kitchen role can read and done, waiter cannot done", async () => {
@@ -367,6 +392,12 @@ describe("kots: board and done", () => {
     const kotId = waiterSend.json().kots[0].id;
 
     expect((await app.inject({ method: "GET", url: "/api/kots", headers: auth(kitchen.token) })).statusCode).toBe(200);
+
+    const kitchenSendAttempt = await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/send`,
+      headers: auth(kitchen.token),
+    });
+    expect(kitchenSendAttempt.statusCode).toBe(403);
 
     const kitchenDone = await app.inject({
       method: "POST", url: `/api/kots/${kotId}/done`,

@@ -178,22 +178,49 @@ export function registerKots(app: FastifyInstance): void {
   });
 
   app.get("/api/kots", { preHandler: read }, async () => {
-    const rows = app.db
+    const kots = app.db
       .prepare("SELECT * FROM kots WHERE done_at IS NULL ORDER BY created_at")
       .all() as KotRow[];
 
-    const kots = rows.map((kot) => {
-      const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
-      const tableName = order.table_id
-        ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
-        : null;
-      const items = app.db
-        .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
-        .all(kot.id) as OrderItemRow[];
-      return toKotWithContext(kot, order, tableName, items);
-    });
+    if (kots.length === 0) {
+      return { kots: [] };
+    }
 
-    return { kots };
+    const orders = app.db
+      .prepare(
+        `SELECT o.*, dt.name AS table_name
+         FROM orders o
+         LEFT JOIN dining_tables dt ON dt.id = o.table_id
+         WHERE o.id IN (${kots.map(() => "?").join(",")})`,
+      )
+      .all(...kots.map((k) => k.order_id)) as Array<OrderRow & { table_name: string | null }>;
+
+    const items = app.db
+      .prepare(
+        `SELECT * FROM order_items WHERE kot_id IN (${kots.map(() => "?").join(",")})`,
+      )
+      .all(...kots.map((k) => k.id)) as OrderItemRow[];
+
+    const ordersById = new Map<string, OrderRow & { table_name: string | null }>();
+    for (const o of orders) {
+      ordersById.set(o.id, o);
+    }
+
+    const itemsByKotId = new Map<string, OrderItemRow[]>();
+    for (const item of items) {
+      const list = itemsByKotId.get(item.kot_id!) ?? [];
+      list.push(item);
+      itemsByKotId.set(item.kot_id!, list);
+    }
+
+    return {
+      kots: kots.map((kot) => {
+        const order = ordersById.get(kot.order_id)!;
+        const tableName = order.table_name ?? null;
+        const kotItems = itemsByKotId.get(kot.id) ?? [];
+        return toKotWithContext(kot, order as OrderRow, tableName, kotItems);
+      }),
+    };
   });
 
   app.post("/api/kots/:id/done", { preHandler: update }, async (req, reply) => {
