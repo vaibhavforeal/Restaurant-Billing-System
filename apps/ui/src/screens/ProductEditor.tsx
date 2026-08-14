@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError, apiFetch } from "../api";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Category, Product, Station, Variant } from "../types";
@@ -30,6 +30,7 @@ export function ProductEditor({
   const [variants, setVariants] = useState<Variant[]>(product?.variants ?? []);
   const [newVariant, setNewVariant] = useState({ name: "", price: "" });
   const [error, setError] = useState("");
+  const localIdRef = useRef(0);
 
   function fail(e: unknown) {
     setError(e instanceof ApiError ? e.message : "Request failed");
@@ -79,7 +80,7 @@ export function ProductEditor({
       }
     } else {
       // local-only until the product is created
-      setVariants((vs) => [...vs, { id: `local-${vs.length}`, name: vName, pricePaise: vPrice, isActive: true }]);
+      setVariants((vs) => [...vs, { id: `local-${localIdRef.current++}`, name: vName, pricePaise: vPrice, isActive: true }]);
     }
     setNewVariant({ name: "", price: "" });
   }
