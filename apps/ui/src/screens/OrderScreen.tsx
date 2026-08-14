@@ -21,6 +21,7 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftItem[]>([]);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
   const draftKey = `forkflow.draft.${orderId}`;
 
@@ -83,8 +84,9 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
   }
 
   function punch() {
-    if (draft.length === 0) return;
-    void run(async () => {
+    if (pending || draft.length === 0) return;
+    setPending(true);
+    run(async () => {
       const items = draft.map((d) => ({
         clientRef: d.clientRef,
         productId: d.productId,
@@ -95,7 +97,7 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
       await apiFetch(`/api/orders/${orderId}/items`, { method: "POST", body: JSON.stringify({ items }) });
       setDraft([]);
       localStorage.removeItem(draftKey);
-    });
+    }).finally(() => setPending(false));
   }
 
   function cancelItem(item: OrderItem) {
@@ -111,15 +113,18 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
   }
 
   function sendToKitchen() {
-    void run(() => apiFetch(`/api/orders/${orderId}/send`, { method: "POST" }));
+    if (pending) return;
+    setPending(true);
+    run(() => apiFetch(`/api/orders/${orderId}/send`, { method: "POST" })).finally(() => setPending(false));
   }
 
   function cancelOrder() {
-    if (!window.confirm("Cancel this entire order?")) return;
-    void run(async () => {
+    if (pending || !window.confirm("Cancel this entire order?")) return;
+    setPending(true);
+    run(async () => {
       await apiFetch(`/api/orders/${orderId}/cancel`, { method: "POST" });
       onBack();
-    });
+    }).finally(() => setPending(false));
   }
 
   function addNote(clientRef: string) {
@@ -210,7 +215,7 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
               </div>
             ))}
             {draft.length > 0 && (
-              <button onClick={punch} style={{ marginTop: 8, padding: "10px 24px", fontWeight: 700 }}>
+              <button onClick={punch} disabled={pending || draft.length === 0} style={{ marginTop: 8, padding: "10px 24px", fontWeight: 700 }}>
                 Punch
               </button>
             )}
@@ -248,8 +253,8 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
             >
               {item.status}
             </span>
-            {item.status !== "cancelled" && (
-              <button onClick={() => cancelItem(item)} disabled={item.status === "sent" && user.role !== "admin" && user.role !== "cashier"}>
+            {item.status !== "cancelled" && (item.status === "pending" || (item.status === "sent" && (user.role === "admin" || user.role === "cashier"))) && (
+              <button onClick={() => cancelItem(item)}>
                 Cancel
               </button>
             )}
@@ -264,11 +269,11 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
 
       {order.status === "open" && (
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={sendToKitchen} style={{ padding: "10px 24px", fontWeight: 700 }}>
+          <button onClick={sendToKitchen} disabled={pending} style={{ padding: "10px 24px", fontWeight: 700 }}>
             Send to kitchen
           </button>
           {canCancelOrder && (
-            <button onClick={cancelOrder} style={{ padding: "10px 24px", backgroundColor: "#f8d7da" }}>
+            <button onClick={cancelOrder} disabled={pending} style={{ padding: "10px 24px", backgroundColor: "#f8d7da" }}>
               Cancel order
             </button>
           )}
