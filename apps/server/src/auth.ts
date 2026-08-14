@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword, can } from "@forkflow/core";
-import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName } from "@forkflow/domain";
+import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
 
@@ -27,6 +27,18 @@ interface SessionRow {
   is_active: number;
 }
 
+export function sessionUser(db: Database, token: string): AuthedUser | null {
+  const row = db
+    .prepare(
+      `SELECT s.user_id, s.expires_at, u.name, u.role, u.is_active
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token = ?`,
+    )
+    .get(token) as SessionRow | undefined;
+  if (!row || row.expires_at < Date.now() || !row.is_active) return null;
+  return { id: row.user_id, name: row.name, role: row.role };
+}
+
 export function registerAuth(app: FastifyInstance): void {
   // Plugin-scoped: each server instance gets its own throttle state.
   const loginThrottle = new Map<string, ThrottleState>();
@@ -45,15 +57,7 @@ export function registerAuth(app: FastifyInstance): void {
   const userForToken = (header: string | undefined): AuthedUser | null => {
     if (!header?.startsWith("Bearer ")) return null;
     const token = header.slice("Bearer ".length);
-    const row = app.db
-      .prepare(
-        `SELECT s.user_id, s.expires_at, u.name, u.role, u.is_active
-         FROM sessions s JOIN users u ON u.id = s.user_id
-         WHERE s.token = ?`,
-      )
-      .get(token) as SessionRow | undefined;
-    if (!row || row.expires_at < Date.now() || !row.is_active) return null;
-    return { id: row.user_id, name: row.name, role: row.role };
+    return sessionUser(app.db, token);
   };
 
   const requireAuth: preHandlerHookHandler = async (req: FastifyRequest, reply: FastifyReply) => {

@@ -2,6 +2,7 @@ import type { Database } from "@forkflow/domain";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";
+import { registerWs } from "./ws.js";
 import { registerCatalog } from "./catalog.js";
 import { registerUsers } from "./users.js";
 import { registerSettings } from "./settings.js";
@@ -45,6 +46,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   registerAuth(app);
+  registerWs(app);
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);
