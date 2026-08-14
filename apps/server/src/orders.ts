@@ -1,4 +1,5 @@
-import { OrderCreate, uuidv7 } from "@forkflow/domain";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor } from "@forkflow/domain";
+import { can } from "@forkflow/core";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 
@@ -142,5 +143,183 @@ export function registerOrders(app: FastifyInstance): void {
     const order = orderWithDetails(id);
     if (!order) throw httpError(404, "order not found");
     return { order };
+  });
+
+  const update = app.requirePermission("orders.update");
+
+  app.post("/api/orders/:id/items", { preHandler: update }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = OrderItemsAdd.parse(req.body);
+    const order = getOrder(id);
+    if (!order) throw httpError(404, "order not found");
+    if (order.status !== "open") throw httpError(409, "order is not open");
+
+    const existingRefs = new Set(
+      (app.db.prepare("SELECT client_ref FROM order_items WHERE client_ref IS NOT NULL").all() as Array<{ client_ref: string }>).map((r) => r.client_ref),
+    );
+
+    interface ProductRow {
+      id: string;
+      name: string;
+      price_paise: number;
+      gst_rate: number;
+      is_active: number;
+    }
+    interface VariantRow {
+      id: string;
+      product_id: string;
+      name: string;
+      price_paise: number;
+      is_active: number;
+    }
+
+    const itemsToInsert: Array<{
+      clientRef: string | null;
+      productId: string;
+      variantId: string | null;
+      name: string;
+      pricePaise: number;
+      gstRate: number;
+      qty: number;
+      note: string | undefined;
+    }> = [];
+
+    for (const item of body.items) {
+      if (item.clientRef && existingRefs.has(item.clientRef)) continue;
+
+      const product = app.db.prepare("SELECT * FROM products WHERE id = ?").get(item.productId) as ProductRow | undefined;
+      if (!product) throw httpError(400, "unknown product");
+
+      let variant: VariantRow | undefined;
+      if (item.variantId) {
+        variant = app.db.prepare("SELECT * FROM variants WHERE id = ?").get(item.variantId) as VariantRow | undefined;
+        if (!variant) throw httpError(400, "unknown variant");
+        if (variant.is_active !== 1) throw httpError(400, "variant is not active");
+        if (variant.product_id !== item.productId) throw httpError(400, "variant does not belong to product");
+      }
+
+      if (product.is_active !== 1) throw httpError(400, "product is not active");
+
+      const name = variant ? `${product.name} (${variant.name})` : product.name;
+      const pricePaise = variant ? variant.price_paise : product.price_paise;
+
+      itemsToInsert.push({
+        clientRef: item.clientRef ?? null,
+        productId: item.productId,
+        variantId: item.variantId,
+        name,
+        pricePaise,
+        gstRate: product.gst_rate,
+        qty: item.qty,
+        note: item.note,
+      });
+    }
+
+    if (itemsToInsert.length > 0) {
+      const write = app.db.transaction(() => {
+        for (const item of itemsToInsert) {
+          app.db
+            .prepare(
+              "INSERT INTO order_items (id, order_id, client_ref, product_id, variant_id, name_snapshot, price_paise_snapshot, gst_rate_snapshot, qty, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .run(
+              uuidv7(),
+              id,
+              item.clientRef,
+              item.productId,
+              item.variantId,
+              item.name,
+              item.pricePaise,
+              item.gstRate,
+              item.qty,
+              item.note ?? null,
+            );
+        }
+      });
+      write();
+    }
+
+    const result = orderWithDetails(id)!;
+    app.broadcast("order.updated", { order: result });
+    return { order: result };
+  });
+
+  app.patch("/api/order-items/:id", { preHandler: update }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = OrderItemUpdate.parse(req.body);
+    const item = app.db.prepare("SELECT * FROM order_items WHERE id = ?").get(id) as OrderItemRow | undefined;
+    if (!item) throw httpError(404, "item not found");
+    if (item.status !== "pending") throw httpError(409, "item is not pending");
+
+    const qty = body.qty ?? item.qty;
+    const note = body.note === undefined ? item.note : body.note;
+
+    app.db.prepare("UPDATE order_items SET qty = ?, note = ? WHERE id = ?").run(qty, note, id);
+
+    const result = orderWithDetails(item.order_id)!;
+    app.broadcast("order.updated", { order: result });
+    return { order: result };
+  });
+
+  app.post("/api/order-items/:id/cancel", { preHandler: update }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = ItemCancel.parse(req.body);
+    const item = app.db.prepare("SELECT * FROM order_items WHERE id = ?").get(id) as OrderItemRow | undefined;
+    if (!item) throw httpError(404, "item not found");
+    if (item.status === "cancelled") throw httpError(409, "item already cancelled");
+
+    if (item.status === "sent") {
+      if (!can(roleFor(req.user.role), "orders.cancel_sent")) {
+        return reply.status(403).send({ error: "forbidden", permission: "orders.cancel_sent" });
+      }
+      if (!body.reason) throw httpError(400, "reason required");
+    }
+
+    app.db
+      .prepare("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_by = ? WHERE id = ?")
+      .run(body.reason ?? null, req.user.id, id);
+
+    const result = orderWithDetails(item.order_id)!;
+    app.broadcast("order.updated", { order: result });
+    if (item.status === "sent" && item.kot_id) {
+      const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(item.kot_id) as KotRow;
+      const kotItems = app.db
+        .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
+        .all(item.kot_id) as OrderItemRow[];
+      const order = getOrder(kot.order_id)!;
+      const tableName = order.table_id
+        ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
+        : null;
+      app.broadcast("kot.updated", {
+        kot: {
+          ...toKot(kot),
+          orderType: order.type,
+          tableName,
+          items: kotItems.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),
+        },
+      });
+    }
+    return { order: result };
+  });
+
+  app.post("/api/orders/:id/cancel", { preHandler: update }, async (req) => {
+    const { id } = req.params as { id: string };
+    const order = getOrder(id);
+    if (!order) throw httpError(404, "order not found");
+    if (order.status !== "open") throw httpError(409, "order is not open");
+
+    const sentItem = app.db
+      .prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'sent' LIMIT 1")
+      .get(id) as { id: string } | undefined;
+    if (sentItem) throw httpError(409, "cancel sent items first");
+
+    app.db.prepare("UPDATE orders SET status = 'cancelled', closed_at = ? WHERE id = ?").run(Date.now(), id);
+
+    const result = orderWithDetails(id)!;
+    app.broadcast("order.updated", { order: result });
+    if (order.table_id) {
+      app.broadcast("table.changed", { tableId: order.table_id });
+    }
+    return { order: result };
   });
 }
