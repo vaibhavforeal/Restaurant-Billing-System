@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, apiFetch, type User } from "../api";
+import { ApiError, apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
@@ -29,6 +29,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
         if (event === "table.changed" || event === "order.updated") void reload();
       },
       onStatus: (connected) => { if (connected) void reload(); },
+      onAuthFail: () => session.clear(),
     });
     return dispose;
   }, []);
