@@ -43,3 +43,37 @@ export async function createUser(
   const { token } = login.json() as { token: string };
   return { id: (created.json() as { user: { id: string } }).user.id, token };
 }
+
+export async function wsAuth(app: FastifyInstance, token: string): Promise<import("@fastify/websocket").WebSocket> {
+  const ws = await app.injectWS("/api/ws");
+
+  // Wait for connection to open
+  await new Promise<void>((resolve) => {
+    if (ws.readyState === ws.OPEN) {
+      resolve();
+    } else {
+      ws.on("open", () => resolve());
+    }
+  });
+
+  // Send auth frame
+  ws.send(JSON.stringify({ type: "auth", token }));
+
+  // Wait for auth.ok
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("auth.ok timeout")), 1000);
+    ws.on("message", (raw: Buffer) => {
+      try {
+        const msg = JSON.parse(raw.toString()) as { event?: string };
+        if (msg.event === "auth.ok") {
+          clearTimeout(timeout);
+          resolve();
+        }
+      } catch {
+        // ignore non-JSON
+      }
+    });
+  });
+
+  return ws;
+}

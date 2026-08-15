@@ -75,6 +75,12 @@ export function registerUsers(app: FastifyInstance): void {
     app.db
       .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ? WHERE id = ?")
       .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash, id);
+
+    // Close WS sockets if user was deactivated
+    if (row.is_active === 1 && body.isActive === false) {
+      app.wsRevalidate();
+    }
+
     return { user: toUser(getUser(id)!) };
   });
 }

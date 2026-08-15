@@ -157,6 +157,7 @@ export function registerAuth(app: FastifyInstance): void {
   app.post("/api/logout", { preHandler: requireAuth }, async (req, reply) => {
     const token = (req.headers.authorization ?? "").slice("Bearer ".length);
     app.db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+    app.wsRevalidate();  // NEW: close this user's WS sockets
     return reply.status(204).send();
   });
 }
