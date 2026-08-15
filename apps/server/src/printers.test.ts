@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { auth, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, freshAppWithFakeSink, setupAdmin, wsAuth } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshAppWithFakeSink>["app"];
 afterEach(async () => {
@@ -363,7 +363,7 @@ describe("WS print.job broadcast", () => {
     });
     const printerId = printerRes.json().printer.id;
 
-    const ws = await app.injectWS(`/api/ws?token=${admin.token}`);
+    const ws = await wsAuth(app, admin.token);
     const messages: Array<{ event?: string; data?: { job?: { status: string } } }> = [];
     ws.on("message", (raw: Buffer) => { messages.push(JSON.parse(raw.toString())); });
 
