@@ -1,14 +1,19 @@
 const TOKEN_KEY = "forkflow.token";
 
 export const session = {
+  onUnauthorized: null as (() => void) | null,
+
   get token(): string | null {
     return localStorage.getItem(TOKEN_KEY);
   },
+
   set(token: string) {
     localStorage.setItem(TOKEN_KEY, token);
   },
+
   clear() {
     localStorage.removeItem(TOKEN_KEY);
+    this.onUnauthorized?.();
   },
 };
 
