@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, freshApp, setupAdmin, createUser, wsAuth } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {
@@ -727,7 +727,7 @@ describe("orders: items punch/update/cancel", () => {
     const { dalId } = await fixtures(app, admin.token);
 
     await app.ready();
-    const ws = await app.injectWS("/api/ws?token=" + admin.token);
+    const ws = await wsAuth(app, admin.token);
     const messages: unknown[] = [];
     ws.on("message", (data: Buffer) => messages.push(JSON.parse(data.toString())));
 
