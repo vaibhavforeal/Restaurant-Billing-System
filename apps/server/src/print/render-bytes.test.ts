@@ -35,4 +35,14 @@ describe("renderBytes", () => {
     const buf = Buffer.from([0x80, 0xff]);
     expect(renderBytes(buf)).toBe("<80><FF>");
   });
+
+  it("ESC @ (init with 0 params) followed by text", () => {
+    const buf = Buffer.from([0x1b, 0x40, 0x54]); // ESC @ 'T'
+    expect(renderBytes(buf)).toBe("<1B><40>T");
+  });
+
+  it("ESC p (drawerKick with 3 params) followed by text", () => {
+    const buf = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa, 0x41]); // ESC p 0 25 250 'A'
+    expect(renderBytes(buf)).toBe("<1B><70><00><19><FA>A");
+  });
 });
