@@ -35,6 +35,7 @@ export function Settings() {
 
   // Common
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   // Load all data on mount
   useEffect(() => {
@@ -98,6 +99,8 @@ export function Settings() {
 
   // Profile actions
   async function saveProfile() {
+    if (busy) return;
+    setBusy(true);
     setProfileStatus("");
     try {
       const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", {
@@ -108,15 +111,19 @@ export function Settings() {
       setProfileStatus("saved");
     } catch {
       setProfileStatus("error");
+    } finally {
+      setBusy(false);
     }
   }
 
   // Printer actions
   async function addPrinter() {
+    if (busy) return;
     if (!newPrinter.name.trim() || !newPrinter.connection.trim()) {
       setError("Printer name and connection are required");
       return;
     }
+    setBusy(true);
     setError("");
     try {
       await apiFetch("/api/printers", { method: "POST", body: JSON.stringify(newPrinter) });
@@ -124,6 +131,8 @@ export function Settings() {
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add printer");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -133,6 +142,8 @@ export function Settings() {
   }
 
   async function savePrinter(id: string) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/printers/${id}`, { method: "PATCH", body: JSON.stringify(editPrinter) });
@@ -140,10 +151,15 @@ export function Settings() {
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update printer");
+      await loadAll();
+    } finally {
+      setBusy(false);
     }
   }
 
   async function togglePrinter(p: PrinterInfo) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/printers/${p.id}`, {
@@ -153,25 +169,34 @@ export function Settings() {
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to toggle printer");
+      await loadAll();
+    } finally {
+      setBusy(false);
     }
   }
 
   async function testPrint(printerId: string) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/printers/${printerId}/test-print`, { method: "POST" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Test print failed");
+    } finally {
+      setBusy(false);
     }
   }
 
   // Station actions
   async function addStation() {
+    if (busy) return;
     const name = newStationName.trim();
     if (!name) {
       setError("Station name is required");
       return;
     }
+    setBusy(true);
     setError("");
     try {
       await apiFetch("/api/kot-stations", { method: "POST", body: JSON.stringify({ name }) });
@@ -179,10 +204,14 @@ export function Settings() {
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add station");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function updateStationPrinter(stationId: string, printerId: string) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/kot-stations/${stationId}`, {
@@ -192,10 +221,15 @@ export function Settings() {
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update station");
+      await loadAll();
+    } finally {
+      setBusy(false);
     }
   }
 
   async function toggleStation(s: StationInfo) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/kot-stations/${s.id}`, {
@@ -205,16 +239,23 @@ export function Settings() {
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to toggle station");
+      await loadAll();
+    } finally {
+      setBusy(false);
     }
   }
 
   // Job actions
   async function retryJob(jobId: string) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/print-jobs/${jobId}/retry`, { method: "POST" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Retry failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -243,7 +284,7 @@ export function Settings() {
           <button
             onClick={() => void saveProfile()}
             style={{ padding: 12, fontWeight: 700 }}
-            disabled={!form.restaurantName.trim()}
+            disabled={!form.restaurantName.trim() || busy}
           >
             Save
           </button>
@@ -312,8 +353,8 @@ export function Settings() {
                   </td>
                   <td>{p.isActive ? "✓" : "—"}</td>
                   <td>
-                    <button onClick={() => void savePrinter(p.id)}>Save</button>
-                    <button onClick={() => setEditingPrinterId(null)}>Cancel</button>
+                    <button onClick={() => void savePrinter(p.id)} disabled={busy}>Save</button>
+                    <button onClick={() => setEditingPrinterId(null)} disabled={busy}>Cancel</button>
                   </td>
                 </tr>
               ) : (
@@ -324,9 +365,9 @@ export function Settings() {
                   <td>{p.paperWidth}mm</td>
                   <td>{p.isActive ? "✓" : "—"}</td>
                   <td>
-                    <button onClick={() => void testPrint(p.id)}>Test print</button>
-                    <button onClick={() => startEditPrinter(p)}>Edit</button>
-                    <button onClick={() => void togglePrinter(p)}>{p.isActive ? "Deactivate" : "Activate"}</button>
+                    <button onClick={() => void testPrint(p.id)} disabled={busy}>Test print</button>
+                    <button onClick={() => startEditPrinter(p)} disabled={busy}>Edit</button>
+                    <button onClick={() => void togglePrinter(p)} disabled={busy}>{p.isActive ? "Deactivate" : "Activate"}</button>
                   </td>
                 </tr>
               )
@@ -368,7 +409,7 @@ export function Settings() {
               <option value={80}>80mm</option>
               <option value={58}>58mm</option>
             </select>
-            <button onClick={() => void addPrinter()}>Add printer</button>
+            <button onClick={() => void addPrinter()} disabled={busy}>Add printer</button>
           </div>
         </div>
       </div>
@@ -393,7 +434,7 @@ export function Settings() {
                   <select
                     value={s.printerId ?? ""}
                     onChange={(e) => void updateStationPrinter(s.id, e.target.value)}
-                    disabled={!s.isActive}
+                    disabled={!s.isActive || busy}
                   >
                     <option value="">No printer</option>
                     {activePrinters.map((p) => (
@@ -405,7 +446,7 @@ export function Settings() {
                 </td>
                 <td>{s.isActive ? "✓" : "—"}</td>
                 <td>
-                  <button onClick={() => void toggleStation(s)}>{s.isActive ? "Deactivate" : "Activate"}</button>
+                  <button onClick={() => void toggleStation(s)} disabled={busy}>{s.isActive ? "Deactivate" : "Activate"}</button>
                 </td>
               </tr>
             ))}
@@ -420,7 +461,7 @@ export function Settings() {
             onChange={(e) => setNewStationName(e.target.value)}
             style={{ flex: 1 }}
           />
-          <button onClick={() => void addStation()}>Add station</button>
+          <button onClick={() => void addStation()} disabled={busy}>Add station</button>
         </div>
       </div>
 
@@ -453,7 +494,7 @@ export function Settings() {
                   </div>
                 </div>
                 {job.status === "failed" && (
-                  <button onClick={() => void retryJob(job.id)} style={{ padding: "6px 12px" }}>
+                  <button onClick={() => void retryJob(job.id)} style={{ padding: "6px 12px" }} disabled={busy}>
                     Retry
                   </button>
                 )}
