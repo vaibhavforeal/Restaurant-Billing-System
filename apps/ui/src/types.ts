@@ -52,7 +52,7 @@ export interface TableInfo {
   sortOrder: number;
   isActive: boolean;
   status: "free" | "occupied" | "billed";
-  openOrderId: string | null;
+  activeOrders: Array<{ id: string; splitLabel: string | null; status: "open" | "billed" }>;
 }
 
 export interface OrderItem {
@@ -75,6 +75,8 @@ export interface Order {
   clientRef: string;
   type: "dine_in" | "parcel";
   tableId: string | null;
+  splitLabel: string | null;
+  tableName: string | null;
   status: "open" | "billed" | "settled" | "cancelled";
   openedBy: string;
   openedAt: number;

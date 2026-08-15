@@ -11,6 +11,7 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
   const [newTable, setNewTable] = useState({ name: "", area: "" });
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [pickerTableId, setPickerTableId] = useState<string | null>(null);
 
   async function reload() {
     const [t, o] = await Promise.all([
@@ -75,9 +76,8 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
   }
 
   function openTable(table: TableInfo) {
-    if (table.status === "occupied" || table.status === "billed") {
-      onOpenOrder(table.openOrderId!);
-    } else {
+    if (table.activeOrders.length === 0) {
+      // Free table: create split A
       if (creating) return;
       setCreating(true);
       void run(async () => {
@@ -91,7 +91,30 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
           setCreating(false);
         }
       });
+    } else if (table.activeOrders.length === 1) {
+      // Fast path: one split, open directly
+      onOpenOrder(table.activeOrders[0]!.id);
+    } else {
+      // Multiple splits: show picker
+      setPickerTableId(table.id);
     }
+  }
+
+  function createSplitOnTable(tableId: string) {
+    if (creating) return;
+    setCreating(true);
+    void run(async () => {
+      try {
+        const { order } = await apiFetch<{ order: Order }>("/api/orders", {
+          method: "POST",
+          body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId }),
+        });
+        setPickerTableId(null); // close picker
+        onOpenOrder(order.id);
+      } finally {
+        setCreating(false);
+      }
+    });
   }
 
   function newParcel() {
@@ -109,6 +132,15 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
       }
     });
   }
+
+  // Clear picker if the target table's splits drop below 2 (e.g., remote settle/cancel)
+  useEffect(() => {
+    if (pickerTableId === null) return;
+    const table = tables.find((t) => t.id === pickerTableId);
+    if (!table || table.activeOrders.length < 2) {
+      setPickerTableId(null);
+    }
+  }, [tables, pickerTableId]);
 
   const grouped = new Map<string, TableInfo[]>();
   for (const t of tables) {
@@ -196,10 +228,61 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
                       }}
                     >
                       {t.name}
-                      <div style={{ fontSize: 12, fontWeight: 400, marginTop: 4, textTransform: "capitalize" }}>{t.status}</div>
+                      <div style={{ fontSize: 12, fontWeight: 400, marginTop: 4, textTransform: "capitalize" }}>
+                        {t.status}{t.activeOrders.length >= 2 ? ` · ${t.activeOrders.length} splits` : ""}
+                      </div>
                     </button>
                   ))}
               </div>
+              {/* Picker panel */}
+              {(() => {
+                if (pickerTableId === null) return null;
+                const table = list.find((t) => t.id === pickerTableId);
+                if (!table) return null;
+                return (
+                  <div
+                    style={{
+                      marginTop: 16,
+                      padding: 16,
+                      border: "2px solid #333",
+                      borderRadius: 8,
+                      backgroundColor: "#fffbf0",
+                    }}
+                  >
+                    <h4 style={{ marginTop: 0, marginBottom: 12 }}>
+                      {table.name} — splits
+                    </h4>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {table.activeOrders.map((o) => (
+                        <button
+                          key={o.id}
+                          onClick={() => {
+                            setPickerTableId(null);
+                            onOpenOrder(o.id);
+                          }}
+                          style={{ padding: "12px 16px", fontSize: 16, textAlign: "left" }}
+                        >
+                          Split {o.splitLabel ?? "?"}
+                          {o.status === "billed" ? " (billed)" : ""}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => createSplitOnTable(table.id)}
+                        disabled={creating}
+                        style={{ padding: "12px 16px", fontSize: 16, fontWeight: 700 }}
+                      >
+                        New split
+                      </button>
+                      <button
+                        onClick={() => setPickerTableId(null)}
+                        style={{ padding: "12px 16px", fontSize: 16 }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
 
