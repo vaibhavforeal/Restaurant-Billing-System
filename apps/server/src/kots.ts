@@ -134,7 +134,7 @@ export function registerKots(app: FastifyInstance): void {
         const order = ordersById.get(kot.order_id)!;
         const tableName = order.table_name ?? null;
         const kotItems = itemsByKotId.get(kot.id) ?? [];
-        return kotWithContextJson(kot, order as OrderRow, tableName, kotItems);
+        return kotWithContextJson(kot, order, tableName, kotItems);
       }),
     };
   });

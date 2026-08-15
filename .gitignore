@@ -7,6 +7,7 @@ build/
 *.db
 *.db-journal
 *.db-wal
+gate-*.png
 .forkflow/
 data/
 .e2e-scratch/

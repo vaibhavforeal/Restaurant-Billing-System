@@ -151,20 +151,21 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User
         </h2>
         {order.type === "dine_in" && order.status === "open" && (
           <button
-            onClick={() => {
+            onClick={async () => {
               if (pending) return;
+              setError("");
               setPending(true);
-              void run(async () => {
-                try {
-                  const { order: newOrder } = await apiFetch<{ order: Order }>("/api/orders", {
-                    method: "POST",
-                    body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId: order.tableId }),
-                  });
-                  onOpenOrder(newOrder.id);
-                } finally {
-                  setPending(false);
-                }
-              });
+              try {
+                const { order: newOrder } = await apiFetch<{ order: Order }>("/api/orders", {
+                  method: "POST",
+                  body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId: order.tableId }),
+                });
+                onOpenOrder(newOrder.id);
+              } catch (e) {
+                setError(e instanceof ApiError ? e.message : "Request failed");
+              } finally {
+                setPending(false);
+              }
             }}
             disabled={pending}
             style={{ padding: "8px 16px", fontWeight: 700 }}

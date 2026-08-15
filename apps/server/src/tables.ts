@@ -10,7 +10,6 @@ interface TableRow {
   is_active: number;
 }
 
-type OrderStatus = "open" | "billed" | "settled" | "cancelled";
 type TableStatus = "free" | "occupied" | "billed";
 
 export function registerTables(app: FastifyInstance): void {
