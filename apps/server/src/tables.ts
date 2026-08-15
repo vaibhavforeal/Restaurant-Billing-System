@@ -20,26 +20,34 @@ export function registerTables(app: FastifyInstance): void {
   const getTable = (id: string) =>
     app.db.prepare("SELECT * FROM dining_tables WHERE id = ?").get(id) as TableRow | undefined;
 
-  // Derive status from the latest open/billed order (never stored)
-  const deriveStatus = (tableId: string): { status: TableStatus; openOrderId: string | null } => {
-    const order = app.db
+  // Derive status and activeOrders from all open/billed orders (never stored)
+  function deriveTableState(tableId: string): {
+    status: TableStatus;
+    activeOrders: Array<{ id: string; splitLabel: string | null; status: "open" | "billed" }>;
+  } {
+    const orders = app.db
       .prepare(
-        `SELECT id, status FROM orders
+        `SELECT id, split_label, status FROM orders
          WHERE table_id = ? AND status IN ('open', 'billed')
-         ORDER BY opened_at DESC
-         LIMIT 1`,
+         ORDER BY split_label`,
       )
-      .get(tableId) as { id: string; status: OrderStatus } | undefined;
+      .all(tableId) as Array<{ id: string; split_label: string | null; status: "open" | "billed" }>;
 
-    if (!order) return { status: "free", openOrderId: null };
+    if (orders.length === 0) {
+      return { status: "free", activeOrders: [] };
+    }
+
+    const hasOpen = orders.some((o) => o.status === "open");
+    const status = hasOpen ? "occupied" : "billed";
+
     return {
-      status: order.status === "open" ? "occupied" : "billed",
-      openOrderId: order.id,
+      status,
+      activeOrders: orders.map((o) => ({ id: o.id, splitLabel: o.split_label, status: o.status })),
     };
-  };
+  }
 
   const toTable = (r: TableRow) => {
-    const { status, openOrderId } = deriveStatus(r.id);
+    const { status, activeOrders } = deriveTableState(r.id);
     return {
       id: r.id,
       name: r.name,
@@ -47,7 +55,7 @@ export function registerTables(app: FastifyInstance): void {
       sortOrder: r.sort_order,
       isActive: r.is_active === 1,
       status,
-      openOrderId,
+      activeOrders,
     };
   };
 
@@ -73,7 +81,7 @@ export function registerTables(app: FastifyInstance): void {
 
     // Check if deactivating a table with an open/billed order
     if (body.isActive === false) {
-      const { status } = deriveStatus(id);
+      const { status } = deriveTableState(id);
       if (status === "occupied" || status === "billed") {
         throw httpError(409, "table has an open order");
       }
