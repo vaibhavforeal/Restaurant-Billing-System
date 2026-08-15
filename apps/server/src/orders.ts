@@ -2,80 +2,7 @@ import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFo
 import { can } from "@forkflow/core";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
-
-interface OrderRow {
-  id: string;
-  client_ref: string;
-  type: "dine_in" | "parcel";
-  table_id: string | null;
-  status: "open" | "billed" | "settled" | "cancelled";
-  opened_by: string;
-  opened_at: number;
-  closed_at: number | null;
-}
-
-interface OrderItemRow {
-  id: string;
-  order_id: string;
-  client_ref: string | null;
-  product_id: string;
-  variant_id: string | null;
-  name_snapshot: string;
-  price_paise_snapshot: number;
-  gst_rate_snapshot: number;
-  qty: number;
-  status: "pending" | "sent" | "cancelled";
-  note: string | null;
-  cancel_reason: string | null;
-  kot_id: string | null;
-  cancelled_by: string | null;
-}
-
-interface KotRow {
-  id: string;
-  kot_no: number;
-  station_id: string;
-  order_id: string;
-  created_at: number;
-  done_at: number | null;
-}
-
-const toOrderItem = (r: OrderItemRow) => ({
-  id: r.id,
-  clientRef: r.client_ref,
-  productId: r.product_id,
-  variantId: r.variant_id,
-  name: r.name_snapshot,
-  pricePaise: r.price_paise_snapshot,
-  gstRate: r.gst_rate_snapshot,
-  qty: r.qty,
-  status: r.status,
-  note: r.note,
-  cancelReason: r.cancel_reason,
-  kotId: r.kot_id,
-});
-
-const toKot = (r: KotRow) => ({
-  id: r.id,
-  kotNo: r.kot_no,
-  stationId: r.station_id,
-  orderId: r.order_id,
-  createdAt: r.created_at,
-  doneAt: r.done_at,
-});
-
-const toOrder = (r: OrderRow, items: OrderItemRow[], kots: KotRow[]) => ({
-  id: r.id,
-  clientRef: r.client_ref,
-  type: r.type,
-  tableId: r.table_id,
-  status: r.status,
-  openedBy: r.opened_by,
-  openedAt: r.opened_at,
-  closedAt: r.closed_at,
-  items: items.map(toOrderItem),
-  kots: kots.map(toKot),
-});
+import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -85,15 +12,7 @@ export function registerOrders(app: FastifyInstance): void {
     app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow | undefined;
 
   function orderWithDetails(id: string) {
-    const order = getOrder(id);
-    if (!order) return null;
-    const items = app.db
-      .prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY id")
-      .all(id) as OrderItemRow[];
-    const kots = app.db
-      .prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at")
-      .all(id) as KotRow[];
-    return toOrder(order, items, kots);
+    return loadOrderJson(app.db, id);
   }
 
   app.post("/api/orders", { preHandler: create }, async (req, reply) => {
@@ -296,18 +215,11 @@ export function registerOrders(app: FastifyInstance): void {
       const kotItems = app.db
         .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
         .all(item.kot_id) as OrderItemRow[];
-      const order = getOrder(kot.order_id)!;
+      const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
       const tableName = order.table_id
         ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
         : null;
-      app.broadcast("kot.updated", {
-        kot: {
-          ...toKot(kot),
-          orderType: order.type,
-          tableName,
-          items: kotItems.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),
-        },
-      });
+      app.broadcast("kot.updated", { kot: kotWithContextJson(kot, order, tableName, kotItems) });
     }
     return { order: result };
   });

@@ -1,65 +1,7 @@
 import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
-
-interface OrderRow {
-  id: string;
-  client_ref: string;
-  type: "dine_in" | "parcel";
-  table_id: string | null;
-  status: string;
-  opened_by: string;
-  opened_at: number;
-  closed_at: number | null;
-}
-
-interface OrderItemRow {
-  id: string;
-  client_ref: string | null;
-  order_id: string;
-  product_id: string;
-  variant_id: string | null;
-  kot_id: string | null;
-  name_snapshot: string;
-  price_paise_snapshot: number;
-  gst_rate_snapshot: number;
-  qty: number;
-  status: "pending" | "sent" | "cancelled";
-  note: string | null;
-  cancel_reason: string | null;
-}
-
-interface KotRow {
-  id: string;
-  kot_no: number;
-  station_id: string;
-  order_id: string;
-  created_at: number;
-  done_at: number | null;
-}
-
-const toKot = (r: KotRow) => ({
-  id: r.id,
-  kotNo: r.kot_no,
-  stationId: r.station_id,
-  orderId: r.order_id,
-  createdAt: r.created_at,
-  doneAt: r.done_at,
-});
-
-function toKotWithContext(
-  kot: KotRow,
-  order: OrderRow,
-  tableName: string | null,
-  items: OrderItemRow[],
-) {
-  return {
-    ...toKot(kot),
-    orderType: order.type,
-    tableName,
-    items: items.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),
-  };
-}
+import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 
 export function registerKots(app: FastifyInstance): void {
   const create = app.requirePermission("kots.create");
@@ -134,40 +76,14 @@ export function registerKots(app: FastifyInstance): void {
     const kotsWithContext = createdKots.map((ck) => {
       const kotRow = allKots.find((k) => k.id === ck.id)!;
       const kotItems = allItems.filter((i) => i.kot_id === ck.id);
-      return toKotWithContext(kotRow, orderResult, tableName, kotItems);
+      return kotWithContextJson(kotRow, orderResult, tableName, kotItems);
     });
 
     for (const kot of kotsWithContext) {
       app.broadcast("kot.created", { kot });
     }
 
-    const toOrderItem = (i: OrderItemRow) => ({
-      id: i.id,
-      clientRef: i.client_ref,
-      productId: i.product_id,
-      variantId: i.variant_id,
-      name: i.name_snapshot,
-      pricePaise: i.price_paise_snapshot,
-      gstRate: i.gst_rate_snapshot,
-      qty: i.qty,
-      status: i.status,
-      note: i.note,
-      cancelReason: i.cancel_reason,
-      kotId: i.kot_id,
-    });
-
-    const orderFull = {
-      id: orderResult.id,
-      clientRef: orderResult.client_ref,
-      type: orderResult.type,
-      tableId: orderResult.table_id,
-      status: orderResult.status,
-      openedBy: orderResult.opened_by,
-      openedAt: orderResult.opened_at,
-      closedAt: orderResult.closed_at,
-      items: allItems.map(toOrderItem),
-      kots: allKots.map(toKot),
-    };
+    const orderFull = loadOrderJson(app.db, id)!;
 
     app.broadcast("order.updated", { order: orderFull });
     if (orderResult.type === "dine_in") {
@@ -218,7 +134,7 @@ export function registerKots(app: FastifyInstance): void {
         const order = ordersById.get(kot.order_id)!;
         const tableName = order.table_name ?? null;
         const kotItems = itemsByKotId.get(kot.id) ?? [];
-        return toKotWithContext(kot, order as OrderRow, tableName, kotItems);
+        return kotWithContextJson(kot, order as OrderRow, tableName, kotItems);
       }),
     };
   });
@@ -229,7 +145,7 @@ export function registerKots(app: FastifyInstance): void {
     if (!kot) throw httpError(404, "kot not found");
 
     if (kot.done_at) {
-      return reply.status(200).send({ kot: toKot(kot) });
+      return reply.status(200).send({ kot: kotJson(kot) });
     }
 
     const now = Date.now();
@@ -244,8 +160,8 @@ export function registerKots(app: FastifyInstance): void {
       .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
       .all(id) as OrderItemRow[];
 
-    app.broadcast("kot.updated", { kot: toKotWithContext(updated, order, tableName, items) });
+    app.broadcast("kot.updated", { kot: kotWithContextJson(updated, order, tableName, items) });
 
-    return reply.status(200).send({ kot: toKot(updated) });
+    return reply.status(200).send({ kot: kotJson(updated) });
   });
 }
