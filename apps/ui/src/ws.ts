@@ -3,6 +3,7 @@ import { session } from "./api";
 export interface WsHandlers {
   onEvent: (event: string, data: unknown) => void;
   onStatus: (connected: boolean) => void;
+  onAuthFail?: () => void;
 }
 
 /** Auto-reconnecting WebSocket client. Backoff 1s..10s. Returns a dispose function. */
@@ -11,29 +12,48 @@ export function connectWs(handlers: WsHandlers): () => void {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let backoffMs = 1000;
   let disposed = false;
+  let authenticated = false;
 
   function connect() {
     if (disposed) return;
+    authenticated = false;
     const protocol = location.protocol === "https:" ? "wss" : "ws";
-    const url = `${protocol}://${location.host}/api/ws?token=${session.token ?? ""}`;
+    const url = `${protocol}://${location.host}/api/ws`;
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      backoffMs = 1000;
-      handlers.onStatus(true);
+      // Send auth frame immediately
+      const token = session.token ?? "";
+      ws?.send(JSON.stringify({ type: "auth", token }));
     };
 
     ws.onmessage = (e) => {
       try {
         const { event, data } = JSON.parse(e.data);
+
+        // Intercept auth.ok
+        if (event === "auth.ok") {
+          authenticated = true;
+          backoffMs = 1000;
+          handlers.onStatus(true);
+          return; // Do NOT forward to onEvent
+        }
+
         handlers.onEvent(event, data);
       } catch {
         // ignore malformed messages
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (disposed) return;
+
+      // Fatal close on auth failure
+      if (e.code === 4401) {
+        handlers.onAuthFail?.();
+        return; // No reconnect
+      }
+
       handlers.onStatus(false);
       reconnectTimer = setTimeout(() => {
         backoffMs = Math.min(backoffMs * 2, 10000);
