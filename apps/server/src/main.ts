@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildServer } from "./server.js";
+import { redactUrl } from "./log-redact.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
@@ -12,7 +13,17 @@ mkdirSync(dataDir, { recursive: true });
 const db = openDb(join(dataDir, "forkflow.db"));
 migrate(db, MIGRATIONS);
 
-const app = buildServer({ db, logger: true });
+const app = buildServer({
+  db,
+  logger: {
+    serializers: {
+      req: (req: { method: string; url: string }) => ({
+        method: req.method,
+        url: redactUrl(req.url),
+      }),
+    },
+  },
+});
 
 // Serve the built UI when it exists (production / packaged). In dev, Vite serves the UI.
 const uiDist = resolve(here, "../../ui/dist");
