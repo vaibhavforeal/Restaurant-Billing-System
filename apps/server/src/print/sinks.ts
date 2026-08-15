@@ -50,11 +50,11 @@ async function sendToNetwork(connection: string, bytes: Buffer): Promise<void> {
 
     socket.connect(port, host, () => {
       socket.write(bytes, (err) => {
-        if (err) {
+        if (err && !timedOut) {
           clearTimeout(timeout);
           socket.destroy();
           reject(new Error(`Write failed: ${err.message}`));
-        } else {
+        } else if (!err && !timedOut) {
           socket.end(() => {
             clearTimeout(timeout);
             resolve();
