@@ -75,7 +75,7 @@ describe("tables", () => {
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(orderId, "test-ref-1", "dine_in", table.id, "A", "open", admin.user.id, Date.now());
+      .run(orderId, "test-test-ref-001", "dine_in", table.id, "A", "open", admin.user.id, Date.now());
 
     const occupied = await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) });
     expect(occupied.json().tables[0]).toMatchObject({
@@ -108,7 +108,7 @@ describe("tables", () => {
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(uuidv7(), "test-ref-2", "dine_in", table.id, "open", admin.user.id, Date.now());
+      .run(uuidv7(), "test-test-ref-002", "dine_in", table.id, "open", admin.user.id, Date.now());
 
     const deactivate = await app.inject({
       method: "PATCH",
@@ -150,12 +150,12 @@ describe("tables", () => {
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order1Id, "ref-1", "dine_in", table.id, "A", "open", admin.user.id, Date.now());
+      .run(order1Id, "test-ref-001", "dine_in", table.id, "A", "open", admin.user.id, Date.now());
     app.db
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order2Id, "ref-2", "dine_in", table.id, "B", "open", admin.user.id, Date.now());
+      .run(order2Id, "test-ref-002", "dine_in", table.id, "B", "open", admin.user.id, Date.now());
 
     const res = await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) });
     expect(res.json().tables[0]).toMatchObject({
@@ -178,12 +178,12 @@ describe("tables", () => {
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order1Id, "ref-1", "dine_in", table.id, "A", "open", admin.user.id, Date.now());
+      .run(order1Id, "test-ref-001", "dine_in", table.id, "A", "open", admin.user.id, Date.now());
     app.db
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order2Id, "ref-2", "dine_in", table.id, "B", "billed", admin.user.id, Date.now());
+      .run(order2Id, "test-ref-002", "dine_in", table.id, "B", "billed", admin.user.id, Date.now());
 
     const res = await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) });
     expect(res.json().tables[0]).toMatchObject({
@@ -205,7 +205,7 @@ describe("tables", () => {
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order1Id, "ref-1", "dine_in", table.id, "A", "billed", admin.user.id, Date.now());
+      .run(order1Id, "test-ref-001", "dine_in", table.id, "A", "billed", admin.user.id, Date.now());
 
     const res = await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) });
     expect(res.json().tables[0]).toMatchObject({
@@ -225,12 +225,12 @@ describe("tables", () => {
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order1Id, "ref-1", "dine_in", table.id, "A", "settled", admin.user.id, Date.now(), Date.now());
+      .run(order1Id, "test-ref-001", "dine_in", table.id, "A", "settled", admin.user.id, Date.now(), Date.now());
     app.db
       .prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .run(order2Id, "ref-2", "dine_in", table.id, "B", "cancelled", admin.user.id, Date.now(), Date.now());
+      .run(order2Id, "test-ref-002", "dine_in", table.id, "B", "cancelled", admin.user.id, Date.now(), Date.now());
 
     const res = await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) });
     expect(res.json().tables[0]).toMatchObject({ status: "free", activeOrders: [] });
