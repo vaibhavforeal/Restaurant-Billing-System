@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import { paiseToRupees } from "../money";
-import type { Category, Product, Station } from "../types";
+import type { Category, Product, Station, StationInfo } from "../types";
 import { ProductEditor } from "./ProductEditor";
 
 export function Catalog() {
@@ -17,11 +17,11 @@ export function Catalog() {
     const [c, p, s] = await Promise.all([
       apiFetch<{ categories: Category[] }>("/api/categories"),
       apiFetch<{ products: Product[] }>("/api/products"),
-      apiFetch<{ stations: Station[] }>("/api/kot-stations"),
+      apiFetch<{ stations: StationInfo[] }>("/api/kot-stations"),
     ]);
     setCategories(c.categories);
     setProducts(p.products);
-    setStations(s.stations);
+    setStations(s.stations.filter((st) => st.isActive));
     setSelectedCat((cur) => cur ?? c.categories[0]?.id ?? null);
   }
 
