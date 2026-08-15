@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiFetch } from "../api";
+import { apiFetch, session } from "../api";
 import type { KotWithContext } from "../types";
 import { connectWs } from "../ws";
 
@@ -20,6 +20,7 @@ export function Kitchen() {
         if (event === "kot.created" || event === "kot.updated" || event === "order.updated") void reload();
       },
       onStatus: (c) => { setConnected(c); if (c) void reload(); },
+      onAuthFail: () => session.clear(),
     });
     const ageInterval = setInterval(() => setTick((t) => t + 1), 30000);
     return () => {
