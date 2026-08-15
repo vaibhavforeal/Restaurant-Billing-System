@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, apiFetch, type User } from "../api";
+import { ApiError, apiFetch, session, type User } from "../api";
 import { paiseToRupees } from "../money";
 import type { Category, Order, OrderItem, Product } from "../types";
 import { connectWs } from "../ws";
@@ -54,6 +54,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User
         if (event === "table.changed") void reload();
       },
       onStatus: (connected) => { if (connected) void reload(); },
+      onAuthFail: () => session.clear(),
     });
     return dispose;
   }, [orderId, draftKey]);
