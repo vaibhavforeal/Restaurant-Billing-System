@@ -58,7 +58,13 @@ export function Kitchen() {
               <div style={{ fontSize: 20, fontWeight: 700 }}>KOT #{kot.kotNo}</div>
               <div style={{ fontSize: 14, color: "#555" }}>{age(kot.createdAt)}</div>
             </div>
-            <div style={{ fontSize: 14, marginBottom: 8 }}>{kot.tableName ?? "Parcel"}</div>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>
+              {kot.orderType === "parcel"
+                ? "Parcel"
+                : kot.splitLabel && kot.splitLabel !== "A"
+                  ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}`
+                  : kot.tableName ?? "Table"}
+            </div>
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {kot.items.map((item) => (
                 <li

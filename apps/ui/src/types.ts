@@ -103,6 +103,7 @@ export interface KotWithContext {
   doneAt: number | null;
   orderType: "dine_in" | "parcel";
   tableName: string | null;
+  splitLabel: string | null;
   items: Array<{
     id: string;
     name: string;

@@ -15,7 +15,7 @@ interface DraftItem {
   note: string;
 }
 
-export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: string; onBack: () => void }) {
+export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -145,8 +145,33 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
     <div style={{ fontFamily: "system-ui", padding: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h2>
-          {order.type === "dine_in" ? `Table order` : "Parcel"} — {order.status}
+          {order.type === "dine_in"
+            ? `${order.tableName ?? "Table"} · ${order.splitLabel ?? "A"} — ${order.status}`
+            : `Parcel — ${order.status}`}
         </h2>
+        {order.type === "dine_in" && order.status === "open" && (
+          <button
+            onClick={() => {
+              if (pending) return;
+              setPending(true);
+              void run(async () => {
+                try {
+                  const { order: newOrder } = await apiFetch<{ order: Order }>("/api/orders", {
+                    method: "POST",
+                    body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId: order.tableId }),
+                  });
+                  onOpenOrder(newOrder.id);
+                } finally {
+                  setPending(false);
+                }
+              });
+            }}
+            disabled={pending}
+            style={{ padding: "8px 16px", fontWeight: 700 }}
+          >
+            + Split
+          </button>
+        )}
         <button onClick={onBack} style={{ padding: "8px 16px" }}>
           ← Back
         </button>

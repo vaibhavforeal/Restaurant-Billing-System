@@ -58,7 +58,7 @@ export function App() {
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
           {page.name === "home" && <Home user={user} onNavigate={go} />}
           {page.name === "tables" && <Tables user={user} onOpenOrder={onOpenOrder} />}
-          {page.name === "order" && <OrderScreen user={user} orderId={page.orderId} onBack={onBack} />}
+          {page.name === "order" && <OrderScreen key={page.orderId} user={user} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} />}
           {page.name === "kitchen" && <Kitchen />}
           {page.name === "catalog" && <Catalog />}
           {page.name === "users" && <Users />}
