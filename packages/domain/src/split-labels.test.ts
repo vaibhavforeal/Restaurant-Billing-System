@@ -114,7 +114,7 @@ describe("nextSplitLabel", () => {
       const orderId = uuidv7();
       db.prepare(
         "INSERT INTO orders (id, client_ref, type, table_id, split_label, status, opened_by, opened_at) VALUES (?, ?, 'dine_in', ?, ?, 'open', ?, ?)"
-      ).run(orderId, `ref-${letters[i]}`, tableId, letters[i], userId, Date.now());
+      ).run(orderId, `ref-${letters[i]!}`, tableId, letters[i]!, userId, Date.now());
     }
 
     expect(nextSplitLabel(db, tableId)).toBeNull();
