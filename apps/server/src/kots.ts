@@ -79,6 +79,63 @@ export function registerKots(app: FastifyInstance): void {
       return kotWithContextJson(kotRow, orderResult, tableName, kotItems);
     });
 
+    // Print each KOT
+    for (const ck of createdKots) {
+      const kotRow = allKots.find((k) => k.id === ck.id)!;
+      const stationRow = app.db
+        .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
+        .get(ck.stationId) as { name: string; printer_id: string | null } | undefined;
+
+      if (!stationRow) continue;
+
+      const printerRow = stationRow.printer_id
+        ? (app.db
+            .prepare("SELECT paper_width FROM printers WHERE id = ? AND is_active = 1")
+            .get(stationRow.printer_id) as { paper_width: number } | undefined)
+        : undefined;
+
+      if (!printerRow) continue;
+
+      const kotItemsForPrint = allItems.filter((i) => i.kot_id === ck.id);
+
+      // Build context line using kitchen-board rule
+      let contextLine: string;
+      if (orderResult.type === "parcel") {
+        contextLine = "Parcel";
+      } else if (tableName) {
+        if (orderResult.split_label === null || orderResult.split_label === "A") {
+          contextLine = tableName;
+        } else {
+          contextLine = `${tableName} / ${orderResult.split_label}`;
+        }
+      } else {
+        contextLine = "Table";
+      }
+
+      const label = `KOT #${kotRow.kot_no} — ${contextLine}`;
+
+      const { kotSlip } = await import("./print/templates.js");
+      const bytes = kotSlip(
+        {
+          kotNo: kotRow.kot_no,
+          stationName: stationRow.name,
+          orderType: orderResult.type,
+          tableName,
+          splitLabel: orderResult.split_label,
+          items: kotItemsForPrint.map((i) => ({
+            qty: i.qty,
+            name: i.name_snapshot,
+            note: i.note,
+            cancelled: i.status === "cancelled",
+          })),
+          atMs: kotRow.created_at,
+        },
+        printerRow.paper_width as 58 | 80,
+      );
+
+      app.enqueuePrint(ck.stationId, "kot", label, bytes);
+    }
+
     for (const kot of kotsWithContext) {
       app.broadcast("kot.created", { kot });
     }

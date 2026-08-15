@@ -231,6 +231,55 @@ export function registerOrders(app: FastifyInstance): void {
       const tableName = order.table_id
         ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
         : null;
+
+      // Print cancel slip
+      const stationRow = app.db
+        .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
+        .get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
+
+      if (stationRow) {
+        const printerRow = stationRow.printer_id
+          ? (app.db
+              .prepare("SELECT paper_width FROM printers WHERE id = ? AND is_active = 1")
+              .get(stationRow.printer_id) as { paper_width: number } | undefined)
+          : undefined;
+
+        if (printerRow) {
+          // Build context line using kitchen-board rule
+          let contextLine: string;
+          if (order.type === "parcel") {
+            contextLine = "Parcel";
+          } else if (tableName) {
+            if (order.split_label === null || order.split_label === "A") {
+              contextLine = tableName;
+            } else {
+              contextLine = `${tableName} / ${order.split_label}`;
+            }
+          } else {
+            contextLine = "Table";
+          }
+
+          const label = `Cancel — KOT #${kot.kot_no} — ${contextLine}`;
+
+          const { cancelSlip } = await import("./print/templates.js");
+          const bytes = cancelSlip(
+            {
+              kotNo: kot.kot_no,
+              stationName: stationRow.name,
+              orderType: order.type,
+              tableName,
+              splitLabel: order.split_label,
+              item: { qty: item.qty, name: item.name_snapshot },
+              reason: body.reason ?? "No reason provided",
+              atMs: Date.now(),
+            },
+            printerRow.paper_width as 58 | 80,
+          );
+
+          app.enqueuePrint(kot.station_id, "cancel", label, bytes);
+        }
+      }
+
       app.broadcast("kot.updated", { kot: kotWithContextJson(kot, order, tableName, kotItems) });
     }
     return { order: result };

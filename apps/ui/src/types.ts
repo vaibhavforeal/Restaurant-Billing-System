@@ -29,6 +29,34 @@ export interface Station {
   name: string;
 }
 
+export interface PrinterInfo {
+  id: string;
+  name: string;
+  kind: "network" | "windows" | "bluetooth";
+  connection: string;
+  paperWidth: 58 | 80;
+  isActive: boolean;
+}
+
+export interface StationInfo {
+  id: string;
+  name: string;
+  printerId: string | null;
+  isActive: boolean;
+}
+
+export interface PrintJobInfo {
+  id: string;
+  printerId: string;
+  printerName: string;
+  kind: "kot" | "cancel" | "test";
+  label: string;
+  status: "queued" | "printing" | "failed" | "done";
+  error: string | null;
+  createdAt: number;
+  attempts: number;
+}
+
 export interface AdminUser {
   id: string;
   name: string;

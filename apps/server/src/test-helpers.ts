@@ -1,11 +1,23 @@
 import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
+import { makeFakeSink } from "./print/sinks.js";
 
 export function freshApp(): FastifyInstance {
   const db = openDb(":memory:");
   migrate(db, MIGRATIONS);
   return buildServer({ db });
+}
+
+export function freshAppWithFakeSink(): {
+  app: FastifyInstance;
+  fake: ReturnType<typeof makeFakeSink>;
+} {
+  const db = openDb(":memory:");
+  migrate(db, MIGRATIONS);
+  const fake = makeFakeSink();
+  const app = buildServer({ db, sinkSend: fake.send });
+  return { app, fake };
 }
 
 export const SETUP = { restaurantName: "Cafe Test", adminName: "Asha", pin: "1234" };

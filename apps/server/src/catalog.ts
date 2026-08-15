@@ -2,6 +2,7 @@ import {
   CategoryCreate, CategoryUpdate,
   ProductCreate, ProductUpdate,
   VariantCreate, VariantUpdate,
+  StationCreate, StationUpdate,
   uuidv7,
 } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
@@ -183,10 +184,76 @@ export function registerCatalog(app: FastifyInstance): void {
     return { variant: toVariant(getVariant(id)!) };
   });
 
+  // Replace existing GET /api/kot-stations
   app.get("/api/kot-stations", { preHandler: read }, async () => {
     const rows = app.db
-      .prepare("SELECT id, name FROM kot_stations WHERE is_active = 1 ORDER BY name")
-      .all() as Array<{ id: string; name: string }>;
-    return { stations: rows };
+      .prepare("SELECT id, name, printer_id, is_active FROM kot_stations ORDER BY name")
+      .all() as Array<{ id: string; name: string; printer_id: string | null; is_active: number }>;
+    return {
+      stations: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        printerId: r.printer_id,
+        isActive: r.is_active === 1,
+      })),
+    };
+  });
+
+  app.post("/api/kot-stations", { preHandler: manage }, async (req, reply) => {
+    const body = StationCreate.parse(req.body);
+    if (body.printerId) {
+      const printer = app.db.prepare("SELECT id FROM printers WHERE id = ?").get(body.printerId);
+      if (!printer) throw httpError(400, "unknown printer");
+    }
+    const id = uuidv7();
+    app.db
+      .prepare("INSERT INTO kot_stations (id, name, printer_id) VALUES (?, ?, ?)")
+      .run(id, body.name, body.printerId);
+    const row = app.db
+      .prepare("SELECT id, name, printer_id, is_active FROM kot_stations WHERE id = ?")
+      .get(id) as { id: string; name: string; printer_id: string | null; is_active: number };
+    return reply.status(201).send({
+      station: {
+        id: row.id,
+        name: row.name,
+        printerId: row.printer_id,
+        isActive: row.is_active === 1,
+      },
+    });
+  });
+
+  app.patch("/api/kot-stations/:id", { preHandler: manage }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = StationUpdate.parse(req.body);
+    const row = app.db
+      .prepare("SELECT * FROM kot_stations WHERE id = ?")
+      .get(id) as { id: string; name: string; printer_id: string | null; is_active: number } | undefined;
+    if (!row) throw httpError(404, "station not found");
+
+    if (body.printerId !== undefined && body.printerId !== null) {
+      const printer = app.db.prepare("SELECT id FROM printers WHERE id = ?").get(body.printerId);
+      if (!printer) throw httpError(400, "unknown printer");
+    }
+
+    app.db
+      .prepare("UPDATE kot_stations SET name = ?, printer_id = ?, is_active = ? WHERE id = ?")
+      .run(
+        body.name ?? row.name,
+        body.printerId === undefined ? row.printer_id : body.printerId,
+        body.isActive !== undefined ? (body.isActive ? 1 : 0) : row.is_active,
+        id,
+      );
+
+    const updated = app.db
+      .prepare("SELECT id, name, printer_id, is_active FROM kot_stations WHERE id = ?")
+      .get(id) as { id: string; name: string; printer_id: string | null; is_active: number };
+    return {
+      station: {
+        id: updated.id,
+        name: updated.name,
+        printerId: updated.printer_id,
+        isActive: updated.is_active === 1,
+      },
+    };
   });
 }
