@@ -125,4 +125,42 @@ describe("PrintQueue", () => {
     const result = queue.retry(job.id);
     expect(result).toBeNull();
   });
+
+  it("processes queued jobs in FIFO order (oldest first)", async () => {
+    const received: string[] = [];
+    let resolvers: Array<() => void> = [];
+
+    // Controlled sink that captures order and waits for manual resolution
+    const controlledSend = async (_target: unknown, bytes: Buffer) => {
+      const label = bytes.toString();
+      received.push(label);
+      await new Promise<void>((resolve) => { resolvers.push(resolve); });
+    };
+
+    const queue = new PrintQueue(controlledSend, () => {});
+    const printer = { id: "p1", name: "Test Printer", kind: "network" as const, connection: "test" };
+
+    // Enqueue 3 jobs in order
+    queue.enqueue(printer, "test", "Job 1", Buffer.from("job1"));
+    queue.enqueue(printer, "test", "Job 2", Buffer.from("job2"));
+    queue.enqueue(printer, "test", "Job 3", Buffer.from("job3"));
+
+    // Wait for first job to start
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(received).toEqual(["job1"]);
+
+    // Release first job
+    resolvers[0]!();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(received).toEqual(["job1", "job2"]);
+
+    // Release second job
+    resolvers[1]!();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(received).toEqual(["job1", "job2", "job3"]);
+
+    // Release third job
+    resolvers[2]!();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  });
 });

@@ -12,11 +12,9 @@ export function connectWs(handlers: WsHandlers): () => void {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let backoffMs = 1000;
   let disposed = false;
-  let authenticated = false;
 
   function connect() {
     if (disposed) return;
-    authenticated = false;
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const url = `${protocol}://${location.host}/api/ws`;
     ws = new WebSocket(url);
@@ -33,7 +31,6 @@ export function connectWs(handlers: WsHandlers): () => void {
 
         // Intercept auth.ok
         if (event === "auth.ok") {
-          authenticated = true;
           backoffMs = 1000;
           handlers.onStatus(true);
           return; // Do NOT forward to onEvent

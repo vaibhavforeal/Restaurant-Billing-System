@@ -89,30 +89,44 @@ export class PrintQueue {
 
     const work = (async () => {
       while (true) {
-        const job = this.jobsList.find(
-          (j) => j.json.printerId === printerId && j.json.status === "queued"
-        );
+        // Find the OLDEST queued job for this printer (scan from end)
+        let job: QueuedJob | undefined;
+        for (let i = this.jobsList.length - 1; i >= 0; i--) {
+          const candidate = this.jobsList[i];
+          if (candidate!.json.printerId === printerId && candidate!.json.status === "queued") {
+            job = candidate;
+            break;
+          }
+        }
         if (!job) break;
 
-        job.json.status = "printing";
-        this.onChange({ ...job.json });
-
         try {
-          await this.send(job.target, job.bytes);
-          job.json.status = "done";
-          job.json.error = null;
-        } catch (err) {
-          job.json.status = "failed";
-          job.json.error = err instanceof Error ? err.message : "unknown error";
-        }
+          job.json.status = "printing";
+          this.onChange({ ...job.json });
 
-        this.onChange({ ...job.json });
+          try {
+            await this.send(job.target, job.bytes);
+            job.json.status = "done";
+            job.json.error = null;
+          } catch (err) {
+            job.json.status = "failed";
+            job.json.error = err instanceof Error ? err.message : "unknown error";
+          }
+
+          this.onChange({ ...job.json });
+        } catch (onChangeErr) {
+          // Defensive: if onChange throws, log but don't wedge the printer
+          console.error("onChange threw:", onChangeErr);
+        }
       }
     })();
 
     this.perPrinterLock.set(printerId, work);
-    await work;
-    this.perPrinterLock.delete(printerId);
+    try {
+      await work;
+    } finally {
+      this.perPrinterLock.delete(printerId);
+    }
 
     // Re-check for newly queued jobs that may have arrived during final await
     const hasMore = this.jobsList.some(

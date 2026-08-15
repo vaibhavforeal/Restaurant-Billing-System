@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { auth, freshAppWithFakeSink, setupAdmin, wsAuth } from "./test-helpers.js";
+import { auth, createUser, freshAppWithFakeSink, setupAdmin, wsAuth } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshAppWithFakeSink>["app"];
 afterEach(async () => {
@@ -380,5 +380,24 @@ describe("WS print.job broadcast", () => {
     expect(jobEvents.some((e) => e.data?.job?.status === "queued")).toBe(true);
 
     ws.close();
+  });
+});
+
+describe("RBAC", () => {
+  it("forbids non-admin from listing printers", async () => {
+    const { app: testApp } = freshAppWithFakeSink();
+    app = testApp;
+    const admin = await setupAdmin(app);
+
+    const waiter = await createUser(app, admin.token, { name: "Waiter", pin: "9999", role: "waiter" });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/printers",
+      headers: auth(waiter.token),
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ error: "forbidden", permission: "printers.read" });
   });
 });

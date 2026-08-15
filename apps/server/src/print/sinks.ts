@@ -4,6 +4,8 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+let tmpSeq = 0;
+
 export interface PrinterTarget {
   kind: "network" | "windows" | "bluetooth";
   connection: string;
@@ -67,7 +69,7 @@ async function sendToNetwork(connection: string, bytes: Buffer): Promise<void> {
 
 async function sendToWindows(printerName: string, bytes: Buffer): Promise<void> {
   // Write bytes to temp file
-  const bytesPath = join(tmpdir(), `print-${Date.now()}.bin`);
+  const bytesPath = join(tmpdir(), `print-${Date.now()}-${++tmpSeq}.bin`);
   await fs.writeFile(bytesPath, bytes);
 
   // Embedded PowerShell script with RawPrinterHelper
@@ -146,7 +148,7 @@ $bytes = [System.IO.File]::ReadAllBytes("${bytesPath}")
 `;
 
   // Note: Printer names containing " or $ are unsupported in v1 (no escaping)
-  const scriptPath = join(tmpdir(), `print-script-${Date.now()}.ps1`);
+  const scriptPath = join(tmpdir(), `print-script-${Date.now()}-${++tmpSeq}.ps1`);
   await fs.writeFile(scriptPath, psScript, "utf8");
 
   return new Promise((resolve, reject) => {
