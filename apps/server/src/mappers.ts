@@ -5,6 +5,7 @@ export interface OrderRow {
   client_ref: string;
   type: "dine_in" | "parcel";
   table_id: string | null;
+  split_label: string | null;
   status: "open" | "billed" | "settled" | "cancelled";
   opened_by: string;
   opened_at: number;
@@ -75,13 +76,22 @@ export function kotWithContextJson(
     ...kotJson(kot),
     orderType: order.type,
     tableName,
+    splitLabel: order.split_label,
     items: items.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),
   };
 }
 
 export function loadOrderJson(db: Database, orderId: string) {
-  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as OrderRow | undefined;
-  if (!order) return null;
+  const row = db
+    .prepare(
+      `SELECT o.*, dt.name AS table_name
+       FROM orders o
+       LEFT JOIN dining_tables dt ON dt.id = o.table_id
+       WHERE o.id = ?`
+    )
+    .get(orderId) as (OrderRow & { table_name: string | null }) | undefined;
+
+  if (!row) return null;
 
   const items = db
     .prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY id")
@@ -92,14 +102,16 @@ export function loadOrderJson(db: Database, orderId: string) {
     .all(orderId) as KotRow[];
 
   return {
-    id: order.id,
-    clientRef: order.client_ref,
-    type: order.type,
-    tableId: order.table_id,
-    status: order.status,
-    openedBy: order.opened_by,
-    openedAt: order.opened_at,
-    closedAt: order.closed_at,
+    id: row.id,
+    clientRef: row.client_ref,
+    type: row.type,
+    tableId: row.table_id,
+    splitLabel: row.split_label,
+    tableName: row.table_name,
+    status: row.status,
+    openedBy: row.opened_by,
+    openedAt: row.opened_at,
+    closedAt: row.closed_at,
     items: items.map(orderItemJson),
     kots: kots.map(kotJson),
   };

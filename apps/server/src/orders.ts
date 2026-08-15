@@ -1,4 +1,4 @@
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor } from "@forkflow/domain";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
 import { can } from "@forkflow/core";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
@@ -29,16 +29,28 @@ export function registerOrders(app: FastifyInstance): void {
       if (!table) throw httpError(400, "unknown table");
       if (table.is_active !== 1) throw httpError(409, "table is not active");
 
-      const openOrder = app.db
-        .prepare("SELECT id FROM orders WHERE table_id = ? AND status IN ('open', 'billed')")
-        .get(body.tableId!) as { id: string } | undefined;
-      if (openOrder) throw httpError(409, "table occupied");
+      // No longer checking for occupied — splits allowed
     }
 
     const id = uuidv7();
-    app.db
-      .prepare("INSERT INTO orders (id, client_ref, type, table_id, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(id, body.clientRef, body.type, body.tableId, req.user.id, Date.now());
+    const now = Date.now();
+
+    if (body.type === "dine_in") {
+      const write = app.db.transaction(() => {
+        const label = nextSplitLabel(app.db, body.tableId!);
+        if (label === null) throw httpError(409, "table has too many open splits");
+
+        app.db
+          .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+          .run(id, body.clientRef, body.type, body.tableId, label, req.user.id, now);
+      });
+      write();
+    } else {
+      // Parcel: split_label is NULL
+      app.db
+        .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(id, body.clientRef, body.type, body.tableId, null, req.user.id, now);
+    }
 
     const order = orderWithDetails(id)!;
     app.broadcast("order.updated", { order });

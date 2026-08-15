@@ -116,14 +116,16 @@ describe("orders: create/get/list", () => {
     });
     expect(order1.statusCode).toBe(201);
     expect(order1.json().order.tableId).toBe(tableId);
+    expect(order1.json().order.splitLabel).toBe("A");
 
-    const occupied = await app.inject({
+    // Second create on same table -> 201 with splitLabel "B"
+    const order2 = await app.inject({
       method: "POST", url: "/api/orders",
       payload: { clientRef: "order-c5", type: "dine_in", tableId },
       headers: auth(admin.token),
     });
-    expect(occupied.statusCode).toBe(409);
-    expect(occupied.json().error).toBe("table occupied");
+    expect(order2.statusCode).toBe(201);
+    expect(order2.json().order.splitLabel).toBe("B");
   });
 
   it("GET /api/orders lists only open orders", async () => {
@@ -174,6 +176,217 @@ describe("orders: create/get/list", () => {
 
     expect((await app.inject({ method: "POST", url: "/api/orders", payload: { clientRef: "x", type: "parcel" } })).statusCode).toBe(401);
     expect((await app.inject({ method: "GET", url: "/api/orders" })).statusCode).toBe(401);
+  });
+
+  it("assigns split labels A, B, C in sequence for dine_in orders", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const orderA = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-aa", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(orderA.json().order.splitLabel).toBe("A");
+
+    const orderB = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-bb", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(orderB.json().order.splitLabel).toBe("B");
+
+    const orderC = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-cc", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(orderC.json().order.splitLabel).toBe("C");
+  });
+
+  it("reuses split labels after order cancellation", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const orderA = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-aa", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    const orderAId = orderA.json().order.id;
+    expect(orderA.json().order.splitLabel).toBe("A");
+
+    // Cancel order A
+    await app.inject({
+      method: "POST", url: `/api/orders/${orderAId}/cancel`,
+      headers: auth(admin.token),
+    });
+
+    // Next order should reuse 'A'
+    const orderA2 = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-aa2", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(orderA2.json().order.splitLabel).toBe("A");
+  });
+
+  it("billed orders hold their letter (no reuse until settled)", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const orderA = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-aa", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    const orderAId = orderA.json().order.id;
+    expect(orderA.json().order.splitLabel).toBe("A");
+
+    // Mark as billed via raw SQL (no billing API yet)
+    app.db.prepare("UPDATE orders SET status = 'billed' WHERE id = ?").run(orderAId);
+
+    // Next order should be 'B' (A is still held)
+    const orderB = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-bb", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(orderB.json().order.splitLabel).toBe("B");
+  });
+
+  it("parcel orders have null splitLabel", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "parcel-1", type: "parcel" },
+      headers: auth(admin.token),
+    });
+    expect(orderRes.json().order.splitLabel).toBeNull();
+  });
+
+  it("clientRef replay on occupied table returns existing order without consuming a letter", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const order1 = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "replay-ref", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(order1.statusCode).toBe(201);
+    expect(order1.json().order.splitLabel).toBe("A");
+
+    // Replay same clientRef -> 200, same order
+    const order2 = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "replay-ref", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(order2.statusCode).toBe(200);
+    expect(order2.json().order.id).toBe(order1.json().order.id);
+    expect(order2.json().order.splitLabel).toBe("A");
+
+    // Next new order should be 'B' (replay didn't consume a letter)
+    const order3 = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "new-ref-1", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(order3.json().order.splitLabel).toBe("B");
+  });
+
+  it("order JSON includes tableName for dine_in orders", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1", area: "Patio" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "order-with-table", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(orderRes.json().order.tableName).toBe("T1");
+  });
+
+  it("26-split cap returns 409 error", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    // Create 26 splits
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (let i = 0; i < 26; i++) {
+      const res = await app.inject({
+        method: "POST", url: "/api/orders",
+        payload: { clientRef: `split-cap-${letters[i]}`, type: "dine_in", tableId },
+        headers: auth(admin.token),
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    // 27th split should fail
+    const overflow = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "split-overflow", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    expect(overflow.statusCode).toBe(409);
+    expect(overflow.json().error).toBe("table has too many open splits");
+  });
+
+  it("parcel order JSON has null tableName", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "parcel-1", type: "parcel" },
+      headers: auth(admin.token),
+    });
+    expect(orderRes.json().order.tableName).toBeNull();
   });
 });
 

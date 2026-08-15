@@ -442,4 +442,77 @@ describe("kots: board and done", () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe("kot not found");
   });
+
+  it("KOT board payload includes splitLabel from order", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { biryaniId } = await fixtures(app, admin.token);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T1" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "order-for-kot", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    const orderId = orderRes.json().order.id;
+
+    await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/items`,
+      payload: { items: [{ productId: biryaniId, qty: 1 }] },
+      headers: auth(admin.token),
+    });
+
+    await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/send`,
+      headers: auth(admin.token),
+    });
+
+    const boardRes = await app.inject({
+      method: "GET", url: "/api/kots",
+      headers: auth(admin.token),
+    });
+    expect(boardRes.statusCode).toBe(200);
+    const kots = boardRes.json().kots;
+    expect(kots[0]!.splitLabel).toBe("A");
+  });
+
+  it("send response KOT context includes splitLabel", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { biryaniId } = await fixtures(app, admin.token);
+
+    const tableRes = await app.inject({
+      method: "POST", url: "/api/tables",
+      payload: { name: "T2" },
+      headers: auth(admin.token),
+    });
+    const tableId = tableRes.json().table.id;
+
+    const orderRes = await app.inject({
+      method: "POST", url: "/api/orders",
+      payload: { clientRef: "order-send-split", type: "dine_in", tableId },
+      headers: auth(admin.token),
+    });
+    const orderId = orderRes.json().order.id;
+
+    await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/items`,
+      payload: { items: [{ productId: biryaniId, qty: 1 }] },
+      headers: auth(admin.token),
+    });
+
+    const sendRes = await app.inject({
+      method: "POST", url: `/api/orders/${orderId}/send`,
+      headers: auth(admin.token),
+    });
+    expect(sendRes.statusCode).toBe(200);
+    const { kots } = sendRes.json();
+    expect(kots[0]!.splitLabel).toBe("A");
+  });
 });
