@@ -1,5 +1,5 @@
 import type { Database } from "@forkflow/domain";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";
 import { registerWs } from "./ws.js";
@@ -15,7 +15,8 @@ import { PrintQueue } from "./print/queue.js";
 
 export interface ServerOptions {
   db: Database;
-  logger?: boolean;
+  logger?: FastifyServerOptions["logger"];
+  authTimeoutMs?: number;  // WS auth frame timeout (default 5000ms in registerWs)
   sinkSend?: SinkSend;
 }
 
@@ -84,7 +85,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   registerAuth(app);
-  registerWs(app);
+  registerWs(app, opts.authTimeoutMs);
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);
