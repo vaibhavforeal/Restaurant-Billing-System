@@ -316,6 +316,126 @@ def main():
             page_k.screenshot(path="gate-final-kitchen.png", full_page=True)
             print("Screenshots: gate-final-split-a.png, gate-final-kitchen.png", flush=True)
 
+            # M3b printing scenario starts here
+            step("Start TCP capture server on free port")
+            import threading
+            import socketserver
+
+            captured_bytes = []
+
+            class TCPCaptureHandler(socketserver.BaseRequestHandler):
+                def handle(self):
+                    data = b""
+                    while True:
+                        chunk = self.request.recv(8192)
+                        if not chunk:
+                            break
+                        data += chunk
+                    if data:
+                        captured_bytes.append(data)
+                    self.request.close()
+
+            server = socketserver.TCPServer(("127.0.0.1", 0), TCPCaptureHandler)
+            port = server.server_address[1]
+            server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+            print(f"     TCP server listening on 127.0.0.1:{port}", flush=True)
+
+            step(f"Settings: add printer 'Front KOT' (network 127.0.0.1:{port}, 80mm)")
+            nav(page1, "settings")
+            page1.get_by_placeholder("Printer name").fill("Front KOT")
+            # Kind select defaults to "Network (WiFi/LAN)"
+            page1.get_by_placeholder(re.compile(r"IP address")).fill(f"127.0.0.1:{port}")
+            # Paper width select defaults to 80mm
+            page1.get_by_role("button", name="Add printer").click()
+            expect(page1.get_by_role("cell", name="Front KOT")).to_be_visible()
+
+            step("Test print Front KOT -> bytes captured contain 'TEST PRINT' + printer name")
+            page1.get_by_role("button", name="Test print").first.click()
+            # Wait up to 5s for job to complete and bytes to arrive
+            import time
+            timeout = time.time() + 5
+            while time.time() < timeout:
+                if captured_bytes:
+                    break
+                time.sleep(0.1)
+            assert captured_bytes, "No bytes captured from test print"
+            test_bytes = captured_bytes[-1]
+            test_str = test_bytes.decode("latin1", errors="replace")
+            assert "TEST PRINT" in test_str, f"TEST PRINT not found in: {test_str}"
+            assert "Front KOT" in test_str, f"Printer name not found in: {test_str}"
+            print(f"     Test print bytes captured ({len(test_bytes)} bytes)", flush=True)
+            # Verify job shows done status
+            expect(page1.get_by_text(re.compile(r"✓ Done"))).to_be_visible()
+
+            step("Assign Kitchen station to Front KOT printer")
+            # Find Kitchen station row, change printer select to Front KOT
+            kitchen_row = page1.locator("tr").filter(has_text="Kitchen")
+            printer_select = kitchen_row.locator("select")
+            printer_select.select_option(label="Front KOT")
+            # Assert PATCH landed before navigating away
+            expect(printer_select).to_have_value(re.compile(r".+"))  # non-empty value
+            print("     Kitchen station assigned to Front KOT", flush=True)
+
+            step("Punch+send Biryani (Half) on new parcel -> KOT bytes captured")
+            nav(page1, "tables")
+            page1.get_by_role("button", name="New parcel").click()
+            page1.get_by_role("button", name=re.compile(r"Half — ₹60\.00")).click()
+            page1.get_by_role("button", name="Punch", exact=True).click()
+            expect(page1.get_by_text("pending", exact=True)).to_be_visible()
+
+            captured_count_before = len(captured_bytes)
+            page1.get_by_role("button", name="Send to kitchen").click()
+            expect(page1.get_by_text("sent", exact=True)).to_be_visible()
+
+            # Wait for KOT bytes
+            timeout = time.time() + 5
+            while time.time() < timeout:
+                if len(captured_bytes) > captured_count_before:
+                    break
+                time.sleep(0.1)
+            assert len(captured_bytes) > captured_count_before, "No KOT bytes captured"
+
+            kot_bytes = captured_bytes[-1]
+            kot_str = kot_bytes.decode("latin1", errors="replace")
+            # Determine expected KOT number based on whether LAN block ran
+            # Previous KOTs: #1 (dine-in T1 Biryani Half), #2 (parcel Full), #3 (split B Full or LAN Half), #4 (LAN Half if LAN ran)
+            # So next KOT is #4 if no LAN, #5 if LAN ran
+            expected_kot_num = 5 if GATE_LAN else 4
+            assert f"KOT #{expected_kot_num}" in kot_str, f"KOT #{expected_kot_num} not found in: {kot_str}"
+            assert "1 x Biryani (Half)" in kot_str, f"Biryani (Half) not found in: {kot_str}"
+            print(f"     KOT bytes captured ({len(kot_bytes)} bytes), contains KOT #{expected_kot_num}", flush=True)
+
+            # Verify kitchen board ALSO updated (proves WS handshake + broadcast work)
+            expect(page_k.get_by_text(f"KOT #{expected_kot_num}")).to_be_visible()
+            print("     Kitchen board shows live KOT (WS handshake smoke: ✓)", flush=True)
+
+            step("Failed job: add 'Dead Printer' on 127.0.0.1:1 -> test print fails")
+            nav(page1, "settings")
+            page1.get_by_placeholder("Printer name").fill("Dead Printer")
+            page1.get_by_placeholder(re.compile(r"IP address")).fill("127.0.0.1:1")
+            page1.get_by_role("button", name="Add printer").click()
+            expect(page1.get_by_role("cell", name="Dead Printer")).to_be_visible()
+
+            # Find Dead Printer row's test button (last one now)
+            dead_row = page1.locator("tr").filter(has_text="Dead Printer")
+            dead_row.get_by_role("button", name="Test print").click()
+
+            # Wait for job to fail
+            timeout = time.time() + 8
+            while time.time() < timeout:
+                if page1.get_by_text(re.compile(r"✗ Failed")).is_visible():
+                    break
+                time.sleep(0.1)
+
+            expect(page1.get_by_text(re.compile(r"✗ Failed"))).to_be_visible()
+            expect(page1.get_by_role("button", name="Retry")).to_be_visible()
+            print("     Dead printer job failed, retry button visible", flush=True)
+
+            step("Cleanup: stop TCP server")
+            server.shutdown()
+            print("     TCP server stopped", flush=True)
+
             print("\nALL STEPS PASSED (including M3s splits)", flush=True)
         except Exception:
             traceback.print_exc()
