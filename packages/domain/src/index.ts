@@ -24,3 +24,9 @@ export {
   type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput,
 } from "./order-schemas.js";
 export { nextSplitLabel } from "./split-labels.js";
+export {
+  PrinterCreate, PrinterUpdate,
+  StationCreate, StationUpdate,
+  type PrinterCreateInput, type PrinterUpdateInput,
+  type StationCreateInput, type StationUpdateInput,
+} from "./printer-schemas.js";
