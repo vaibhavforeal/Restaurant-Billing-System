@@ -21,6 +21,9 @@ export function App() {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
+    // Register expiry handler
+    session.onUnauthorized = () => setState({ kind: "login" });
+
     void (async () => {
       try {
         const { needsSetup } = await apiFetch<{ needsSetup: boolean }>("/api/needs-setup");
@@ -39,6 +42,10 @@ export function App() {
         setState({ kind: "login" }); // server down: login screen will show "Server unreachable"
       }
     })();
+
+    return () => {
+      session.onUnauthorized = null;
+    };
   }, []);
 
   switch (state.kind) {
