@@ -1,80 +1,148 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, app } from "electron";
+import { appendFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, "../../..");
-const SERVER_URL = "http://localhost:4100";
-const MAX_RESTARTS = 5;
-
-let server: ChildProcess | null = null;
-let restarts = 0;
+const port = process.env["FORKFLOW_PORT"] ?? "4100";
+const url = `http://127.0.0.1:${port}`;
+const dataDir = process.env["FORKFLOW_DATA_DIR"] ?? join(app.getPath("userData"), "data");
+let server: UtilityProcess | null = null;
+let window: BrowserWindow | null = null;
+let tray: Tray | null = null;
 let quitting = false;
+let stopping = false;
+let restarts = 0;
+let timer: ReturnType<typeof setTimeout> | undefined;
+let recovering = false;
+let errorShown = false;
 
-function startServer(): void {
-  // Dev shell: system Node + tsx keeps better-sqlite3 on the Node ABI.
-  // Milestone 6 packaging replaces this with utilityProcess + electron-rebuild.
-  server = spawn("node", ["--import", "tsx", "apps/server/src/main.ts"], {
-    cwd: repoRoot,
-    stdio: "inherit",
-    shell: false,
-  });
-  server.on("exit", (code) => {
-    if (quitting) return;
-    if (restarts >= MAX_RESTARTS) {
-      console.error(`server exited (code ${code}) too many times; giving up`);
-      app.quit();
-      return;
-    }
-    const delay = 500 * 2 ** restarts;
-    restarts += 1;
-    console.error(`server exited (code ${code}); restarting in ${delay}ms`);
-    setTimeout(startServer, delay);
-  });
-  server.on("error", (err) => {
-    if (quitting) return;
-    console.error("server spawn failed:", err);
-    if (restarts >= MAX_RESTARTS) {
-      app.quit();
-      return;
-    }
-    const delay = 500 * 2 ** restarts;
-    restarts += 1;
-    setTimeout(startServer, delay);
-  });
-}
-
-async function waitForHealth(timeoutMs = 15_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  mkdirSync(dataDir, { recursive: true });
+  const log = join(dataDir, "server.log");
+  const writeLog = (text: string) => {
     try {
-      const res = await fetch(`${SERVER_URL}/api/health`);
-      if (res.ok) {
-        // Reset restart counter on successful health check
-        restarts = 0;
-        return;
-      }
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 250));
+      if (existsSync(log) && statSync(log).size > 5_000_000) renameSync(log, log + ".previous");
+      appendFileSync(log, text);
+    } catch { /* read-only disk will be surfaced by server startup */ }
+  };
+  writeLog(`Desktop ${app.getVersion()} starting at ${new Date().toISOString()}\n`);
+  function showWindow() { window?.show(); window?.focus(); }
+  async function failure(message: string) {
+    if (errorShown || quitting || recovering) return;
+    errorShown = true;
+    const { response } = await dialog.showMessageBox({ type: "error", title: "ForkFlow needs attention", message,
+      detail: `Your data is in ${dataDir}. See server.log for details.`, buttons: ["Retry", "Open data folder", "Restore backup", "Quit"], cancelId: 3 });
+    errorShown = false;
+    if (response === 0) { restarts = 0; startServer(); }
+    else if (response === 1) { await shell.openPath(dataDir); void failure(message); }
+    else if (response === 2) await restore();
+    else app.quit();
   }
-  throw new Error("server did not become healthy in time");
+  function startServer(restorePath?: string) {
+    if (quitting || server) return;
+    writeLog("Starting server utility process\n");
+    const instanceId = randomUUID();
+    const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
+      cwd: dataDir, stdio: "pipe", serviceName: "ForkFlow POS server",
+      env: { ...process.env, FORKFLOW_DATA_DIR: dataDir, FORKFLOW_UI_DIR: join(here, "ui"), FORKFLOW_PORT: port,
+        FORKFLOW_APP_VERSION: app.getVersion(), FORKFLOW_INSTANCE_ID: instanceId, ...(restorePath ? { FORKFLOW_RESTORE: restorePath } : {}) },
+    });
+    server = child;
+    child.on("spawn", () => writeLog(`Server spawned (${child.pid})\n`));
+    let healthy = false;
+    let healthyAt = 0;
+    let failures = 0;
+    const started = Date.now();
+    const spawnCheck = setTimeout(() => {
+      if (server === child && child.pid === undefined) {
+        server = null; clearInterval(watchdog);
+        writeLog("Server failed to spawn; verify its entry point and working directory\n");
+        void failure("The server process could not be launched. Open the data folder to inspect server.log.");
+      }
+    }, 5000);
+    child.stdout?.on("data", (data: Buffer) => writeLog(data.toString()));
+    child.stderr?.on("data", (data: Buffer) => writeLog(data.toString()));
+    const watchdog = setInterval(() => { void (async () => {
+      try {
+        const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) });
+        const data = await res.json() as { instanceId?: string };
+        if (!res.ok || data.instanceId !== instanceId) throw new Error("This port belongs to another server");
+        failures = 0;
+        if (!healthy) { healthy = true; healthyAt = Date.now(); if (window?.webContents.getURL() !== url + "/") await window?.loadURL(url); }
+        if (Date.now() - healthyAt > 60_000) restarts = 0;
+      } catch {
+        failures++;
+        // Allow migration/backup work to finish at startup. A live hung server is
+        // killed only after repeated failed probes; its OS data lock then releases.
+        if ((healthy && failures >= 15) || (!healthy && Date.now() - started > 120_000)) child.kill();
+      }
+    })(); }, 2000);
+    child.once("exit", (code) => {
+      clearTimeout(spawnCheck);
+      clearInterval(watchdog);
+      if (server === child) server = null;
+      writeLog(`\nServer exited (${code}) at ${new Date().toISOString()}\n`);
+      if (quitting || stopping || recovering) return;
+      if (restarts >= 5) { void failure("The POS server could not start. Your saved data has been kept."); return; }
+      timer = setTimeout(() => startServer(), Math.min(500 * 2 ** restarts++, 10_000));
+    });
+  }
+  async function stopServer() {
+    if (timer) clearTimeout(timer);
+    const child = server;
+    if (!child) return;
+    stopping = true;
+    await new Promise<void>((resolve) => {
+      const force = setTimeout(() => child.kill(), 10_000);
+      child.once("exit", () => { clearTimeout(force); resolve(); });
+      child.postMessage("shutdown");
+    });
+    stopping = false;
+  }
+  async function restore() {
+    const selection = await dialog.showOpenDialog({ title: "Choose a ForkFlow backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
+    if (selection.canceled || !selection.filePaths[0]) return;
+    const { response } = await dialog.showMessageBox({ type: "warning", title: "Restore backup", message: "Stop work on all counters before restoring.",
+      detail: `Restore ${selection.filePaths[0]}? Current data will be archived; all changes since this snapshot will leave the live database. Staff must sign in again and review open orders.`, buttons: ["Cancel", "Restore this backup"], defaultId: 0, cancelId: 0 });
+    if (response !== 1) return;
+    recovering = true;
+    await stopServer();
+    await window?.loadURL("data:text/html,<h2>Restoring ForkFlow backup…</h2>");
+    restarts = 5; // invalid backups produce a reviewable error, never silently fall back
+    startServer(selection.filePaths[0]);
+    recovering = false;
+  }
+  app.on("second-instance", showWindow);
+  app.whenReady().then(() => {
+    window = new BrowserWindow({ width: 1280, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+    void window.loadURL("data:text/html,<h2>Starting ForkFlow…</h2><p>Preparing the database and checking backups.</p>");
+    window.webContents.setWindowOpenHandler(({ url: target }) => { if (/^https?:\/\//.test(target)) void shell.openExternal(target); return { action: "deny" }; });
+    window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(url + "/") && target !== url) event.preventDefault(); });
+    window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
+    if (app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+      app.setLoginItemSettings({ openAtLogin: true });
+      appendFileSync(join(dataDir, "desktop-initialized"), "1");
+    }
+    startServer();
+    writeLog("Creating tray menu\n");
+    tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
+    tray.setToolTip("ForkFlow — restaurant POS server");
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: "Open ForkFlow", click: showWindow },
+      { label: "Open data and backups", click: () => { void shell.openPath(dataDir); } },
+      { label: "Restore backup…", click: () => { void restore(); } },
+      { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+      { type: "separator" }, { label: "Quit ForkFlow (stops all counters)", click: () => app.quit() },
+    ]));
+    tray.on("double-click", showWindow);
+    writeLog("Tray menu ready\n");
+  }).catch((error: unknown) => { writeLog(String(error)); void failure("ForkFlow startup failed."); });
+  app.on("before-quit", (event) => {
+    if (quitting) return;
+    event.preventDefault(); quitting = true;
+    void stopServer().finally(() => { tray?.destroy(); app.quit(); });
+  });
 }
-
-app.whenReady().then(async () => {
-  startServer();
-  await waitForHealth();
-  const win = new BrowserWindow({ width: 1280, height: 800, autoHideMenuBar: true });
-  await win.loadURL(SERVER_URL);
-});
-
-app.on("before-quit", () => {
-  quitting = true;
-  server?.kill();
-});
-
-app.on("window-all-closed", () => {
-  app.quit();
-});

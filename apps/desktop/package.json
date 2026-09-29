@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p .",
-    "start": "electron ."
+    "start": "electron ../../build/desktop/app"
   },
   "devDependencies": {
     "electron": "^43.4.0"

@@ -56,6 +56,24 @@ async function fixtures(app: ReturnType<typeof freshApp>, adminToken: string) {
 }
 
 describe("kots: send-to-kitchen", () => {
+  it("replays the same request after later punches without sending the later round", async () => {
+    app = freshApp(); const admin = await setupAdmin(app);
+    const { biryaniId } = await fixtures(app, admin.token);
+    const created = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel" } });
+    const orderId = created.json().order.id;
+    const punch = () => app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers: auth(admin.token), payload: { items: [{ clientRef: uuidv7(), productId: biryaniId, qty: 1 }] } });
+    await punch();
+    const item = (app.db.prepare("SELECT id FROM order_items WHERE order_id = ?").get(orderId) as { id: string }).id;
+    const payload = { clientRef: uuidv7(), itemIds: [item] };
+    const send = (body = payload) => app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(admin.token), payload: body });
+    const first = await send(); expect(first.statusCode).toBe(200);
+    await punch(); const replay = await send(); expect(replay.statusCode).toBe(200);
+    expect(replay.json().kots.map((k: { id: string }) => k.id)).toEqual(first.json().kots.map((k: { id: string }) => k.id));
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM kots").get()).toEqual({ n: 1 });
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM order_items WHERE status = 'pending'").get()).toEqual({ n: 1 });
+    expect((await send({ ...payload, itemIds: [uuidv7()] })).statusCode).toBe(409);
+    expect((await send({ clientRef: uuidv7(), itemIds: [item] })).statusCode).toBe(409);
+  });
   it("groups items by station and assigns per-day KOT numbers", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

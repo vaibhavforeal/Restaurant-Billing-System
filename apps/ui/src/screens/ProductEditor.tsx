@@ -101,7 +101,7 @@ export function ProductEditor({
   }
 
   return (
-    <div style={{ maxWidth: 520, margin: "4vh auto", display: "grid", gap: 12, fontFamily: "system-ui" }}>
+    <div className="legacy-screen">
       <h2>{product ? `Edit: ${product.name}` : "New product"}</h2>
 
       <input placeholder="Product name" value={name} onChange={(e) => setName(e.target.value)} />

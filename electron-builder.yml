@@ -1,0 +1,26 @@
+appId: in.forkflow.pos
+productName: ForkFlow
+directories:
+  app: build/desktop/app
+  output: dist/installer
+electronVersion: 43.4.0
+npmRebuild: false
+asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**/*"
+files:
+  - "**/*"
+  - "!**/*.map"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/desktop/icon.ico
+  artifactName: "ForkFlow-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  include: tools/installer.nsh

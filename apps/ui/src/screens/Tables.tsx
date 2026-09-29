@@ -3,8 +3,11 @@ import { ApiError, apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
+import { Icon } from "../Icon";
 
 export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderId: string) => void }) {
+  const [filter, setFilter] = useState<"all" | TableInfo["status"]>("all");
+  const [search, setSearch] = useState("");
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [managing, setManaging] = useState(false);
@@ -26,9 +29,9 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
     reload().catch(() => setError("Failed to load tables"));
     const dispose = connectWs({
       onEvent: (event) => {
-        if (event === "table.changed" || event === "order.updated") void reload();
+        if (event === "table.changed" || event === "order.updated") void reload().catch(() => {});
       },
-      onStatus: (connected) => { if (connected) void reload(); },
+      onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
       onAuthFail: () => session.clear(),
     });
     return dispose;
@@ -155,154 +158,40 @@ export function Tables({ user, onOpenOrder }: { user: User; onOpenOrder: (orderI
 
   const isAdmin = user.role === "admin";
 
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2>Tables</h2>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={newParcel} disabled={creating} style={{ padding: "8px 16px", fontWeight: 700 }}>
-            New parcel
-          </button>
-          {isAdmin && (
-            <button onClick={() => setManaging(!managing)} style={{ padding: "8px 16px" }}>
-              {managing ? "Done managing" : "Manage tables"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div style={{ color: "crimson", minHeight: 20 }}>{error}</div>
-
-      {managing && isAdmin && (
-        <div style={{ marginBottom: 24, padding: 16, border: "1px solid #ddd", borderRadius: 4 }}>
-          <h3>Add table</h3>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input placeholder="Table name" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} />
-            <input placeholder="Area (optional)" value={newTable.area} onChange={(e) => setNewTable({ ...newTable, area: e.target.value })} />
-            <button onClick={addTable}>Add</button>
-          </div>
-          <h3 style={{ marginTop: 16 }}>All tables</h3>
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {tables.map((t) => (
-              <li key={t.id} style={{ display: "flex", gap: 4, alignItems: "center", padding: "4px 0", opacity: t.isActive ? 1 : 0.45 }}>
-                <span style={{ flex: 1 }}>
-                  {t.name} {t.area && `(${t.area})`}
-                </span>
-                <button onClick={() => move(t, -1)} title="Move up">
-                  ▲
-                </button>
-                <button onClick={() => move(t, 1)} title="Move down">
-                  ▼
-                </button>
-                <button onClick={() => rename(t)} title="Rename">
-                  ✎
-                </button>
-                <button onClick={() => patchTable(t.id, { isActive: !t.isActive })} title={t.isActive ? "Deactivate" : "Activate"}>
-                  {t.isActive ? "⏸" : "▶"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!managing && (
-        <>
-          {Array.from(grouped.entries()).map(([area, list]) => (
-            <div key={area} style={{ marginBottom: 24 }}>
-              <h3>{area}</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
-                {list
-                  .filter((t) => t.isActive)
-                  .map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => openTable(t)}
-                      disabled={t.status === "free" && creating}
-                      style={{
-                        padding: 16,
-                        fontSize: 16,
-                        fontWeight: 700,
-                        backgroundColor: t.status === "free" ? "#e0f7e0" : t.status === "occupied" ? "#ffe0b2" : "#ffcccc",
-                        border: "1px solid #ccc",
-                        borderRadius: 4,
-                      }}
-                    >
-                      {t.name}
-                      <div style={{ fontSize: 12, fontWeight: 400, marginTop: 4, textTransform: "capitalize" }}>
-                        {t.status}{t.activeOrders.length >= 2 ? ` · ${t.activeOrders.length} splits` : ""}
-                      </div>
-                    </button>
-                  ))}
-              </div>
-              {/* Picker panel */}
-              {(() => {
-                if (pickerTableId === null) return null;
-                const table = list.find((t) => t.id === pickerTableId);
-                if (!table) return null;
-                return (
-                  <div
-                    style={{
-                      marginTop: 16,
-                      padding: 16,
-                      border: "2px solid #333",
-                      borderRadius: 8,
-                      backgroundColor: "#fffbf0",
-                    }}
-                  >
-                    <h4 style={{ marginTop: 0, marginBottom: 12 }}>
-                      {table.name} — splits
-                    </h4>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {table.activeOrders.map((o) => (
-                        <button
-                          key={o.id}
-                          onClick={() => {
-                            setPickerTableId(null);
-                            onOpenOrder(o.id);
-                          }}
-                          style={{ padding: "12px 16px", fontSize: 16, textAlign: "left" }}
-                        >
-                          Split {o.splitLabel ?? "?"}
-                          {o.status === "billed" ? " (billed)" : ""}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => createSplitOnTable(table.id)}
-                        disabled={creating}
-                        style={{ padding: "12px 16px", fontSize: 16, fontWeight: 700 }}
-                      >
-                        New split
-                      </button>
-                      <button
-                        onClick={() => setPickerTableId(null)}
-                        style={{ padding: "12px 16px", fontSize: 16 }}
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          ))}
-
-          {openParcels.length > 0 && (
-            <div>
-              <h3>Open parcels</h3>
-              <ul style={{ listStyle: "none", padding: 0 }}>
-                {openParcels.map((o) => (
-                  <li key={o.id} style={{ padding: "8px 0", borderBottom: "1px solid #eee" }}>
-                    <button onClick={() => onOpenOrder(o.id)} style={{ fontSize: 16, padding: 8 }}>
-                      Parcel {o.clientRef.slice(0, 8)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
+  const active = tables.filter((table) => table.isActive);
+  const visible = active.filter((table) => (filter === "all" || table.status === filter) && `${table.name} ${table.area ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase().trim()));
+  return <section className="screen">
+    <div className="page-header"><div><h2>Tables & orders</h2></div><div className="actions">
+      {isAdmin && <button onClick={() => setManaging(!managing)}>{managing ? "Done managing" : "Manage tables"}</button>}
+      <button className="primary button-icon" onClick={newParcel} disabled={creating}><Icon name="plus" size={17} />New parcel</button>
+    </div></div>
+    <div className="error-message" role="alert">{error}</div>
+    {managing && isAdmin ? <div className="panel">
+      <h3>Add table</h3><div className="actions"><input aria-label="Table name" placeholder="Table name" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} /><input aria-label="Area" placeholder="Area (optional)" value={newTable.area} onChange={(e) => setNewTable({ ...newTable, area: e.target.value })} /><button className="primary" onClick={addTable}>Add</button></div>
+      <h3 style={{ marginTop: 26 }}>All tables</h3>
+      <ul style={{ listStyle: "none", padding: 0 }}>{tables.map((t) => <li key={t.id} className="actions" style={{ padding: "12px 0", borderBottom: "1px solid var(--line)", opacity: t.isActive ? 1 : .5 }}>
+        <span style={{ flex: 1 }}>{t.name} {t.area && <small className="muted">· {t.area}</small>}</span>
+        <button onClick={() => move(t, -1)} title="Move up" aria-label={`Move ${t.name} up`}>▲</button><button onClick={() => move(t, 1)} title="Move down" aria-label={`Move ${t.name} down`}>▼</button><button onClick={() => rename(t)} title="Rename">Rename</button><button onClick={() => patchTable(t.id, { isActive: !t.isActive })}>{t.isActive ? "Deactivate" : "Activate"}</button>
+      </li>)}</ul>
+    </div> : <>
+      <div className="filter-bar"><div className="tabs" aria-label="Table status">
+        {(["all", "free", "occupied", "billed"] as const).map((status) => <button key={status} className={filter === status ? "selected" : ""} aria-pressed={filter === status} onClick={() => setFilter(status)}>{({ all: "All tables", free: "Available", occupied: "Occupied", billed: "Billed" })[status]}<span className="count">{status === "all" ? active.length : active.filter((t) => t.status === status).length}</span></button>)}
+      </div><div className="search-field"><Icon name="search" size={16} /><input aria-label="Search tables" placeholder="Find a table or area…" value={search} onChange={(e) => setSearch(e.target.value)} /></div></div>
+      {Array.from(grouped.entries()).filter(([,list]) => list.some((t) => visible.includes(t))).map(([area, list]) => <section className="table-area" key={area}>
+        <h3>{area}<span>{list.filter((t) => visible.includes(t)).length} tables</span></h3>
+        <div className="table-grid">{list.filter((t) => visible.includes(t)).map((t) => <button key={t.id} className={`table-card ${t.status}`} onClick={() => openTable(t)} disabled={t.status === "free" && creating}>
+          <div className="table-card-header"><Icon name="tables" size={20} /><span className={`status ${t.status}`}>{t.status === "free" ? "Available" : t.status}</span></div>
+          <strong>{t.name}</strong><div className="table-card-footer"><span>{t.activeOrders.length ? `${t.activeOrders.length} active ${t.activeOrders.length === 1 ? "order" : "splits"}` : ""}</span><Icon name="arrow" size={15} /></div>
+        </button>)}</div>
+        {pickerTableId && list.some((t) => t.id === pickerTableId) && <div className="panel split-picker"><h3>{list.find((t) => t.id === pickerTableId)?.name} — splits</h3><div className="actions">
+          {list.find((t) => t.id === pickerTableId)?.activeOrders.map((o) => <button key={o.id} onClick={() => { setPickerTableId(null); onOpenOrder(o.id); }}>Split {o.splitLabel ?? "?"}{o.status === "billed" ? " (billed)" : ""}</button>)}
+          <button className="primary" onClick={() => createSplitOnTable(pickerTableId)} disabled={creating}>New split</button><button onClick={() => setPickerTableId(null)}>Close</button>
+        </div></div>}
+      </section>)}
+      {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables using Manage tables." : "Ask an admin to add tables."}</p></div>}
+      {openParcels.length > 0 && <section className="panel" style={{ marginTop: 28 }}><div className="panel-title"><h3>Open parcels</h3><span>{openParcels.length} orders</span></div><div className="parcel-grid">
+        {openParcels.map((o) => <button key={o.id} onClick={() => onOpenOrder(o.id)}><Icon name="bag" size={18} />Parcel {o.clientRef.slice(0, 8)}</button>)}
+      </div></section>}
+    </>}
+  </section>;
 }

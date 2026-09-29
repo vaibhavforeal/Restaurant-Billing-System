@@ -5,7 +5,7 @@ export interface PrintJobJson {
   id: string;
   printerId: string;
   printerName: string;
-  kind: "kot" | "cancel" | "test";
+  kind: "kot" | "cancel" | "test" | "receipt";
   label: string;
   status: "queued" | "printing" | "failed" | "done";
   error: string | null;
@@ -30,7 +30,7 @@ export class PrintQueue {
 
   enqueue(
     printer: { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string },
-    kind: "kot" | "cancel" | "test",
+    kind: "kot" | "cancel" | "test" | "receipt",
     label: string,
     bytes: Buffer,
   ): PrintJobJson {
@@ -51,9 +51,7 @@ export class PrintQueue {
     };
 
     this.jobsList.unshift(job);
-    if (this.jobsList.length > 100) {
-      this.jobsList = this.jobsList.slice(0, 100);
-    }
+    this.trimCompleted();
 
     const snap = { ...job.json };
     this.onChange(snap);
@@ -78,6 +76,12 @@ export class PrintQueue {
 
   jobs(): PrintJobJson[] {
     return this.jobsList.map((j) => ({ ...j.json }));
+  }
+
+  private trimCompleted() {
+    // Keep every live/failed job; only successful history may be discarded.
+    let completed = 0;
+    this.jobsList = this.jobsList.filter((job) => job.json.status !== "done" || ++completed <= 100);
   }
 
   private async processQueue(printerId: string): Promise<void> {
@@ -114,6 +118,7 @@ export class PrintQueue {
           }
 
           this.onChange({ ...job.json });
+          this.trimCompleted();
         } catch (onChangeErr) {
           // Defensive: if onChange throws, log but don't wedge the printer
           console.error("onChange threw:", onChangeErr);

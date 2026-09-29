@@ -1,4 +1,5 @@
 import { apiFetch, session, type User } from "./api";
+import { Brand, Icon, type IconName } from "./Icon";
 
 export type Page =
   | { name: "home" }
@@ -7,7 +8,11 @@ export type Page =
   | { name: "kitchen" }
   | { name: "catalog" }
   | { name: "users" }
-  | { name: "settings" };
+  | { name: "settings" }
+  | { name: "bills" }
+  | { name: "reports" }
+  | { name: "inventory" };
+// Billing and reports use the existing cashier/admin permissions.
 
 export function NavBar({
   user,
@@ -37,6 +42,9 @@ export function NavBar({
       ? [
           { page: { name: "home" }, label: "home" },
           { page: { name: "tables" }, label: "tables" },
+          { page: { name: "bills" }, label: "bills" },
+          { page: { name: "reports" }, label: "reports" },
+          { page: { name: "inventory" }, label: "inventory" },
           { page: { name: "kitchen" }, label: "kitchen" },
           { page: { name: "catalog" }, label: "catalog" },
           { page: { name: "users" }, label: "users" },
@@ -46,6 +54,9 @@ export function NavBar({
         ? [
             { page: { name: "home" }, label: "home" },
             { page: { name: "tables" }, label: "tables" },
+            { page: { name: "bills" }, label: "bills" },
+            { page: { name: "reports" }, label: "reports" },
+            { page: { name: "inventory" }, label: "inventory" },
             { page: { name: "kitchen" }, label: "kitchen" },
           ]
         : user.role === "waiter"
@@ -59,21 +70,26 @@ export function NavBar({
   const activeTab = page.name === "order" ? "tables" : page.name;
 
   return (
-    <nav style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-      <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+    <nav className="sidebar" aria-label="Main navigation">
+      <Brand />
+      <div className="nav-items">
       {tabs.map((t) => (
         <button
           key={t.label}
           onClick={() => onNavigate(t.page)}
           disabled={activeTab === t.label}
-          style={{ padding: "6px 12px", textTransform: "capitalize" }}
+          className={`nav-item ${activeTab === t.label ? "active" : ""}`}
+          aria-current={activeTab === t.label ? "page" : undefined}
+          aria-label={t.label}
+          title={t.label}
         >
-          {t.label}
+          <Icon name={t.label as IconName} /><span>{t.label}</span>
         </button>
       ))}
-      <span style={{ marginLeft: "auto" }}>{user.name}</span>
-      <button onClick={() => void logout()} style={{ padding: "6px 12px" }}>
-        Log out
+      </div>
+      <div className="sidebar-footer"><span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div></div>
+      <button className="nav-item logout" onClick={() => void logout()} title="Log out" aria-label="Log out">
+        <Icon name="logout" /><span>Log out</span>
       </button>
     </nav>
   );

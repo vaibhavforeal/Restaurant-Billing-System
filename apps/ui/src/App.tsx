@@ -10,6 +10,10 @@ import { Settings } from "./screens/Settings";
 import { Setup } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
 import { Users } from "./screens/Users";
+import { Bills } from "./screens/Bills";
+import { DayEnd } from "./screens/DayEnd";
+import { Inventory } from "./screens/Inventory";
+import { ConnectionStatus } from "./ConnectionStatus";
 
 type State =
   | { kind: "loading" }
@@ -17,8 +21,11 @@ type State =
   | { kind: "login" }
   | { kind: "in"; user: User; page: Page };
 
+
 export function App() {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const pageKey = state.kind === "in" ? state.page.name === "order" ? state.page.orderId : state.page.name : state.kind;
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); }, [pageKey]);
 
   useEffect(() => {
     // Register expiry handler
@@ -50,7 +57,7 @@ export function App() {
 
   switch (state.kind) {
     case "loading":
-      return null;
+      return <div className="loading-state" role="status">Opening your workspace…</div>;
     case "setup":
       return <Setup onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
     case "login":
@@ -61,8 +68,12 @@ export function App() {
       const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
       const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
       return (
-        <div>
+        <div className="app-shell">
           <NavBar user={user} page={page} onNavigate={go} onLogout={() => setState({ kind: "login" })} />
+          <div className="app-body">
+
+          <ConnectionStatus key={user.id} userId={user.id} />
+          <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
           {page.name === "tables" && <Tables user={user} onOpenOrder={onOpenOrder} />}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} />}
@@ -70,6 +81,11 @@ export function App() {
           {page.name === "catalog" && <Catalog />}
           {page.name === "users" && <Users />}
           {page.name === "settings" && <Settings />}
+          {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
+          {page.name === "reports" && <DayEnd />}
+          {page.name === "inventory" && <Inventory user={user} />}
+          </main>
+          </div>
         </div>
       );
     }

@@ -87,18 +87,18 @@ export function Catalog() {
   const visible = products.filter((p) => p.categoryId === selectedCat);
 
   return (
-    <div style={{ display: "flex", gap: 24, padding: 16, fontFamily: "system-ui", alignItems: "flex-start" }}>
-      <div style={{ width: 260 }}>
+    <div className="catalog-layout">
+      <aside className="panel category-editor">
         <h2>Categories</h2>
         <div style={{ display: "flex", gap: 4 }}>
           <input value={newCatName} placeholder="New category" onChange={(e) => setNewCatName(e.target.value)} style={{ flex: 1 }} />
-          <button onClick={addCategory}>Add</button>
+          <button className="primary" onClick={addCategory}>Add</button>
         </div>
         <ul style={{ listStyle: "none", padding: 0 }}>
           {categories.map((c) => (
             <li key={c.id} style={{ display: "flex", gap: 4, alignItems: "center", padding: "4px 0", opacity: c.isActive ? 1 : 0.45 }}>
               <button
-                onClick={() => setSelectedCat(c.id)}
+                className={c.id === selectedCat ? "primary soft" : ""} onClick={() => setSelectedCat(c.id)}
                 style={{ flex: 1, textAlign: "left", padding: 8, fontWeight: c.id === selectedCat ? 700 : 400 }}
               >
                 {c.name}
@@ -112,12 +112,12 @@ export function Catalog() {
             </li>
           ))}
         </ul>
-      </div>
+      </aside>
 
-      <div style={{ flex: 1 }}>
+      <div className="panel catalog-products">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Products</h2>
-          <button onClick={() => setEditing("new")} disabled={!selectedCat} style={{ padding: "8px 16px" }}>
+          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat} style={{ padding: "8px 16px" }}>
             New product
           </button>
         </div>

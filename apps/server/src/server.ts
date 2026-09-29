@@ -10,6 +10,11 @@ import { registerTables } from "./tables.js";
 import { registerOrders } from "./orders.js";
 import { registerKots } from "./kots.js";
 import { registerPrinters } from "./printers.js";
+import { registerBilling } from "./billing.js";
+import { registerReports } from "./reports.js";
+import { registerStock } from "./stock.js";
+import { registerSystem } from "./system.js";
+import type { Backups } from "./backups.js";
 import { realSend, type SinkSend } from "./print/sinks.js";
 import { PrintQueue } from "./print/queue.js";
 
@@ -18,6 +23,10 @@ export interface ServerOptions {
   logger?: FastifyServerOptions["logger"];
   authTimeoutMs?: number;  // WS auth frame timeout (default 5000ms in registerWs)
   sinkSend?: SinkSend;
+  backups?: Backups;
+  port?: number;
+  generation?: string;
+  instanceId?: string;
 }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
@@ -93,8 +102,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerOrders(app);
   registerKots(app);
   registerPrinters(app);
+  registerBilling(app);
+  registerReports(app);
+  registerStock(app);
+  registerSystem(app, opts.backups, opts.port, opts.generation);
 
-  app.get("/api/health", async () => ({ ok: true }));
+  app.get("/api/health", async () => ({ ok: true, ...(opts.instanceId ? { instanceId: opts.instanceId } : {}) }));
 
   return app;
 }

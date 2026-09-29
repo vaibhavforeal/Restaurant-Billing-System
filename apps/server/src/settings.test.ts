@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "",
+      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false,
     });
 
     const put = await app.inject({

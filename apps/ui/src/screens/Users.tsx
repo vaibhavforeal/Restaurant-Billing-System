@@ -48,7 +48,7 @@ export function Users() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: "4vh auto", fontFamily: "system-ui" }}>
+    <div className="legacy-screen">
       <h2>Users</h2>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />

@@ -104,7 +104,7 @@ describe("PrintQueue", () => {
     expect(order).toEqual(["job1-start", "job1-end", "job2-start", "job2-end"]);
   });
 
-  it("caps job history at 100", () => {
+  it("preserves all live jobs and caps only completed history at 100", async () => {
     const fake = makeFakeSink();
     const queue = new PrintQueue(fake.send, () => {});
     const printer = { id: "p1", name: "Printer 1", kind: "network" as const, connection: "test" };
@@ -113,7 +113,11 @@ describe("PrintQueue", () => {
       queue.enqueue(printer, "test", `Job ${i}`, Buffer.from("data"));
     }
 
+    expect(queue.jobs()).toHaveLength(105);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fake.sent).toHaveLength(105);
     expect(queue.jobs()).toHaveLength(100);
+    expect(queue.jobs().every((job) => job.status === "done")).toBe(true);
   });
 
   it("returns null when retrying non-failed job", () => {

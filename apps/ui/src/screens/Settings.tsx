@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
+import { SystemSettings } from "./SystemSettings";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "" };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false };
 
-const SETTINGS_FIELDS: Array<{ key: keyof SettingsData; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "taxInclusive">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -36,6 +37,7 @@ export function Settings() {
   // Common
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   // Load all data on mount
   useEffect(() => {
@@ -82,6 +84,7 @@ export function Settings() {
       setPrinters(printersRes.printers);
       setStations(stationsRes.stations);
       setJobs(jobsRes.jobs);
+      setLoaded(true);
       setError("");
     } catch {
       setError("Failed to load settings");
@@ -269,20 +272,31 @@ export function Settings() {
 
   const activePrinters = printers.filter((p) => p.isActive);
 
+  if (!loaded) return <section className="panel">{error ? <><p role="alert">{error}</p><button onClick={() => void loadAll()}>Retry</button></> : <p role="status">Loading settings…</p>}</section>;
+
   return (
-    <div style={{ maxWidth: 800, margin: "4vh auto", padding: 16, fontFamily: "system-ui", display: "grid", gap: 24 }}>
+    <div className="screen settings-screen">
+      <div className="page-header"><div><h2>Settings</h2></div></div>
       {/* Profile section */}
-      <div>
-        <h2>Settings</h2>
-        <div style={{ display: "grid", gap: 12 }}>
+      <div className="panel">
+        <h3>Restaurant profile</h3>
+        <div className="settings-form">
           {SETTINGS_FIELDS.map(({ key, label }) => (
             <label key={key} style={{ display: "grid", gap: 4 }}>
               {label}
               <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
             </label>
           ))}
+          <label style={{ display: "grid", gap: 4 }}>
+            Menu price tax mode
+            <select value={form.taxInclusive ? "inclusive" : "exclusive"} onChange={(e) => setForm({ ...form, taxInclusive: e.target.value === "inclusive" })} disabled={busy}>
+              <option value="exclusive">Add GST at checkout</option>
+              <option value="inclusive">Menu prices include GST</option>
+            </select>
+          </label>
+          <small>Applies to new bills. Existing bills keep their original tax calculation.</small>
           <button
-            onClick={() => void saveProfile()}
+            className="primary" onClick={() => void saveProfile()}
             style={{ padding: 12, fontWeight: 700 }}
             disabled={!form.restaurantName.trim() || busy}
           >
@@ -296,9 +310,9 @@ export function Settings() {
       </div>
 
       {/* Printers section */}
-      <div>
+      <div className="panel settings-section">
         <h3>Printers</h3>
-        <div style={{ color: "crimson", minHeight: 20 }}>{error}</div>
+      <div style={{ color: "crimson", minHeight: 20 }}>{error}</div>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
@@ -376,16 +390,16 @@ export function Settings() {
         </table>
 
         {/* Add printer form */}
-        <div style={{ display: "grid", gap: 8, padding: 12, border: "1px solid #ddd", borderRadius: 4 }}>
+        <div className="printer-form" style={{ display: "grid", gap: 8, padding: 12, border: "1px solid #ddd", borderRadius: 4 }}>
           <div style={{ display: "flex", gap: 8 }}>
             <input
-              placeholder="Printer name"
+              placeholder="Printer name" aria-label="Printer name"
               value={newPrinter.name}
               onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
               style={{ flex: 1 }}
             />
             <select
-              value={newPrinter.kind}
+              aria-label="Printer connection type" value={newPrinter.kind}
               onChange={(e) =>
                 setNewPrinter({ ...newPrinter, kind: e.target.value as "network" | "windows" | "bluetooth" })
               }
@@ -397,13 +411,13 @@ export function Settings() {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
-              placeholder={connectionPlaceholder(newPrinter.kind)}
+              aria-label="Printer address or connection" placeholder={connectionPlaceholder(newPrinter.kind)}
               value={newPrinter.connection}
               onChange={(e) => setNewPrinter({ ...newPrinter, connection: e.target.value })}
               style={{ flex: 1 }}
             />
             <select
-              value={newPrinter.paperWidth}
+              aria-label="Paper width" value={newPrinter.paperWidth}
               onChange={(e) => setNewPrinter({ ...newPrinter, paperWidth: Number(e.target.value) as 58 | 80 })}
             >
               <option value={80}>80mm</option>
@@ -415,7 +429,7 @@ export function Settings() {
       </div>
 
       {/* KOT stations section */}
-      <div>
+      <div className="panel settings-section">
         <h3>KOT stations</h3>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
@@ -456,7 +470,7 @@ export function Settings() {
         {/* Add station form */}
         <div style={{ display: "flex", gap: 8 }}>
           <input
-            placeholder="Station name"
+            placeholder="Station name" aria-label="Station name"
             value={newStationName}
             onChange={(e) => setNewStationName(e.target.value)}
             style={{ flex: 1 }}
@@ -466,7 +480,7 @@ export function Settings() {
       </div>
 
       {/* Print jobs section */}
-      <div>
+      <div className="panel settings-section">
         <h3>Print jobs</h3>
         {jobs.length === 0 ? (
           <div style={{ color: "#777", padding: 12 }}>No print jobs yet.</div>
@@ -503,6 +517,7 @@ export function Settings() {
           </div>
         )}
       </div>
+      <SystemSettings />
     </div>
   );
 }

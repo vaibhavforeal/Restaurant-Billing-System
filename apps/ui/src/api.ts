@@ -30,11 +30,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const token = session.token;
   if (token) headers.set("authorization", `Bearer ${token}`);
 
-  const res = await fetch(path, { ...init, headers });
+  const res = await fetch(path, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(15_000) });
   if (res.status === 401) session.clear();
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    throw new ApiError(res.status, body.error === "validation" ? (body.issues?.[0]?.message ?? "Check the form values") : (body.error ?? res.statusText));
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }

@@ -19,8 +19,8 @@ describe("migration 001", () => {
       .sort();
     expect(names).toEqual(
       [
-        "bill_taxes", "bills", "categories", "dining_tables", "kot_stations",
-        "kots", "order_items", "orders", "payments", "printers", "product_stock_links",
+        "bill_settlements", "bill_taxes", "bills", "categories", "dining_tables", "kot_stations",
+        "kots", "kot_requests", "order_items", "orders", "payments", "printers", "product_stock_links",
         "products", "sequences", "sessions", "settings", "stock_items", "stock_moves",
         "users", "variants",
       ].sort(),

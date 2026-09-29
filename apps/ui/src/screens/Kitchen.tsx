@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiFetch, session } from "../api";
 import type { KotWithContext } from "../types";
 import { connectWs } from "../ws";
+import { Icon } from "../Icon";
 
 export function Kitchen() {
   const [kots, setKots] = useState<KotWithContext[]>([]);
@@ -14,12 +15,12 @@ export function Kitchen() {
   }
 
   useEffect(() => {
-    void reload();
+    void reload().catch(() => {});
     const dispose = connectWs({
       onEvent: (event) => {
-        if (event === "kot.created" || event === "kot.updated" || event === "order.updated") void reload();
+        if (event === "kot.created" || event === "kot.updated" || event === "order.updated") void reload().catch(() => {});
       },
-      onStatus: (c) => { setConnected(c); if (c) void reload(); },
+      onStatus: (c) => { setConnected(c); if (c) void reload().catch(() => {}); },
       onAuthFail: () => session.clear(),
     });
     const ageInterval = setInterval(() => setTick((t) => t + 1), 30000);
@@ -34,7 +35,7 @@ export function Kitchen() {
       await apiFetch(`/api/kots/${id}/done`, { method: "POST" });
       await reload();
     } catch {
-      void reload();
+      void reload().catch(() => {});
     }
   }
 
@@ -43,50 +44,15 @@ export function Kitchen() {
     return mins === 0 ? "just now" : `${mins} min`;
   }
 
-  return (
-    <div style={{ fontFamily: "system-ui", padding: 16 }}>
-      {!connected && (
-        <div style={{ padding: 12, backgroundColor: "#fff3cd", borderRadius: 4, marginBottom: 16 }}>
-          Reconnecting…
-        </div>
-      )}
-      <h2>Kitchen Display</h2>
-      {kots.length === 0 && <p style={{ color: "#777" }}>No active KOTs.</p>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-        {kots.map((kot) => (
-          <div key={kot.id} style={{ border: "2px solid #333", borderRadius: 8, padding: 16, backgroundColor: "#fffbf0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>KOT #{kot.kotNo}</div>
-              <div style={{ fontSize: 14, color: "#555" }}>{age(kot.createdAt)}</div>
-            </div>
-            <div style={{ fontSize: 14, marginBottom: 8 }}>
-              {kot.orderType === "parcel"
-                ? "Parcel"
-                : kot.splitLabel && kot.splitLabel !== "A"
-                  ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}`
-                  : kot.tableName ?? "Table"}
-            </div>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {kot.items.map((item) => (
-                <li
-                  key={item.id}
-                  style={{
-                    padding: "4px 0",
-                    textDecoration: item.status === "cancelled" ? "line-through" : "none",
-                    opacity: item.status === "cancelled" ? 0.5 : 1,
-                  }}
-                >
-                  {item.qty} × {item.name}
-                  {item.note && <div style={{ fontSize: 12, color: "#555", fontStyle: "italic" }}>({item.note})</div>}
-                </li>
-              ))}
-            </ul>
-            <button onClick={() => void markDone(kot.id)} style={{ marginTop: 12, padding: "10px 24px", fontWeight: 700, width: "100%" }}>
-              Done
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <section className="screen">
+    <div className="page-header"><div><h2>Kitchen display</h2></div><span className="role-badge">{kots.length} active tickets</span></div>
+    {!connected && <div className="alert" role="status">Reconnecting…</div>}
+    {kots.length === 0 && <div className="panel empty-state"><Icon name="kitchen" size={36} /><h3>No active tickets</h3></div>}
+    <div className="kitchen-grid">{kots.map((kot) => <article className="kitchen-ticket" key={kot.id}>
+      <div className="ticket-header"><strong>KOT #{kot.kotNo}</strong><span><Icon name="clock" size={12} /> {age(kot.createdAt)}</span></div>
+      <div className="ticket-location">{kot.orderType === "parcel" ? "Parcel" : kot.splitLabel && kot.splitLabel !== "A" ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}` : kot.tableName ?? "Table"}</div>
+      <ul className="ticket-items">{kot.items.map((item) => <li key={item.id} style={{ textDecoration: item.status === "cancelled" ? "line-through" : "none", opacity: item.status === "cancelled" ? .5 : 1 }}>{item.qty} × {item.name}{item.note && <small>{item.note}</small>}</li>)}</ul>
+      <button className="primary soft button-icon" onClick={() => void markDone(kot.id)}><Icon name="check" size={17} />Done</button>
+    </article>)}</div>
+  </section>;
 }

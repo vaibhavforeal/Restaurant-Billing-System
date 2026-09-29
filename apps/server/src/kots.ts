@@ -1,4 +1,6 @@
-import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
+import { nextSequence, localDateKey, uuidv7, consumeStock } from "@forkflow/domain";
+import { publishStock } from "./stock.js";
+import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -10,6 +12,16 @@ export function registerKots(app: FastifyInstance): void {
 
   app.post("/api/orders/:id/send", { preHandler: create }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    const body = z.object({ clientRef: z.uuid(), itemIds: z.array(z.uuid()).min(1).max(500) }).optional().parse(req.body);
+    const fingerprint = body ? JSON.stringify([...new Set(body.itemIds)].sort()) : "";
+    if (body) {
+      const previous = app.db.prepare("SELECT * FROM kot_requests WHERE client_ref = ?").get(body.clientRef) as { order_id: string; user_id: string; fingerprint: string; kot_ids: string } | undefined;
+      if (previous) {
+        if (previous.order_id !== id || previous.user_id !== req.user.id || previous.fingerprint !== fingerprint) throw httpError(409, "Kitchen request reference was already used for different items");
+        const saved = JSON.parse(previous.kot_ids) as string[];
+        return { order: loadOrderJson(app.db, id), kots: saved.map((kotId) => kotJson(app.db.prepare("SELECT * FROM kots WHERE id = ?").get(kotId) as KotRow)) };
+      }
+    }
     const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow | undefined;
     if (!order) throw httpError(404, "order not found");
     if (order.status !== "open") throw httpError(409, "order is not open");
@@ -19,7 +31,7 @@ export function registerKots(app: FastifyInstance): void {
       product_id: string;
       station_id: string | null;
     }
-    const pendingItems = app.db
+    const pendingItems = (app.db
       .prepare(
         `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id
          FROM order_items oi
@@ -27,7 +39,8 @@ export function registerKots(app: FastifyInstance): void {
          WHERE oi.order_id = ? AND oi.status = 'pending'
          ORDER BY oi.id`,
       )
-      .all(id) as PendingItem[];
+      .all(id) as PendingItem[]).filter((item) => !body || body.itemIds.includes(item.id));
+    if (body && new Set(body.itemIds).size !== pendingItems.length) throw httpError(409, "Kitchen items changed; review the order before sending again");
 
     const byStation = new Map<string, string[]>();
     for (const item of pendingItems) {
@@ -41,11 +54,13 @@ export function registerKots(app: FastifyInstance): void {
     if (byStation.size === 0) throw httpError(409, "nothing to send");
 
     const createdKots: Array<{ id: string; stationId: string }> = [];
+    const changedStockIds: string[] = [];
 
     const write = app.db.transaction(() => {
       const now = Date.now();
       const dateKey = localDateKey(now);
       for (const [stationId, itemIds] of byStation.entries()) {
+        changedStockIds.push(...consumeStock(app.db, itemIds, req.user.id));
         const kotNo = nextSequence(app.db, "kot:" + dateKey);
         const kotId = uuidv7();
         app.db
@@ -58,8 +73,11 @@ export function registerKots(app: FastifyInstance): void {
 
         createdKots.push({ id: kotId, stationId });
       }
+      if (body) app.db.prepare("INSERT INTO kot_requests (client_ref, order_id, user_id, fingerprint, kot_ids) VALUES (?, ?, ?, ?, ?)")
+        .run(body.clientRef, id, req.user.id, fingerprint, JSON.stringify(createdKots.map((k) => k.id)));
     });
     write();
+    publishStock(app, changedStockIds);
 
     const orderResult = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
     const allItems = app.db

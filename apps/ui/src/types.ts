@@ -49,7 +49,7 @@ export interface PrintJobInfo {
   id: string;
   printerId: string;
   printerName: string;
-  kind: "kot" | "cancel" | "test";
+  kind: "kot" | "cancel" | "test" | "receipt";
   label: string;
   status: "queued" | "printing" | "failed" | "done";
   error: string | null;
@@ -66,6 +66,7 @@ export interface AdminUser {
 }
 
 export interface SettingsData {
+  taxInclusive: boolean;
   restaurantName: string;
   address: string;
   gstin: string;
@@ -99,6 +100,7 @@ export interface OrderItem {
 }
 
 export interface Order {
+  stockWarnings: import("@forkflow/domain").StockWarning[];
   id: string;
   clientRef: string;
   type: "dine_in" | "parcel";

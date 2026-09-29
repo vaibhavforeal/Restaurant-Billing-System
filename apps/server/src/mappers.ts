@@ -1,4 +1,4 @@
-import type { Database } from "@forkflow/domain";
+import { orderStockWarnings, type Database } from "@forkflow/domain";
 
 export interface OrderRow {
   id: string;
@@ -114,5 +114,6 @@ export function loadOrderJson(db: Database, orderId: string) {
     closedAt: row.closed_at,
     items: items.map(orderItemJson),
     kots: kots.map(kotJson),
+    stockWarnings: orderStockWarnings(db, orderId),
   };
 }

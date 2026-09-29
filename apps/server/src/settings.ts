@@ -2,6 +2,7 @@ import { SettingsUpdate } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 
 interface SettingsRow {
+  tax_inclusive: number;
   restaurant_name: string;
   address: string;
   gstin: string;
@@ -14,9 +15,10 @@ export function registerSettings(app: FastifyInstance): void {
 
   const readSettings = () => {
     const r = app.db
-      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer FROM settings WHERE id = 1")
+      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer, tax_inclusive FROM settings WHERE id = 1")
       .get() as SettingsRow;
     return {
+      taxInclusive: r.tax_inclusive === 1,
       restaurantName: r.restaurant_name,
       address: r.address,
       gstin: r.gstin,
@@ -30,8 +32,8 @@ export function registerSettings(app: FastifyInstance): void {
   app.put("/api/settings", { preHandler: manage }, async (req) => {
     const body = SettingsUpdate.parse(req.body);
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ? WHERE id = 1")
-      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter);
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, tax_inclusive = COALESCE(?, tax_inclusive) WHERE id = 1")
+      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.taxInclusive === undefined ? null : Number(body.taxInclusive));
     return { settings: readSettings() };
   });
 }

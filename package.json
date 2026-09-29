@@ -1,9 +1,9 @@
 {
   "name": "forkflow",
-  "version": "0.0.0",
+  "version": "0.6.2",
   "private": true,
   "type": "module",
-  "description": "AI-native restaurant POS — offline-first hybrid SQLite (terminal) + PostgreSQL (cloud).",
+  "description": "Local Windows restaurant POS with SQLite, GST billing, kitchen orders and inventory.",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -15,11 +15,18 @@
     "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
     "dev:server": "tsx watch apps/server/src/main.ts",
     "dev:ui": "npm run dev -w @forkflow/ui",
-    "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+    "dev:desktop": "npm run build:desktop && electron build/desktop/app",
+    "build:desktop": "npm run build -w @forkflow/ui && node tools/build-desktop.mjs",
+    "package:win": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64",
+    "package:dir": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64 --dir"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/qrcode": "^1.5.6",
     "concurrently": "^10.0.4",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.10"

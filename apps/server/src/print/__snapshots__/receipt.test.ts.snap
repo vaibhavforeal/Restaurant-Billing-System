@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`receipts > renders a 58mm GST receipt with split and payment details 1`] = `
+"<1B><40><1B><61><01><1B><45><01>ForkFlow Cafe
+<1B><45><00>12 Market Road
+GSTIN: 29ABCDE1234F1Z5
+FSSAI: 12345678901234
+Bill #42 / PAID
+28/9/2026, 13:30:00
+T1 / B
+GST added to menu prices
+<1B><61><00>--------------------------------
+Meal
+2 x Rs.100.00             200.00
+--------------------------------
+Subtotal                  200.00
+Taxable @ 5%              200.00
+CGST @ 2.5%                 5.00
+SGST @ 2.5%                 5.00
+Round off                   0.00
+<1B><45><01>TOTAL Rs.                 210.00
+<1B><45><00>CASH                      100.00
+UPI                       110.00
+--------------------------------
+<1B><61><01>Thank you!
+<1B><64><03><1D><56><42><00>"
+`;
+
+exports[`receipts > renders a 80mm GST receipt with split and payment details 1`] = `
+"<1B><40><1B><61><01><1B><45><01>ForkFlow Cafe
+<1B><45><00>12 Market Road
+GSTIN: 29ABCDE1234F1Z5
+FSSAI: 12345678901234
+Bill #42 / PAID
+28/9/2026, 13:30:00
+T1 / B
+GST added to menu prices
+<1B><61><00>------------------------------------------------
+Meal
+2 x Rs.100.00                             200.00
+------------------------------------------------
+Subtotal                                  200.00
+Taxable @ 5%                              200.00
+CGST @ 2.5%                                 5.00
+SGST @ 2.5%                                 5.00
+Round off                                   0.00
+<1B><45><01>TOTAL Rs.                                 210.00
+<1B><45><00>CASH                                      100.00
+UPI                                       110.00
+------------------------------------------------
+<1B><61><01>Thank you!
+<1B><64><03><1D><56><42><00>"
+`;

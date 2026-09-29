@@ -2,6 +2,7 @@ import { z } from "zod";
 
 /** Full-replace shape for the settings singleton (PUT). GSTIN is 15 chars, FSSAI 14 — light caps, empty allowed (unregistered restaurants). */
 export const SettingsUpdate = z.object({
+  taxInclusive: z.boolean().optional(),
   restaurantName: z.string().trim().min(1),
   address: z.string().trim().max(500).default(""),
   gstin: z.string().trim().max(15).default(""),

@@ -2,6 +2,8 @@ import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFo
 import { can } from "@forkflow/core";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { reverseStock } from "@forkflow/domain";
+import { publishStock } from "./stock.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 
 export function registerOrders(app: FastifyInstance): void {
@@ -63,7 +65,7 @@ export function registerOrders(app: FastifyInstance): void {
 
   app.get("/api/orders", { preHandler: read }, async () => {
     const rows = app.db
-      .prepare("SELECT * FROM orders WHERE status = 'open' ORDER BY opened_at")
+      .prepare("SELECT * FROM orders WHERE status IN ('open', 'billed') ORDER BY opened_at")
       .all() as OrderRow[];
     const orders = rows.map((r) => orderWithDetails(r.id)!);
     return { orders };
@@ -216,9 +218,13 @@ export function registerOrders(app: FastifyInstance): void {
       if (!body.reason) throw httpError(400, "reason required");
     }
 
-    app.db
-      .prepare("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_by = ? WHERE id = ?")
-      .run(body.reason ?? null, req.user.id, id);
+    const changedStockIds = app.db.transaction(() => {
+      const ids = item.status === "sent" ? reverseStock(app.db, id, req.user.id, body.reason!) : [];
+      app.db.prepare("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_by = ? WHERE id = ?")
+        .run(body.reason ?? null, req.user.id, id);
+      return ids;
+    })();
+    publishStock(app, changedStockIds);
 
     const result = orderWithDetails(item.order_id)!;
     app.broadcast("order.updated", { order: result });
