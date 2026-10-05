@@ -10,6 +10,7 @@ import { registerTables } from "./tables.js";
 import { registerReservations } from "./reservations.js";
 import { registerOrders } from "./orders.js";
 import { registerKots } from "./kots.js";
+import { registerTableTransfer } from "./table-transfer.js";
 import { registerPrinters } from "./printers.js";
 import { registerBilling } from "./billing.js";
 import { registerReports } from "./reports.js";
@@ -74,7 +75,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.addHook("onReady", async () => queue.start());
   app.addHook("preClose", async () => queue.close());
 
-  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel", label: string, bytes: Buffer) => {
+  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "table", label: string, bytes: Buffer) => {
     interface StationRow {
       printer_id: string | null;
     }
@@ -127,6 +128,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerReservations(app);
   registerOrders(app);
   registerKots(app);
+  registerTableTransfer(app);
   registerPrinters(app, opts.discoverPrinters ?? discoverWindowsPrinters);
   registerBilling(app);
   registerReports(app);
@@ -154,6 +156,6 @@ declare module "fastify" {
   interface FastifyInstance {
     db: Database;
     printQueue: PrintQueue;
-    enqueuePrint(stationId: string, kind: "kot" | "cancel", label: string, bytes: Buffer): void;
+    enqueuePrint(stationId: string, kind: "kot" | "cancel" | "table", label: string, bytes: Buffer): void;
   }
 }

@@ -96,3 +96,30 @@ export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: Pri
 
   return finishSlip(pos, profile);
 }
+
+export interface TableChangeSlipCtx {
+  stationName: string;
+  /** Printable text only (ASCII): the thermal encoder replaces other characters, e.g. "T3 -> T7" or "T3, T4". */
+  text: string;
+  atMs: number;
+}
+
+export function tableChangeSlip(ctx: TableChangeSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+  const pos = new EscPos();
+  const width = CHARS_PER_LINE[paperWidth];
+
+  pos
+    .init()
+    .align("center")
+    .bold(true)
+    .line("TABLE CHANGE")
+    .line(ctx.stationName)
+    .size(2, 2)
+    .line(ctx.text)
+    .size(1, 1)
+    .line(formatTime(ctx.atMs))
+    .bold(false)
+    .hr(width);
+
+  return finishSlip(pos, profile);
+}

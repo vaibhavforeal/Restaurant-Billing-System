@@ -5,7 +5,7 @@ export interface PrintJobJson {
   id: string;
   printerId: string;
   printerName: string;
-  kind: "kot" | "cancel" | "test" | "receipt";
+  kind: "kot" | "cancel" | "table" | "test" | "receipt";
   label: string;
   status: "queued" | "printing" | "failed" | "done" | "unknown";
   error: string | null;
