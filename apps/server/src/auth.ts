@@ -39,9 +39,11 @@ export function sessionUser(db: Database, token: string): AuthedUser | null {
 }
 
 export function registerAuth(app: FastifyInstance, demo = false): void {
-  // Plugin-scoped: each server instance gets its own throttle state, shared with admin approval of refunds and voids.
+  // Plugin-scoped: each server instance gets its own throttle state. Admin approval of refunds and voids has an independent
+  // counter, so a successful sign-in can never reset approval failures.
   const throttle = createPinThrottle();
-  app.decorate("pinThrottle", throttle);
+  app.decorate("loginThrottle", throttle);
+  app.decorate("approvalThrottle", createPinThrottle());
 
   const createSession = (userId: string, credential: unknown): string => {
     const token = randomBytes(32).toString("hex");

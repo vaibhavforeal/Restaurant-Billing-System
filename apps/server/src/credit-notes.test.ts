@@ -178,18 +178,27 @@ describe("credit preview, approval and bill credit data", () => {
       expect(await resolveApprover(app, requestOf({ id: cashier.id, name: "Cara", role: "cashier" }, "10.0.0.2"), "1234")).toEqual({ id: admin.user.id, name: "Asha" });
     });
 
-    it("counts wrong approval PINs against the login throttle for the same address", async () => {
+    it("keeps approval failures separate from login: a successful login does not lift the approval cooldown", async () => {
       const req = requestOf({ id: cashier.id, name: "Cara", role: "cashier" }, "127.0.0.1");
       for (let i = 0; i < 5; i++) expect(await status(resolveApprover(app, req, "0000"))).toBe(401);
+      // the same address can still sign in (login has its own counter) and that sign-in clears only login failures
       const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "5678" } });
-      expect(login.statusCode).toBe(429);
+      expect(login.statusCode).toBe(200);
+      expect(await status(resolveApprover(app, req, "1234"))).toBe(429);
+    });
+
+    it("does not let wrong approval PINs count against login, nor wrong login PINs against approval", async () => {
+      const req = requestOf({ id: cashier.id, name: "Cara", role: "cashier" }, "127.0.0.1");
+      for (let i = 0; i < 5; i++) await app.inject({ method: "POST", url: "/api/login", payload: { pin: "0000" } });
+      expect((await app.inject({ method: "POST", url: "/api/login", payload: { pin: "5678" } })).statusCode).toBe(429);
+      expect(await resolveApprover(app, req, "1234")).toEqual({ id: admin.user.id, name: "Asha" });
     });
 
     it("clears earlier wrong PINs once the right one is entered", async () => {
       for (let i = 0; i < 4; i++) await status(resolveApprover(app, cashierReq(), "0000"));
       await resolveApprover(app, cashierReq(), "1234");
       expect(await status(resolveApprover(app, cashierReq(), "0000"))).toBe(401);
-      expect(app.pinThrottle.pinCooldown("10.0.0.1")).toBe(false);
+      expect(app.approvalThrottle.pinCooldown("10.0.0.1")).toBe(false);
     });
   });
 

@@ -100,11 +100,11 @@ export function draftCredit(db: Database, billId: string, kind: "void" | "refund
   }
 }
 
-/** The signed-in admin for an admin requester; otherwise the active admin whose PIN was entered, counted by the login throttle. */
+/** The signed-in admin for an admin requester; otherwise the active admin whose PIN was entered, counted by the approval throttle (separate from login's). */
 export async function resolveApprover(app: FastifyInstance, req: FastifyRequest, approverPin?: string): Promise<{ id: string; name: string }> {
   if (req.user.role === "admin") return { id: req.user.id, name: req.user.name };
   if (!approverPin) throw httpError(403, "Admin approval is required");
-  const throttle = app.pinThrottle;
+  const throttle = app.approvalThrottle;
   if (throttle.pinCooldown(req.ip)) throw httpError(429, "too many attempts");
   const admins = app.db.prepare("SELECT id, name, pin_hash FROM users WHERE role = 'admin' AND is_active = 1").all() as Array<{ id: string; name: string; pin_hash: string }>;
   for (const admin of admins) {

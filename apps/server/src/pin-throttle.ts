@@ -14,7 +14,7 @@ export interface PinThrottle {
   clearPinFailures(ip: string): void;
 }
 
-/** One throttle per server instance, shared by sign-in and admin approval so both draw on the same per-IP budget. */
+/** An independent per-IP failure counter; each server instance has one for sign-in and a separate one for admin approval. */
 export function createPinThrottle(): PinThrottle {
   const state = new Map<string, ThrottleState>();
   return {
@@ -39,6 +39,7 @@ export function createPinThrottle(): PinThrottle {
 
 declare module "fastify" {
   interface FastifyInstance {
-    pinThrottle: PinThrottle;
+    loginThrottle: PinThrottle;
+    approvalThrottle: PinThrottle;
   }
 }
