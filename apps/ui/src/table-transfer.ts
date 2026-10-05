@@ -39,3 +39,8 @@ export function mergeTargets(orders: Order[], currentOrderId: string): MergeGrou
   }
   return [...groups.values()];
 }
+
+/** Cart drafts are stored per order, so merging an order away would orphan any unsaved items. */
+export function mergeBlockedReason(draftCount: number): string | null {
+  return draftCount > 0 ? "Save or discard the cart items before merging." : null;
+}

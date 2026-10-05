@@ -6,6 +6,7 @@ import type { Category, Order, OrderItem, Product, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { BillingPanel } from "./BillingPanel";
+import { mergeBlockedReason } from "../table-transfer";
 import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
 import { Icon } from "../Icon";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
@@ -76,7 +77,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     let current = true;
     apiFetch<{ order: Order }>(`/api/orders/${mergedInto}`).then(({ order: receiving }) => {
       if (!current) return;
-      const text = `Merged into ${orderLabel(receiving)}`;
+      const label = orderLabel(receiving);
+      // Unsaved cart items belong to this order's draft key and would be orphaned: say so, then drop them.
+      const lostCart = readDraft().length > 0;
+      const text = lostCart
+        ? `This bill was merged into ${label}. Your unsaved items were not added — add them again on the combined bill.`
+        : `Merged into ${label}`;
+      if (lostCart) { localStorage.removeItem(draftKey); localStorage.removeItem(`forkflow.draft.${orderId}`); }
       setMessage(text);
       carryStatus(mergedInto, text, false);
       onOpenOrder(mergedInto);
@@ -344,6 +351,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   function mergeOrders(choice: MergeChoice) {
     if (!order) return;
+    const blocked = mergeBlockedReason(readDraft().length);
+    if (blocked) { setTransferError(blocked); return; }
     // The order folded in is the one that stops existing; the other order keeps the bill.
     const keepsBill = choice.billAt === "this" ? order.id : choice.otherOrderId;
     const foldedIn = choice.billAt === "this" ? choice.otherOrderId : order.id;

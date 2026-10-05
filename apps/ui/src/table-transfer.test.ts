@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Order, OrderItem, TableInfo } from "./types";
-import { mergeTargets, moveTargets } from "./table-transfer";
+import { mergeBlockedReason, mergeTargets, moveTargets } from "./table-transfer";
 
 const table = (id: string, patch: Partial<TableInfo> = {}): TableInfo => ({
   id, name: id.toUpperCase(), area: null, sortOrder: 0, priceTier: "non_ac", isActive: true,
@@ -59,5 +59,13 @@ describe("mergeTargets", () => {
 
   it("falls back to the table name when no label is present", () => {
     expect(mergeTargets([order("a", { tableLabel: null, tableName: "T2" })], "x")[0]!.tableLabel).toBe("T2");
+  });
+});
+
+describe("mergeBlockedReason", () => {
+  it("blocks a merge while the cart holds unsaved items", () => {
+    expect(mergeBlockedReason(0)).toBeNull();
+    expect(mergeBlockedReason(1)).toBe("Save or discard the cart items before merging.");
+    expect(mergeBlockedReason(4)).toBe("Save or discard the cart items before merging.");
   });
 });
