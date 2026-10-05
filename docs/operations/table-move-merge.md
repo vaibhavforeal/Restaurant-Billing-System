@@ -35,10 +35,16 @@ order at that table keeps the bill, its captain, and its prices.
 - All items (including pending and cancelled ones) and kitchen tickets move to
   the combined order. Their prices, stock deductions, and costs do not change.
 - New items on the combined order use the table that keeps the bill.
-- Accepted guest QR requests from either table go to the combined order.
-- Merging is blocked while the cart has unsaved items. Send them with **KOT** or
-  discard them first: "Save or discard the cart items before merging."
-- Both orders must still be open: otherwise the screen asks you to refresh.
+- Guest QR requests already accepted move with the items. A request still waiting
+  keeps its table; accepting it from a linked table lets you add it to the
+  combined bill, unless that table uses different (AC/Non-AC) pricing. In that
+  case the screen says "This bill uses different pricing. Create a new bill
+  group."
+- Merging is blocked while the cart has unsaved items. Send them to the kitchen
+  (or punch them) first, or discard them: "Save or discard the cart items before
+  merging."
+- Both orders must still be open. If one was billed or changed meanwhile, the
+  screen shows the error and reloads the list itself.
 
 The result line reads "Merged · T3, T4 billed together". Order headers, table
 cards, the Kitchen screen, kitchen slips, and the receipt show the combined name
@@ -46,13 +52,14 @@ cards, the Kitchen screen, kitchen slips, and the receipt show the combined name
 
 ## Linked tables
 
-A table whose order was folded into another stays **occupied and linked** to the
-combined order until that bill is paid. On the Tables screen its card shows
+A table whose order was folded into another stays linked to the combined order:
+occupied, then billed, until paid. On the Tables screen its card shows
 "with T3", and tapping it opens the combined order. The receiving card shows the
-combined name. Once the bill is paid or the order is cancelled, every linked
-table becomes free again. Reservations are not changed by a move or merge; a
-table with a booking in progress can still be merged onto, because the party is
-already seated.
+combined name. A second device still showing the merged-away bill sees "Merged
+into T3, T4" and opens the combined bill. Once the bill is paid or the order is
+cancelled, every linked table becomes free again. Reservations are not changed
+by a move or merge; a table with a booking in progress can still be merged onto,
+because the party is already seated.
 
 If a combined order is moved, its linked tables stay linked. Further merges add
 more linked tables.
@@ -63,8 +70,9 @@ The Kitchen screen updates live to the new table name. Each kitchen station that
 still has unfinished tickets on the order prints a short slip with table names
 only, and no KOT numbers. A move prints `T3 -> T7`. A merge prints the combined
 name, `T3, T4`. If a slip cannot print, the order screen shows the problem and
-the change still stands; check the printer and tell the kitchen directly. Kitchen
-acceptance before billing applies to all tickets on the combined order.
+the change still stands; check the printer and tell the kitchen directly. A
+station with no active printer gets no slip, so tell that station directly.
+Kitchen acceptance before billing applies to all tickets on the combined order.
 
 ## What cannot be undone
 
