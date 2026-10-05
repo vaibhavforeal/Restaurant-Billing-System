@@ -15,7 +15,7 @@ describe("stock costing", () => {
   let app: FastifyInstance; let token: string;
   beforeEach(async () => { app = freshApp(); ({ token } = await setupAdmin(app)); });
   afterEach(async () => { roleOverrides.clear(); await app.close(); app.db.close(); });
-  const request = (method: "GET" | "POST" | "PATCH", url: string, payload?: object, as = token) =>
+  const request = (method: "GET" | "POST" | "PATCH" | "PUT", url: string, payload?: object, as = token) =>
     app.inject({ method, url, headers: auth(as), ...(payload ? { payload } : {}) });
   async function stock(qty = 10, name = "Paneer"): Promise<StockItem> {
     const res = await request("POST", "/api/stock-items", { clientRef: uuidv7(), name, unit: "kg", openingQty: qty, lowStockThreshold: null });
@@ -165,5 +165,124 @@ describe("stock costing", () => {
     const res = (await history(item.id, manager)).json() as { movements: StockMove[]; costChanges?: unknown };
     for (const m of res.movements) expect("costPaise" in m).toBe(false);
     expect("costChanges" in res).toBe(false);
+  });
+
+  describe("stock value and dish costing", () => {
+    const costed = async (name: string, qty: number, unitCostMilliPaise: number | null) => {
+      const item = await stock(qty, name);
+      if (unitCostMilliPaise !== null) expect((await unitCost(item.id, unitCostMilliPaise)).statusCode).toBe(201);
+      return item;
+    };
+    async function category(): Promise<string> {
+      const res = await request("POST", "/api/categories", { name: "Mains" });
+      expect(res.statusCode).toBe(201); return res.json().category.id;
+    }
+    async function product(categoryId: string, payload: object = {}): Promise<{ id: string; variants: Array<{ id: string; name: string }> }> {
+      const res = await request("POST", "/api/products", { name: "Paneer Tikka", categoryId, pricePaise: 10_500, gstRate: 5, kotStationId: null, ...payload });
+      expect(res.statusCode).toBe(201); return res.json().product;
+    }
+    async function recipe(productId: string, ingredients: Array<{ stockItemId: string; qtyPerSale: number }>) {
+      const res = await request("PUT", `/api/products/${productId}/recipe`, { expectedVersion: 0, ingredients });
+      expect(res.statusCode).toBe(200);
+    }
+    type Dish = { productId: string; variantId: string | null; name: string; categoryName: string; costPaise: number | null; status: string; missing: string[]; prices: Array<{ tier: string; pricePaise: number; preGstPaise: number; costPercent: number | null; marginPaise: number | null }> };
+    const dishes = async (as = token) => (await request("GET", "/api/costing/dishes", undefined, as)).json() as { dishes: Dish[]; taxInclusive: boolean };
+
+    it("values stock on hand", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const salt = await costed("Salt", 5, null);
+      const res = await request("GET", "/api/costing/stock");
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { items: Array<{ stockItemId: string; name: string; unit: string; qty: number; isActive: boolean; unitCostMilliPaise: number | null; valuePaise: number | null }>; totalValuePaise: number };
+      expect(body.items.find((i) => i.stockItemId === paneer.id)).toMatchObject({ name: "Paneer", unit: "kg", qty: 10, isActive: true, unitCostMilliPaise: 32_000_000, valuePaise: 320_000 });
+      expect(body.items.find((i) => i.stockItemId === salt.id)?.valuePaise).toBeNull();
+      expect(body.totalValuePaise).toBe(320_000);
+    });
+
+    it("values negative stock negatively and leaves archived items out of the total", async () => {
+      const oil = await costed("Oil", 1, 100_000_000);
+      const old = await costed("Old", 2, 50_000_000);
+      expect((await request("PATCH", `/api/stock-items/${old.id}`, { expectedVersion: version(old.id), isActive: false })).statusCode).toBe(200);
+      app.db.prepare("UPDATE stock_items SET qty = -0.5 WHERE id = ?").run(oil.id);
+      const body = (await request("GET", "/api/costing/stock")).json() as { items: Array<{ stockItemId: string; valuePaise: number | null; isActive: boolean }>; totalValuePaise: number };
+      expect(body.items.find((i) => i.stockItemId === oil.id)?.valuePaise).toBe(-50_000);
+      expect(body.items.find((i) => i.stockItemId === old.id)).toMatchObject({ isActive: false, valuePaise: 100_000 });
+      expect(body.totalValuePaise).toBe(-50_000);
+    });
+
+    it("costs dishes against each service price, pre-GST", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const p = await product(cat, { acPricePaise: 12_600 });
+      await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", taxInclusive: true })).statusCode).toBe(200);
+      const body = await dishes();
+      expect(body.taxInclusive).toBe(true);
+      expect(body.dishes).toHaveLength(1);
+      expect(body.dishes[0]).toMatchObject({
+        productId: p.id, variantId: null, name: "Paneer Tikka", categoryName: "Mains", costPaise: 4_800, status: "complete", missing: [],
+        prices: [
+          { tier: "non_ac", preGstPaise: 10_000, costPercent: 48 },
+          { tier: "ac", preGstPaise: 12_000, costPercent: 40 },
+          { tier: "takeaway", preGstPaise: 10_000, costPercent: 48 },
+        ],
+      });
+      expect(body.dishes[0]!.prices.map((x) => x.marginPaise)).toEqual([5_200, 7_200, 5_200]);
+      expect(body.dishes[0]!.prices[0]!.pricePaise).toBe(10_500);
+    });
+
+    it("costs each active variant on its own prices and leaves inactive ones out", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const p = await product(cat, { gstRate: 0, variants: [{ name: "Half", pricePaise: 6_000 }, { name: "Full", pricePaise: 10_000, takeawayPricePaise: 9_600 }, { name: "Jumbo", pricePaise: 20_000 }] });
+      await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      app.db.prepare("UPDATE variants SET is_active = 0 WHERE name = 'Jumbo'").run();
+      app.db.prepare("INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_active, created_at) VALUES ('p-off', ?, 'Retired', 100, 5, 0, 1)").run(cat);
+      const body = await dishes();
+      expect(body.taxInclusive).toBe(false);
+      expect(body.dishes.map((d) => d.name).sort()).toEqual(["Paneer Tikka · Full", "Paneer Tikka · Half"]);
+      const half = body.dishes.find((d) => d.name.endsWith("Half"))!;
+      const full = body.dishes.find((d) => d.name.endsWith("Full"))!;
+      expect(half.variantId).toBe(p.variants.find((v) => v.name === "Half")!.id);
+      expect(half.productId).toBe(p.id);
+      expect(half.costPaise).toBe(4_800);
+      expect(half.prices.map((x) => [x.preGstPaise, x.costPercent])).toEqual([[6_000, 80], [6_000, 80], [6_000, 80]]);
+      expect(full.prices.map((x) => [x.pricePaise, x.costPercent, x.marginPaise])).toEqual([[10_000, 48, 5_200], [10_000, 48, 5_200], [9_600, 50, 4_800]]);
+    });
+
+    it("flags incomplete and unlinked dishes", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cream = await costed("Cream", 4, null);
+      const cat = await category();
+      const incomplete = await product(cat, { name: "Malai Paneer" });
+      await recipe(incomplete.id, [{ stockItemId: paneer.id, qtyPerSale: 0.1 }, { stockItemId: cream.id, qtyPerSale: 0.05 }]);
+      const bare = await product(cat, { name: "Water", pricePaise: 0 });
+      const body = await dishes();
+      const a = body.dishes.find((d) => d.productId === incomplete.id)!;
+      expect(a).toMatchObject({ status: "incomplete", missing: ["Cream"], costPaise: null });
+      for (const price of a.prices) expect(price).toMatchObject({ costPercent: null, marginPaise: null });
+      const b = body.dishes.find((d) => d.productId === bare.id)!;
+      expect(b).toMatchObject({ status: "no_recipe", missing: [], costPaise: null });
+      for (const price of b.prices) expect(price).toMatchObject({ costPercent: null, marginPaise: null });
+    });
+
+    it("leaves percent and margin empty when the pre-GST price is zero", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const free = await product(cat, { name: "Free Sample", pricePaise: 0 });
+      await recipe(free.id, [{ stockItemId: paneer.id, qtyPerSale: 0.1 }]);
+      const dish = (await dishes()).dishes[0]!;
+      expect(dish.costPaise).toBe(3_200);
+      for (const price of dish.prices) expect(price).toMatchObject({ preGstPaise: 0, costPercent: null, marginPaise: null });
+    });
+
+    it("refuses cashiers", async () => {
+      const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+      for (const url of ["/api/costing/stock", "/api/costing/dishes"]) {
+        const res = await request("GET", url, undefined, cashier);
+        expect(res.statusCode).toBe(403);
+        expect(res.json().permission).toBe("costs.read");
+      }
+    });
   });
 });
