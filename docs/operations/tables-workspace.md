@@ -12,7 +12,9 @@ it in the open list and make room for the next customer.
 
 Opening a free table starts its order. A table with one active order opens it
 directly. A table with multiple bill groups opens a split selection dialog;
-choose a group or **New split**.
+choose a group or **New split**. To change a party's table or bill two tables
+together, see [moving and merging tables](table-move-merge.md); a table linked
+to another table's bill shows **with T3** and opens the combined order.
 
 For table orders, send kitchen items with **KOT**, then wait for the kitchen to
 choose **Accept order** on every active ticket. Billing becomes available as soon

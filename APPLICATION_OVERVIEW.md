@@ -111,7 +111,7 @@ Restaurant Billing Software/
 ├── packages/
 │   ├── core/src/                PIN hashing, permission checks, signature verification
 │   └── domain/src/              SQLite access, schemas, business calculations
-│       └── migrations/          Ordered schema migrations 001 through 023
+│       └── migrations/          Ordered schema migrations 001 through 024
 ├── tools/
 │   ├── build-desktop.mjs         Stage development, Demo, or commercial desktop app
 │   ├── build-kitchen.mjs         Stage the Kitchen client
@@ -208,7 +208,7 @@ The server also declares local `@forkflow/core` and `@forkflow/domain` workspace
 
 [openDb](packages/domain/src/db.ts) enables write-ahead logging (`WAL`), foreign keys, a 5-second busy timeout, and `synchronous=NORMAL`. The server holds an exclusive data-directory lock. Windows uses an exclusive named pipe derived from the resolved directory; other platforms use `proper-lockfile`.
 
-[Migrations](packages/domain/src/migrations/index.ts) currently run from **001 through 023**. Startup checks the schema version, creates a required backup before upgrading an existing database, and applies pending migrations. A database with a schema newer than the application is rejected.
+[Migrations](packages/domain/src/migrations/index.ts) currently run from **001 through 024**. Startup checks the schema version, creates a required backup before upgrading an existing database, and applies pending migrations. A database with a schema newer than the application is rejected.
 
 ### Main table groups
 
@@ -216,7 +216,7 @@ The server also declares local `@forkflow/core` and `@forkflow/domain` workspace
 | --- | --- |
 | Staff and settings | `users`, `sessions`, `settings` (includes the tax mode, UPI ID and kitchen-acceptance billing setting) |
 | Catalog | `categories`, `products`, `variants` |
-| Tables and reservations | `dining_tables`, `reservations` |
+| Tables and reservations | `dining_tables`, `reservations`, `table_links`, `order_table_events` |
 | Orders and kitchen | `orders`, `order_items`, `kots`, `kot_requests` |
 | Billing and payments | `bills`, `bill_taxes`, `payments`, `bill_settlements`, `bill_report_lines`, `sequences` |
 | Inventory | `stock_items`, `product_stock_links`, `stock_moves`, `stock_cost_changes` |
@@ -274,6 +274,7 @@ Licensing installation identity, backup preferences, cloud queue metadata, and H
 
 - Dine-in tables and parcel/takeaway orders.
 - Multiple independent customer bill groups at one table, each with its own order and bill.
+- Moving an open order to a free table and merging two open dine-in orders (different tables or two bill groups) into one bill; the second table stays linked and occupied until payment.
 - Searchable menu selection, variants, quantities, cooking notes, saved cart state, and item/order cancellation.
 - Captain selection on each open dine-in customer order. A new visit or split does not inherit a fixed table captain.
 - Table status and service overview, with links to open groups and guest requests.
@@ -389,6 +390,7 @@ The backend exposes JSON REST endpoints under `/api`. The table below maps route
 | Menu transfer | `/api/catalog/export`, `/api/catalog/import/preview`, `/api/catalog/import` | [catalog-transfer.ts](apps/server/src/catalog-transfer.ts) |
 | Tables/reservations | `/api/tables`, `/api/reservations`, `/api/reservations/:id/seat` | [tables.ts](apps/server/src/tables.ts), [reservations.ts](apps/server/src/reservations.ts) |
 | Orders/captains | `/api/orders`, `/api/orders/:id/items`, `/api/order-items/:id`, `/api/captains` | [orders.ts](apps/server/src/orders.ts) |
+| Table move/merge | `/api/orders/:id/move`, `/api/orders/:id/merge` | [table-transfer.ts](apps/server/src/table-transfer.ts) |
 | Kitchen | `/api/orders/:id/send`, `/api/kots`, `/api/kots/:id/accept`, `/api/kots/:id/done` | [kots.ts](apps/server/src/kots.ts) |
 | Billing | `/api/orders/:id/bill-preview`, `/api/orders/:id/bill`, `/api/bills/:id/settle` | [billing.ts](apps/server/src/billing.ts) |
 | Receipts/pay QR | `/api/bills/:id/receipt`, `/api/bills/:id/print`, `/api/bills/:id/upi-qr` | [billing.ts](apps/server/src/billing.ts) |
@@ -584,7 +586,7 @@ This overview records what checks exist. Historical test counts in handoff docum
 | Guest QR | Restaurant-LAN menus, requests, and service calls | Public hosted ordering and cloud coordination |
 | Payments | Recorded cash/UPI/card settlement and local UPI QR | Gateway confirmation, bank reconciliation, and refund/void workflows |
 | Inventory | Stock ledger, recipes, deductions, reversals, adjustments, ingredient costing, dish costing, food cost and profit report | Full supplier/purchase-order management, procurement automation, and inter-outlet inventory from the historical plan |
-| Table splits | Independent bill groups sharing a table | General bill merging or post-issue financial restructuring is not an implemented workflow |
+| Table splits and merges | Independent bill groups sharing a table; moving a party; merging open orders into one bill with linked tables | Un-merging, moving individual items between orders, and post-issue financial restructuring are not implemented |
 | AI | Separate menu-ingestion experiment | Integrated AI onboarding, forecasting, voice/copilot workflows, and automated recommendations |
 | Multi-outlet operations | Signed outlet identity in local licensing | Cloud tenancy, head-office management, and cross-outlet synchronization |
 
@@ -599,7 +601,7 @@ This overview records what checks exist. Historical test counts in handoff docum
 | Tablet HTTPS and PWA setup | [Captain App](docs/operations/captain-app.md) |
 | Menu transfer | [Item import/export](docs/operations/item-import-export.md) |
 | Multiple service prices | [Service pricing](docs/operations/service-pricing.md) |
-| Table workspace and bookings | [Tables](docs/operations/tables-workspace.md), [Reservations](docs/operations/table-reservations.md) |
+| Table workspace and bookings | [Tables](docs/operations/tables-workspace.md), [Move and merge](docs/operations/table-move-merge.md), [Reservations](docs/operations/table-reservations.md) |
 | Fast parcel checkout | [Quick takeaway](docs/operations/quick-takeaway.md) |
 | Billing output and QR payment | [Bill formats](docs/operations/bill-format.md), [UPI payments](docs/operations/upi-payments.md) |
 | Printer settings and job recovery | [Printers](docs/operations/printer-settings.md) |
