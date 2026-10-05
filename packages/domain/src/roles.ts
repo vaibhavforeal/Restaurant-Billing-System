@@ -4,7 +4,7 @@ export type RoleName = "admin" | "cashier" | "waiter" | "kitchen";
 
 /**
  * Permission namespaces (fixed vocabulary for the whole app):
- * orders, kots, bills, tables, reservations, catalog, stock, costs, users, settings, reports, printers.
+ * orders, kots, bills (bills.refund = void or refund an issued bill), tables, reservations, catalog, stock, costs, users, settings, reports, printers.
  * Roles are code, not data — a restaurant picks a role per staff member and
  * that's the whole model (spec: fewer things to learn).
  */

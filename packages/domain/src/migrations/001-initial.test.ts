@@ -26,6 +26,7 @@ describe("migration 001", () => {
         "users", "variants", "license_state", "licensed_devices", "license_events", "table_qr", "guest_requests", "guest_service_requests", "reservations",
         "zomato_settings", "zomato_orders", "zomato_events", "zomato_settlements", "zomato_imports",
         "table_links", "order_table_events",
+        "credit_notes", "credit_note_lines", "credit_note_taxes", "refund_payments",
       ].sort(),
     );
   });

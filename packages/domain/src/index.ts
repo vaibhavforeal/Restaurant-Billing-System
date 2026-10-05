@@ -36,6 +36,7 @@ export {
   type TableCreateInput, type TableUpdateInput,
   type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput,
 } from "./order-schemas.js";
+export { creditFor, voidRemainder, refundState, refundableByMode, CreditPreview, VoidBill, RefundBill, type Money, type BillLine, type Credited, type CreditDraft, type PayMode, type CreditPreviewInput, type VoidBillInput, type RefundBillInput } from "./credit-notes.js";
 export { OrderMove, OrderMerge, type OrderMoveInput, type OrderMergeInput } from "./table-transfer-schemas.js";
 export { nextSplitLabel } from "./split-labels.js";
 export {
