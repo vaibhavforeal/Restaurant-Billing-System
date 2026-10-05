@@ -5,7 +5,7 @@ import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequ
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
-import { orderTableLabel } from "./table-label.js";
+import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
 import { billUpiPayment, upiQrSvg } from "./print/upi.js";
 import { consumeStock, saveReportLines } from "@forkflow/domain";
@@ -56,10 +56,12 @@ export function registerBilling(app: FastifyInstance): void {
     const job = rendered.value ? app.printQueue.enqueue(p, "receipt", `Bill #${bill.billNo}`, rendered.value.bytes, rendered.value.copies) : null;
     return { value: job, error: rendered.error };
   }
-  function broadcast(orderId: string) {
+  /** `linkedTables` are the tables linked to a combined order; they change state together with its own table. */
+  function broadcast(orderId: string, linkedTables: string[]) {
     const order = loadOrderJson(db, orderId)!;
     app.broadcast("order.updated", { order });
     if (order.tableId) app.broadcast("table.changed", { tableId: order.tableId });
+    for (const tableId of linkedTables) if (tableId !== order.tableId) app.broadcast("table.changed", { tableId });
     return order;
   }
   function preview(orderId: string, body: z.infer<typeof BillPreview>, role: Parameters<typeof roleFor>[0]) {
@@ -108,7 +110,7 @@ export function registerBilling(app: FastifyInstance): void {
       const existing = db.prepare("SELECT * FROM bills WHERE client_ref = ?").get(body.clientRef) as BillRow | undefined;
       if (existing) {
         if (existing.request_json !== requestJson) throw httpError(409, "Billing reference already used for a different request");
-        return { billId: existing.id, created: false, job: null, printError: null };
+        return { billId: existing.id, created: false, job: null, printError: null, linkedTables: [] as string[] };
       }
       if (db.prepare("SELECT id FROM bills WHERE order_id = ?").get(orderId)) throw httpError(409, "Order already billed; reload to view its bill");
       const value = preview(orderId, body, req.user.role);
@@ -129,11 +131,11 @@ export function registerBilling(app: FastifyInstance): void {
       db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(orderId);
       db.prepare("UPDATE orders SET status = 'billed' WHERE id = ?").run(orderId);
       const print = target ? printNewBill(getBill(id), target) : { value: null, error: null };
-      return { billId: id, created: true, job: print.value, printError: print.error };
+      return { billId: id, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };
     })();
     const bill = getBill(result.billId);
     if (result.created) publishStock(app, changedStockIds);
-    const order = result.created ? broadcast(orderId) : loadOrderJson(db, orderId);
+    const order = result.created ? broadcast(orderId, result.linkedTables) : loadOrderJson(db, orderId);
     const job = result.job;
     return reply.status(result.created ? 201 : 200).send({ bill, order, job, printError: result.printError });
   });
@@ -141,11 +143,12 @@ export function registerBilling(app: FastifyInstance): void {
     const { id } = req.params as { id: string };
     const body = BillSettle.parse(req.body);
     const requestJson = JSON.stringify({ billId: id, payments: body.payments });
-    const changed = db.transaction(() => {
+    // Settling deactivates the order's table links, so the linked tables are read inside the transaction.
+    const changed = db.transaction((): string[] | null => {
       const replay = db.prepare("SELECT bill_id, request_json FROM bill_settlements WHERE client_ref = ?").get(body.clientRef) as { bill_id: string; request_json: string } | undefined;
       if (replay) {
         if (replay.bill_id !== id || replay.request_json !== requestJson) throw httpError(409, "Settlement reference already used for a different request");
-        return false;
+        return null;
       }
       const bill = getRow(id);
       if (!bill) throw httpError(404, "bill not found");
@@ -155,14 +158,15 @@ export function registerBilling(app: FastifyInstance): void {
       const amount = body.payments.reduce((sum, p) => sum + p.amountPaise, 0);
       if (amount !== bill.total_paise) throw httpError(400, "Payments must exactly match the bill total");
       const now = Date.now();
+      const linkedTables = linkedTableIds(db, bill.order_id);
       db.prepare("INSERT INTO bill_settlements (bill_id, client_ref, request_json, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(id, body.clientRef, requestJson, req.user.id, now);
       for (const payment of body.payments) db.prepare("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, payment.mode, payment.amountPaise, payment.refNote || null, now);
       db.prepare("UPDATE bills SET status = 'paid' WHERE id = ?").run(id);
       db.prepare("UPDATE orders SET status = 'settled', closed_at = ? WHERE id = ?").run(now, bill.order_id);
-      return true;
+      return linkedTables;
     })();
     const bill = getBill(id);
-    return { bill, order: changed ? broadcast(bill.orderId) : loadOrderJson(db, bill.orderId) };
+    return { bill, order: changed ? broadcast(bill.orderId, changed) : loadOrderJson(db, bill.orderId) };
   });
   app.get("/api/bills", { preHandler: read }, async (req) => {
     const query = z.object({ status: z.enum(["unpaid", "paid", "all"]).default("all"), before: z.coerce.number().int().positive().optional() }).parse(req.query);

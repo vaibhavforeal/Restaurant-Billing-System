@@ -96,12 +96,17 @@ describe("moving an order to another table", () => {
     app.db.prepare("UPDATE orders SET status = 'billed' WHERE id = ?").run(other);
     expect((await move(orderId, tables["T4"]!)).json().error).toBe("That table is occupied — merge instead");
     app.db.prepare("UPDATE orders SET status = 'settled', closed_at = ? WHERE id = ?").run(Date.now(), other);
-    app.db.prepare("INSERT INTO table_links (id, table_id, order_id, linked_at, linked_by) VALUES (?, ?, ?, ?, ?)").run(uuidv7(), tables["T7"], orderId, Date.now(), userId);
-    // T7 is linked to this very order, so the table is still not free for a move.
+    const elsewhere = await openOrder(tables["T5"]!);
+    app.db.prepare("INSERT INTO table_links (id, table_id, order_id, linked_at, linked_by) VALUES (?, ?, ?, ?, ?)").run(uuidv7(), tables["T7"], elsewhere, Date.now(), userId);
+    // T7 is linked to another party's combined order, so it is not free for a move.
     const linked = await move(orderId, tables["T7"]!);
     expect(linked.statusCode).toBe(409);
     expect(linked.json().error).toBe("That table is occupied — merge instead");
+    // A link to this very order does not help when the table is also linked to someone else.
+    app.db.prepare("INSERT INTO table_links (id, table_id, order_id, linked_at, linked_by) VALUES (?, ?, ?, ?, ?)").run(uuidv7(), tables["T7"], orderId, Date.now() + 1, userId);
+    expect((await move(orderId, tables["T7"]!)).json().error).toBe("That table is occupied — merge instead");
     app.db.prepare("DELETE FROM table_links").run();
+    app.db.prepare("UPDATE orders SET status = 'cancelled', closed_at = ? WHERE id = ?").run(Date.now(), elsewhere);
 
     app.db.prepare("UPDATE dining_tables SET is_active = 0 WHERE id = ?").run(tables["T7"]);
     const inactive = await move(orderId, tables["T7"]!);
@@ -281,17 +286,108 @@ describe("moving an order to another table", () => {
       expect((await tableState("T4")).status).toBe("billed");
     });
 
-    it("merges two bill groups at the same table without a link", async () => {
+    it("merges two bill groups at the same table without a link or a kitchen slip", async () => {
       const receiving = await openOrder(tables["T3"]!);
+      await addAndSend(receiving, [kitchenProductId]);
       const folded = await openOrder(tables["T3"]!);
+      await addAndSend(folded, [grillProductId]);
       await addItems(folded, [waterProductId]);
       const res = await merge(folded, receiving);
       expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().printErrors).toEqual([]);
       expect(res.json().order).toMatchObject({ id: receiving, tableLabel: "T3", splitLabel: "A" });
-      expect(res.json().order.items).toHaveLength(1);
+      expect(res.json().order.items).toHaveLength(3);
       expect(orderRow(folded)).toMatchObject({ status: "cancelled", merged_into: receiving });
       expect(links()).toEqual([]);
       expect(events()).toEqual([expect.objectContaining({ kind: "merge", from_table_id: tables["T3"], to_table_id: tables["T3"] })]);
+      // The table name did not change, so the kitchen gets no "TABLE CHANGE T3" slip.
+      const tableJobs = (app.db.prepare("SELECT job_json FROM print_jobs").all() as Array<{ job_json: string }>)
+        .map((j) => JSON.parse(j.job_json) as { kind: string }).filter((j) => j.kind === "table");
+      expect(tableJobs).toEqual([]);
+    });
+
+    it("still prints when a same-table merge brings linked tables with it", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const folded = await openOrder(tables["T3"]!);
+      await addAndSend(folded, [kitchenProductId]);
+      const atT4 = await openOrder(tables["T4"]!);
+      expect((await merge(atT4, folded)).statusCode).toBe(200);
+      const before = (app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs WHERE job_json LIKE '%\"kind\":\"table\"%'").get() as { n: number }).n;
+      const res = await merge(folded, receiving);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().order.tableLabel).toBe("T3, T4");
+      const after = (app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs WHERE job_json LIKE '%\"kind\":\"table\"%'").get() as { n: number }).n;
+      expect(after).toBe(before + 1);
+    });
+
+    it("moves a combined order onto one of its own linked tables and drops that link", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      await addAndSend(receiving, [kitchenProductId]);
+      expect((await merge(await openOrder(tables["T4"]!), receiving)).statusCode).toBe(200);
+      expect((await merge(await openOrder(tables["T5"]!), receiving)).statusCode).toBe(200);
+      expect(links()).toEqual([{ table_id: tables["T4"], order_id: receiving }, { table_id: tables["T5"], order_id: receiving }]);
+
+      const res = await move(receiving, tables["T4"]!);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().order).toMatchObject({ id: receiving, tableId: tables["T4"], splitLabel: "A", tableLabel: "T4, T5" });
+      expect(links()).toEqual([{ table_id: tables["T5"], order_id: receiving }]);
+      expect((await tableState("T3")).status).toBe("free");
+      expect(await tableState("T4")).toMatchObject({ status: "occupied", link: null });
+      expect((await tableState("T5")).link).toMatchObject({ orderId: receiving, label: "T4, T5", tableName: "T4" });
+      expect(events().filter((e) => e.kind === "move")).toEqual([expect.objectContaining({ order_id: receiving, from_table_id: tables["T3"], to_table_id: tables["T4"] })]);
+    });
+
+    it("labels a cancel slip on a combined order with the combined table name", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const [kot] = await addAndSend(receiving, [kitchenProductId]);
+      expect((await merge(await openOrder(tables["T4"]!), receiving)).statusCode).toBe(200);
+      await vi.waitFor(() => expect(fake.sent.length).toBeGreaterThanOrEqual(2));
+      const sent = fake.sent.length;
+      const broadcasts: Array<{ event: string; data: unknown }> = [];
+      const original = app.broadcast;
+      app.broadcast = ((event: string, data: unknown) => { broadcasts.push({ event, data }); return original.call(app, event, data as never); }) as typeof app.broadcast;
+
+      const itemId = (app.db.prepare("SELECT id FROM order_items WHERE kot_id = ?").get(kot!.id) as { id: string }).id;
+      const cancelled = await request("POST", `/api/order-items/${itemId}/cancel`, { reason: "Guest changed mind" });
+      expect(cancelled.statusCode, cancelled.body).toBe(200);
+      const cancelJob = (app.db.prepare("SELECT job_json FROM print_jobs").all() as Array<{ job_json: string }>)
+        .map((j) => JSON.parse(j.job_json) as { kind: string; label: string }).find((j) => j.kind === "cancel")!;
+      expect(cancelJob.label).toContain("T3, T4");
+      await vi.waitFor(() => expect(fake.sent).toHaveLength(sent + 1));
+      expect(fake.sent.at(-1)!.bytes.toString("latin1")).toContain("T3, T4");
+      const kotUpdate = broadcasts.find((b) => b.event === "kot.updated")!.data as { kot: { tableName: string } };
+      expect(kotUpdate.kot.tableName).toBe("T3, T4");
+    });
+
+    it("tells every linked table when the combined bill is issued and settled", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      await addItems(receiving, [waterProductId]);
+      expect((await merge(await openOrder(tables["T4"]!), receiving)).statusCode).toBe(200);
+      const broadcasts: Array<{ event: string; data: unknown }> = [];
+      const original = app.broadcast;
+      app.broadcast = ((event: string, data: unknown) => { broadcasts.push({ event, data }); return original.call(app, event, data as never); }) as typeof app.broadcast;
+      const changedTables = () => broadcasts.filter((b) => b.event === "table.changed").map((b) => (b.data as { tableId: string }).tableId).sort();
+
+      await bill(receiving);
+      expect(changedTables()).toEqual([tables["T3"], tables["T4"]].sort());
+      broadcasts.length = 0;
+
+      const issued = (await request("GET", `/api/orders/${receiving}/bill`)).json().bill as { id: string; totalPaise: number };
+      const paid = await request("POST", `/api/bills/${issued.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: issued.totalPaise }] });
+      expect(paid.statusCode, paid.body).toBe(200);
+      expect(changedTables()).toEqual([tables["T3"], tables["T4"]].sort());
+      expect((await tableState("T4")).status).toBe("free");
+    });
+
+    it("tells every linked table when a combined order is cancelled", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      expect((await merge(await openOrder(tables["T4"]!), receiving)).statusCode).toBe(200);
+      const changed: string[] = [];
+      const original = app.broadcast;
+      app.broadcast = ((event: string, data: unknown) => { if (event === "table.changed") changed.push((data as { tableId: string }).tableId); return original.call(app, event, data as never); }) as typeof app.broadcast;
+      expect((await request("POST", `/api/orders/${receiving}/cancel`, {})).statusCode).toBe(200);
+      expect(changed.sort()).toEqual([tables["T3"], tables["T4"]].sort());
+      expect((await tableState("T4")).status).toBe("free");
     });
 
     it("does not duplicate a link when a linked table's other group joins", async () => {

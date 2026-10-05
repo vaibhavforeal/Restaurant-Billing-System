@@ -164,6 +164,41 @@ describe("table reservations", () => {
     expect((await f.seat(rescheduled.json().reservation)).statusCode).toBe(200);
   });
 
+  it("refuses to seat a party at a table that is occupied through a merge link", async () => {
+    const f = await fixture();
+    const open = async (tableId: string) => (await f.api("POST", "/api/orders", { clientRef: uuidv7(), type: "dine_in", tableId })).json().order.id as string;
+    // A walk-in at T1 was merged into T2's bill before the booking began, so T1 stays linked and occupied.
+    const walkIn = await open(f.table.id), receiving = await open(f.second.id);
+    expect((await f.api("POST", `/api/orders/${walkIn}/merge`, { clientRef: uuidv7(), targetOrderId: receiving })).statusCode).toBe(200);
+    const r = await f.create();
+    const refused = await f.seat(r);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toBe("This table is still occupied. Finish its current orders or move the reservation to another table.");
+    expect(f.countOrders()).toBe(2);
+    app.db.prepare("UPDATE orders SET status='settled' WHERE id=?").run(receiving);
+    expect((await f.seat(r)).statusCode).toBe(200);
+  });
+
+  it("keeps a seated party's slot while its order lives on inside a combined bill", async () => {
+    const f = await fixture(), r = await f.create();
+    const seated = (await f.seat(r)).json().order.id as string;
+    const third = (await f.api("POST", "/api/tables", { name: "T3" })).json().table.id as string;
+    const open = async (tableId: string) => (await f.api("POST", "/api/orders", { clientRef: uuidv7(), type: "dine_in", tableId })).json().order.id as string;
+    const merge = (folded: string, target: string) => f.api("POST", `/api/orders/${folded}/merge`, { clientRef: uuidv7(), targetOrderId: target });
+    // Bill at T2: the seated party's order is folded away, but the party is still at T1.
+    const atSecond = await open(f.second.id);
+    expect((await merge(seated, atSecond)).statusCode).toBe(200);
+    expect((await f.api("POST", "/api/reservations", f.body())).statusCode).toBe(409);
+    // Folding the combined order again still holds the slot.
+    const atThird = await open(third);
+    expect((await merge(atSecond, atThird)).statusCode).toBe(200);
+    expect((await f.api("POST", "/api/reservations", f.body())).statusCode).toBe(409);
+    app.db.prepare("UPDATE orders SET status='billed' WHERE id=?").run(atThird);
+    expect((await f.api("POST", "/api/reservations", f.body())).statusCode).toBe(409);
+    app.db.prepare("UPDATE orders SET status='settled' WHERE id=?").run(atThird);
+    await f.create();
+  });
+
   it("does not allow early seating to consume an adjacent party's booked slot", async () => {
     const f = await fixture(), r = await f.create({ durationMinutes: 15 });
     const next = await f.create({ startsLocal: localMinute(r.endsAt), durationMinutes: 30 });

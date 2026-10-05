@@ -1,7 +1,7 @@
 import { paiseToRupees } from "./money";
 import type { Order, TableInfo } from "./types";
 
-export type MoveNote = "occupied — merge instead" | "reserved now";
+export type MoveNote = "occupied — merge instead" | "reserved now" | "linked to this bill";
 
 export interface MoveTarget {
   table: TableInfo;
@@ -14,12 +14,19 @@ export interface MergeGroup {
   options: Array<{ orderId: string; label: string }>;
 }
 
-/** Active tables other than the current one; only free tables can receive a moved order. */
-export function moveTargets(tables: TableInfo[], currentTableId: string): MoveTarget[] {
+/**
+ * Active tables other than the current one. Free tables can receive a moved order, and so can a table whose
+ * only occupancy is a link to this very order (part of the party already sits there) unless it is reserved now.
+ */
+export function moveTargets(tables: TableInfo[], currentTableId: string, currentOrderId: string, now = Date.now()): MoveTarget[] {
   return tables
     .filter((table) => table.isActive && table.id !== currentTableId)
-    .map((table) => {
+    .map((table): MoveTarget => {
       if (table.status === "free") return { table, selectable: true, note: null };
+      if (table.link?.orderId === currentOrderId && table.activeOrders.length === 0) {
+        const reservedNow = table.reservation != null && table.reservation.startsAt <= now;
+        return reservedNow ? { table, selectable: false, note: "reserved now" } : { table, selectable: true, note: "linked to this bill" };
+      }
       return { table, selectable: false, note: table.status === "reserved" ? "reserved now" : "occupied — merge instead" };
     });
 }
@@ -40,9 +47,27 @@ export function mergeTargets(orders: Order[], currentOrderId: string): MergeGrou
   return [...groups.values()];
 }
 
-/** Cart drafts are stored per order, so merging an order away would orphan any unsaved items. */
-export function mergeBlockedReason(draftCount: number): string | null {
-  return draftCount > 0 ? "Save or discard the cart items before merging." : null;
+/** "Bill at this table" keeps the bill on the current order and folds the other one away, and vice versa. */
+export function mergeRoles(currentOrderId: string, choice: { billAt: "this" | "other"; otherOrderId: string }): { keepsBill: string; foldedIn: string } {
+  return choice.billAt === "this"
+    ? { keepsBill: currentOrderId, foldedIn: choice.otherOrderId }
+    : { keepsBill: choice.otherOrderId, foldedIn: currentOrderId };
+}
+
+/**
+ * Cart drafts and queued item saves are stored per order, so folding an order away would orphan them.
+ * Pass the counts for the order being folded in (see `mergeRoles`); the receiving order's cart is safe.
+ */
+export function mergeBlockedReason({ foldedDraftCount, foldedQueuedCount }: { foldedDraftCount: number; foldedQueuedCount: number }): string | null {
+  return foldedDraftCount > 0 || foldedQueuedCount > 0 ? "Save or discard the cart items before merging." : null;
+}
+
+/** Bill groups a guest QR request from this table can join: its open groups, then the open combined order it is linked to. */
+export function qrBillGroupOptions(table: TableInfo | undefined): Array<{ value: string; label: string }> {
+  if (!table) return [];
+  const options = table.activeOrders.filter((order) => order.status === "open").map((order) => ({ value: order.id, label: `Existing group ${order.splitLabel ?? "?"}` }));
+  if (table.link?.status === "open") options.push({ value: table.link.orderId, label: table.link.label });
+  return options;
 }
 
 /** Note shown on a card whose table is billed together with another table's order. */

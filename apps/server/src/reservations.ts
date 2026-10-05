@@ -5,6 +5,7 @@ import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
 import { assertReservationSlot, localMinute, reservationTime } from "./reservation-rules.js";
+import { activeLinkForTable } from "./table-label.js";
 
 interface Row {
   id: string; client_ref: string; request_json: string; table_id: string; table_name: string; area: string | null;
@@ -109,7 +110,8 @@ export function registerReservations(app: FastifyInstance) {
       const now = Date.now();
       if (now < row.starts_at - 30 * 60000) throw httpError(409, "Seat the party from 30 minutes before its reservation time, or edit the time first.");
       if (now >= row.ends_at) throw httpError(409, "This reservation has ended. Reschedule it before seating the party.");
-      if (app.db.prepare("SELECT id FROM orders WHERE table_id = ? AND status IN ('open','billed') LIMIT 1").get(row.table_id)) throw httpError(409, "This table is still occupied. Finish its current orders or move the reservation to another table.");
+      // A table linked to a combined bill elsewhere is occupied too, until that bill is paid.
+      if (app.db.prepare("SELECT id FROM orders WHERE table_id = ? AND status IN ('open','billed') LIMIT 1").get(row.table_id) || activeLinkForTable(app.db, row.table_id)) throw httpError(409, "This table is still occupied. Finish its current orders or move the reservation to another table.");
       assertReservationSlot(app.db, row.table_id, Math.min(now, row.starts_at), row.ends_at, id);
       const orderId = uuidv7(), ref = `reservation:${id}`, label = nextSplitLabel(app.db, row.table_id);
       if (!label || app.db.prepare("SELECT id FROM orders WHERE client_ref = ?").get(ref)) throw httpError(409, "Could not open this table. Refresh and review the reservation.");

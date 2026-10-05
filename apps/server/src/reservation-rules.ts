@@ -10,10 +10,25 @@ export function reservationTime(value: string): number {
   if (!Number.isFinite(ms) || localMinute(ms) !== value) throw httpError(400, "Invalid reservation date or time");
   return ms;
 }
+/** Status of the order a seated party's bill ended up in: merges fold an order into another, possibly more than once. */
+function finalOrderStatus(db: Database, orderId: string): string | null {
+  const get = db.prepare("SELECT status, merged_into FROM orders WHERE id = ?");
+  const seen = new Set<string>();
+  let id: string | null = orderId;
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    const row = get.get(id) as { status: string; merged_into: string | null } | undefined;
+    if (!row) return null;
+    if (!row.merged_into) return row.status;
+    id = row.merged_into;
+  }
+  return null;
+}
 export function assertReservationSlot(db: Database, tableId: string, start: number, end: number, exclude = "") {
-  const conflict = db.prepare(`SELECT r.id FROM reservations r LEFT JOIN orders o ON o.id = r.order_id
-    WHERE r.table_id = ? AND r.id != ? AND r.starts_at < ? AND r.ends_at > ?
-      AND (r.status = 'booked' OR (r.status = 'seated' AND o.status IN ('open','billed'))) LIMIT 1`).get(tableId, exclude, end, start);
+  const overlapping = db.prepare(`SELECT status, order_id FROM reservations
+    WHERE table_id = ? AND id != ? AND starts_at < ? AND ends_at > ? AND status IN ('booked','seated')`).all(tableId, exclude, end, start) as Array<{ status: "booked" | "seated"; order_id: string | null }>;
+  // A seated party holds its slot while its bill — or the combined bill it was merged into — is open or billed.
+  const conflict = overlapping.some((r) => r.status === "booked" || (r.order_id !== null && ["open", "billed"].includes(finalOrderStatus(db, r.order_id) ?? "")));
   if (conflict) throw httpError(409, "This table already has a reservation during that time. Choose another table or time.");
 }
 /** New walk-in groups cannot consume a table currently held for a booked party. */

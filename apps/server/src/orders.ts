@@ -11,6 +11,7 @@ import { cancelSlip } from "./print/templates.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
+import { linkedTableIds, orderTableLabel } from "./table-label.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -264,9 +265,8 @@ export function registerOrders(app: FastifyInstance): void {
           .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
           .all(item.kot_id) as OrderItemRow[];
         const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
-        const tableName = order.table_id
-          ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
-          : null;
+        // The combined label (e.g. "T3, T4") so the kitchen matches the slip to the tickets on screen.
+        const tableName = orderTableLabel(app.db, order.id);
 
         // Print cancel slip
         const stationRow = app.db
@@ -352,6 +352,8 @@ export function registerOrders(app: FastifyInstance): void {
     if (order.table_id) {
       app.broadcast("table.changed", { tableId: order.table_id });
     }
+    // Cancelling a combined order frees its linked tables as well.
+    for (const tableId of linkedTableIds(app.db, id)) app.broadcast("table.changed", { tableId });
     return { order: result };
   });
 }

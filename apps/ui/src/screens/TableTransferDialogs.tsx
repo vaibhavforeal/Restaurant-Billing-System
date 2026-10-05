@@ -39,7 +39,7 @@ function MoveBody({ order, busy, error, refreshSignal, onClose, onConfirm }: Omi
       .catch((e) => { if (current) setLoadError(e instanceof Error ? e.message : "Could not load tables"); });
     return () => { current = false; };
   }, [refreshSignal]);
-  const targets = tables && order.tableId ? moveTargets(tables, order.tableId) : [];
+  const targets = tables && order.tableId ? moveTargets(tables, order.tableId, order.id) : [];
   const from = `${orderLabel(order)}-${order.splitLabel ?? "A"}`;
   return <>
     {(error || loadError) && <div className="error-message" role="alert">{error || loadError}</div>}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Order, OrderItem, TableInfo } from "./types";
-import { mergeBlockedReason, mergeTargets, moveTargets, receivingLabel, tableCardNote, tableOpenTargets } from "./table-transfer";
+import { mergeBlockedReason, mergeRoles, mergeTargets, moveTargets, qrBillGroupOptions, receivingLabel, tableCardNote, tableOpenTargets } from "./table-transfer";
 
 const table = (id: string, patch: Partial<TableInfo> = {}): TableInfo => ({
   id, name: id.toUpperCase(), area: null, sortOrder: 0, priceTier: "non_ac", isActive: true,
@@ -26,12 +26,32 @@ describe("moveTargets", () => {
       table("t6", { status: "reserved" }),
       table("t7", { status: "free", isActive: false }),
       table("t8", { status: "billed" }),
-    ], "t3");
+    ], "t3", "me");
     expect(targets.map((t) => [t.table.id, t.selectable, t.note])).toEqual([
       ["t4", true, null],
       ["t5", false, "occupied — merge instead"],
       ["t6", false, "reserved now"],
       ["t8", false, "occupied — merge instead"],
+    ]);
+  });
+
+  it("lets a combined order move onto a table that is linked only to it", () => {
+    const own = { orderId: "me", status: "open" as const, label: "T3, T5", tableName: "T3" };
+    const now = 1_000_000;
+    const booking = (startsAt: number) => ({ id: "r", customerName: "Rao", partySize: 2, startsAt, endsAt: startsAt + 3_600_000, startsLocal: "" });
+    const targets = moveTargets([
+      table("t5", { status: "occupied", link: own }),
+      table("t6", { status: "occupied", link: own, activeOrders: [{ id: "x", splitLabel: "A", status: "open" }] }),
+      table("t7", { status: "occupied", link: { ...own, orderId: "someone-else" } }),
+      table("t8", { status: "occupied", link: own, reservation: booking(now - 60_000) }),
+      table("t9", { status: "occupied", link: own, reservation: booking(now + 60_000) }),
+    ], "t3", "me", now);
+    expect(targets.map((t) => [t.table.id, t.selectable, t.note])).toEqual([
+      ["t5", true, "linked to this bill"],
+      ["t6", false, "occupied — merge instead"],
+      ["t7", false, "occupied — merge instead"],
+      ["t8", false, "reserved now"],
+      ["t9", true, "linked to this bill"],
     ]);
   });
 });
@@ -62,11 +82,64 @@ describe("mergeTargets", () => {
   });
 });
 
+describe("mergeRoles", () => {
+  it("keeps the bill on the chosen side and folds the other order", () => {
+    expect(mergeRoles("me", { billAt: "this", otherOrderId: "other" })).toEqual({ keepsBill: "me", foldedIn: "other" });
+    expect(mergeRoles("me", { billAt: "other", otherOrderId: "other" })).toEqual({ keepsBill: "other", foldedIn: "me" });
+  });
+});
+
 describe("mergeBlockedReason", () => {
-  it("blocks a merge while the cart holds unsaved items", () => {
-    expect(mergeBlockedReason(0)).toBeNull();
-    expect(mergeBlockedReason(1)).toBe("Save or discard the cart items before merging.");
-    expect(mergeBlockedReason(4)).toBe("Save or discard the cart items before merging.");
+  const blocked = "Save or discard the cart items before merging.";
+  type Cart = { draft: number; queued: number };
+  /** What the order screen does: look up the cart of the order being folded away. */
+  const reasonFor = (billAt: "this" | "other", carts: Record<"me" | "other", Cart>) => {
+    const { foldedIn } = mergeRoles("me", { billAt, otherOrderId: "other" });
+    const cart = carts[foldedIn as "me" | "other"];
+    return mergeBlockedReason({ foldedDraftCount: cart.draft, foldedQueuedCount: cart.queued });
+  };
+  const empty = { draft: 0, queued: 0 };
+
+  it("allows a merge when the folded order has nothing unsaved", () => {
+    expect(mergeBlockedReason({ foldedDraftCount: 0, foldedQueuedCount: 0 })).toBeNull();
+    expect(reasonFor("this", { me: empty, other: empty })).toBeNull();
+    expect(reasonFor("other", { me: empty, other: empty })).toBeNull();
+  });
+
+  it("Bill at this table: this order's cart is safe, the other order's held cart blocks", () => {
+    expect(reasonFor("this", { me: { draft: 3, queued: 1 }, other: empty })).toBeNull();
+    expect(reasonFor("this", { me: empty, other: { draft: 2, queued: 0 } })).toBe(blocked);
+    expect(reasonFor("this", { me: empty, other: { draft: 0, queued: 1 } })).toBe(blocked);
+  });
+
+  it("Bill at the other table: this order is folded, so its cart or queued items block", () => {
+    expect(reasonFor("other", { me: empty, other: { draft: 4, queued: 2 } })).toBeNull();
+    expect(reasonFor("other", { me: { draft: 1, queued: 0 }, other: empty })).toBe(blocked);
+    expect(reasonFor("other", { me: { draft: 0, queued: 1 }, other: empty })).toBe(blocked);
+  });
+});
+
+describe("qrBillGroupOptions", () => {
+  it("is empty when the table is unknown or has no open groups", () => {
+    expect(qrBillGroupOptions(undefined)).toEqual([]);
+    expect(qrBillGroupOptions(table("t1"))).toEqual([]);
+  });
+
+  it("lists the table's open bill groups only", () => {
+    expect(qrBillGroupOptions(table("t1", { status: "occupied", activeOrders: [
+      { id: "a", splitLabel: "A", status: "open" }, { id: "b", splitLabel: "B", status: "billed" }, { id: "c", splitLabel: null, status: "open" },
+    ] }))).toEqual([{ value: "a", label: "Existing group A" }, { value: "c", label: "Existing group ?" }]);
+  });
+
+  it("offers the open combined order a linked table belongs to", () => {
+    const linked = { orderId: "o9", status: "open" as const, label: "T3, T4", tableName: "T3" };
+    expect(qrBillGroupOptions(table("t4", { status: "occupied", link: linked }))).toEqual([{ value: "o9", label: "T3, T4" }]);
+    expect(qrBillGroupOptions(table("t4", { status: "occupied", link: linked, activeOrders: [{ id: "a", splitLabel: "A", status: "open" }] })))
+      .toEqual([{ value: "a", label: "Existing group A" }, { value: "o9", label: "T3, T4" }]);
+  });
+
+  it("does not offer a combined order that is already billed", () => {
+    expect(qrBillGroupOptions(table("t4", { status: "billed", link: { orderId: "o9", status: "billed", label: "T3, T4", tableName: "T3" } }))).toEqual([]);
   });
 });
 

@@ -4,6 +4,7 @@ import type { GuestRequest, QrTable } from "@forkflow/domain";
 import { apiFetch, session } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
+import { qrBillGroupOptions } from "../table-transfer";
 import { useLicense } from "./LicenseSettings";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { QrNotificationControls } from "../QrNotifications";
@@ -152,8 +153,9 @@ function RequestCard({ request, table, canAccept, busy, saving, onReview, onOpen
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
-  const openGroups = table?.activeOrders.filter((order) => order.status === "open") ?? [];
-  const targetValid = target === "new" || openGroups.some((order) => order.id === target);
+  // A linked table's request can also join the combined bill (spec §5); the server still checks the price tier.
+  const groupOptions = qrBillGroupOptions(table);
+  const targetValid = target === "new" || groupOptions.some((option) => option.value === target);
   async function submit(action: { orderId: string | null } | { reason: string }) {
     setError("");
     try { await onReview(request, action); }
@@ -173,7 +175,7 @@ function RequestCard({ request, table, canAccept, busy, saving, onReview, onOpen
         <label>Bill group for {request.tableName}<select required value={target} disabled={busy || !canAccept} onChange={(event) => { setTarget(event.target.value); setError(""); }}>
           <option value="">Choose a bill group</option><option value="new">New bill group</option>
           {target && !targetValid && <option value={target} disabled>Selected bill group is no longer open</option>}
-          {openGroups.map((order) => <option key={order.id} value={order.id}>Existing group {order.splitLabel ?? "?"}</option>)}
+          {groupOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select></label>
         {target && !targetValid && <p role="status">Review the available bill groups before accepting.</p>}
         <div className="qr-card-actions"><button className="primary" disabled={busy || !canAccept || !targetValid}>{saving ? "Saving…" : "Accept & open order"}</button><button type="button" disabled={busy} onClick={() => setRejecting(true)}>Reject…</button></div>

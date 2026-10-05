@@ -16,6 +16,9 @@ travel with the party.
 - The destination must be an active, free table that is not reserved right now.
   Occupied tables are shown as "occupied — merge instead", and tables with a
   booking in progress as "reserved now".
+- A combined party can also move onto one of its own linked tables (shown as
+  "linked to this bill"). The bill then sits on that table, which stops being a
+  linked table; its other linked tables stay linked.
 - One bill group moves at a time. It takes the next free split letter at the
   destination (**A** when the table is empty).
 - Items already ordered keep their prices. New items use the destination
@@ -36,13 +39,15 @@ order at that table keeps the bill, its captain, and its prices.
   the combined order. Their prices, stock deductions, and costs do not change.
 - New items on the combined order use the table that keeps the bill.
 - Guest QR requests already accepted move with the items. A request still waiting
-  keeps its table; accepting it from a linked table lets you add it to the
-  combined bill, unless that table uses different (AC/Non-AC) pricing. In that
-  case the screen says "This bill uses different pricing. Create a new bill
-  group."
-- Merging is blocked while the cart has unsaved items. Send them to the kitchen
+  keeps its table. When you accept a request from a linked table, choose the
+  combined bill, labelled `T3, T4`, in the bill group list to add it there,
+  unless that table uses different (AC/Non-AC) pricing. In that case the screen
+  says "This bill uses different pricing. Create a new bill group."
+- Merging is blocked while the bill being merged away has unsaved cart items,
+  or saved actions still waiting to be sent, on this device. That can be either
+  bill, depending on where the combined bill goes. Send the items to the kitchen
   (or punch them) first, or discard them: "Save or discard the cart items before
-  merging."
+  merging." The cart of the order that keeps the bill is safe.
 - Both orders must still be open. If one was billed or changed meanwhile, the
   screen shows the error and reloads the list itself.
 

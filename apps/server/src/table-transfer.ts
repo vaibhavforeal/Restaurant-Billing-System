@@ -6,7 +6,7 @@ import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
 import { tableChangeSlip } from "./print/templates.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
-import { activeLinkForTable, orderTableLabel } from "./table-label.js";
+import { orderTableLabel } from "./table-label.js";
 
 /**
  * Prints a table-change slip at every station that still has an unfinished ticket on the order.
@@ -64,8 +64,14 @@ export function registerTableTransfer(app: FastifyInstance): void {
       const table = app.db.prepare("SELECT id, name, is_active, price_tier FROM dining_tables WHERE id = ?").get(body.tableId) as { id: string; name: string; is_active: number; price_tier: "non_ac" | "ac" } | undefined;
       if (!table) throw httpError(400, "unknown table");
       if (table.is_active !== 1) throw httpError(409, "Choose an active table");
+      // A table linked only to this very order is where part of the party already sits, so it counts as free
+      // for this order; any other open/billed order or another order's link makes it occupied.
       const occupied = app.db.prepare("SELECT 1 FROM orders WHERE table_id = ? AND status IN ('open', 'billed') LIMIT 1").get(table.id);
-      if (occupied || activeLinkForTable(app.db, table.id)) throw httpError(409, "That table is occupied — merge instead");
+      const linkedElsewhere = app.db
+        .prepare(`SELECT 1 FROM table_links tl JOIN orders o ON o.id = tl.order_id
+          WHERE tl.table_id = ? AND tl.order_id != ? AND o.status IN ('open', 'billed') LIMIT 1`)
+        .get(table.id, id);
+      if (occupied || linkedElsewhere) throw httpError(409, "That table is occupied — merge instead");
       const now = Date.now();
       assertTableNotReserved(app.db, table.id, now);
 
@@ -73,6 +79,8 @@ export function registerTableTransfer(app: FastifyInstance): void {
       if (label === null) throw httpError(409, "table has too many open splits");
       const fromTable = app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string };
 
+      // The order now sits on that table, so its link there is dropped; links to other tables stay.
+      app.db.prepare("DELETE FROM table_links WHERE table_id = ? AND order_id = ?").run(table.id, id);
       app.db.prepare("UPDATE orders SET table_id = ?, split_label = ?, price_tier = ? WHERE id = ?").run(table.id, label, table.price_tier, id);
       app.db
         .prepare(
@@ -136,10 +144,12 @@ export function registerTableTransfer(app: FastifyInstance): void {
       app.db.prepare("DELETE FROM table_links WHERE order_id = ?").run(folded.id);
       const alreadyLinked = app.db.prepare("SELECT 1 FROM table_links WHERE table_id = ? AND order_id = ?");
       const insertLink = app.db.prepare("INSERT INTO table_links (id, table_id, order_id, linked_at, linked_by) VALUES (?, ?, ?, ?, ?)");
+      let linksAdded = 0;
       for (const tableId of [foldedTableId, ...foldedLinks]) {
         affectedTableIds.add(tableId);
         if (tableId === receivingTableId || alreadyLinked.get(tableId, receiving.id)) continue;
         insertLink.run(uuidv7(), tableId, receiving.id, now, req.user.id);
+        linksAdded++;
       }
       affectedTableIds.add(receivingTableId);
       for (const link of app.db.prepare("SELECT table_id FROM table_links WHERE order_id = ?").all(receiving.id) as Array<{ table_id: string }>) affectedTableIds.add(link.table_id);
@@ -152,8 +162,11 @@ export function registerTableTransfer(app: FastifyInstance): void {
         )
         .run(uuidv7(), folded.id, receiving.id, foldedTableId, receivingTableId, folded.captain_name ?? null, now, req.user.id, body.clientRef, fingerprint);
 
-      // The label is plain table names joined by ", " — already ASCII for the thermal encoder.
-      printErrors.push(...notifyKitchenTableChange(app, receiving.id, orderTableLabel(app.db, receiving.id)!));
+      // The label is plain table names joined by ", " — already ASCII for the thermal encoder. Two groups at the
+      // same table merging with no new link leave the table name unchanged, so the kitchen needs no slip.
+      if (foldedTableId !== receivingTableId || linksAdded > 0) {
+        printErrors.push(...notifyKitchenTableChange(app, receiving.id, orderTableLabel(app.db, receiving.id)!));
+      }
       return false;
     })();
 

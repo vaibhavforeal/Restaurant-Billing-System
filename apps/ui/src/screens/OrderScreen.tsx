@@ -6,7 +6,7 @@ import type { Category, Order, OrderItem, Product, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { BillingPanel } from "./BillingPanel";
-import { mergeBlockedReason } from "../table-transfer";
+import { mergeBlockedReason, mergeRoles } from "../table-transfer";
 import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
 import { Icon } from "../Icon";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
@@ -349,13 +349,24 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     });
   }
 
+  /** Unsaved cart rows and queued requests this device holds for an order (same keys `readDraft` uses). */
+  function heldCart(id: string) {
+    let foldedDraftCount = 0;
+    try {
+      const rows: unknown = JSON.parse(localStorage.getItem(`forkflow.draft.${user.id}.${id}`) ?? localStorage.getItem(`forkflow.draft.${id}`) ?? "[]");
+      foldedDraftCount = Array.isArray(rows) ? rows.length : 0;
+    } catch { /* an unreadable draft is shown as empty, so it cannot block either */ }
+    const foldedQueuedCount = queuedRequests(user.id).filter((request) => request.path.startsWith(`/api/orders/${id}/`)).length;
+    return { foldedDraftCount, foldedQueuedCount };
+  }
+
   function mergeOrders(choice: MergeChoice) {
     if (!order) return;
-    const blocked = mergeBlockedReason(readDraft().length);
+    // The order folded in is the one that stops existing; the other order keeps the bill. Only the folded
+    // order's cart would be orphaned, so that is the cart that must be empty.
+    const { keepsBill, foldedIn } = mergeRoles(order.id, choice);
+    const blocked = mergeBlockedReason(heldCart(foldedIn));
     if (blocked) { setTransferError(blocked); return; }
-    // The order folded in is the one that stops existing; the other order keeps the bill.
-    const keepsBill = choice.billAt === "this" ? order.id : choice.otherOrderId;
-    const foldedIn = choice.billAt === "this" ? choice.otherOrderId : order.id;
     void transfer(`merge:${foldedIn}:${keepsBill}`, async (clientRef) => {
       const result = await apiFetch<{ order: Order; printErrors: string[] }>(`/api/orders/${foldedIn}/merge`, {
         method: "POST", body: JSON.stringify({ clientRef, targetOrderId: keepsBill }),
