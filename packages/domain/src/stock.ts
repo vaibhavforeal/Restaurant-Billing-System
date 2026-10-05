@@ -1,10 +1,12 @@
 import type { Database } from "./db.js";
 import { uuidv7 } from "./id.js";
+import { blendUnitCost, moveCostPaise } from "./costing.js";
 import { stockMilli, type StockItem, type StockUnit, type StockWarning } from "./stock-schemas.js";
 
 export interface StockRow {
   id: string; name: string; unit: StockUnit; qty: number; low_stock_threshold: number | null;
   is_active: number; version: number; client_ref: string | null; request_json: string | null;
+  unit_cost_milli_paise: number | null;
 }
 export function stockJson(row: StockRow): StockItem {
   return { id: row.id, name: row.name, unit: row.unit, qty: row.qty, lowStockThreshold: row.low_stock_threshold,
@@ -19,21 +21,34 @@ export function appendStockMove(db: Database, input: {
   stockItemId: string; delta: number; reason: "sale" | "purchase" | "adjustment" | "wastage" | "cancel_reversal";
   actorId: string; note?: string | null; orderItemId?: string | null; reversalOf?: string | null;
   clientRef?: string | null; requestJson?: string | null;
+  /** Purchases: amount paid (paise) blended into the average. Reversals: the frozen cost being undone (may be null). */
+  costPaise?: number | null;
 }): string {
   requireTransaction(db);
-  const row = db.prepare("SELECT qty FROM stock_items WHERE id = ?").get(input.stockItemId) as { qty: number } | undefined;
+  const row = db.prepare("SELECT qty, unit_cost_milli_paise FROM stock_items WHERE id = ?").get(input.stockItemId) as
+    { qty: number; unit_cost_milli_paise: number | null } | undefined;
   if (!row) throw new Error("Stock item not found");
   const delta = stockMilli(input.delta);
   if (!delta) throw new Error("Stock movement cannot be zero");
   const after = (stockMilli(row.qty) + delta) / 1000;
   stockMilli(after);
+  let unitCost = row.unit_cost_milli_paise;
+  let costPaise: number | null;
+  if (input.costPaise === undefined) costPaise = moveCostPaise(delta, unitCost);
+  else if (input.reason === "purchase") {
+    if (input.costPaise === null) throw new Error("A purchase cost cannot be unknown");
+    costPaise = input.costPaise;
+    unitCost = blendUnitCost(stockMilli(row.qty), unitCost, delta, input.costPaise);
+  } else if (input.reason === "cancel_reversal") costPaise = input.costPaise;
+  else throw new Error("Cost can only be given for purchases and reversals");
   const id = uuidv7();
   db.prepare(`INSERT INTO stock_moves (id, stock_item_id, delta, reason, ref, note, created_at, created_by,
-    order_item_id, reversal_of, client_ref, request_json, balance_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    order_item_id, reversal_of, client_ref, request_json, balance_after, cost_paise, unit_cost_after)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, input.stockItemId, delta / 1000, input.reason, input.orderItemId ?? null, input.note ?? null, Date.now(), input.actorId,
-    input.orderItemId ?? null, input.reversalOf ?? null, input.clientRef ?? null, input.requestJson ?? null, after,
+    input.orderItemId ?? null, input.reversalOf ?? null, input.clientRef ?? null, input.requestJson ?? null, after, costPaise, unitCost,
   );
-  db.prepare("UPDATE stock_items SET qty = ?, version = version + 1 WHERE id = ?").run(after, input.stockItemId);
+  db.prepare("UPDATE stock_items SET qty = ?, unit_cost_milli_paise = ?, version = version + 1 WHERE id = ?").run(after, unitCost, input.stockItemId);
   return id;
 }
 
@@ -60,9 +75,12 @@ export function consumeStock(db: Database, orderItemIds: string[], actorId: stri
 /** Reverse saved sale quantities, never the product's current links. */
 export function reverseStock(db: Database, orderItemId: string, actorId: string, note: string): string[] {
   requireTransaction(db);
-  const moves = db.prepare(`SELECT m.id, m.stock_item_id, m.delta FROM stock_moves m WHERE m.order_item_id = ? AND m.reason = 'sale'
-    AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id) ORDER BY m.id`).all(orderItemId) as Array<{ id: string; stock_item_id: string; delta: number }>;
-  for (const move of moves) appendStockMove(db, { stockItemId: move.stock_item_id, delta: -move.delta, reason: "cancel_reversal", actorId, note, orderItemId, reversalOf: move.id });
+  const moves = db.prepare(`SELECT m.id, m.stock_item_id, m.delta, m.cost_paise FROM stock_moves m WHERE m.order_item_id = ? AND m.reason = 'sale'
+    AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id) ORDER BY m.id`).all(orderItemId) as Array<{ id: string; stock_item_id: string; delta: number; cost_paise: number | null }>;
+  for (const move of moves) appendStockMove(db, {
+    stockItemId: move.stock_item_id, delta: -move.delta, reason: "cancel_reversal", actorId, note, orderItemId, reversalOf: move.id,
+    costPaise: move.cost_paise === null ? null : 0 - move.cost_paise,
+  });
   return [...new Set(moves.map((move) => move.stock_item_id))];
 }
 

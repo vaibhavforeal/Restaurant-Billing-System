@@ -31,9 +31,16 @@ export const StockUpdate = z.object({
 export const StockAdjust = z.object({
   clientRef: Ref, expectedVersion: Version, reason: z.enum(["purchase", "wastage", "adjustment"]),
   quantity: Nonnegative, note: z.string().trim().min(1, "Enter a reason or reference").max(200),
+  costPaise: z.number().int().min(0).max(1_000_000_000).optional(),
 }).strict().superRefine((v, ctx) => {
+  if (v.costPaise !== undefined && v.reason !== "purchase") ctx.addIssue({ code: "custom", message: "Amount paid applies only to received stock", path: ["costPaise"] });
   if (v.reason !== "adjustment" && v.quantity <= 0) ctx.addIssue({ code: "custom", message: "Quantity must be positive", path: ["quantity"] });
 });
+export const UnitCostSet = z.object({
+  clientRef: Ref, expectedVersion: Version,
+  unitCostMilliPaise: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  note: z.string().trim().min(1, "Enter a reason or reference").max(200),
+}).strict();
 export const StockLinkUpdate = z.object({
   expectedVersion: Version,
   stockItemId: z.string().min(1).nullable(),
@@ -49,5 +56,5 @@ export interface StockLink { id: string; stockItemId: string; qtyPerSale: number
 export interface StockMove {
   id: string; stockItemId: string; delta: number; reason: "sale" | "purchase" | "adjustment" | "wastage" | "cancel_reversal";
   note: string | null; orderItemId: string | null; orderId: string | null; reversalOf: string | null;
-  createdAt: number; createdByName: string | null; balanceAfter: number | null;
+  createdAt: number; createdByName: string | null; balanceAfter: number | null; costPaise?: number | null;
 }
