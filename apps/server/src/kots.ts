@@ -7,6 +7,7 @@ import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderIt
 import { kotSlip } from "./print/templates.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
+import { orderTableLabel } from "./table-label.js";
 
 export function registerKots(app: FastifyInstance): void {
   const create = app.requirePermission("kots.create");
@@ -87,9 +88,7 @@ export function registerKots(app: FastifyInstance): void {
         .prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at")
         .all(id) as KotRow[];
 
-      const tableName = orderResult.table_id
-        ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(orderResult.table_id) as { name: string } | undefined)?.name ?? null
-        : null;
+      const tableName = orderTableLabel(app.db, id);
 
       const kotsWithContext = createdKots.map((ck) => {
         const kotRow = allKots.find((k) => k.id === ck.id)!;
@@ -211,7 +210,7 @@ export function registerKots(app: FastifyInstance): void {
     return {
       kots: kots.map((kot) => {
         const order = ordersById.get(kot.order_id)!;
-        const tableName = order.table_name ?? null;
+        const tableName = orderTableLabel(app.db, order.id);
         const kotItems = itemsByKotId.get(kot.id) ?? [];
         return kotWithContextJson(kot, order, tableName, kotItems);
       }),
@@ -220,9 +219,7 @@ export function registerKots(app: FastifyInstance): void {
 
   function broadcastKotUpdated(updated: KotRow): void {
     const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(updated.order_id) as OrderRow;
-    const tableName = order.table_id
-      ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
-      : null;
+    const tableName = orderTableLabel(app.db, order.id);
     const items = app.db
       .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
       .all(updated.id) as OrderItemRow[];

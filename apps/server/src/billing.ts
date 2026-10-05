@@ -5,6 +5,7 @@ import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequ
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
+import { orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
 import { billUpiPayment, upiQrSvg } from "./print/upi.js";
 import { consumeStock, saveReportLines } from "@forkflow/domain";
@@ -83,7 +84,7 @@ export function registerBilling(app: FastifyInstance): void {
     const limit = roleFor(role).limits?.["max_discount_percent"];
     if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
     const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId">;
-    const receipt: ReceiptSnapshot = { ...profile, taxInclusive: tax_inclusive === 1, orderType: order.type, tableName: order.tableName, splitLabel: order.splitLabel,
+    const receipt: ReceiptSnapshot = { ...profile, taxInclusive: tax_inclusive === 1, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
       items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })) };
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
     return { ...totals, receipt, previewKey };

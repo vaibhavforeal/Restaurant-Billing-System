@@ -96,6 +96,7 @@ export interface TableInfo {
   isActive: boolean;
   status: "free" | "occupied" | "billed" | "reserved";
   activeOrders: Array<{ id: string; splitLabel: string | null; status: "open" | "billed" }>;
+  link?: { orderId: string; status: "open" | "billed"; label: string; tableName: string } | null;
   reservation?: { id: string; customerName: string; partySize: number; startsAt: number; endsAt: number; startsLocal: string } | null;
 }
 
@@ -125,6 +126,7 @@ export interface Order {
   tableId: string | null;
   splitLabel: string | null;
   tableName: string | null;
+  tableLabel?: string | null;
   status: "open" | "billed" | "settled" | "cancelled";
   openedBy: string;
   openedAt: number;

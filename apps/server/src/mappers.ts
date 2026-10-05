@@ -1,4 +1,5 @@
 import { orderStockWarnings, type Database } from "@forkflow/domain";
+import { orderTableLabel } from "./table-label.js";
 
 export interface OrderRow {
   captain_id?: string | null;
@@ -114,6 +115,7 @@ export function loadOrderJson(db: Database, orderId: string) {
     tableId: row.table_id,
     splitLabel: row.split_label,
     tableName: row.table_name,
+    tableLabel: orderTableLabel(db, row.id),
     captainId: row.captain_id ?? null,
     captainName: row.captain_name ?? null,
     status: row.status,

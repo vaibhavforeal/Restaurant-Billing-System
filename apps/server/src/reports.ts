@@ -21,7 +21,7 @@ export function registerReports(app: FastifyInstance) {
       WHERE b.created_at >= ? AND b.created_at < ? AND b.status != 'void' GROUP BY t.gst_rate ORDER BY t.gst_rate`).all(...bounds);
     const payments = app.db.prepare(`SELECT p.mode, SUM(p.amount_paise) AS amountPaise FROM payments p
       JOIN bills b ON b.id = p.bill_id WHERE p.created_at >= ? AND p.created_at < ? AND b.status != 'void' GROUP BY p.mode`).all(...bounds);
-    const cancellations = app.db.prepare("SELECT COUNT(*) AS orderCount FROM orders WHERE status = 'cancelled' AND closed_at >= ? AND closed_at < ?").get(...bounds);
+    const cancellations = app.db.prepare("SELECT COUNT(*) AS orderCount FROM orders WHERE status = 'cancelled' AND merged_into IS NULL AND closed_at >= ? AND closed_at < ?").get(...bounds);
     return { report: { date, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, sales, taxes, payments, cancellations } };
   });
 }

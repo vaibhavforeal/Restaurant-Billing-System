@@ -91,7 +91,7 @@ export function registerOperationalReports(app: FastifyInstance) {
         const orders = query(`SELECT o.id AS orderId, o.closed_at AS time, COALESCE(dt.name, 'Takeaway') AS location,
           COALESCE(u.name, 'Unknown') AS staff, COALESCE(o.cancel_reason, 'Not recorded') AS reason
           FROM orders o LEFT JOIN users u ON u.id = o.cancelled_by LEFT JOIN dining_tables dt ON dt.id = o.table_id
-          WHERE o.status = 'cancelled' AND o.closed_at >= ? AND o.closed_at < ? ORDER BY o.closed_at DESC, o.id`, ...bounds);
+          WHERE o.status = 'cancelled' AND o.merged_into IS NULL AND o.closed_at >= ? AND o.closed_at < ? ORDER BY o.closed_at DESC, o.id`, ...bounds);
         tables.push({ title: "Cancelled orders", columns: [column("time", "Cancelled at", "time"), column("orderId", "Order reference"), column("location", "Table / takeaway"), column("staff", "Cancelled by"), column("reason", "Reason")], rows: orders });
       }
       if (kind === "stock") {
