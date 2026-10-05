@@ -15,7 +15,7 @@
 - Migration number: **025**; it only creates tables/indexes/triggers — never rebuilds or edits existing tables.
 - Stored `bills.status` stays `unpaid | paid | void`; a void sets `void`. Bill JSON adds derived `refundState: "none" | "partly_refunded" | "refunded"`.
 - Credit note number from sequence `credit_note_no`, displayed `CN-<n>`.
-- Credit math: refunding `q` of `n` units → `round(field × q / n)` half away from zero per field, except the last units of a line take the exact remainder; a bill's credit notes always sum exactly to its `total_paise`.
+- Credit math: refunding `q` of `n` units → `round(field × q / n)` half away from zero for `taxable`, `cgst`, `sgst` and `rounding`; a credit line's `total = taxable + cgst + sgst + rounding` (never rounded on its own); the last units of a line take the exact remainder of every field. A bill's credit notes always sum exactly to its `total_paise`.
 - Permission `bills.refund` (admin via `*`, cashier via `bills.*`). Cashier requests need `approverPin` of an active admin; admins approve themselves. Wrong PIN → `401 "Admin PIN is incorrect"`, counted by the same per-IP throttle as login (`429` in cooldown).
 - Exact errors: `"This older bill can only be voided"`, `"This bill changed — review again"`, `"Refund amounts must equal the credit note total"`, `"Refund by <mode> cannot exceed what was paid by <mode>"`, `"Nothing left to refund on this bill"`.
 - Reports: all issued bills by issue date (void bills included) minus credit notes by `credit_notes.created_at`; refunds subtract from collections by refund date and method.
@@ -164,7 +164,7 @@
 
 ### Task 7: Bill view dialogs and day-end display
 
-**Files:** Create `apps/ui/src/credit-note-form.ts` (+ test), `apps/ui/src/screens/CreditNoteDialog.tsx`; modify `apps/ui/src/screens/BillingPanel.tsx`, `apps/ui/src/screens/DayEnd.tsx`, `apps/ui/src/report-export.ts` (+ test), `apps/ui/src/types.ts` if needed
+**Files:** Create `apps/ui/src/credit-note-form.ts` (+ test), `apps/ui/src/screens/CreditNoteDialog.tsx`; modify `apps/ui/src/screens/BillingPanel.tsx`, `apps/ui/src/screens/DayEnd.tsx`, `apps/ui/src/report-export.ts` (+ test), `apps/ui/src/screens/SalesReports.tsx`, `apps/ui/src/sales-report.ts` (+ test), `apps/ui/src/types.ts` if needed
 
 **Interfaces:**
 - Produces (`credit-note-form.ts`):
@@ -174,6 +174,7 @@
 - UI: in the bill view (BillingPanel, when a bill exists and the user is admin or cashier) buttons **Void bill** (unpaid or paid with remaining credit) and **Refund items** (paid with remaining credit). `CreditNoteDialog` per spec §7: item steppers (refund only) bounded by billed − refunded with "All remaining"; reason picker + text; server preview; refund rows from `defaultRefundRows`, live `refundRowsError`; "Admin approval" PIN input only for cashiers; confirm `"Refund ₹<total> as credit note"` / `"Void bill"`; own `clientRef` and in-flight guard; on success show `CN-<n>` with **Print credit note** (printer select) and **View** (opens `/api/credit-notes/:id/receipt`). Unpaid void text: `"This cancels the bill and frees the table"`.
 - Bill view shows status badge from `status`/`refundState` (Paid / Partly refunded / Refunded / VOID), a credit-note list (number, date, kind, amount, reason, requested/approved by, reprint), and per-line `"n billed · m refunded"`.
 - Day-end screen shows the credit-notes block and net figures; `dayEndCsv` includes credit-note rows.
+- Sales report screen (`SalesReports.tsx`, `sales-report.ts` CSV) shows per-day Credit notes and Net sales columns, and collections net of refunds.
 
 - [ ] **Step 1: Write failing tests** for `defaultRefundRows` (single method; split proportional; respects refundable caps), `refundRowsError` (exact messages), and `dayEndCsv` credit-note rows.
 - [ ] **Step 2: Run** `npx vitest run apps/ui` → FAIL. **Step 3: Implement.** **Step 4: Run** `npx vitest run apps/ui`, `npm run typecheck -w @forkflow/ui`, `npm run build -w @forkflow/ui` → PASS.
