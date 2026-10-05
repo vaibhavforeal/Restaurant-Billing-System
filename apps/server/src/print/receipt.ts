@@ -5,21 +5,20 @@ import { contextLine } from "./templates.js";
 import { RECEIPT_CSS } from "./receipt-style.js";
 import { billUpiPayment, upiQrRaster, upiQrSvg } from "./upi.js";
 
-const money = (n: number) => (n / 100).toFixed(2);
-const dateTime = (ms: number) => new Date(ms).toLocaleString("en-IN", {
+export const money = (n: number) => (n / 100).toFixed(2);
+export const dateTime = (ms: number) => new Date(ms).toLocaleString("en-IN", {
   day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
 });
 // User text must never be interpreted as printer commands or HTML.
-const clean = (s: string) => s.replace(/[\x00-\x1f\x7f]/g, " ");
-const escape = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+export const clean = (s: string) => s.replace(/[\x00-\x1f\x7f]/g, " ");
+export const escape = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 const statusLabel = (bill: Bill) => bill.status === "paid" ? "PAID" : bill.status === "void" ? "VOID" : "PAYMENT DUE";
 const paidAmount = (bill: Bill) => bill.payments.reduce((sum, p) => sum + p.amountPaise, 0);
 const quantity = (bill: Bill) => bill.receipt.items.reduce((sum, item) => sum + item.qty, 0);
 const footer = (bill: Bill) => bill.receipt.receiptFooter || "Thank you for visiting. Please come again.";
 
-export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
-  const pos = new EscPos().init();
-  const width = CHARS_PER_LINE[paperWidth];
+/** Wrapping text and label/value lines for one slip; user text is cleaned of control bytes first. */
+export function slipWriter(pos: EscPos, width: number): { line: (value: string) => void; pair: (label: string, value: string) => void } {
   function line(value: string) {
     for (const part of value.split(/\r?\n/)) {
       let safe = clean(part);
@@ -37,6 +36,13 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
     if (key.length + text.length + 1 > width) { line(key); line(text.padStart(width)); }
     else line(key + " ".repeat(width - key.length - text.length) + text);
   }
+  return { line, pair };
+}
+
+export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+  const pos = new EscPos().init();
+  const width = CHARS_PER_LINE[paperWidth];
+  const { line, pair } = slipWriter(pos, width);
   const r = bill.receipt;
   pos.align("center").bold(true).size(1, 2);
   line(r.restaurantName);

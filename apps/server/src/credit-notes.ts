@@ -1,10 +1,12 @@
 import { verifyPassword } from "@forkflow/core";
-import { CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
+import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
   type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
+import { creditNoteHtml, creditNoteSlip, type CreditNoteView } from "./print/credit-note.js";
+import { readProfile } from "./print/profile.js";
 
 interface MoneyRow { taxable_paise: number; cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number }
 const money = (r: MoneyRow): Money => ({ taxablePaise: r.taxable_paise, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise, roundingPaise: r.rounding_paise, totalPaise: r.total_paise });
@@ -268,9 +270,37 @@ function draftForWrite(db: Database, billId: string, kind: "void" | "refund", li
   }
 }
 
+/** A credit note with its per-rate taxes (not part of the bill JSON) and the bill it was issued against. */
+function loadCreditNote(db: Database, id: string): { note: CreditNoteView; bill: Bill } {
+  const row = db.prepare("SELECT bill_id AS billId FROM credit_notes WHERE id = ?").get(id) as { billId: string } | undefined;
+  if (!row) throw httpError(404, "credit note not found");
+  const bill = loadBill(db, row.billId);
+  const found = bill.creditNotes.find((n) => n.id === id)!;
+  const taxes = db.prepare("SELECT gst_rate AS gstRate, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM credit_note_taxes WHERE credit_note_id = ? ORDER BY gst_rate").all(id) as CreditNoteView["taxes"];
+  return { note: { ...found, taxes }, bill };
+}
+
 export function registerCreditNotes(app: FastifyInstance): void {
   const db = app.db;
   const refundPermission = app.requirePermission("bills.refund");
+
+  app.get("/api/credit-notes/:id/receipt", { preHandler: app.requirePermission("bills.read") }, async (req, reply) => {
+    const { note, bill } = loadCreditNote(db, (req.params as { id: string }).id);
+    reply.header("Cache-Control", "no-store");
+    reply.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
+    return reply.type("text/html; charset=utf-8").send(creditNoteHtml(note, bill));
+  });
+
+  app.post("/api/credit-notes/:id/print", { preHandler: app.requirePermission("bills.print") }, async (req, reply) => {
+    const { note, bill } = loadCreditNote(db, (req.params as { id: string }).id);
+    const body = BillPrint.parse(req.body);
+    const p = db.prepare("SELECT * FROM printers WHERE id = ? AND is_active = 1").get(body.printerId) as
+      { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string; paper_width: 58 | 80; receipt_profile: string } | undefined;
+    if (!p) throw httpError(400, "Choose an active receipt printer");
+    const profile = readProfile(p.receipt_profile);
+    const job = app.printQueue.enqueue(p, "credit_note", `CN-${note.cnNo}`, creditNoteSlip(note, bill, p.paper_width, profile), profile.copies);
+    return reply.status(202).send({ job });
+  });
 
   app.post("/api/bills/:id/credit-preview", { preHandler: refundPermission }, async (req) => {
     const { id } = req.params as { id: string };

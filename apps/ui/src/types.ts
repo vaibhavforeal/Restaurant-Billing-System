@@ -58,7 +58,7 @@ export interface PrintJobInfo {
   id: string;
   printerId: string;
   printerName: string;
-  kind: "kot" | "cancel" | "test" | "receipt" | "table";
+  kind: "kot" | "cancel" | "test" | "receipt" | "table" | "credit_note";
   label: string;
   status: "queued" | "printing" | "failed" | "done" | "unknown";
   error: string | null;
