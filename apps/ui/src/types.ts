@@ -127,6 +127,7 @@ export interface Order {
   splitLabel: string | null;
   tableName: string | null;
   tableLabel?: string | null;
+  mergedInto: string | null;
   status: "open" | "billed" | "settled" | "cancelled";
   openedBy: string;
   openedAt: number;

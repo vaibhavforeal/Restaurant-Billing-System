@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { priceForTier, PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
 import { ApiError, apiFetch, session, type User } from "../api";
 import { paiseToRupees } from "../money";
-import type { Category, Order, OrderItem, Product } from "../types";
+import type { Category, Order, OrderItem, Product, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { BillingPanel } from "./BillingPanel";
+import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
 import { Icon } from "../Icon";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
@@ -14,6 +15,15 @@ import { queuedRequests, reliablePost, subscribeQueue } from "../retry-queue";
 import { useNavigationGuard } from "../navigation-guard";
 import "../product-editor.css";
 import "../order-screen.css";
+
+// A status line to show on the next order screen: a merge switches screens, which would otherwise drop it.
+let carriedStatus: { orderId: string; text: string; at: number } | null = null;
+function carryStatus(orderId: string, text: string, overwrite: boolean) {
+  if (overwrite || !carriedStatus || carriedStatus.orderId !== orderId || Date.now() - carriedStatus.at > 5000) carriedStatus = { orderId, text, at: Date.now() };
+}
+function carriedStatusFor(orderId: string): string {
+  return carriedStatus && carriedStatus.orderId === orderId && Date.now() - carriedStatus.at < 5000 ? carriedStatus.text : "";
+}
 
 interface DraftItem {
   clientRef: string;
@@ -53,8 +63,26 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const menuResults = useRef<HTMLDivElement>(null);
   const [removed, setRemoved] = useState<DraftItem | null>(null);
   const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string } | null>(null);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => carriedStatusFor(orderId));
+  const [transferDialog, setTransferDialog] = useState<"move" | "merge" | null>(null);
+  const [transferError, setTransferError] = useState("");
+  const [transferSignal, setTransferSignal] = useState(0);
+  const transferRefs = useRef(new Map<string, string>());
   useEffect(() => { if (order) savePreference("forkflow.order-type", order.type); }, [order?.type]);
+  // Another device (or this one) folded this order into a different bill: follow it.
+  const mergedInto = order?.mergedInto ?? null;
+  useEffect(() => {
+    if (!mergedInto) return;
+    let current = true;
+    apiFetch<{ order: Order }>(`/api/orders/${mergedInto}`).then(({ order: receiving }) => {
+      if (!current) return;
+      const text = `Merged into ${orderLabel(receiving)}`;
+      setMessage(text);
+      carryStatus(mergedInto, text, false);
+      onOpenOrder(mergedInto);
+    }).catch(() => { if (current) setMessage("This order was merged into another bill. Return to tables to find it."); });
+    return () => { current = false; };
+  }, [mergedInto]);
   useEffect(() => { if (!captain && order?.status === "open") menuSearch.current?.focus(); }, [order?.id, captain]);
   const focusCartOnSwitch = useRef(false);
   useEffect(() => {
@@ -275,6 +303,62 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     finally { actionLock.current = false; setPending(false); }
   }
 
+  function openTransfer(kind: "move" | "merge") {
+    if (actionLock.current || billingLock.current) return;
+    setTransferError("");
+    setTransferDialog(kind);
+  }
+
+  /** One lock and one client reference per intent; a retry of the same intent reuses its reference. */
+  async function transfer(intent: string, request: (clientRef: string) => Promise<void>) {
+    if (actionLock.current || billingLock.current) return;
+    actionLock.current = true; setPending(true); setError(""); setMessage(""); setTransferError("");
+    const clientRef = transferRefs.current.get(intent) ?? uuid();
+    transferRefs.current.set(intent, clientRef);
+    try {
+      await request(clientRef);
+      transferRefs.current.delete(intent);
+    } catch (e) {
+      if (e instanceof ApiError) transferRefs.current.delete(intent);
+      setTransferError(e instanceof Error ? e.message : "Request failed");
+      setTransferSignal((v) => v + 1);
+      await reload().catch(() => {});
+    } finally { actionLock.current = false; setPending(false); }
+  }
+
+  const printNote = (printErrors: string[]) => printErrors.length ? `. Not printed: ${printErrors.join("; ")}` : "";
+
+  function moveTable(table: TableInfo) {
+    if (!order) return;
+    const kitchenInformed = order.kots.some((kot) => !kot.doneAt);
+    void transfer(`move:${order.id}:${table.id}`, async (clientRef) => {
+      const result = await apiFetch<{ order: Order; printErrors: string[] }>(`/api/orders/${order.id}/move`, {
+        method: "POST", body: JSON.stringify({ clientRef, tableId: table.id }),
+      });
+      setOrder(result.order);
+      setTransferDialog(null);
+      setMessage(`Moved to ${table.name}${kitchenInformed ? " · kitchen notified" : ""}${printNote(result.printErrors)}`);
+      await reload();
+    });
+  }
+
+  function mergeOrders(choice: MergeChoice) {
+    if (!order) return;
+    // The order folded in is the one that stops existing; the other order keeps the bill.
+    const keepsBill = choice.billAt === "this" ? order.id : choice.otherOrderId;
+    const foldedIn = choice.billAt === "this" ? choice.otherOrderId : order.id;
+    void transfer(`merge:${foldedIn}:${keepsBill}`, async (clientRef) => {
+      const result = await apiFetch<{ order: Order; printErrors: string[] }>(`/api/orders/${foldedIn}/merge`, {
+        method: "POST", body: JSON.stringify({ clientRef, targetOrderId: keepsBill }),
+      });
+      const text = `Merged · ${orderLabel(result.order)} billed together${printNote(result.printErrors)}`;
+      setTransferDialog(null);
+      if (keepsBill === order.id) { setOrder(result.order); setMessage(text); await reload().catch(() => {}); return; }
+      carryStatus(keepsBill, text, true);
+      onOpenOrder(keepsBill);
+    });
+  }
+
   function cancelOrder() {
     if (actionLock.current || billingLock.current || !window.confirm("Cancel this entire order?")) return;
     void run(async () => {
@@ -314,7 +398,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   return <section className="screen order-screen">
     <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
-      <div><h2>{order.type === "dine_in" ? `${order.tableName ?? "Table"} · ${order.splitLabel ?? "A"}` : "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
+      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
         {order.type === "dine_in" && order.status === "open" ? <div className="order-captain-picker">
           <span>Captain</span>
           <button type="button" aria-label="Captain for this order" aria-haspopup="dialog" aria-expanded={captainPickerOpen} disabled={locked}
@@ -327,18 +411,22 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {order.status === "open" && <button {...shortcutProps("hold")} title={shortcut("hold", "Hold and return to tables")} disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>Hold & return to tables</button>}
         {order.status === "open" && draft.length > 0 && <button disabled={locked} {...shortcutProps("save_items")} title={shortcut("save_items", "Save without sending to kitchen")} onClick={punch}>Save items only</button>}
         {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => void newSplit()}>New split on this table</button>}
+        {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => openTransfer("move")}>Move table…</button>}
+        {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => openTransfer("merge")}>Merge…</button>}
         {canCancelOrder && <button disabled={locked} onClick={cancelOrder}>Cancel order</button>}
       </OverflowMenu> : <div className="actions">
       <TerminalClock />
       <span className="pos-order-meta">{PRICE_TIER_LABELS[order.priceTier]} · {user.name}</span>
       {order.status === "open" && <button {...shortcutProps("hold")} title={shortcut("hold", isQuick ? "Keep this order in Open takeaways and free Takeaway for the next customer" : "Hold this order and return to tables")} disabled={locked} onClick={holdOrder}>{shortcut("hold", "Hold")}</button>}
       {order.type === "dine_in" && order.status === "open" && <button onClick={() => void newSplit()} disabled={locked}>+ Split</button>}
+      {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("move")} disabled={locked}>Move table…</button>}
+      {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("merge")} disabled={locked}>Merge…</button>}
       <button {...shortcutProps("tables")} title={shortcut("tables", "Return to tables / choose another table")} disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>← Tables</button>
       </div>}
     </div>
     <WorkspaceDialog open={captainPickerOpen} title="Choose captain" className="order-captain-dialog" busy={locked}
       onClose={() => { if (!actionLock.current && !billingLock.current) setCaptainPickerOpen(false); }}>
-      <p>Captain for {order.tableName ?? "this table"} · {order.splitLabel ?? "A"}</p>
+      <p>Captain for {orderLabel(order)} · {order.splitLabel ?? "A"}</p>
       {captainError && <div className="error-message" role="alert">{captainError}</div>}
       {order.status !== "open" ? <p role="status">This order is no longer open. Captain assignment is closed.</p> : <>
         {order.captainId && !captains.some((c) => c.id === order.captainId) && <p className="muted">{order.captainName} is inactive. Choose another captain or remove the assignment.</p>}
@@ -354,6 +442,10 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {pending && <p role="status">Saving captain…</p>}
       </>}
     </WorkspaceDialog>
+    <MoveTableDialog open={transferDialog === "move" && order.status === "open"} order={order} busy={locked} error={transferError} refreshSignal={transferSignal}
+      onClose={() => { if (!actionLock.current && !billingLock.current) setTransferDialog(null); }} onConfirm={moveTable} />
+    <MergeOrderDialog open={transferDialog === "merge" && order.status === "open"} order={order} busy={locked} error={transferError} refreshSignal={transferSignal}
+      onClose={() => { if (!actionLock.current && !billingLock.current) setTransferDialog(null); }} onConfirm={mergeOrders} />
     <div className="error-message" role="alert">{error}</div>
     {order.status !== "settled" && order.status !== "cancelled" && order.stockWarnings?.length > 0 && <details className="alert order-stock-warning">
       <summary>Low stock · {order.stockWarnings.length} ingredients. Ordering is still available.</summary><ul>{order.stockWarnings.map((item) => <li key={item.id}>{item.name}: {item.qty} {item.unit} remaining</li>)}</ul>

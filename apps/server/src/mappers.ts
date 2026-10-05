@@ -14,6 +14,7 @@ export interface OrderRow {
   opened_by: string;
   opened_at: number;
   closed_at: number | null;
+  merged_into?: string | null;
 }
 
 export interface OrderItemRow {
@@ -118,6 +119,7 @@ export function loadOrderJson(db: Database, orderId: string) {
     tableLabel: orderTableLabel(db, row.id),
     captainId: row.captain_id ?? null,
     captainName: row.captain_name ?? null,
+    mergedInto: row.merged_into ?? null,
     status: row.status,
     openedBy: row.opened_by,
     openedAt: row.opened_at,

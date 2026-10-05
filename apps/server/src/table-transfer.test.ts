@@ -246,7 +246,7 @@ describe("moving an order to another table", () => {
       const res = await merge(folded, receiving);
       expect(res.statusCode, res.body).toBe(200);
       expect(res.json().printErrors).toEqual([]);
-      const order = res.json().order as { id: string; tableId: string; tableLabel: string; captainName: string; status: string; items: Array<{ id: string; status: string }>; kots: Array<{ id: string; acceptedAt: number | null }> };
+      const order = res.json().order as { id: string; tableId: string; tableLabel: string; mergedInto: string | null; captainName: string; status: string; items: Array<{ id: string; status: string }>; kots: Array<{ id: string; acceptedAt: number | null }> };
       expect(order).toMatchObject({ id: receiving, tableId: tables["T3"], tableLabel: "T3, T4", captainName: "Meena", status: "open" });
       expect(order.items).toHaveLength(3);
       expect(order.items.map((i) => i.id)).toEqual(expect.arrayContaining(foldedItemIds));
@@ -256,6 +256,8 @@ describe("moving an order to another table", () => {
       expect(order.kots.find((k) => k.id === foldedKot!.id)!.acceptedAt).toBeNull();
 
       expect(orderRow(folded)).toMatchObject({ status: "cancelled", merged_into: receiving, table_id: tables["T4"] });
+      expect(order.mergedInto).toBeNull();
+      expect((await request("GET", `/api/orders/${folded}`)).json().order).toMatchObject({ status: "cancelled", mergedInto: receiving });
       expect(orderRow(folded).closed_at).toEqual(expect.any(Number));
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM order_items WHERE order_id = ?").get(folded)).toEqual({ n: 0 });
       expect(links()).toEqual([{ table_id: tables["T4"], order_id: receiving }]);

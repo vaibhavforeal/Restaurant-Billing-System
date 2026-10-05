@@ -89,3 +89,8 @@ html[data-theme] .workspace-dialog.order-captain-dialog { width: min(440px, calc
 .order-captain-options { display: grid; gap: 8px; }
 .order-captain-dialog .order-captain-options > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 12px; text-align: left; overflow-wrap: anywhere; }
 .order-captain-dialog .order-captain-options > button[aria-pressed="true"] { border-color: var(--pos-accent); background: var(--pos-accent-soft); }
+html[data-theme] .workspace-dialog.table-transfer-dialog { width: min(480px, calc(100vw - 24px)); }
+.table-transfer-group { margin-top: 12px; }
+.table-transfer-group h3 { margin: 0 0 6px; font-size: 13px; }
+.table-transfer-dialog .order-captain-options > button:disabled { opacity: .6; }
+.table-transfer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
