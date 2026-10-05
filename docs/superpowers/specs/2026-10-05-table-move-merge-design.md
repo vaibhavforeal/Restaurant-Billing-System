@@ -94,7 +94,7 @@ Item prices, stock movements (keyed by order item) and costs are untouched. R ke
 
 ### Table status
 
-A table is **occupied** if it has an open order or an active link to an open order; **billed** if it has no open order but has a billed order or an active link to a billed order; otherwise free/reserved as today. `GET /api/tables` reports, per table, its active orders plus `linkedOrderId` (the combined order this table is linked to, if any) and, for an order with links, `linkedTableNames`.
+A table is **occupied** if it has an open order or an active link to an open order; **billed** if it has no open order but has a billed order or an active link to a billed order; otherwise free/reserved as today. `GET /api/tables` reports, per table, its active orders plus `link` (the combined order this table is linked to, if any: its id, status, label and receiving table name); order JSON carries `tableLabel`.
 
 ### Table label
 
