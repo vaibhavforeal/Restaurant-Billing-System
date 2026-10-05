@@ -1,7 +1,7 @@
 import { verifyPassword } from "@forkflow/core";
-import { CreditPreview, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
-  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type VoidBillInput } from "@forkflow/domain";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import { CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
+  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@forkflow/domain";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
@@ -150,6 +150,12 @@ function checkVoidRefunds(bill: CreditBillRow, credit: BillCredit, refunds: Refu
   checkRefundMethods(credit, refunds);
 }
 
+/** A refund's methods must add up to the credit note total and stay within what each method still holds. */
+function checkRefundAmounts(credit: BillCredit, draft: CreditDraft, refunds: RefundInput): void {
+  if (refunds.reduce((s, r) => s + r.amountPaise, 0) !== draft.totals.totalPaise) throw httpError(400, "Refund amounts must equal the credit note total");
+  checkRefundMethods(credit, refunds);
+}
+
 /** Append a credit note with its lines, per-rate taxes and refund payments; returns its id. Call inside the write transaction. */
 export function writeCreditNote(db: Database, note: {
   billId: string; kind: "void" | "refund"; reason: string; draft: CreditDraft; refunds: RefundInput;
@@ -187,6 +193,81 @@ function billWithNote(db: Database, billId: string, noteId: string): { bill: Bil
   return { bill, creditNote: bill.creditNotes.find((n) => n.id === noteId)! };
 }
 
+interface IssueCredit {
+  kind: "void" | "refund";
+  billId: string;
+  request: { clientRef: string; reason: string; refunds: RefundInput };
+  approverPin?: string | undefined;
+  /** Items asked for (refund only). */
+  lines?: RefundBillInput["lines"];
+}
+
+/**
+ * A void or refund: replay check, approval, then one transaction that re-drafts the credit from the stored bill, applies the
+ * kind's rules and writes the credit note. Responds with the bill, the credit note and the order; broadcasts only when new.
+ */
+async function issueCredit(app: FastifyInstance, req: FastifyRequest, reply: FastifyReply, input: IssueCredit): Promise<unknown> {
+  const db = app.db;
+  const { kind, billId: id, request } = input;
+  // The retry fingerprint never holds the PIN: a retry is identical when the bill, kind, reason, items and refunds are.
+  const requestJson = JSON.stringify({ billId: id, kind, ...request, ...(input.lines ? { lines: input.lines } : {}) });
+  const earlier = replayedCreditNote(db, request.clientRef, requestJson);
+  if (earlier) {
+    const replayed = billWithNote(db, earlier.billId, earlier.id);
+    return reply.status(200).send({ ...replayed, order: loadOrderJson(db, replayed.bill.orderId) });
+  }
+  const approver = await resolveApprover(app, req, input.approverPin);
+
+  const result = db.transaction(() => {
+    // Another request may have written this reference, voided or refunded the bill while the PIN was checked.
+    const replay = replayedCreditNote(db, request.clientRef, requestJson);
+    if (replay) return { created: false, ...billWithNote(db, replay.billId, replay.id), tables: [] as string[] };
+    const { bill, credit, draft } = draftForWrite(db, id, kind, input.lines);
+    if (kind === "void") checkVoidRefunds(bill, credit, request.refunds);
+    else checkRefundAmounts(credit, draft, request.refunds);
+    // Read before the order closes: cancelling deactivates its table links.
+    const own = db.prepare("SELECT table_id FROM orders WHERE id = ?").get(bill.order_id) as { table_id: string | null } | undefined;
+    const linked = (db.prepare(`SELECT tl.table_id FROM table_links tl JOIN orders o ON o.id = tl.order_id
+      WHERE tl.order_id = ? AND o.status IN ('open', 'billed') ORDER BY tl.linked_at, tl.id`).all(bill.order_id) as Array<{ table_id: string }>).map((r) => r.table_id);
+    const now = Date.now();
+    const noteId = writeCreditNote(db, { billId: id, kind, reason: request.reason, draft, refunds: request.refunds,
+      requestedBy: req.user.id, approvedBy: approver.id, clientRef: request.clientRef, requestJson, now });
+    if (kind === "void") {
+      db.prepare("UPDATE bills SET status = 'void' WHERE id = ?").run(id);
+      if (bill.status === "unpaid") {
+        db.prepare("UPDATE orders SET status = 'cancelled', closed_at = ?, cancelled_by = ?, cancel_reason = ? WHERE id = ?").run(now, req.user.id, request.reason, bill.order_id);
+      }
+    }
+    const tables = [...new Set([...(own?.table_id ? [own.table_id] : []), ...linked])];
+    // The response bill is built inside the transaction so a bill that cannot be shown (no saved receipt) rolls the write back.
+    return { created: true, ...billWithNote(db, id, noteId), tables };
+  })();
+
+  const order = loadOrderJson(db, result.bill.orderId)!;
+  if (result.created) {
+    app.broadcast("order.updated", { order });
+    for (const tableId of result.tables) app.broadcast("table.changed", { tableId });
+  }
+  return reply.status(result.created ? 201 : 200).send({ bill: result.bill, creditNote: result.creditNote, order });
+}
+
+/**
+ * draftCredit for a write. The counter reviewed an earlier preview, so a refund quantity that no longer fits an item on the
+ * bill means the bill changed since (409); items that were never on the bill stay a bad request.
+ */
+function draftForWrite(db: Database, billId: string, kind: "void" | "refund", lines?: RefundBillInput["lines"]): ReturnType<typeof draftCredit> {
+  try {
+    return draftCredit(db, billId, kind, lines);
+  } catch (err) {
+    if ((err as { statusCode?: number }).statusCode !== 400 || !lines) throw err;
+    const credit = loadBillCredit(db, billId);
+    const wanted = new Map<string, number>();
+    for (const l of lines) wanted.set(l.orderItemId, (wanted.get(l.orderItemId) ?? 0) + l.qty);
+    const outgrown = credit.lines.some((l) => (wanted.get(l.orderItemId) ?? 0) > l.qty - (credit.credited[l.orderItemId]?.qty ?? 0));
+    throw outgrown ? httpError(409, "This bill changed — review again") : err;
+  }
+}
+
 export function registerCreditNotes(app: FastifyInstance): void {
   const db = app.db;
   const refundPermission = app.requirePermission("bills.refund");
@@ -201,42 +282,12 @@ export function registerCreditNotes(app: FastifyInstance): void {
   app.post("/api/bills/:id/void", { preHandler: refundPermission }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const { approverPin, ...request } = VoidBill.parse(req.body ?? {});
-    // The retry fingerprint never holds the PIN: a retry is identical when the bill, reason and refunds are.
-    const requestJson = JSON.stringify({ billId: id, kind: "void", ...request });
-    const earlier = replayedCreditNote(db, request.clientRef, requestJson);
-    if (earlier) {
-      const replayed = billWithNote(db, earlier.billId, earlier.id);
-      return reply.status(200).send({ ...replayed, order: loadOrderJson(db, replayed.bill.orderId) });
-    }
-    const approver = await resolveApprover(app, req, approverPin);
+    return issueCredit(app, req, reply, { kind: "void", billId: id, request, approverPin });
+  });
 
-    const result = db.transaction(() => {
-      // Another request may have written this reference, voided or refunded the bill while the PIN was checked.
-      const replay = replayedCreditNote(db, request.clientRef, requestJson);
-      if (replay) return { created: false, ...billWithNote(db, replay.billId, replay.id), tables: [] as string[] };
-      const { bill, credit, draft } = draftCredit(db, id, "void");
-      checkVoidRefunds(bill, credit, request.refunds);
-      // Read before the order closes: cancelling deactivates its table links.
-      const own = db.prepare("SELECT table_id FROM orders WHERE id = ?").get(bill.order_id) as { table_id: string | null } | undefined;
-      const linked = (db.prepare(`SELECT tl.table_id FROM table_links tl JOIN orders o ON o.id = tl.order_id
-        WHERE tl.order_id = ? AND o.status IN ('open', 'billed') ORDER BY tl.linked_at, tl.id`).all(bill.order_id) as Array<{ table_id: string }>).map((r) => r.table_id);
-      const now = Date.now();
-      const noteId = writeCreditNote(db, { billId: id, kind: "void", reason: request.reason, draft, refunds: request.refunds,
-        requestedBy: req.user.id, approvedBy: approver.id, clientRef: request.clientRef, requestJson, now });
-      db.prepare("UPDATE bills SET status = 'void' WHERE id = ?").run(id);
-      if (bill.status === "unpaid") {
-        db.prepare("UPDATE orders SET status = 'cancelled', closed_at = ?, cancelled_by = ?, cancel_reason = ? WHERE id = ?").run(now, req.user.id, request.reason, bill.order_id);
-      }
-      const tables = [...new Set([...(own?.table_id ? [own.table_id] : []), ...linked])];
-      // The response bill is built inside the transaction so a bill that cannot be shown (no saved receipt) rolls the void back.
-      return { created: true, ...billWithNote(db, id, noteId), tables };
-    })();
-
-    const order = loadOrderJson(db, result.bill.orderId)!;
-    if (result.created) {
-      app.broadcast("order.updated", { order });
-      for (const tableId of result.tables) app.broadcast("table.changed", { tableId });
-    }
-    return reply.status(result.created ? 201 : 200).send({ bill: result.bill, creditNote: result.creditNote, order });
+  app.post("/api/bills/:id/refund", { preHandler: refundPermission }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { approverPin, lines, ...request } = RefundBill.parse(req.body ?? {});
+    return issueCredit(app, req, reply, { kind: "refund", billId: id, request, approverPin, lines });
   });
 }

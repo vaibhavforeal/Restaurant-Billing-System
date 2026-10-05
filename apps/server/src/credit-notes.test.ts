@@ -397,6 +397,187 @@ describe("credit preview, approval and bill credit data", () => {
     });
   });
 
+  describe("POST /api/bills/:id/refund", () => {
+    const count = (sql: string, ...args: unknown[]) => (app.db.prepare(sql).get(...args) as { n: number }).n;
+    const refundBill = (billId: string, payload: Record<string, unknown>, token = cashier.token) =>
+      app.inject({ method: "POST", url: `/api/bills/${billId}/refund`, headers: auth(token), payload: { clientRef: uuidv7(), reason: "Cold food", approverPin: "1234", ...payload } });
+    const billJson = async (id: string) => (await app.inject({ url: `/api/bills/${id}`, headers: auth(admin.token) })).json().bill as Bill;
+
+    it("refunds part of a bill in cash: a refund credit note, status stays paid, state partly_refunded", async () => {
+      const b = await bill();
+      const orderItemId = orderItemOf(b.id);
+      const stockMovesBefore = count("SELECT COUNT(*) AS n FROM stock_moves");
+      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499, refNote: "paid back" }] });
+      expect(res.statusCode, res.body).toBe(201);
+      const { bill: after, creditNote, order } = res.json() as { bill: Bill; creditNote: BillCreditNote; order: { id: string; status: string } };
+      expect(creditNote).toMatchObject({ cnNo: 1, kind: "refund", reason: "Cold food", totalPaise: 3499, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83,
+        requestedByName: "Cara", approvedByName: "Asha", refunds: [{ mode: "cash", amountPaise: 3499, refNote: "paid back" }],
+        lines: [{ orderItemId, name: "Thali", qty: 1, totalPaise: 3499 }] });
+      expect(after).toMatchObject({ id: b.id, status: "paid", totalPaise: 10500, refundState: "partly_refunded", refundedQty: { [orderItemId]: 1 } });
+      expect(after.creditNotes).toEqual([creditNote]);
+      expect(order).toMatchObject({ id: b.orderId, status: "settled" });
+      expect(app.db.prepare("SELECT status, total_paise FROM bills WHERE id = ?").get(b.id)).toEqual({ status: "paid", total_paise: 10500 });
+      const row = app.db.prepare("SELECT request_json FROM credit_notes WHERE id = ?").get(creditNote.id) as { request_json: string };
+      expect(row.request_json).not.toContain("1234");
+      expect(count("SELECT COUNT(*) AS n FROM stock_moves")).toBe(stockMovesBefore);
+    });
+
+    it("refunding the rest takes the exact remainder and makes the bill refunded", async () => {
+      const b = await bill();
+      const orderItemId = orderItemOf(b.id);
+      expect((await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(201);
+      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
+      expect(res.statusCode, res.body).toBe(201);
+      expect(res.json().creditNote).toMatchObject({ cnNo: 2, kind: "refund", totalPaise: 7001, taxablePaise: 6666, cgstPaise: 167, sgstPaise: 167 });
+      const after = res.json().bill as Bill;
+      expect(after).toMatchObject({ status: "paid", refundState: "refunded", refundedQty: { [orderItemId]: 3 } });
+      expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(after.totalPaise);
+    });
+
+    it("refuses an over-refund: a quantity that no longer fits is a stale bill, an unknown item a bad request", async () => {
+      const b = await bill();
+      const orderItemId = orderItemOf(b.id);
+      const tooMany = await refundBill(b.id, { lines: [{ orderItemId, qty: 4 }], refunds: [{ mode: "cash", amountPaise: 10500 }] });
+      expect(tooMany.statusCode).toBe(409);
+      expect(tooMany.json().error).toBe("This bill changed — review again");
+      priorCredit(b.id, 2, [6666, 167, 167, 1, 7001], [["cash", 7001]]);
+      const stale = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().error).toBe("This bill changed — review again");
+      const unknown = await refundBill(b.id, { lines: [{ orderItemId: "nope", qty: 1 }], refunds: [{ mode: "cash", amountPaise: 100 }] });
+      expect(unknown.statusCode).toBe(400);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
+    });
+
+    it("refuses refund amounts that do not equal the credit note total", async () => {
+      const b = await bill();
+      const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
+      for (const refunds of [[{ mode: "cash", amountPaise: 3498 }], [{ mode: "cash", amountPaise: 3500 }], []]) {
+        const res = await refundBill(b.id, { lines, refunds });
+        expect(res.statusCode).toBe(400);
+        expect(res.json().error).toBe("Refund amounts must equal the credit note total");
+      }
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(0);
+    });
+
+    it("keeps each method within what it paid: a cash refund on an all-UPI bill is refused", async () => {
+      const b = await bill(3, "upi");
+      const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
+      const byCash = await refundBill(b.id, { lines, refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      expect(byCash.statusCode).toBe(400);
+      expect(byCash.json().error).toBe("Refund by cash cannot exceed what was paid by cash");
+      const byUpi = await refundBill(b.id, { lines, refunds: [{ mode: "upi", amountPaise: 3499 }] });
+      expect(byUpi.statusCode, byUpi.body).toBe(201);
+      const rest = [{ orderItemId: orderItemOf(b.id), qty: 2 }];
+      const split = await refundBill(b.id, { lines: rest, refunds: [{ mode: "upi", amountPaise: 7000 }, { mode: "card", amountPaise: 1 }] });
+      expect(split.statusCode).toBe(400);
+      expect(split.json().error).toBe("Refund by card cannot exceed what was paid by card");
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
+    });
+
+    it("refunds a split bill across the methods it was paid by", async () => {
+      const issued = await bill(3, false);
+      const paid = await app.inject({ method: "POST", url: `/api/bills/${issued.id}/settle`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: 6000 }, { mode: "card", amountPaise: 4500 }] } });
+      expect(paid.statusCode, paid.body).toBe(200);
+      const lines = [{ orderItemId: orderItemOf(issued.id), qty: 1 }];
+      const res = await refundBill(issued.id, { lines, refunds: [{ mode: "card", amountPaise: 2000 }, { mode: "cash", amountPaise: 1499 }] });
+      expect(res.statusCode, res.body).toBe(201);
+      expect(res.json().creditNote.refunds).toEqual([{ mode: "card", amountPaise: 2000, refNote: null }, { mode: "cash", amountPaise: 1499, refNote: null }]);
+    });
+
+    it("counts money already refunded by a method against its limit", async () => {
+      const b = await bill();
+      priorCredit(b.id, 1, [3333, 83, 83, 0, 3499], [["cash", 3499]]);
+      const orderItemId = orderItemOf(b.id);
+      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
+      expect(res.statusCode, res.body).toBe(201);
+      expect(res.json().bill.refundState).toBe("refunded");
+    });
+
+    it("refuses an unpaid bill, a void bill, a fully refunded bill and an older bill", async () => {
+      const unpaid = await bill(3, false);
+      const lines = (id: string) => [{ orderItemId: orderItemOf(id), qty: 1 }];
+      const onUnpaid = await refundBill(unpaid.id, { lines: lines(unpaid.id), refunds: [] });
+      expect(onUnpaid.statusCode).toBe(409);
+
+      const voided = await bill();
+      expect((await app.inject({ method: "POST", url: `/api/bills/${voided.id}/void`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), reason: "Wrong", refunds: [{ mode: "cash", amountPaise: 10500 }] } })).statusCode).toBe(201);
+      const onVoid = await refundBill(voided.id, { lines: lines(voided.id), refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      expect(onVoid.statusCode).toBe(409);
+      expect(onVoid.json().error).toBe("Nothing left to refund on this bill");
+
+      const done = await bill();
+      priorCredit(done.id, 3, [9999, 250, 250, 1, 10500], [["cash", 10500]]);
+      const onDone = await refundBill(done.id, { lines: lines(done.id), refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      expect(onDone.statusCode).toBe(409);
+      expect(onDone.json().error).toBe("Nothing left to refund on this bill");
+
+      const older = await olderBill({ receipt: true });
+      const onOlder = await refundBill(older, { lines: [{ orderItemId: "x", qty: 1 }], refunds: [{ mode: "upi", amountPaise: 3499 }] });
+      expect(onOlder.statusCode).toBe(409);
+      expect(onOlder.json().error).toBe("This older bill can only be voided");
+      expect((await refundBill("missing", { lines: [{ orderItemId: "x", qty: 1 }], refunds: [] })).statusCode).toBe(404);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes WHERE kind = 'refund'")).toBe(1);
+    });
+
+    it("needs admin approval, refusing a missing or wrong PIN and a waiter, and lets an admin approve themselves", async () => {
+      const b = await bill();
+      const body = { lines: [{ orderItemId: orderItemOf(b.id), qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] };
+      expect((await refundBill(b.id, { ...body, approverPin: undefined })).statusCode).toBe(403);
+      const wrong = await refundBill(b.id, { ...body, approverPin: "0000" });
+      expect(wrong.statusCode).toBe(401);
+      expect(wrong.json().error).toBe("Admin PIN is incorrect");
+      const waiter = await createUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
+      expect((await refundBill(b.id, body, waiter.token)).statusCode).toBe(403);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(0);
+      const self = await refundBill(b.id, { ...body, approverPin: undefined }, admin.token);
+      expect(self.statusCode, self.body).toBe(201);
+      expect(self.json().creditNote).toMatchObject({ requestedByName: "Asha", approvedByName: "Asha" });
+    });
+
+    it("answers a retry with the same credit note, broadcasts once and refuses a reused reference with a different request", async () => {
+      const b = await bill();
+      const orderItemId = orderItemOf(b.id);
+      const events: string[] = [];
+      const original = app.broadcast;
+      app.broadcast = ((event: string, data: unknown) => { events.push(event); return original.call(app, event, data as never); }) as typeof app.broadcast;
+      const payload = { clientRef: "refund-ref-0001", lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] };
+      const first = await refundBill(b.id, payload);
+      expect(first.statusCode, first.body).toBe(201);
+      expect(events).toContain("order.updated");
+      events.length = 0;
+      const again = await refundBill(b.id, payload);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(again.json().creditNote).toEqual(first.json().creditNote);
+      expect(again.json().bill).toEqual(first.json().bill);
+      expect(events).toEqual([]);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
+
+      const otherQty = await refundBill(b.id, { ...payload, lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
+      expect(otherQty.statusCode).toBe(409);
+      expect(otherQty.json().error).toBe("Credit note reference already used for a different request");
+      // the same reference used for a void of the same bill is a different request too
+      const asVoid = await app.inject({ method: "POST", url: `/api/bills/${b.id}/void`, headers: auth(admin.token), payload: { clientRef: "refund-ref-0001", reason: "Cold food", refunds: [{ mode: "cash", amountPaise: 7001 }] } });
+      expect(asVoid.statusCode).toBe(409);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
+    });
+
+    it("rejects a request with no lines", async () => {
+      const b = await bill();
+      expect((await refundBill(b.id, { lines: [], refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(400);
+      expect((await refundBill(b.id, { refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(400);
+    });
+
+    it("shows the refund on the bill view", async () => {
+      const b = await bill();
+      const orderItemId = orderItemOf(b.id);
+      await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      expect(await billJson(b.id)).toMatchObject({ status: "paid", refundState: "partly_refunded", refundedQty: { [orderItemId]: 1 } });
+    });
+  });
+
   describe("resolveApprover", () => {
     const requestOf = (user: { id: string; name: string; role: "admin" | "cashier" }, ip = "10.0.0.1") =>
       ({ ip, user }) as unknown as FastifyRequest;
