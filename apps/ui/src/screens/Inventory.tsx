@@ -4,6 +4,10 @@ import { apiFetch, session, type User } from "../api";
 import type { Product } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
+import type { StockCost, StockCostChange } from "@forkflow/domain";
+import { formatMovementCost, formatUnitCost, amountPaidToPaise, mergeCostChanges, mergeHistory } from "../stock-costs";
+import { useLicense } from "./LicenseSettings";
+import { PerUnitHint, SetUnitCostForm } from "./StockCostControls";
 
 const UNITS: StockUnit[] = ["pcs", "kg", "g", "L", "ml"];
 const quantity = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
@@ -30,6 +34,20 @@ export function Inventory({ user }: { user: User }) {
   const creating = useRef(false);
   const createRequest = useRef<{ fingerprint: string; ref: string } | null>(null);
   const [message, setMessage] = useState("");
+  const { status } = useLicense();
+  const canSeeCosts = user.role === "admin" && status?.features.recipes === true;
+  const [costData, setCostData] = useState<{ items: StockCost[]; totalValuePaise: number } | null>(null);
+  const [costError, setCostError] = useState("");
+  // Cost figures are refreshed whenever stock reloads (stock.changed, reconnect, or a save): historyVersion bumps each time.
+  useEffect(() => {
+    if (!canSeeCosts) { setCostData(null); setCostError(""); return; }
+    let active = true;
+    apiFetch<{ items: StockCost[]; totalValuePaise: number }>("/api/costing/stock")
+      .then((r) => { if (active) { setCostData(r); setCostError(""); } })
+      .catch((e: unknown) => { if (active) setCostError(e instanceof Error ? e.message : "Could not load stock costs"); });
+    return () => { active = false; };
+  }, [canSeeCosts, historyVersion]);
+  const costById = new Map((costData?.items ?? []).map((c) => [c.stockItemId, c]));
 
   useEffect(() => {
     let active = true;
@@ -83,21 +101,22 @@ export function Inventory({ user }: { user: User }) {
       <label style={fieldStyle}>Find stock<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
       <label style={fieldStyle}>Show stock<select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="active">Active</option><option value="low">Low stock</option><option value="all">All, including archived</option></select></label>
     </div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "left", borderSpacing: "10px 14px" }}>
-      <thead><tr><th>Name</th><th>On hand</th><th>Threshold</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody>{visible.map((item) => <tr key={item.id}><td>{item.name}</td><td>{quantity(item.qty)} {item.unit}</td><td>{item.lowStockThreshold === null ? "At zero" : `${quantity(item.lowStockThreshold)} ${item.unit}`}</td>
+      <thead><tr><th>Name</th><th>On hand</th>{canSeeCosts && <><th>Avg cost</th><th>Stock value</th></>}<th>Threshold</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>{visible.map((item) => <tr key={item.id}><td>{item.name}</td><td>{quantity(item.qty)} {item.unit}</td>{canSeeCosts && <><td>{costData ? formatUnitCost(costById.get(item.id)?.unitCostMilliPaise ?? null, item.unit) : "…"}</td><td>{costData ? (costById.get(item.id)?.valuePaise == null ? "—" : formatMovementCost(costById.get(item.id)!.valuePaise)) : "…"}</td></>}<td>{item.lowStockThreshold === null ? "At zero" : `${quantity(item.lowStockThreshold)} ${item.unit}`}</td>
         <td style={{ color: item.isLow && item.isActive ? "#874500" : undefined }}>{!item.isActive ? "Archived" : item.qty <= 0 ? "Out of stock" : item.isLow ? "Low" : "Available"}</td>
         <td><button onClick={() => setSelected(item)}>{canManage ? "Manage" : "View"} {item.name}</button></td></tr>)}</tbody>
-    </table></div>{!visible.length && <p>No stock items match this view.</p>}</section>
-    {selected && <StockDetail key={`${selected.id}:${selected.version}`} item={selected} canManage={canManage} onSaved={saved} historyVersion={historyVersion} />}
+    </table></div>{!visible.length && <p>No stock items match this view.</p>}{canSeeCosts && costData && <p>Total stock value (active items): <strong>{formatMovementCost(costData.totalValuePaise)}</strong></p>}{canSeeCosts && costError && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{costError}</p>}</section>
+    {selected && <StockDetail key={`${selected.id}:${selected.version}`} item={selected} canManage={canManage} onSaved={saved} historyVersion={historyVersion} canSeeCosts={canSeeCosts} unitCostMilliPaise={costData ? (costById.get(selected.id)?.unitCostMilliPaise ?? null) : undefined} onNotice={setMessage} />}
     <ProductStockLink products={products} items={items} canManage={canManage} />
   </section>;
 }
 
-function StockDetail({ item, canManage, onSaved, historyVersion }: { item: StockItem; canManage: boolean; onSaved: (item: StockItem) => void; historyVersion: number }) {
+function StockDetail({ item, canManage, onSaved, historyVersion, canSeeCosts, unitCostMilliPaise, onNotice }: { item: StockItem; canManage: boolean; onSaved: (item: StockItem) => void; historyVersion: number; canSeeCosts: boolean; unitCostMilliPaise: number | null | undefined; onNotice: (text: string) => void }) {
   const [name, setName] = useState(item.name);
   const [threshold, setThreshold] = useState(item.lowStockThreshold?.toString() ?? "");
   const [reason, setReason] = useState<"purchase" | "wastage" | "adjustment">("purchase");
   const [amount, setAmount] = useState("");
+  const [amountPaid, setAmountPaid] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,13 +133,15 @@ function StockDetail({ item, canManage, onSaved, historyVersion }: { item: Stock
     onSaved(next);
   }
   async function movement() {
-    const body = { reason, quantity: number(amount), note, expectedVersion: item.version };
+    const costPaise = canSeeCosts && reason === "purchase" ? amountPaidToPaise(amountPaid) : undefined;
+    const body = { reason, quantity: number(amount), note, expectedVersion: item.version, ...(costPaise === undefined ? {} : { costPaise }) };
     const fingerprint = JSON.stringify(body);
     if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, ref: uuid() };
     const { item: next } = await apiFetch<{ item: StockItem }>(`/api/stock-items/${item.id}/movements`, { method: "POST", body: JSON.stringify({ ...body, clientRef: request.current.ref }) });
     onSaved(next);
   }
   return <section style={panel} aria-label={`Stock detail ${item.name}`}><h3>{item.name}</h3>
+    {canSeeCosts && unitCostMilliPaise !== undefined && <p>Average cost: <strong>{formatUnitCost(unitCostMilliPaise, item.unit)}</strong></p>}
     <p>Balance when opened: <strong>{quantity(item.qty)} {item.unit}</strong>{" "}<button disabled={busy} onClick={() => void run(async () => {
       const result = await apiFetch<{ items: StockItem[] }>("/api/stock-items"); const next = result.items.find((s) => s.id === item.id); if (next) onSaved(next);
     })}>Refresh balance</button></p>
@@ -137,32 +158,39 @@ function StockDetail({ item, canManage, onSaved, historyVersion }: { item: Stock
           <option value="purchase">Receive stock</option><option value="wastage">Record wastage</option><option value="adjustment">Physical stock count</option>
         </select></label>
         <label style={fieldStyle}>{reason === "adjustment" ? "Counted quantity" : "Movement quantity"} ({item.unit})<input type="number" min={reason === "adjustment" ? "0" : "0.001"} step="0.001" required value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></label>
+        {canSeeCosts && reason === "purchase" && <label style={fieldStyle}>Amount paid (₹, incl. GST)<input type="text" inputMode="decimal" placeholder="Optional" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} disabled={busy} /></label>}
+        {canSeeCosts && reason === "purchase" && <PerUnitHint amountPaid={amountPaid} quantity={amount} unit={item.unit} />}
         <label style={fieldStyle}>Reason / reference<input required maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} /></label>
         <button disabled={busy}>Record movement</button>
       </form>}
+      {canSeeCosts && item.isActive && <SetUnitCostForm item={item} onSaved={onSaved} onNotice={onNotice} />}
       <p>A physical count replaces the balance you reviewed. If stock changes meanwhile, refresh the balance before trying again.</p>
     </>}
-    <StockHistory itemId={item.id} unit={item.unit} refresh={historyVersion} />
+    <StockHistory itemId={item.id} unit={item.unit} refresh={historyVersion} showCost={canSeeCosts} />
   </section>;
 }
 
-function StockHistory({ itemId, unit, refresh }: { itemId: string; unit: string; refresh: number }) {
+function StockHistory({ itemId, unit, refresh, showCost }: { itemId: string; unit: StockUnit; refresh: number; showCost: boolean }) {
   const [moves, setMoves] = useState<StockMove[]>([]);
+  const [changes, setChanges] = useState<StockCostChange[]>([]);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
-    apiFetch<{ movements: StockMove[] }>(`/api/stock-items/${itemId}/movements`).then((r) => { if (active) { setMoves(r.movements); setMore(r.movements.length === 100); setError(""); } }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load history"); });
+    apiFetch<{ movements: StockMove[]; costChanges?: StockCostChange[] }>(`/api/stock-items/${itemId}/movements`).then((r) => { if (active) { setMoves(r.movements); setChanges(r.costChanges ?? []); setMore(r.movements.length === 100); setError(""); } }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load history"); });
     return () => { active = false; };
   }, [itemId, refresh]);
   return <div><h4>Movement history</h4><p role="alert" style={{ color: "crimson" }}>{error}</p><div style={{ overflowX: "auto" }}>
-    <table style={{ width: "100%", textAlign: "left", borderSpacing: "10px 12px" }}><thead><tr><th>Date</th><th>Movement</th><th>Change</th><th>Balance after</th><th>Reason</th><th>Staff</th></tr></thead>
-      <tbody>{moves.map((m) => <tr key={m.id}><td>{new Date(m.createdAt).toLocaleString()}</td><td>{m.reason.replaceAll("_", " ")}</td><td>{m.delta > 0 ? "+" : ""}{quantity(m.delta)} {unit}</td><td>{m.balanceAfter === null ? "—" : quantity(m.balanceAfter)}</td><td>{m.note ?? (m.orderItemId ? "Order item" : "—")}</td><td>{m.createdByName ?? "—"}</td></tr>)}</tbody>
-    </table></div>{!moves.length && <p>No movements yet.</p>}
+    <table style={{ width: "100%", textAlign: "left", borderSpacing: "10px 12px" }}><thead><tr><th>Date</th><th>Movement</th><th>Change</th><th>Balance after</th>{showCost && <th>Cost</th>}<th>Reason</th><th>Staff</th></tr></thead>
+      <tbody>{mergeHistory(moves, showCost ? changes : []).map((row) => row.kind === "cost"
+        ? <tr key={`cost:${row.id}`}><td>{new Date(row.at).toLocaleString()}</td><td>Unit cost set</td><td>—</td><td>—</td><td>{formatUnitCost(row.change.oldCostMilliPaise, unit)} → {formatUnitCost(row.change.newCostMilliPaise, unit)}</td><td>{row.change.note}</td><td>{row.change.createdByName ?? "—"}</td></tr>
+        : <tr key={row.id}><td>{new Date(row.at).toLocaleString()}</td><td>{row.move.reason.replaceAll("_", " ")}</td><td>{row.move.delta > 0 ? "+" : ""}{quantity(row.move.delta)} {unit}</td><td>{row.move.balanceAfter === null ? "—" : quantity(row.move.balanceAfter)}</td>{showCost && <td>{formatMovementCost(row.move.costPaise)}</td>}<td>{row.move.note ?? (row.move.orderItemId ? "Order item" : "—")}</td><td>{row.move.createdByName ?? "—"}</td></tr>)}</tbody>
+    </table></div>{!moves.length && !changes.length && <p>No movements yet.</p>}
     {more && <button disabled={busy} onClick={async () => {
       setBusy(true); try {
-        const result = await apiFetch<{ movements: StockMove[] }>(`/api/stock-items/${itemId}/movements?before=${encodeURIComponent(moves[moves.length - 1]!.id)}`);
+        const result = await apiFetch<{ movements: StockMove[]; costChanges?: StockCostChange[] }>(`/api/stock-items/${itemId}/movements?before=${encodeURIComponent(moves[moves.length - 1]!.id)}`);
+        setChanges((prior) => mergeCostChanges(prior, result.costChanges ?? []));
         setMoves((prior) => [...prior, ...result.movements.filter((m) => !prior.some((p) => p.id === m.id))]); setMore(result.movements.length === 100);
       } catch (e) { setError(e instanceof Error ? e.message : "Could not load history"); } finally { setBusy(false); }
     }}>Older movements</button>}
