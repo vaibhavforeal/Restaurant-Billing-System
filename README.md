@@ -115,6 +115,15 @@ saving again. Movement history records the change, balance after, staff, reason,
 and order reference. Entries cannot be edited or deleted. Remove product links
 before archiving a stock item; its history is retained.
 
+Pro administrators can also see what dishes cost and what the restaurant earned.
+Enter **Amount paid (₹, incl. GST)** when receiving stock, or **Set unit cost** on
+an item, and ForkFlow keeps a weighted-average cost per ingredient. **Inventory →
+Dish costing** shows recipe cost, cost % and margin per price, and **Reports →
+Detailed reports → Food cost & profit** shows revenue, ingredient cost and gross
+profit for a date range, with sales whose cost is unknown or that have no recipe
+reported separately rather than as zero cost. Cashiers never see costs. See
+[Inventory costing and profit](docs/operations/costing.md).
+
 ## Layout
 
 ```
