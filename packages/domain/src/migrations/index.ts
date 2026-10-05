@@ -23,5 +23,6 @@ import { migration020 } from "./020-kot-acceptance.js";
 import { migration021 } from "./021-zomato.js";
 import { migration022 } from "./022-kitchen-acceptance-setting.js";
 import { migration023 } from "./023-stock-costing.js";
+import { migration024 } from "./024-table-transfers.js";
 
-export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015, migration016, migration017, migration018, migration019, migration020, migration021, migration022, migration023];
+export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015, migration016, migration017, migration018, migration019, migration020, migration021, migration022, migration023, migration024];
