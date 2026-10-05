@@ -230,7 +230,10 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       const now = Date.now(), target = body.orderId ?? uuidv7();
       if (body.orderId) {
         const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(target) as OrderRow | undefined;
-        if (!order || order.type !== "dine_in" || order.table_id !== row.table_id || order.status !== "open") {
+        // A table linked to a combined order may add to it; the order is open, so the link is active.
+        const atThisTable = order?.table_id === row.table_id
+          || !!app.db.prepare("SELECT 1 FROM table_links WHERE table_id = ? AND order_id = ?").get(row.table_id, target);
+        if (!order || order.type !== "dine_in" || !atThisTable || order.status !== "open") {
           throw httpError(409, "Choose an open bill at this table, or create a new bill group");
         }
         if (order.price_tier !== table.price_tier) throw httpError(409, "This bill uses different pricing. Create a new bill group.");
@@ -250,7 +253,10 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       didAccept = true; return target;
     })();
     const request = requestJson(app.db, getRequest(id)!), order = loadOrderJson(app.db, orderId)!;
-    if (didAccept) { changed(); app.broadcast("order.updated", { order }); app.broadcast("table.changed", { tableId: request.tableId }); }
+    if (didAccept) {
+      changed(); app.broadcast("order.updated", { order }); app.broadcast("table.changed", { tableId: request.tableId });
+      if (order.tableId && order.tableId !== request.tableId) app.broadcast("table.changed", { tableId: order.tableId });
+    }
     return { request, order };
   });
 }

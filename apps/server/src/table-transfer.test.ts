@@ -15,7 +15,8 @@ describe("moving an order to another table", () => {
   let grillStationId: string;
   let kitchenProductId: string;
   let grillProductId: string;
-  const request = (method: "GET" | "POST", url: string, payload?: object, as = token) =>
+  let waterProductId: string;
+  const request = (method: "GET" | "POST" | "PUT", url: string, payload?: object, as = token) =>
     app.inject({ method, url, headers: auth(as), ...(payload ? { payload } : {}) });
 
   beforeEach(async () => {
@@ -32,8 +33,9 @@ describe("moving an order to another table", () => {
     }
     kitchenProductId = (await request("POST", "/api/products", { name: "Biryani", categoryId: category, pricePaise: 20000, acPricePaise: 25000, gstRate: 5, kotStationId: kitchenStationId })).json().product.id;
     grillProductId = (await request("POST", "/api/products", { name: "Kebab", categoryId: category, pricePaise: 15000, gstRate: 5, kotStationId: grillStationId })).json().product.id;
+    waterProductId = (await request("POST", "/api/products", { name: "Water", categoryId: category, pricePaise: 2000, gstRate: 5, kotStationId: null })).json().product.id;
     tables = {};
-    for (const [index, [name, priceTier]] of ([["T3", "non_ac"], ["T4", "non_ac"], ["T7", "ac"]] as const).entries()) {
+    for (const [index, [name, priceTier]] of ([["T3", "non_ac"], ["T4", "non_ac"], ["T7", "ac"], ["T5", "non_ac"], ["T9", "non_ac"]] as const).entries()) {
       const res = await request("POST", "/api/tables", { name, area: null, sortOrder: index, priceTier });
       expect(res.statusCode).toBe(201);
       tables[name] = res.json().table.id;
@@ -202,5 +204,228 @@ describe("moving an order to another table", () => {
     expect(res.statusCode, res.body).toBe(200);
     expect(events()[0]!.created_by).toBe(waiter.id);
     expect((await app.inject({ method: "POST", url: `/api/orders/${orderId}/move`, payload: { clientRef: uuidv7(), tableId: tables["T3"] } })).statusCode).toBe(401);
+  });
+
+  describe("merging orders", () => {
+    const merge = (foldedId: string, targetOrderId: string, clientRef = uuidv7(), as = token) =>
+      request("POST", `/api/orders/${foldedId}/merge`, { clientRef, targetOrderId }, as);
+    const links = () => app.db.prepare("SELECT table_id, order_id FROM table_links ORDER BY linked_at, id").all() as Array<{ table_id: string; order_id: string }>;
+    const orderRow = (id: string) => app.db.prepare("SELECT status, merged_into, closed_at, table_id FROM orders WHERE id = ?").get(id) as { status: string; merged_into: string | null; closed_at: number | null; table_id: string };
+    const tableState = async (name: string) =>
+      ((await request("GET", "/api/tables")).json().tables as Array<{ id: string; status: string; link: { orderId: string; status: string; label: string; tableName: string } | null }>).find((t) => t.id === tables[name])!;
+    async function addItems(orderId: string, productIds: string[]) {
+      const added = await request("POST", `/api/orders/${orderId}/items`, { items: productIds.map((productId) => ({ productId, qty: 1, clientRef: uuidv7() })) });
+      expect(added.statusCode, added.body).toBe(200);
+    }
+    async function bill(orderId: string) {
+      const preview = await request("POST", `/api/orders/${orderId}/bill-preview`, {});
+      expect(preview.statusCode, preview.body).toBe(200);
+      const billed = await request("POST", `/api/orders/${orderId}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey });
+      expect(billed.statusCode, billed.body).toBe(201);
+      return preview.json().preview as { subtotalPaise: number; receipt: { tableName: string; items: Array<{ name: string }> } };
+    }
+
+    it("merges two tables into one bill and keeps the other table linked", async () => {
+      const stock = await request("POST", "/api/stock-items", { clientRef: uuidv7(), name: "Mutton", unit: "kg", openingQty: 10 });
+      expect(stock.statusCode, stock.body).toBe(201);
+      expect((await request("PUT", `/api/products/${grillProductId}/stock-links`, { expectedVersion: 0, stockItemId: stock.json().item.id, qtyPerSale: 0.25 })).statusCode).toBe(200);
+
+      const receiving = await openOrder(tables["T3"]!);
+      const [receivingKot] = await addAndSend(receiving, [kitchenProductId]);
+      expect((await request("POST", `/api/kots/${receivingKot!.id}/accept`)).statusCode).toBe(200);
+      const folded = await openOrder(tables["T4"]!);
+      const [foldedKot] = await addAndSend(folded, [grillProductId]);
+      await addItems(folded, [waterProductId]);
+      app.db.prepare("UPDATE orders SET captain_name = 'Meena' WHERE id = ?").run(receiving);
+      app.db.prepare("UPDATE orders SET captain_name = 'Ravi' WHERE id = ?").run(folded);
+      const foldedItemIds = (app.db.prepare("SELECT id FROM order_items WHERE order_id = ? ORDER BY id").all(folded) as Array<{ id: string }>).map((r) => r.id);
+      const saleMoves = () => app.db.prepare("SELECT id, order_item_id FROM stock_moves WHERE reason = 'sale' ORDER BY id").all();
+      const movesBefore = saleMoves();
+      expect(movesBefore).toHaveLength(1);
+
+      const res = await merge(folded, receiving);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().printErrors).toEqual([]);
+      const order = res.json().order as { id: string; tableId: string; tableLabel: string; captainName: string; status: string; items: Array<{ id: string; status: string }>; kots: Array<{ id: string; acceptedAt: number | null }> };
+      expect(order).toMatchObject({ id: receiving, tableId: tables["T3"], tableLabel: "T3, T4", captainName: "Meena", status: "open" });
+      expect(order.items).toHaveLength(3);
+      expect(order.items.map((i) => i.id)).toEqual(expect.arrayContaining(foldedItemIds));
+      expect(order.items.map((i) => i.status).sort()).toEqual(["pending", "sent", "sent"]);
+      expect(order.kots).toHaveLength(2);
+      expect(order.kots.find((k) => k.id === receivingKot!.id)!.acceptedAt).not.toBeNull();
+      expect(order.kots.find((k) => k.id === foldedKot!.id)!.acceptedAt).toBeNull();
+
+      expect(orderRow(folded)).toMatchObject({ status: "cancelled", merged_into: receiving, table_id: tables["T4"] });
+      expect(orderRow(folded).closed_at).toEqual(expect.any(Number));
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM order_items WHERE order_id = ?").get(folded)).toEqual({ n: 0 });
+      expect(links()).toEqual([{ table_id: tables["T4"], order_id: receiving }]);
+      expect(events()).toEqual([expect.objectContaining({ kind: "merge", order_id: folded, target_order_id: receiving, from_table_id: tables["T4"], to_table_id: tables["T3"], folded_captain_name: "Ravi", created_by: userId })]);
+
+      const linkedTable = await tableState("T4");
+      expect(linkedTable.status).toBe("occupied");
+      expect(linkedTable.link).toMatchObject({ orderId: receiving, status: "open", label: "T3, T4", tableName: "T3" });
+      expect((await tableState("T3")).status).toBe("occupied");
+
+      // Stock moves are keyed by order item, so the folded order's sale moves are untouched.
+      expect(saleMoves()).toEqual(movesBefore);
+      expect(app.db.prepare("SELECT order_id FROM order_items WHERE id = ?").get((movesBefore[0] as { order_item_id: string }).order_item_id)).toEqual({ order_id: receiving });
+
+      expect((await request("POST", `/api/kots/${foldedKot!.id}/accept`)).statusCode).toBe(200);
+      const preview = await bill(receiving);
+      expect(preview.subtotalPaise).toBe(20000 + 15000 + 2000);
+      expect(preview.receipt.tableName).toBe("T3, T4");
+      expect(preview.receipt.items.map((i) => i.name).sort()).toEqual(["Biryani", "Kebab", "Water"]);
+      expect(app.db.prepare("SELECT order_id FROM bills").all()).toEqual([{ order_id: receiving }]);
+      expect((await tableState("T4")).status).toBe("billed");
+    });
+
+    it("merges two bill groups at the same table without a link", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const folded = await openOrder(tables["T3"]!);
+      await addItems(folded, [waterProductId]);
+      const res = await merge(folded, receiving);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().order).toMatchObject({ id: receiving, tableLabel: "T3", splitLabel: "A" });
+      expect(res.json().order.items).toHaveLength(1);
+      expect(orderRow(folded)).toMatchObject({ status: "cancelled", merged_into: receiving });
+      expect(links()).toEqual([]);
+      expect(events()).toEqual([expect.objectContaining({ kind: "merge", from_table_id: tables["T3"], to_table_id: tables["T3"] })]);
+    });
+
+    it("does not duplicate a link when a linked table's other group joins", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const firstGroup = await openOrder(tables["T4"]!);
+      const secondGroup = await openOrder(tables["T4"]!);
+      expect((await merge(firstGroup, receiving)).statusCode).toBe(200);
+      const res = await merge(secondGroup, receiving);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().order.tableLabel).toBe("T3, T4");
+      expect(links()).toEqual([{ table_id: tables["T4"], order_id: receiving }]);
+    });
+
+    it("carries links when a combined order is merged or moved", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const folded = await openOrder(tables["T4"]!);
+      expect((await merge(folded, receiving)).statusCode).toBe(200);
+
+      const moved = await move(receiving, tables["T9"]!);
+      expect(moved.statusCode, moved.body).toBe(200);
+      expect(moved.json().order.tableLabel).toBe("T9, T4");
+      expect((await tableState("T3")).status).toBe("free");
+      expect((await tableState("T4")).link).toMatchObject({ orderId: receiving, tableName: "T9", label: "T9, T4" });
+
+      // Folding the combined order into another group at T4: the T4 link would point at its own
+      // table, so it is dropped; T9 joins as a link.
+      const atLinkedTable = await openOrder(tables["T4"]!);
+      const res = await merge(receiving, atLinkedTable);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().order.tableLabel).toBe("T4, T9");
+      expect(links().filter((l) => ["open", "billed"].includes(orderRow(l.order_id).status))).toEqual([{ table_id: tables["T9"], order_id: atLinkedTable }]);
+      expect((await tableState("T9")).link).toMatchObject({ orderId: atLinkedTable, tableName: "T4" });
+
+      // A further merge re-points the links that targeted the folded order, keeping their order.
+      const atT5 = await openOrder(tables["T5"]!);
+      const chained = await merge(atLinkedTable, atT5);
+      expect(chained.statusCode, chained.body).toBe(200);
+      expect(chained.json().order.tableLabel).toBe("T5, T4, T9");
+      expect((await tableState("T4")).link).toMatchObject({ orderId: atT5, label: "T5, T4, T9" });
+    });
+
+    it("refuses to merge a billed order", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const folded = await openOrder(tables["T4"]!);
+      await addItems(receiving, [waterProductId]);
+      await addItems(folded, [waterProductId]);
+      expect((await merge(folded, receiving)).statusCode).toBe(200);
+      await bill(receiving);
+
+      const late = await openOrder(tables["T5"]!);
+      await addItems(late, [waterProductId]);
+      const refused = await merge(late, receiving);
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json().error).toBe("Both orders must be open to merge");
+      const reversed = await merge(receiving, late);
+      expect(reversed.statusCode).toBe(409);
+      expect(reversed.json().error).toBe("Both orders must be open to merge");
+      expect(orderRow(late)).toMatchObject({ status: "open", merged_into: null });
+      expect(orderRow(receiving)).toMatchObject({ status: "billed", merged_into: null });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM order_items WHERE order_id = ?").get(late)).toEqual({ n: 1 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM order_items WHERE order_id = ?").get(receiving)).toEqual({ n: 2 });
+
+      // Self, already-merged, parcel and unknown orders are refused too.
+      expect((await merge(late, late)).json().error).toBe("Both orders must be open to merge");
+      const another = await openOrder(tables["T5"]!);
+      expect((await merge(folded, another)).json().error).toBe("Both orders must be open to merge");
+      const parcel = (await request("POST", "/api/orders", { clientRef: uuidv7(), type: "parcel" })).json().order.id as string;
+      const parcelMerge = await merge(parcel, another);
+      expect(parcelMerge.statusCode).toBe(409);
+      expect(parcelMerge.json().error).toBe("Both orders must be open to merge");
+      expect((await merge(late, uuidv7())).statusCode).toBe(404);
+      expect(events()).toHaveLength(1);
+    });
+
+    it("replays an identical merge and refuses a reused reference with a different target", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      const folded = await openOrder(tables["T4"]!);
+      const clientRef = uuidv7();
+      const first = await merge(folded, receiving, clientRef);
+      const second = await merge(folded, receiving, clientRef);
+      expect(first.statusCode, first.body).toBe(200);
+      expect(second.statusCode, second.body).toBe(200);
+      expect(second.json().order).toMatchObject({ id: receiving, tableLabel: "T3, T4" });
+      expect(second.json().printErrors).toEqual([]);
+      expect(events()).toHaveLength(1);
+      expect(links()).toHaveLength(1);
+
+      const other = await openOrder(tables["T5"]!);
+      const different = await merge(folded, other, clientRef);
+      expect(different.statusCode).toBe(409);
+      expect(different.json().error).toBe("Table change reference already used for a different request");
+      // A move reference cannot be replayed as a merge either.
+      const moveRef = uuidv7();
+      expect((await move(other, tables["T7"]!, moveRef)).statusCode).toBe(200);
+      expect((await merge(other, receiving, moveRef)).json().error).toBe("Table change reference already used for a different request");
+      expect(orderRow(other)).toMatchObject({ status: "open", merged_into: null });
+    });
+
+    it("prints the merged label to each station", async () => {
+      const receiving = await openOrder(tables["T3"]!);
+      await addAndSend(receiving, [kitchenProductId]);
+      const folded = await openOrder(tables["T4"]!);
+      await addAndSend(folded, [grillProductId]);
+      await vi.waitFor(() => expect(fake.sent).toHaveLength(2));
+      const broadcasts: Array<{ event: string; data: unknown }> = [];
+      const original = app.broadcast;
+      app.broadcast = ((event: string, data: unknown) => { broadcasts.push({ event, data }); return original.call(app, event, data as never); }) as typeof app.broadcast;
+
+      const res = await merge(folded, receiving);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().printErrors).toEqual([]);
+      const tableJobs = (app.db.prepare("SELECT job_json FROM print_jobs").all() as Array<{ job_json: string }>)
+        .map((j) => JSON.parse(j.job_json) as { kind: string; label: string }).filter((j) => j.kind === "table");
+      expect(tableJobs).toHaveLength(2);
+      expect(tableJobs.every((j) => j.label.includes("T3, T4"))).toBe(true);
+      await vi.waitFor(() => expect(fake.sent).toHaveLength(4));
+      const texts = fake.sent.slice(2).map((s) => s.bytes.toString("latin1"));
+      expect(texts.every((t) => t.includes("TABLE CHANGE") && t.includes("T3, T4") && !t.includes("#"))).toBe(true);
+      expect(texts.some((t) => t.includes("Kitchen"))).toBe(true);
+      expect(texts.some((t) => t.includes("Grill"))).toBe(true);
+
+      expect(broadcasts.filter((b) => b.event === "order.updated").map((b) => (b.data as { order: { id: string } }).order.id).sort()).toEqual([folded, receiving].sort());
+      expect(broadcasts.filter((b) => b.event === "table.changed").map((b) => (b.data as { tableId: string }).tableId).sort()).toEqual([tables["T3"], tables["T4"]].sort());
+      const kotUpdates = broadcasts.filter((b) => b.event === "kot.updated").map((b) => (b.data as { kot: { orderId: string; tableName: string } }).kot);
+      expect(kotUpdates).toHaveLength(2);
+      expect(kotUpdates.every((k) => k.orderId === receiving && k.tableName === "T3, T4")).toBe(true);
+    });
+
+    it("lets a waiter merge orders", async () => {
+      const waiter = await createUser(app, token, { name: "Ravi", pin: "4321", role: "waiter" });
+      const receiving = await openOrder(tables["T3"]!);
+      const folded = await openOrder(tables["T4"]!);
+      const res = await merge(folded, receiving, uuidv7(), waiter.token);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(events()[0]!.created_by).toBe(waiter.id);
+      expect(links()).toEqual([{ table_id: tables["T4"], order_id: receiving }]);
+    });
   });
 });

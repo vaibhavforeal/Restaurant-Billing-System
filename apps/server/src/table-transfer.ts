@@ -1,4 +1,4 @@
-import { OrderMove, nextSplitLabel, uuidv7 } from "@forkflow/domain";
+import { OrderMerge, OrderMove, nextSplitLabel, uuidv7 } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
@@ -6,7 +6,7 @@ import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
 import { tableChangeSlip } from "./print/templates.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
-import { activeLinkForTable } from "./table-label.js";
+import { activeLinkForTable, orderTableLabel } from "./table-label.js";
 
 /**
  * Prints a table-change slip at every station that still has an unfinished ticket on the order.
@@ -94,13 +94,86 @@ export function registerTableTransfer(app: FastifyInstance): void {
     if (!replayed) {
       app.broadcast("order.updated", { order });
       for (const tableId of affectedTableIds) app.broadcast("table.changed", { tableId });
-      const row = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
-      const kots = app.db.prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at").all(id) as KotRow[];
-      for (const kot of kots) {
-        const items = app.db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(kot.id) as OrderItemRow[];
-        app.broadcast("kot.updated", { kot: kotWithContextJson(kot, row, order.tableLabel, items) });
-      }
+      broadcastTickets(app, id, order.tableLabel);
     }
     return { order, printErrors };
   });
+
+  // `:id` is the order folded in (S); `targetOrderId` is the receiving order (R) that keeps the bill.
+  app.post("/api/orders/:id/merge", { preHandler: update }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = OrderMerge.parse(req.body);
+    const fingerprint = JSON.stringify({ kind: "merge", orderId: id, targetOrderId: body.targetOrderId });
+    const printErrors: string[] = [];
+    const affectedTableIds = new Set<string>();
+
+    const replayed = app.db.transaction((): boolean => {
+      const previous = app.db.prepare("SELECT request_json FROM order_table_events WHERE client_ref = ?").get(body.clientRef) as { request_json: string } | undefined;
+      if (previous) {
+        if (previous.request_json !== fingerprint) throw httpError(409, "Table change reference already used for a different request");
+        return true;
+      }
+
+      const getOrder = app.db.prepare("SELECT * FROM orders WHERE id = ?");
+      const folded = getOrder.get(id) as (OrderRow & { merged_into: string | null }) | undefined;
+      const receiving = getOrder.get(body.targetOrderId) as (OrderRow & { merged_into: string | null }) | undefined;
+      if (!folded || !receiving) throw httpError(404, "order not found");
+      const mergeable = (o: typeof folded) => o.status === "open" && o.type === "dine_in" && o.table_id !== null && o.merged_into === null;
+      if (folded.id === receiving.id || !mergeable(folded) || !mergeable(receiving)) throw httpError(409, "Both orders must be open to merge");
+      const foldedTableId = folded.table_id!, receivingTableId = receiving.table_id!;
+      const now = Date.now();
+
+      // Spec §4 Merge, steps 1–3: items (any status) and tickets (acceptance/done unchanged) move to R; S closes.
+      app.db.prepare("UPDATE order_items SET order_id = ? WHERE order_id = ?").run(receiving.id, folded.id);
+      app.db.prepare("UPDATE kots SET order_id = ? WHERE order_id = ?").run(receiving.id, folded.id);
+      app.db.prepare("UPDATE orders SET status = 'cancelled', closed_at = ?, merged_into = ? WHERE id = ?").run(now, receiving.id, folded.id);
+      // Accepted guest requests track their items through order_id, so they follow the items.
+      app.db.prepare("UPDATE guest_requests SET order_id = ? WHERE order_id = ?").run(receiving.id, folded.id);
+
+      // Step 4: S's table, then the tables linked to S (in link order), become links to R — skipping R's own
+      // table and tables already linked to R. S was open, so every link on it was active.
+      const foldedLinks = (app.db.prepare("SELECT table_id FROM table_links WHERE order_id = ? ORDER BY linked_at, id").all(folded.id) as Array<{ table_id: string }>).map((l) => l.table_id);
+      app.db.prepare("DELETE FROM table_links WHERE order_id = ?").run(folded.id);
+      const alreadyLinked = app.db.prepare("SELECT 1 FROM table_links WHERE table_id = ? AND order_id = ?");
+      const insertLink = app.db.prepare("INSERT INTO table_links (id, table_id, order_id, linked_at, linked_by) VALUES (?, ?, ?, ?, ?)");
+      for (const tableId of [foldedTableId, ...foldedLinks]) {
+        affectedTableIds.add(tableId);
+        if (tableId === receivingTableId || alreadyLinked.get(tableId, receiving.id)) continue;
+        insertLink.run(uuidv7(), tableId, receiving.id, now, req.user.id);
+      }
+      affectedTableIds.add(receivingTableId);
+      for (const link of app.db.prepare("SELECT table_id FROM table_links WHERE order_id = ?").all(receiving.id) as Array<{ table_id: string }>) affectedTableIds.add(link.table_id);
+
+      // Step 5.
+      app.db
+        .prepare(
+          `INSERT INTO order_table_events (id, kind, order_id, target_order_id, from_table_id, to_table_id, folded_captain_name, created_at, created_by, client_ref, request_json)
+           VALUES (?, 'merge', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(uuidv7(), folded.id, receiving.id, foldedTableId, receivingTableId, folded.captain_name ?? null, now, req.user.id, body.clientRef, fingerprint);
+
+      // The label is plain table names joined by ", " — already ASCII for the thermal encoder.
+      printErrors.push(...notifyKitchenTableChange(app, receiving.id, orderTableLabel(app.db, receiving.id)!));
+      return false;
+    })();
+
+    const order = loadOrderJson(app.db, body.targetOrderId)!;
+    if (!replayed) {
+      app.broadcast("order.updated", { order: loadOrderJson(app.db, id)! });
+      app.broadcast("order.updated", { order });
+      for (const tableId of affectedTableIds) app.broadcast("table.changed", { tableId });
+      broadcastTickets(app, order.id, order.tableLabel);
+    }
+    return { order, printErrors };
+  });
+}
+
+/** Re-broadcasts every ticket on the order so kitchen screens pick up its new table label. */
+function broadcastTickets(app: FastifyInstance, orderId: string, tableLabel: string | null): void {
+  const row = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as OrderRow;
+  const kots = app.db.prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at").all(orderId) as KotRow[];
+  for (const kot of kots) {
+    const items = app.db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(kot.id) as OrderItemRow[];
+    app.broadcast("kot.updated", { kot: kotWithContextJson(kot, row, tableLabel, items) });
+  }
 }

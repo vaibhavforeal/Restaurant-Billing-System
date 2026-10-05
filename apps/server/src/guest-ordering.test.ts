@@ -496,6 +496,42 @@ describe("guest QR ordering", () => {
     expect(f.count("kots")).toBe(0);
   });
 
+  it("accepts a guest request from a linked table into the combined order", async () => {
+    const f = await fixture();
+    const otherTable = await f.table("T2");
+    const receiving = await f.order(otherTable.id);
+    const folded = await f.order();
+    // A request already accepted into the folded order keeps tracking its items after the merge.
+    const earlier = await f.request([{ productId: f.water.id, variantId: null, qty: 1, note: "" }]);
+    expect((await f.accept(earlier.request.id, folded.id)).statusCode).toBe(200);
+    const merged = await f.api("POST", `/api/orders/${folded.id}/merge`, { clientRef: randomUUID(), targetOrderId: receiving.id });
+    expect(merged.statusCode, merged.body).toBe(200);
+    const tracked = (await f.receipt(earlier.request.id, earlier.body.receiptToken)).json().request as GuestReceipt;
+    expect(tracked.preparation).toMatchObject({ state: "with_staff", hasChanges: false, items: [{ name: "Water", qty: 1, state: "with_staff" }] });
+
+    const pending = await f.request();
+    const accepted = await f.accept(pending.request.id, receiving.id);
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json().order).toMatchObject({ id: receiving.id, tableId: otherTable.id });
+    expect(accepted.json().order.items).toHaveLength(2);
+    expect(accepted.json().request).toMatchObject({ tableId: f.diningTable.id, orderId: receiving.id });
+
+    // The tier check still applies to the combined order.
+    const differentTier = await f.request([{ productId: f.water.id, variantId: null, qty: 1, note: "" }]);
+    f.app.db.prepare("UPDATE orders SET price_tier = 'ac' WHERE id = ?").run(receiving.id);
+    const refused = await f.accept(differentTier.request.id, receiving.id);
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json().error).toBe("This bill uses different pricing. Create a new bill group.");
+    f.app.db.prepare("UPDATE orders SET price_tier = 'non_ac' WHERE id = ?").run(receiving.id);
+
+    // An open order at a table this one is not linked to is still refused.
+    const unrelated = await f.order((await f.table("T3")).id);
+    const wrongTable = await f.accept(differentTier.request.id, unrelated.id);
+    expect(wrongTable.statusCode, wrongTable.body).toBe(409);
+    expect(wrongTable.json().error).toBe("Choose an open bill at this table, or create a new bill group");
+    expect((await f.receipt(differentTier.request.id, differentTier.body.receiptToken)).json().request.status).toBe("pending");
+  });
+
   it("rolls back new orders, inserted items and the request decision when a later item insert fails", async () => {
     const f = await fixture(); const pending = await f.request([
       { productId: f.meal.id, variantId: f.meal.variants[0]!.id, qty: 1, note: "" },
