@@ -70,7 +70,7 @@ describe("order analytics", () => {
     }
   });
 
-  it("includes unpaid and complimentary bills, excludes voids, open orders and cancelled items", async () => {
+  it("includes unpaid, complimentary and void bills by issue date, excludes open orders and cancelled items", async () => {
     const unpaid = await issue("parcel");
     const free = await issue("parcel", [{ productId, qty: 1 }], 27, 12, 10001);
     await post(`/api/bills/${free.id}/settle`, { clientRef: uuidv7(), payments: [] });
@@ -80,8 +80,9 @@ describe("order analytics", () => {
     const { order: updated } = await post(`/api/orders/${order.id}/items`, { items: [{ productId, qty: 7, clientRef: uuidv7() }, { productId, qty: 9, clientRef: uuidv7() }] });
     await post(`/api/order-items/${updated.items[0].id}/cancel`, { reason: "Changed mind" });
     const result = await report();
-    expect(result.totals).toEqual({ orderCount: 2, qty: 2, totalPaise: unpaid.totalPaise });
-    expect(result.items[0]!.qty).toBe(2);
+    // A void bill stays in its issue date's figures; only its credit note (none here) subtracts, on its own date.
+    expect(result.totals).toEqual({ orderCount: 3, qty: 3, totalPaise: unpaid.totalPaise + voided.totalPaise });
+    expect(result.items[0]!.qty).toBe(3);
   });
 
   it("preserves billed item names and categories after catalog edits and separates variants", async () => {

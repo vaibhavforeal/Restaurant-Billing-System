@@ -335,6 +335,24 @@ describe("stock costing", () => {
       expect(second.tables).toEqual(report.tables);
     });
 
+    it("takes credit-note taxable value off revenue on the credit date, leaving ingredient cost unchanged", async () => {
+      const paneer = await stock(10);
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const tikka = await dish("Paneer Tikka", [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      const { billId } = await sellParcel(tikka, 2);
+      expect((await request("POST", `/api/bills/${billId}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: 20_000 }] })).statusCode).toBe(200);
+      const orderItemId = (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(billId) as { id: string }).id;
+      const refund = await request("POST", `/api/bills/${billId}/refund`, { clientRef: uuidv7(), reason: "Cold food", lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 10_000 }] });
+      expect(refund.statusCode, refund.body).toBe(201);
+      const report = (await profit()).json().report as OperationalReport;
+      const s = summary(report);
+      expect(s["Revenue (pre-GST)"]!.amount).toBe(10_000);
+      expect(s["Costed revenue"]!.amount).toBe(10_000);
+      expect(s["Ingredient cost"]!.amount).toBe(9_600);
+      expect(s["Gross profit"]!.amount).toBe(400);
+      expect(report.tables[2]!.rows[0]).toMatchObject({ name: "Paneer Tikka", qty: 1, revenue: 10_000, cost: 9_600, status: "Costed" });
+    });
+
     it("excludes cost-unknown and no-recipe sales and reverses cancelled consumption", async () => {
       const paneer = await stock(10);
       const salt = await stock(10, "Salt");

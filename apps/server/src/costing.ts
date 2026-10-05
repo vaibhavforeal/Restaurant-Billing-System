@@ -108,13 +108,21 @@ export function registerCosting(app: FastifyInstance): void {
       // Sale movements that were later reversed (cancelled items) no longer count as consumption.
       const sales = `(SELECT m.cost_paise FROM stock_moves m WHERE m.order_item_id = l.order_item_id AND m.reason = 'sale'
         AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id))`;
-      const lines = (db.prepare(`SELECT l.category_name AS categoryName, l.name, l.qty, l.taxable_paise AS revenuePaise,
-          (SELECT COUNT(*) FROM ${sales}) AS saleMoves,
-          (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves,
-          (SELECT 0 - SUM(cost_paise) FROM ${sales}) AS costPaise
-        FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-        WHERE b.created_at >= ? AND b.created_at < ? AND b.status != 'void'
-        ORDER BY l.category_name COLLATE NOCASE, l.name COLLATE NOCASE, l.bill_id, l.order_item_id`).all(...bounds) as Array<ProfitLine & { unknownMoves: number }>)
+      const recipe = `(SELECT COUNT(*) FROM ${sales}) AS saleMoves, (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves`;
+      // Issued lines by bill date (void bills too). Credit-note lines subtract their taxable value and quantity on the
+      // credit-note date with no cost (no stock comes back), keeping the credited line's recipe status so the revenue
+      // comes off the same costed / cost-unknown / no-recipe bucket.
+      const lines = (db.prepare(`SELECT categoryName, name, qty, revenuePaise, saleMoves, unknownMoves, costPaise FROM (
+          SELECT l.category_name AS categoryName, l.name, l.qty, l.taxable_paise AS revenuePaise, ${recipe},
+            (SELECT 0 - SUM(cost_paise) FROM ${sales}) AS costPaise, b.created_at AS at, l.bill_id, l.order_item_id
+          FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
+          WHERE b.created_at >= ? AND b.created_at < ?
+          UNION ALL
+          SELECT l.category_name, l.name, -cl.qty, -cl.taxable_paise, ${recipe}, 0, c.created_at, l.bill_id, l.order_item_id
+          FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
+          JOIN bill_report_lines l ON l.bill_id = c.bill_id AND l.order_item_id = cl.order_item_id
+          WHERE c.created_at >= ? AND c.created_at < ?)
+        ORDER BY categoryName COLLATE NOCASE, name COLLATE NOCASE, bill_id, order_item_id, at`).all(...bounds, ...bounds) as Array<ProfitLine & { unknownMoves: number }>)
         .map(({ unknownMoves, ...line }): ProfitLine => ({ ...line, costPaise: unknownMoves > 0 ? null : line.costPaise }));
       // Opening balances (written when a stock item is created, with no cost yet) are the only adjustments without a
       // client reference; every manual count carries one. They are not count corrections, so they are left out.
@@ -123,6 +131,7 @@ export function registerCosting(app: FastifyInstance): void {
       return { lines, wastage: movements("wastage"), adjustments: movements("adjustment", " AND client_ref IS NOT NULL") };
     })();
     const report = buildProfitReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines, wastage, adjustments });
+    if (lines.some((line) => line.qty < 0)) report.notes.push("Revenue is net of credit notes (voids and refunds) made in these dates; ingredient cost is unchanged because no stock comes back.");
     reply.header("Cache-Control", "no-store");
     return { report };
   });

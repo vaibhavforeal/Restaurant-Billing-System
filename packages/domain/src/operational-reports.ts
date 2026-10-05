@@ -5,6 +5,7 @@ export const OPERATIONAL_REPORTS = [
   { id: "kots", title: "KOT performance" },
   { id: "cancellations", title: "Cancellation details" },
   { id: "stock", title: "Stock consumption / wastage" },
+  { id: "credit-notes", title: "Credit notes" },
 ] as const;
 export type OperationalReportKind = typeof OPERATIONAL_REPORTS[number]["id"];
 export type ReportCell = string | number | null;

@@ -10,7 +10,7 @@ const salesColumns = [column("qty", "Quantity", "quantity"), column("bills", "Bi
 
 export function registerOperationalReports(app: FastifyInstance) {
   app.get("/api/reports/operations/:kind", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
-    const { kind } = z.object({ kind: z.enum(["items", "cashiers", "hourly", "kots", "cancellations", "stock"]) }).parse(req.params);
+    const { kind } = z.object({ kind: z.enum(["items", "cashiers", "hourly", "kots", "cancellations", "stock", "credit-notes"]) }).parse(req.params);
     const { from, to, bounds } = reportRange(req.query);
     const [start, end] = bounds;
     const db = app.db;
@@ -20,38 +20,81 @@ export function registerOperationalReports(app: FastifyInstance) {
     // One synchronous read transaction gives all sections the same database snapshot.
     db.transaction(() => {
       if (kind === "items") {
-        notes.push("Issued sales by bill date, including unpaid bills; void bills are excluded. Discounts, GST and round-off are allocated in paise so totals match the bills.", "Categories are saved at billing. Bills created before report tracking use ‘Historical category unavailable’. Bill counts across items/categories overlap; the total counts distinct bills.");
-        const aggregates = `SUM(l.qty) AS qty, COUNT(DISTINCT b.id) AS bills, SUM(l.subtotal_paise) AS subtotal, SUM(l.discount_paise) AS discount,
-          SUM(l.taxable_paise) AS taxable, SUM(l.cgst_paise + l.sgst_paise) AS gst, SUM(l.rounding_paise) AS rounding, SUM(l.total_paise) AS total`;
-        const source = `FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id WHERE b.created_at >= ? AND b.created_at < ? AND b.status != 'void'`;
-        const items = query(`SELECT l.name, l.category_name AS category, ${aggregates} ${source} GROUP BY l.product_id, l.variant_id, l.name, l.category_id, l.category_name ORDER BY total DESC, l.name`, ...bounds);
-        const categories = query(`SELECT l.category_name AS category, ${aggregates} ${source} GROUP BY l.category_id, l.category_name ORDER BY total DESC, l.category_name`, ...bounds);
-        const totals = { ...sum(items, ["qty", "subtotal", "discount", "taxable", "gst", "rounding", "total"]), bills: query(`SELECT COUNT(DISTINCT b.id) AS count ${source}`, ...bounds)[0]!.count! };
-        tables.push({ title: "Item sales", columns: [column("name", "Item / variant"), column("category", "Category"), ...salesColumns], rows: items, totals: { name: "Total", ...totals } },
-          { title: "Category sales", columns: [column("category", "Category"), ...salesColumns], rows: categories, totals: { category: "Total", ...totals } });
+        notes.push("Issued sales by bill date, including unpaid and void bills. Discounts, GST and round-off are allocated in paise so totals match the bills.",
+          "Credit notes (voids and refunds) subtract on their own date: credited quantity and value come off net quantity and net sales. Voids of bills issued before report tracking have no item lines and are not itemised here.",
+          "Categories are saved at billing. Bills created before report tracking use ‘Historical category unavailable’. Bill counts across items/categories overlap; the total counts distinct bills.");
+        // Issued lines by bill date, and credited lines (keyed by the bill line they credit) by credit-note date.
+        const entries = `WITH entries AS (
+            SELECT l.product_id, l.variant_id, l.name, l.category_id, l.category_name, l.bill_id, l.qty, l.subtotal_paise AS subtotal, l.discount_paise AS discount,
+              l.taxable_paise AS taxable, l.cgst_paise + l.sgst_paise AS gst, l.rounding_paise AS rounding, l.total_paise AS total, 0 AS creditQty, 0 AS credit
+            FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id WHERE b.created_at >= ? AND b.created_at < ?
+            UNION ALL
+            SELECT l.product_id, l.variant_id, l.name, l.category_id, l.category_name, NULL, 0, 0, 0, 0, 0, 0, 0, cl.qty, cl.total_paise
+            FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
+            JOIN bill_report_lines l ON l.bill_id = c.bill_id AND l.order_item_id = cl.order_item_id
+            WHERE c.created_at >= ? AND c.created_at < ?)`;
+        const aggregates = `SUM(qty) AS qty, COUNT(DISTINCT bill_id) AS bills, SUM(subtotal) AS subtotal, SUM(discount) AS discount,
+          SUM(taxable) AS taxable, SUM(gst) AS gst, SUM(rounding) AS rounding, SUM(total) AS total,
+          SUM(creditQty) AS creditQty, SUM(credit) AS credit, SUM(qty) - SUM(creditQty) AS netQty, SUM(total) - SUM(credit) AS netTotal`;
+        const items = query(`${entries} SELECT name, category_name AS category, ${aggregates} FROM entries
+          GROUP BY product_id, variant_id, name, category_id, category_name ORDER BY netTotal DESC, name`, ...bounds, ...bounds);
+        const categories = query(`${entries} SELECT category_name AS category, ${aggregates} FROM entries
+          GROUP BY category_id, category_name ORDER BY netTotal DESC, category_name`, ...bounds, ...bounds);
+        const totals = { ...sum(items, ["qty", "subtotal", "discount", "taxable", "gst", "rounding", "total", "creditQty", "credit", "netQty", "netTotal"]),
+          bills: query(`${entries} SELECT COUNT(DISTINCT bill_id) AS count FROM entries`, ...bounds, ...bounds)[0]!.count! };
+        const columns = [...salesColumns, column("creditQty", "Credited quantity", "quantity"), column("credit", "Credit notes", "money"),
+          column("netQty", "Net quantity", "quantity"), column("netTotal", "Net sales", "money")];
+        tables.push({ title: "Item sales", columns: [column("name", "Item / variant"), column("category", "Category"), ...columns], rows: items, totals: { name: "Total", ...totals } },
+          { title: "Category sales", columns: [column("category", "Category"), ...columns], rows: categories, totals: { category: "Total", ...totals } });
       }
       if (kind === "cashiers") {
-        notes.push("Collections by payment date, including payments for older bills. Cashier means the person who settled the bill, not the person who issued it. Split payments count as one bill. Legacy receipts without a settlement actor are shown as Unknown.");
-        const rows = query(`SELECT COALESCE(u.name, 'Unknown') AS cashier, COUNT(DISTINCT p.bill_id) AS bills,
-          SUM(CASE WHEN p.mode = 'cash' THEN p.amount_paise ELSE 0 END) AS cash,
-          SUM(CASE WHEN p.mode = 'upi' THEN p.amount_paise ELSE 0 END) AS upi,
-          SUM(CASE WHEN p.mode = 'card' THEN p.amount_paise ELSE 0 END) AS card, SUM(p.amount_paise) AS total
-          FROM payments p JOIN bills b ON b.id = p.bill_id LEFT JOIN bill_settlements s ON s.bill_id = b.id LEFT JOIN users u ON u.id = s.created_by
-          WHERE p.created_at >= ? AND p.created_at < ? AND b.status != 'void' GROUP BY s.created_by ORDER BY total DESC, cashier`, ...bounds);
-        tables.push({ title: "Cashier collections", columns: [column("cashier", "Collecting cashier"), column("bills", "Bills"), ...["cash", "upi", "card", "total"].map((key) => column(key, key === "total" ? "Received" : key.toUpperCase(), "money"))], rows, totals: { cashier: "Total", ...sum(rows, ["bills", "cash", "upi", "card", "total"]) } });
+        notes.push("Collections by payment date, including payments for older bills. Cashier means the person who settled the bill, not the person who issued it. Split payments count as one bill. Legacy receipts without a settlement actor are shown as Unknown.",
+          "Refunds paid out are subtracted by refund date and method from the cashier who requested them.");
+        const rows = query(`WITH entries AS (
+            SELECT s.created_by AS userId, p.bill_id, p.mode, p.amount_paise AS amount, 0 AS refund
+            FROM payments p LEFT JOIN bill_settlements s ON s.bill_id = p.bill_id WHERE p.created_at >= ? AND p.created_at < ?
+            UNION ALL
+            SELECT c.requested_by, NULL, r.mode, -r.amount_paise, r.amount_paise
+            FROM refund_payments r JOIN credit_notes c ON c.id = r.credit_note_id WHERE r.created_at >= ? AND r.created_at < ?)
+          SELECT COALESCE(u.name, 'Unknown') AS cashier, COUNT(DISTINCT e.bill_id) AS bills,
+            SUM(CASE WHEN e.mode = 'cash' THEN e.amount ELSE 0 END) AS cash,
+            SUM(CASE WHEN e.mode = 'upi' THEN e.amount ELSE 0 END) AS upi,
+            SUM(CASE WHEN e.mode = 'card' THEN e.amount ELSE 0 END) AS card, SUM(e.refund) AS refunds, SUM(e.amount) AS total
+          FROM entries e LEFT JOIN users u ON u.id = e.userId GROUP BY e.userId ORDER BY total DESC, cashier`, ...bounds, ...bounds);
+        tables.push({ title: "Cashier collections", columns: [column("cashier", "Collecting cashier"), column("bills", "Bills"),
+          ...["cash", "upi", "card"].map((key) => column(key, key.toUpperCase(), "money")), column("refunds", "Refunded", "money"), column("total", "Net received", "money")],
+          rows, totals: { cashier: "Total", ...sum(rows, ["bills", "cash", "upi", "card", "refunds", "total"]) } });
       }
       if (kind === "hourly") {
-        notes.push("Issued bills grouped by local hour across the selected dates. Sales include GST and rounding; unpaid bills count as sales. All 24 hours are shown.");
-        const data = query(`SELECT CAST(strftime('%H', created_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour,
-          COUNT(*) AS bills, SUM(total_paise) AS total, SUM(discount_paise) AS discount, SUM(cgst_paise + sgst_paise) AS gst
-          FROM bills WHERE created_at >= ? AND created_at < ? AND status != 'void' GROUP BY hour`, ...bounds);
+        notes.push("Issued bills (including void ones) grouped by local hour across the selected dates, less credit notes in the hour they were made. Sales include GST and rounding; unpaid bills count as sales. All 24 hours are shown.");
+        const hourOf = (col: string) => `CAST(strftime('%H', ${col} / 1000, 'unixepoch', 'localtime') AS INTEGER)`;
+        const data = query(`SELECT hour, SUM(bills) AS bills, SUM(total) AS total, SUM(discount) AS discount, SUM(gst) AS gst, SUM(credit) AS credit FROM (
+            SELECT ${hourOf("created_at")} AS hour, 1 AS bills, total_paise AS total, discount_paise AS discount, cgst_paise + sgst_paise AS gst, 0 AS credit
+            FROM bills WHERE created_at >= ? AND created_at < ?
+            UNION ALL
+            SELECT ${hourOf("created_at")}, 0, -total_paise, 0, -(cgst_paise + sgst_paise), total_paise
+            FROM credit_notes WHERE created_at >= ? AND created_at < ?) GROUP BY hour`, ...bounds, ...bounds);
         const rows = Array.from({ length: 24 }, (_, hour) => {
-          const row = data.find((r) => r.hour === hour) ?? { bills: 0, total: 0, discount: 0, gst: 0 };
+          const row = data.find((r) => r.hour === hour) ?? { bills: 0, total: 0, discount: 0, gst: 0, credit: 0 };
           return { ...row, hour: `${String(hour).padStart(2, "0")}:00–${String(hour).padStart(2, "0")}:59`, average: Number(row.bills) ? Math.round(Number(row.total) / Number(row.bills)) : 0 };
         });
-        const totals = sum(rows, ["bills", "total", "discount", "gst"]);
-        tables.push({ title: "Hourly sales", columns: [column("hour", "Hour"), column("bills", "Bills"), column("discount", "Discount", "money"), column("gst", "GST", "money"), column("total", "Sales", "money"), column("average", "Average bill", "money")], rows,
+        const totals = sum(rows, ["bills", "total", "discount", "gst", "credit"]);
+        tables.push({ title: "Hourly sales", columns: [column("hour", "Hour"), column("bills", "Bills"), column("discount", "Discount", "money"), column("gst", "Net GST", "money"), column("credit", "Credit notes", "money"), column("total", "Net sales", "money"), column("average", "Average bill", "money")], rows,
           totals: { hour: "Total", ...totals, average: totals.bills ? Math.round(totals.total! / totals.bills) : 0 } });
+      }
+      if (kind === "credit-notes") {
+        notes.push("Every void and refund credit note made during the selected dates, by the date it was made (not the original bill's date). GST is CGST + SGST credited; total includes round-off.");
+        const rows = query(`SELECT 'CN-' || c.cn_no AS cnNo, c.created_at AS date, b.bill_no AS billNo,
+            CASE c.kind WHEN 'void' THEN 'Void' ELSE 'Refund' END AS kind, c.reason, rb.name AS requestedBy, ab.name AS approvedBy,
+            COALESCE((SELECT group_concat(label, ', ') FROM (SELECT CASE r.mode WHEN 'cash' THEN 'Cash' WHEN 'upi' THEN 'UPI' ELSE 'Card' END AS label
+              FROM refund_payments r WHERE r.credit_note_id = c.id GROUP BY r.mode ORDER BY MIN(r.rowid))), 'None') AS refundModes,
+            c.taxable_paise AS taxable, c.cgst_paise + c.sgst_paise AS gst, c.total_paise AS total
+          FROM credit_notes c JOIN bills b ON b.id = c.bill_id JOIN users rb ON rb.id = c.requested_by JOIN users ab ON ab.id = c.approved_by
+          WHERE c.created_at >= ? AND c.created_at < ? ORDER BY c.cn_no`, ...bounds);
+        tables.push({ title: "Credit notes", columns: [column("cnNo", "CN"), column("date", "Date", "time"), column("billNo", "Bill"), column("kind", "Kind"), column("reason", "Reason"),
+          column("requestedBy", "Requested by"), column("approvedBy", "Approved by"), column("refundModes", "Refund methods"),
+          column("taxable", "Taxable", "money"), column("gst", "GST", "money"), column("total", "Total", "money")],
+          rows, totals: { cnNo: "Total", ...sum(rows, ["taxable", "gst", "total"]) } });
       }
       if (kind === "kots") {
         notes.push("Tickets sent during the selected dates, with their current completion status. Duration measures send-to-completion, not active cooking time. Fully cancelled tickets are excluded from completion averages. Pending age is measured at report refresh.");

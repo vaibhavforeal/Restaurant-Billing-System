@@ -39,22 +39,26 @@ describe("sales and collection reports", () => {
     for (const day of result.daily) {
       const existing = (await app.inject({ url: `/api/reports/day-end?date=${day.date}`, headers: auth(token) })).json().report;
       expect(day.sales).toEqual(existing.sales);
-      expect(day.collections.totalPaise).toBe(existing.payments.reduce((sum: number, p: any) => sum + p.amountPaise, 0));
+      expect(day.collections.totalPaise).toBe(existing.netPayments.reduce((sum: number, p: any) => sum + p.amountPaise, 0));
+      expect(day.netTotalPaise).toBe(existing.net.totalPaise);
     }
     expect(result.daily[1].sales.totalPaise).toBe(0);
     expect(result.sales.totalPaise).toBe(result.daily.reduce((sum: number, d: any) => sum + d.sales.totalPaise, 0));
     expect(app.db.prepare("SELECT * FROM bills ORDER BY id").all()).toEqual(before);
   });
-  it("separates older-bill receipts from issued sales, counts split payments once, excludes voids", async () => {
+  it("separates older-bill receipts from issued sales, counts split payments once, keeps void bills on their dates", async () => {
     const older = await issue(26); await pay(older, 27, true);
     const unpaid = await issue(27); const voided = await issue(28); await pay(voided, 28);
+    // A void bill stays in its issue date's sales and its payment in that date's collections; only credit notes
+    // and refunds (none here) subtract, on their own date.
     app.db.prepare("UPDATE bills SET status = 'void' WHERE id = ?").run(voided.id);
     const result = await report();
-    expect(result.sales).toMatchObject({ billCount: 1, totalPaise: unpaid.totalPaise, outstandingPaise: unpaid.totalPaise });
-    expect(result.collections).toEqual({ billCount: 1, cashPaise: 5000, upiPaise: older.totalPaise - 5000, cardPaise: 0, totalPaise: older.totalPaise });
+    expect(result.sales).toMatchObject({ billCount: 2, totalPaise: unpaid.totalPaise + voided.totalPaise, outstandingPaise: unpaid.totalPaise });
+    expect(result).toMatchObject({ creditNotePaise: 0, netTotalPaise: unpaid.totalPaise + voided.totalPaise });
+    expect(result.collections).toEqual({ billCount: 2, cashPaise: 5000, upiPaise: older.totalPaise - 5000, cardPaise: voided.totalPaise, refundPaise: 0, totalPaise: older.totalPaise + voided.totalPaise });
     app.db.prepare("UPDATE payments SET created_at = ? WHERE bill_id = ? AND mode = 'upi'").run(at(28), older.id);
-    const acrossDays = await report(); expect(acrossDays.collections.billCount).toBe(1);
-    expect(acrossDays.daily.reduce((sum: number, d: any) => sum + d.collections.billCount, 0)).toBe(2);
+    const acrossDays = await report(); expect(acrossDays.collections.billCount).toBe(2);
+    expect(acrossDays.daily.reduce((sum: number, d: any) => sum + d.collections.billCount, 0)).toBe(3);
   });
   it("uses inclusive local dates and validates calendar dates and bounded ranges", async () => {
     const start = await issue(27), outside = await issue(30);
@@ -71,7 +75,7 @@ describe("sales and collection reports", () => {
     const free = await issue(27, 10001); await pay(free, 27);
     const result = await report();
     expect(result.sales).toMatchObject({ billCount: 1, totalPaise: 0 });
-    expect(result.collections).toEqual({ billCount: 0, cashPaise: 0, upiPaise: 0, cardPaise: 0, totalPaise: 0 });
+    expect(result.collections).toEqual({ billCount: 0, cashPaise: 0, upiPaise: 0, cardPaise: 0, refundPaise: 0, totalPaise: 0 });
   });
   it("allows cashiers and denies waiter, kitchen and anonymous financial access", async () => {
     for (const [role, pin, status] of [["cashier", "2345", 200], ["waiter", "3456", 403], ["kitchen", "4567", 403]] as const) {
