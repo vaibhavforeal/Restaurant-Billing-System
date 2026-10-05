@@ -6,6 +6,7 @@ import { uuid } from "../uuid";
 import { Icon } from "../Icon";
 import { paiseToRupees } from "../money";
 import { useNavigationGuard } from "../navigation-guard";
+import { receivingLabel, tableCardNote, tableOpenTargets } from "../table-transfer";
 import { QrRequests, QrTableManager } from "./QrRequests";
 import { ServiceRequests } from "./ServiceRequests";
 import { Reservations } from "./Reservations";
@@ -130,7 +131,8 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   function openTable(table: TableInfo) {
     if (qrLock.current || qrManagerLock.current || serviceLock.current || reservationLock.current) return;
     if (table.status === "reserved") { setReservationView({ tableId: table.id }); return; }
-    if (table.activeOrders.length === 0) {
+    const targets = tableOpenTargets(table);
+    if (targets.length === 0) {
       // Free table: create split A
       if (creating) return;
       setCreating(true);
@@ -145,9 +147,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
           setCreating(false);
         }
       });
-    } else if (table.activeOrders.length === 1) {
-      // Fast path: one split, open directly
-      openOrder(table.activeOrders[0]!.id);
+    } else if (targets.length === 1) {
+      // Fast path: one bill (a split, or the combined order of a linked table), open directly
+      openOrder(targets[0]!.orderId);
     } else {
       // Multiple splits: show picker
       setPickerTableId(table.id);
@@ -191,7 +193,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   useEffect(() => {
     if (pickerTableId === null) return;
     const table = tables.find((t) => t.id === pickerTableId);
-    if (!table || table.activeOrders.length < 2) {
+    if (!table || tableOpenTargets(table).length < 2) {
       setPickerTableId(null);
     }
   }, [tables, pickerTableId]);
@@ -243,17 +245,19 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
           const running = orders.filter((order) => order.tableId === t.id);
           const subtotal = running.flatMap((order) => order.items).filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
           const minutes = running.length ? Math.max(0, Math.floor((Date.now() - Math.min(...running.map((order) => order.openedAt))) / 60000)) : 0;
+          const note = tableCardNote(t), combined = receivingLabel(t, tables), targetCount = tableOpenTargets(t).length;
           const ready = captain && running.some((order) => order.kots.some((kot) => kot.doneAt));
           return <button key={t.id} className={`table-card ${t.status}`} onClick={() => openTable(t)} disabled={busy}>
-          <div className="table-card-heading"><strong>{t.name}</strong><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span></div>
+          <div className="table-card-heading"><strong>{combined ?? t.name}</strong><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span></div>
           <span className="table-state"><span aria-hidden="true" />{({ free: "Available", occupied: "Occupied", reserved: "Reserved", billed: "Billed" })[t.status]}</span>
           <div className="table-card-detail">
             {running.some((o) => o.captainName) && <span className="table-ready-label">Captain: {[...new Set(running.map((o) => o.captainName).filter(Boolean))].join(", ")}</span>}
             {running.length > 0 ? <span className="table-amount-row"><span className="pos-money" title="Items subtotal before billing">₹{paiseToRupees(subtotal)}</span><small><Icon name="clock" size={12} />{minutes} min</small></span>
-              : !t.reservation && <span className="table-ready-label">Ready for guests</span>}
+              : !t.reservation && !t.link && <span className="table-ready-label">Ready for guests</span>}
+            {note && <span className="table-ready-label">{note}</span>}
             {t.reservation && <span className="table-reservation-note"><span>{t.status === "reserved" ? "Reserved for" : "Next booking:"} {t.reservation.customerName}</span><small>{t.reservation.startsLocal.replace("T", " ")} · {t.reservation.partySize} guests</small></span>}
           </div>
-          <div className="table-card-footer"><span><Icon name="tables" size={16} />{ready ? "Kitchen ready" : t.activeOrders.length > 1 ? `${t.activeOrders.length} split bills` : t.status === "billed" ? "Awaiting payment" : t.activeOrders.length ? "View order" : t.status === "reserved" ? "View reservation" : "Open table"}</span><Icon name={ready ? "check" : "arrow"} size={14} /></div>
+          <div className="table-card-footer"><span><Icon name="tables" size={16} />{ready ? "Kitchen ready" : targetCount > 1 ? `${targetCount} split bills` : t.status === "billed" ? "Awaiting payment" : targetCount ? "View order" : t.status === "reserved" ? "View reservation" : "Open table"}</span><Icon name={ready ? "check" : "arrow"} size={14} /></div>
         </button>; })}</div>
       </section>)}
       {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables using Manage tables." : "Ask an admin to add tables."}</p></div>}
@@ -284,7 +288,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     </WorkspaceDialog>}
     <WorkspaceDialog open={!!pickerTable} title={`${pickerTable?.name ?? "Table"} — splits`} onClose={() => { if (!busy) setPickerTableId(null); }} busy={busy} className="table-split-dialog">
       {error && <p className="error-message" role="alert">{error}</p>}
-      <div className="split-options">{pickerTable?.activeOrders.map((order) => <button key={order.id} disabled={busy} onClick={() => { setPickerTableId(null); openOrder(order.id); }}>Split {order.splitLabel ?? "?"}<span className={`status ${order.status}`}>{order.status}</span></button>)}</div>
+      <div className="split-options">{pickerTable && tableOpenTargets(pickerTable).map((target) => { const status = pickerTable.activeOrders.find((order) => order.id === target.orderId)?.status ?? pickerTable.link?.status; return <button key={target.orderId} disabled={busy} onClick={() => { setPickerTableId(null); openOrder(target.orderId); }}>{target.label}{status && <span className={`status ${status}`}>{status}</span>}</button>; })}</div>
       <button className="primary" onClick={() => { if (pickerTableId) createSplitOnTable(pickerTableId); }} disabled={busy}>New split</button>
     </WorkspaceDialog>
   </section>;

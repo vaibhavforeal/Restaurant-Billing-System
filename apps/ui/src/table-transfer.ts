@@ -44,3 +44,21 @@ export function mergeTargets(orders: Order[], currentOrderId: string): MergeGrou
 export function mergeBlockedReason(draftCount: number): string | null {
   return draftCount > 0 ? "Save or discard the cart items before merging." : null;
 }
+
+/** Note shown on a card whose table is billed together with another table's order. */
+export function tableCardNote(table: TableInfo): string | null {
+  return table.link ? `with ${table.link.tableName}` : null;
+}
+
+/** Everything a table card can open: its own bill groups, then the combined order it is linked to. */
+export function tableOpenTargets(table: TableInfo): Array<{ orderId: string; label: string }> {
+  const targets = table.activeOrders.map((order) => ({ orderId: order.id, label: `Split ${order.splitLabel ?? "?"}` }));
+  if (table.link) targets.push({ orderId: table.link.orderId, label: table.link.label });
+  return targets;
+}
+
+/** Combined label (e.g. "T3, T4") for a table that owns an order other tables are linked to. */
+export function receivingLabel(table: TableInfo, tables: TableInfo[]): string | null {
+  const own = new Set(table.activeOrders.map((order) => order.id));
+  return tables.find((other) => other.link && own.has(other.link.orderId))?.link?.label ?? null;
+}

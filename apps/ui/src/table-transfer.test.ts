@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Order, OrderItem, TableInfo } from "./types";
-import { mergeBlockedReason, mergeTargets, moveTargets } from "./table-transfer";
+import { mergeBlockedReason, mergeTargets, moveTargets, receivingLabel, tableCardNote, tableOpenTargets } from "./table-transfer";
 
 const table = (id: string, patch: Partial<TableInfo> = {}): TableInfo => ({
   id, name: id.toUpperCase(), area: null, sortOrder: 0, priceTier: "non_ac", isActive: true,
@@ -67,5 +67,53 @@ describe("mergeBlockedReason", () => {
     expect(mergeBlockedReason(0)).toBeNull();
     expect(mergeBlockedReason(1)).toBe("Save or discard the cart items before merging.");
     expect(mergeBlockedReason(4)).toBe("Save or discard the cart items before merging.");
+  });
+});
+
+const link = { orderId: "o9", status: "open" as const, label: "T3, T4", tableName: "T3" };
+
+describe("tableCardNote", () => {
+  it("names the table a linked table is billed with", () => {
+    expect(tableCardNote(table("t4", { status: "occupied", link }))).toBe("with T3");
+  });
+
+  it("has no note for an unlinked table", () => {
+    expect(tableCardNote(table("t4"))).toBeNull();
+    expect(tableCardNote(table("t4", { status: "occupied", activeOrders: [{ id: "o1", splitLabel: "A", status: "open" }] }))).toBeNull();
+  });
+});
+
+describe("tableOpenTargets", () => {
+  it("is empty for a free table", () => {
+    expect(tableOpenTargets(table("t1"))).toEqual([]);
+  });
+
+  it("lists own groups only when there is no link", () => {
+    expect(tableOpenTargets(table("t1", { status: "occupied", activeOrders: [
+      { id: "a", splitLabel: "A", status: "open" }, { id: "b", splitLabel: null, status: "billed" },
+    ] }))).toEqual([{ orderId: "a", label: "Split A" }, { orderId: "b", label: "Split ?" }]);
+  });
+
+  it("opens only the combined order for a linked table with no own groups", () => {
+    expect(tableOpenTargets(table("t4", { status: "occupied", link }))).toEqual([{ orderId: "o9", label: "T3, T4" }]);
+  });
+
+  it("lists own groups plus the combined order when a linked table has its own bills", () => {
+    expect(tableOpenTargets(table("t4", { status: "occupied", link, activeOrders: [{ id: "a", splitLabel: "A", status: "open" }] })))
+      .toEqual([{ orderId: "a", label: "Split A" }, { orderId: "o9", label: "T3, T4" }]);
+  });
+});
+
+describe("receivingLabel", () => {
+  it("returns the combined label of an own order that absorbed other tables", () => {
+    const t3 = table("t3", { name: "T3", status: "occupied", activeOrders: [{ id: "o9", splitLabel: "A", status: "open" }] });
+    const linked = table("t4", { name: "T4", status: "occupied", link });
+    expect(receivingLabel(t3, [linked, t3])).toBe("T3, T4");
+  });
+
+  it("is null when nothing is linked to the table's orders", () => {
+    const t3 = table("t3", { name: "T3", status: "occupied", activeOrders: [{ id: "o1", splitLabel: "A", status: "open" }] });
+    expect(receivingLabel(t3, [t3, table("t4", { name: "T4", status: "occupied", link })])).toBeNull();
+    expect(receivingLabel(table("t5"), [])).toBeNull();
   });
 });
