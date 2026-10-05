@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, stockMilli, stockJson, appendStockMove, uuidv7,
-  type StockRow, type StockLink, type StockMove } from "@forkflow/domain";
+import { can } from "@forkflow/core";
+import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, stockMilli, stockJson, appendStockMove, uuidv7, roleFor,
+  type StockRow, type StockLink, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { httpError } from "./http-error.js";
 
 /** Publish only after the caller has committed the transaction. */
@@ -15,6 +16,10 @@ export function publishStock(app: FastifyInstance, ids: string[]) {
   if (low.length) app.broadcast("stock.low", { stockItemIds: low.map((item) => item.id) });
 }
 
+export const versionCheck = (actual: number, expected: number) => {
+  if (actual !== expected) throw httpError(409, "Stock changed on another counter. Refresh and review before saving.");
+};
+
 export function registerStock(app: FastifyInstance) {
   const db = app.db;
   const read = app.requirePermission("stock.read");
@@ -24,9 +29,6 @@ export function registerStock(app: FastifyInstance) {
     if (!row) throw httpError(404, "Stock item not found");
     return row;
   }
-  const versionCheck = (actual: number, expected: number) => {
-    if (actual !== expected) throw httpError(409, "Stock changed on another counter. Refresh and review before saving.");
-  };
   const links = (productId: string) => db.prepare(`SELECT l.id, l.stock_item_id AS stockItemId, l.qty_per_sale AS qtyPerSale,
     s.name AS stockName, s.unit FROM product_stock_links l JOIN stock_items s ON s.id = l.stock_item_id WHERE l.product_id = ? ORDER BY l.id`).all(productId) as StockLink[];
 
@@ -67,6 +69,11 @@ export function registerStock(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = StockAdjust.parse(req.body);
     const requestJson = JSON.stringify({ stockItemId: id, ...body });
+    // Priced receiving needs the cost permission and the recipes plan; refuse before anything is written.
+    if (body.costPaise !== undefined) {
+      if (!can(roleFor(req.user.role), "costs.read")) throw httpError(403, "Not allowed to record cost");
+      app.licensing.assertFeature("recipes", req.headers["x-forkflow-device"]);
+    }
     const result = db.transaction(() => {
       const old = db.prepare("SELECT id, request_json FROM stock_moves WHERE client_ref = ?").get(body.clientRef) as { id: string; request_json: string } | undefined;
       if (old) {
@@ -80,7 +87,8 @@ export function registerStock(app: FastifyInstance) {
       if (!deltaMilli) throw httpError(400, "Count already matches the stock balance");
       try { stockMilli(deltaMilli / 1000); stockMilli((stockMilli(row.qty) + deltaMilli) / 1000); }
       catch { throw httpError(400, "Resulting stock balance exceeds the supported range"); }
-      const moveId = appendStockMove(db, { stockItemId: id, delta: deltaMilli / 1000, reason: body.reason, actorId: req.user.id, note: body.note, clientRef: body.clientRef, requestJson });
+      const moveId = appendStockMove(db, { stockItemId: id, delta: deltaMilli / 1000, reason: body.reason, actorId: req.user.id, note: body.note, clientRef: body.clientRef, requestJson,
+        ...(body.costPaise === undefined ? {} : { costPaise: body.costPaise }) });
       return { moveId, created: true };
     })();
     if (result.created) publishStock(app, [id]);
@@ -89,12 +97,25 @@ export function registerStock(app: FastifyInstance) {
   app.get("/api/stock-items/:id/movements", { preHandler: read }, async (req) => {
     const { id } = req.params as { id: string }; item(id);
     const { before } = z.object({ before: z.string().min(1).max(64).optional() }).parse(req.query);
+    // Cost is admin-only and part of the recipes plan; everyone else gets no cost keys at all.
+    const showCost = can(roleFor(req.user.role), "costs.read") && app.licensing.status(req.headers["x-forkflow-device"]).features.recipes;
     const moves = db.prepare(`SELECT m.id, m.stock_item_id AS stockItemId, m.delta, m.reason, m.note,
       m.order_item_id AS orderItemId, oi.order_id AS orderId, m.reversal_of AS reversalOf,
-      m.created_at AS createdAt, u.name AS createdByName, m.balance_after AS balanceAfter
+      m.created_at AS createdAt, u.name AS createdByName, m.balance_after AS balanceAfter${showCost ? ", m.cost_paise AS costPaise" : ""}
       FROM stock_moves m LEFT JOIN users u ON u.id = m.created_by LEFT JOIN order_items oi ON oi.id = m.order_item_id
       WHERE m.stock_item_id = ? AND (? IS NULL OR m.id < ?) ORDER BY m.id DESC LIMIT 100`).all(id, before ?? null, before ?? null) as StockMove[];
-    return { movements: moves };
+    if (!showCost) return { movements: moves };
+    // Cost changes follow the same time window as the page: up to the cursor movement, down to the oldest
+    // movement shown (no lower bound on the last page, so the earliest changes always appear).
+    const cursor = before ? db.prepare("SELECT created_at FROM stock_moves WHERE id = ?").get(before) as { created_at: number } | undefined : undefined;
+    const upper = cursor?.created_at ?? null;
+    const lower = moves.length >= 100 ? moves[moves.length - 1]!.createdAt : null;
+    const costChanges = db.prepare(`SELECT c.id, c.stock_item_id AS stockItemId, c.old_cost_milli_paise AS oldCostMilliPaise,
+      c.new_cost_milli_paise AS newCostMilliPaise, c.note, c.created_at AS createdAt, u.name AS createdByName
+      FROM stock_cost_changes c LEFT JOIN users u ON u.id = c.created_by
+      WHERE c.stock_item_id = ? AND (? IS NULL OR c.created_at <= ?) AND (? IS NULL OR c.created_at >= ?)
+      ORDER BY c.created_at DESC, c.id DESC`).all(id, upper, upper, lower, lower) as StockCostChange[];
+    return { movements: moves, costChanges };
   });
   app.get("/api/products/:id/stock-links", { preHandler: read }, async (req) => {
     const { id } = req.params as { id: string };

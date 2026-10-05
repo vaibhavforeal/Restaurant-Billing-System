@@ -13,6 +13,7 @@ import { registerPrinters } from "./printers.js";
 import { registerBilling } from "./billing.js";
 import { registerReports } from "./reports.js";
 import { registerStock } from "./stock.js";
+import { registerCosting } from "./costing.js";
 import { registerSystem } from "./system.js";
 import type { Backups } from "./backups.js";
 import { realSend, type SinkSend } from "./print/sinks.js";
@@ -105,6 +106,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerBilling(app);
   registerReports(app);
   registerStock(app);
+  registerCosting(app);
   registerSystem(app, opts.backups, opts.port, opts.generation);
 
   app.get("/api/health", async () => ({ ok: true, ...(opts.instanceId ? { instanceId: opts.instanceId } : {}) }));
