@@ -1,6 +1,7 @@
 export { uuidv7 } from "./id.js";
 export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, type StockUnit, type StockItem, type StockWarning, type StockLink, type StockMove } from "./stock-schemas.js";
 export { stockJson, appendStockMove, consumeStock, reverseStock, orderStockWarnings, type StockRow } from "./stock.js";
+export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";
 export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type BillTotals, type ReceiptSnapshot, type Bill } from "./billing.js";
 export { openDb, type Database } from "./db.js";
 export { migrate, type Migration } from "./migrate.js";
