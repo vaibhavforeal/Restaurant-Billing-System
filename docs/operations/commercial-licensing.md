@@ -102,6 +102,31 @@ implemented). Normal startup backs up existing databases before migration 008.
 
 ## Issuing a grant before the hosted service exists
 
+### Quick way: from the activation request
+
+Ask the restaurant for the file from **Settings > Plan and devices > Activation
+details > Download activation request**, then run:
+
+```powershell
+node --import tsx tools/prepare-license.ts C:\licenses\activation-request.json --plan pro --months 12 --sign C:\secure\license-private.pem
+```
+
+- **First activation** (the request has no license yet): new license,
+  organization and outlet IDs are created at revision 1.
+- **Renewal or plan change** (the request already has a license): the same IDs
+  are reused and the revision goes up by one, as renewals require.
+- `--months` sets the length from today; `--grace-days` (default 7) sets how long
+  billing keeps working after expiry.
+- `--sign` checks that your private key matches the public key built into that
+  restaurant's installer (using the fingerprint in the request) and refuses if
+  not, then writes `license-<installation>-r<revision>.txt` next to the request.
+  Without `--sign` it writes `claims-<installation>-r<revision>.json` for
+  `tools/issue-license.ts` below.
+- It never overwrites an existing file and prints the plan, devices, dates and
+  IDs — keep that summary with your customer records.
+
+### Manual way: from a claims file
+
 `tools/issue-license.ts` is an operator-only signing helper, excluded from the
 desktop bundle. Supply a claims JSON file with this shape; identifiers below are
 illustrative, and dates are Unix milliseconds:
