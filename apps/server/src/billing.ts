@@ -4,6 +4,7 @@ import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequ
   type Bill, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { loadBillCreditNotes } from "./credit-notes.js";
 import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
@@ -36,7 +37,7 @@ export function registerBilling(app: FastifyInstance): void {
     return { id, billNo: r.bill_no, orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
       discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
       roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
-      receipt, taxInclusive: receipt.taxInclusive, taxes, payments };
+      receipt, taxInclusive: receipt.taxInclusive, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise) };
   };
   function printer(id: string): PrinterRow {
     const p = db.prepare("SELECT * FROM printers WHERE id = ? AND is_active = 1").get(id) as PrinterRow | undefined;

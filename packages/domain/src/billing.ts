@@ -40,10 +40,23 @@ export interface ReceiptSnapshot {
   orderType: "dine_in" | "parcel"; tableName: string | null; splitLabel: string | null;
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number }>;
 }
+/** A void or refund as shown on its bill. */
+export interface BillCreditNote {
+  id: string; cnNo: number; kind: "void" | "refund"; reason: string; createdAt: number;
+  totalPaise: number; taxablePaise: number; cgstPaise: number; sgstPaise: number;
+  requestedByName: string; approvedByName: string;
+  refunds: Array<{ mode: "cash" | "upi" | "card"; amountPaise: number; refNote: string | null }>;
+  lines: Array<{ orderItemId: string; name: string; qty: number; totalPaise: number }>;
+}
 export interface Bill extends BillTotals {
   id: string; billNo: number; orderId: string; status: "unpaid" | "paid" | "void";
   discountNote: string | null; createdAt: number; receipt: ReceiptSnapshot;
   payments: Array<{ mode: "cash" | "upi" | "card"; amountPaise: number; refNote: string | null; createdAt: number }>;
+  /** Derived from credit notes; the stored status is unchanged by a refund. */
+  refundState: "none" | "partly_refunded" | "refunded";
+  creditNotes: BillCreditNote[];
+  /** Units already credited, keyed by order item id. */
+  refundedQty: Record<string, number>;
 }
 
 /** All financial arithmetic uses integer paise / BigInt. */

@@ -3,17 +3,9 @@ import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } f
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
 import { deviceHash } from "./licensing.js";
+import { createPinThrottle } from "./pin-throttle.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-const THROTTLE_AFTER = 5;
-const THROTTLE_START_MS = 2000;
-const THROTTLE_MAX_MS = 60000;
-
-interface ThrottleState {
-  failures: number;
-  cooldownUntil: number;
-}
-
 export interface AuthedUser {
   id: string;
   name: string;
@@ -47,8 +39,9 @@ export function sessionUser(db: Database, token: string): AuthedUser | null {
 }
 
 export function registerAuth(app: FastifyInstance, demo = false): void {
-  // Plugin-scoped: each server instance gets its own throttle state.
-  const loginThrottle = new Map<string, ThrottleState>();
+  // Plugin-scoped: each server instance gets its own throttle state, shared with admin approval of refunds and voids.
+  const throttle = createPinThrottle();
+  app.decorate("pinThrottle", throttle);
 
   const createSession = (userId: string, credential: unknown): string => {
     const token = randomBytes(32).toString("hex");
@@ -131,8 +124,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     const ip = req.ip;
 
     // Throttle: check if this IP is in cooldown
-    const throttle = loginThrottle.get(ip);
-    if (throttle && Date.now() < throttle.cooldownUntil) {
+    if (throttle.pinCooldown(ip)) {
       return reply.status(429).send({ error: "too many attempts" });
     }
 
@@ -145,23 +137,14 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     for (const u of users) {
       if (await verifyPassword(pin, u.pin_hash)) {
         // Success: reset throttle
-        loginThrottle.delete(ip);
+        throttle.clearPinFailures(ip);
         const token = createSession(u.id, req.headers["x-forkflow-device"]);
         return { token, user: { id: u.id, name: u.name, role: u.role } };
       }
     }
 
     // Failure: increment throttle counter
-    const current = loginThrottle.get(ip) ?? { failures: 0, cooldownUntil: 0 };
-    current.failures += 1;
-    if (current.failures >= THROTTLE_AFTER) {
-      const cooldownMs = Math.min(
-        THROTTLE_START_MS * Math.pow(2, current.failures - THROTTLE_AFTER),
-        THROTTLE_MAX_MS,
-      );
-      current.cooldownUntil = Date.now() + cooldownMs;
-    }
-    loginThrottle.set(ip, current);
+    throttle.recordPinFailure(ip);
 
     return reply.status(401).send({ error: "invalid pin" });
   });

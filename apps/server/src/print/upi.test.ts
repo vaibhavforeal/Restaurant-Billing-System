@@ -10,7 +10,7 @@ const decodeQr = createRequire(import.meta.url)("jsqr") as typeof import("jsqr")
 const items = [{ name: "Lunch", pricePaise: 12345, qty: 2, gstRate: 5 }];
 const bill: Bill = {
   ...calculateBill(items, 1234), id: "01900000-1234-7123-8123-123456789abc", billNo: 42,
-  orderId: "order", status: "unpaid", discountNote: "Offer", createdAt: 1, payments: [],
+  orderId: "order", status: "unpaid", discountNote: "Offer", createdAt: 1, payments: [], refundState: "none", creditNotes: [], refundedQty: {},
   receipt: { restaurantName: "Cafe & Co / भोजन", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false,
     upiId: "cafe.123@bank", orderType: "parcel", tableName: null, splitLabel: null, items },
 };

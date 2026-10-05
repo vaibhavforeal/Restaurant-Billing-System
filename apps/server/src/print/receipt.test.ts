@@ -10,6 +10,7 @@ const bill: Bill = {
   receipt: { restaurantName: "ForkFlow Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", taxInclusive: false,
     orderType: "dine_in", tableName: "T1", splitLabel: "B", items: [{ name: "Meal", pricePaise: 10000, qty: 2, gstRate: 5 }] },
   payments: [{ mode: "cash", amountPaise: 10000, refNote: null, createdAt: 1 }, { mode: "upi", amountPaise: 11000, refNote: null, createdAt: 1 }],
+  refundState: "none", creditNotes: [], refundedQty: {},
 };
 describe("receipts", () => {
   it.each([58, 80] as const)("renders a %imm GST receipt with split and payment details", (width) => {

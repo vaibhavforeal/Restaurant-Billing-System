@@ -13,6 +13,7 @@ import { registerKots } from "./kots.js";
 import { registerTableTransfer } from "./table-transfer.js";
 import { registerPrinters } from "./printers.js";
 import { registerBilling } from "./billing.js";
+import { registerCreditNotes } from "./credit-notes.js";
 import { registerReports } from "./reports.js";
 import { registerSalesReports } from "./sales-reports.js";
 import { registerOperationalReports } from "./operational-reports.js";
@@ -131,6 +132,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerTableTransfer(app);
   registerPrinters(app, opts.discoverPrinters ?? discoverWindowsPrinters);
   registerBilling(app);
+  registerCreditNotes(app);
   registerReports(app);
   registerSalesReports(app);
   registerOperationalReports(app);
