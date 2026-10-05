@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import { ApiError, apiFetch, session, type User } from "../api";
 import { AuthLayout } from "./AuthLayout";
+import { CaptainInstall } from "../CaptainInstall";
 
-export function Login({ onLogin }: { onLogin: (user: User) => void }) {
+export function Login({ onLogin, captain = false, kitchen = false }: { onLogin: (user: User) => void; captain?: boolean; kitchen?: boolean }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,9 +24,10 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
     if (next.length === 6) void submit(next);
   }
   return <AuthLayout><form className="auth-form" onSubmit={(e) => { e.preventDefault(); void submit(pin); }}>
-    <h2>Sign in</h2>
+    <h2>{kitchen ? "Kitchen sign in" : captain ? "Captain sign in" : "Sign in"}</h2>
+    {kitchen && <p className="muted">Use the kitchen staff PIN created on the main POS.</p>}
     <label>Staff PIN<input className="pin-input" aria-label="Staff PIN" type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} disabled={busy} onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setError(""); }} /></label>
     <div className="error-message" role="alert">{error}</div>
     <div className="pin-pad">{["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((key) => <button key={key} type="button" disabled={busy} className={key === "OK" ? "primary" : ""} aria-label={key === "⌫" ? "Delete last digit" : key} onClick={() => { if (key === "⌫") setPin((p) => p.slice(0, -1)); else if (key === "OK") void submit(pin); else press(key); }}>{key}</button>)}</div>
-  </form></AuthLayout>;
+  </form>{captain && <CaptainInstall />}</AuthLayout>;
 }

@@ -1,0 +1,26 @@
+.reservations-dialog { width: min(800px, calc(100vw - 24px)); }
+.reservation-help { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0 0 14px; }
+.reservation-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.reservations-dialog label { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
+.reservations-dialog input, .reservations-dialog select, .reservations-dialog textarea { width: 100%; min-width: 0; }
+.reservation-toolbar label { flex: 1; min-width: 145px; }
+.reservation-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.reservation-form h3, .reservation-wide { grid-column: 1 / -1; }
+.reservation-form h3 { margin: 8px 0 0; }
+.reservation-form .reservation-help { margin: 0; }
+.reservation-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.reservation-list { display: grid; gap: 12px; }
+.reservation-card { border: 1px solid var(--line); border-left: 3px solid #bb851d; border-radius: 8px; padding: 14px; overflow-wrap: anywhere; }
+.reservation-card.seated { border-left-color: #377651; }
+.reservation-card.cancelled, .reservation-card.no_show { border-left-color: #9b9ca3; }
+.reservation-card-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+.reservation-status { font-size: 11px; color: var(--muted); }
+.reservation-card h3 { margin: 8px 0 4px; font-size: 17px; }
+.reservation-card p { margin: 4px 0; font-size: 12px; }
+.reservation-notes { color: var(--muted); white-space: pre-wrap; }
+.reservation-card .reservation-actions { margin-top: 12px; }
+.reservation-empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.tables-screen .table-card.reserved { border-color: #d7b575; background: #fff9ec; }
+.tables-screen .status.reserved { background: #fff0c9; color: #825300; }
+.table-reservation-note { color: #825300; text-align: left; font-size: 10px; overflow-wrap: anywhere; }
+@media (max-width: 540px) { .reservation-form { grid-template-columns: minmax(0,1fr); }.reservation-toolbar > button { flex: 1; }.reservation-card { padding: 11px; } }

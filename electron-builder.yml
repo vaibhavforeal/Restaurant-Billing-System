@@ -1,8 +1,9 @@
 appId: in.forkflow.pos
 productName: ForkFlow
 directories:
-  app: build/desktop/app
-  output: dist/installer
+  app: build/desktop/commercial
+  output: dist/commercial
+beforePack: ./tools/verify-desktop-package.mjs
 electronVersion: 43.4.0
 npmRebuild: false
 asar: true

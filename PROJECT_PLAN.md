@@ -1,5 +1,10 @@
 # AI Restaurant Billing System — Architecture & Product Plan
 
+> Historical product vision. The implemented app uses Electron, Fastify and
+> SQLite. The selected commercial direction is now cloud plus offline; see
+> [the current licensing and cloud architecture](docs/operations/commercial-licensing.md).
+> The original Phase 0 sync implementation described below was retired.
+
 > Working name: **ForkFlow** (placeholder — rename freely)
 > A next-generation, AI-native restaurant POS & billing platform. **We are not cloning PetPooja — we are making a product that is easier to adopt and smarter to run.** PetPooja's feature list is our floor, not our finish line. An offline-first hybrid SQLite + PostgreSQL data architecture and an AI co-pilot are the moat.
 

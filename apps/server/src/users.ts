@@ -80,6 +80,7 @@ export function registerUsers(app: FastifyInstance): void {
     if (row.is_active === 1 && body.isActive === false) {
       app.wsRevalidate();
     }
+    if (body.isActive === false || (body.role !== undefined && body.role !== "waiter")) app.broadcast("table.changed", {});
 
     return { user: toUser(getUser(id)!) };
   });

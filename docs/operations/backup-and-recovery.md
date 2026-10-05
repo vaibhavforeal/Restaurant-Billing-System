@@ -1,5 +1,9 @@
 # Backups, recovery and Windows installation
 
+For the prepared Google Drive backup framework and future integration steps, see
+[Google Drive backups](google-drive-backups.md). Account linking is deferred;
+verified local and second-folder backups work independently.
+
 ForkFlow 0.6 runs one server process. The server owns the SQLite database; other
 counters connect through the browser. Close the window to keep the server in the
 tray. **Quit ForkFlow** in the tray menu stops service for every counter.
@@ -13,17 +17,20 @@ npm ci --ignore-scripts
 node node_modules/electron/install.js
 npm run typecheck
 npm test
+$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
 npm run package:win
 ```
 
 The SQLite 13 package includes its Node-API native binary. The build copies the
-installed, locked production dependency tree into `build/desktop/app`; it does
+installed, locked production dependency tree into `build/desktop/commercial`; it does
 not download a separate Node runtime or compile SQLite. Electron supplies the
 runtime. The builder's first run downloads Electron/NSIS packaging tools.
-Close apps or test servers using `build/desktop/app` before rebuilding it.
+Close apps or test servers using `build/desktop/commercial` before rebuilding it.
 
-Output: `dist/installer/ForkFlow-Setup-0.6.0.exe`. The package includes the server,
+Output: `dist/commercial/ForkFlow-Setup-0.6.4.exe`. The package includes the server,
 UI, runtime and SQLite. Customer PCs do not need Node, npm or a compiler.
+`package:win` creates the licensed customer edition. For a sample-data demo use
+`npm run package:demo`; its separate installer is written to `dist/demo`.
 
 Run the installer as administrator. It installs a private-network, local-subnet
 firewall rule for TCP 4100 and creates the main PC shortcut. First launch enables

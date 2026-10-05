@@ -1,4 +1,4 @@
-import { session } from "./api";
+import { session, deviceCredential } from "./api";
 
 export interface WsHandlers {
   onEvent: (event: string, data: unknown) => void;
@@ -22,7 +22,7 @@ export function connectWs(handlers: WsHandlers): () => void {
     ws.onopen = () => {
       // Send auth frame immediately
       const token = session.token ?? "";
-      ws?.send(JSON.stringify({ type: "auth", token }));
+      ws?.send(JSON.stringify({ type: "auth", token, device: deviceCredential() }));
     };
 
     ws.onmessage = (e) => {
@@ -36,6 +36,7 @@ export function connectWs(handlers: WsHandlers): () => void {
           return; // Do NOT forward to onEvent
         }
 
+        if (event === "license.changed") window.dispatchEvent(new Event("forkflow:license-changed"));
         handlers.onEvent(event, data);
       } catch {
         // ignore malformed messages
@@ -52,6 +53,10 @@ export function connectWs(handlers: WsHandlers): () => void {
       }
 
       handlers.onStatus(false);
+      if (e.code === 4403) {
+        window.dispatchEvent(new Event("forkflow:license-changed"));
+        return;
+      }
       reconnectTimer = setTimeout(() => {
         backoffMs = Math.min(backoffMs * 2, 10000);
         connect();

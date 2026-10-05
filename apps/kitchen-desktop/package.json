@@ -1,0 +1,7 @@
+{
+  "name": "@forkflow/kitchen-desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ForkFlow Kitchen client for a main POS on the restaurant network"
+}

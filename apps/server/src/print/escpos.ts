@@ -30,12 +30,12 @@ export class EscPos {
     return this;
   }
 
-  /** Emit text (latin1-safe: non-ASCII chars replaced with '?') */
+  /** Text cannot emit printer commands. Layout/commands use dedicated methods. */
   text(s: string): this {
     const buf = Buffer.alloc(s.length);
     for (let i = 0; i < s.length; i++) {
       const code = s.charCodeAt(i);
-      buf[i] = code < 128 ? code : 0x3f; // 0x3f = '?'
+      buf[i] = code < 32 || code === 127 ? 0x20 : code < 128 ? code : 0x3f;
     }
     this.chunks.push(buf);
     return this;
@@ -53,6 +53,16 @@ export class EscPos {
     const dashes = "-".repeat(width);
     this.text(dashes);
     this.line();
+    return this;
+  }
+
+  /** GS v 0 — monochrome raster image, eight horizontal pixels per byte. */
+  raster(widthBytes: number, height: number, data: Buffer): this {
+    if (!Number.isInteger(widthBytes) || widthBytes < 1 || widthBytes > 65535 ||
+        !Number.isInteger(height) || height < 1 || height > 65535 || data.length !== widthBytes * height) {
+      throw new Error("Invalid raster dimensions");
+    }
+    this.chunks.push(Buffer.from([0x1d, 0x76, 0x30, 0x00, widthBytes & 255, widthBytes >> 8, height & 255, height >> 8]), data);
     return this;
   }
 

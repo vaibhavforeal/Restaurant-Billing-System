@@ -4,11 +4,14 @@ import { cpSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, rea
 import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
+import { desktopBuildConfig } from "./desktop-build-config.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const stage = join(root, "build", "desktop", "app");
+const { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint } = desktopBuildConfig(process.argv.slice(2), process.env);
+if (process.argv.includes("--check")) { console.log(`${edition} build configuration OK`); process.exit(0); }
+const stage = join(root, "build", "desktop", stageName);
 // Only ever clear the build staging directory, not source or restaurant data.
-if (relative(root, stage).replaceAll("\\", "/") !== "build/desktop/app") throw new Error("Unsafe staging directory");
+if (relative(root, stage).replaceAll("\\", "/") !== `build/desktop/${stageName}`) throw new Error("Unsafe staging directory");
 rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
 const pkg = JSON.parse(readFileSync(join(root, "package.json")));
 const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*" };
@@ -39,11 +42,13 @@ function copyDependency(name, from, parent = stage) {
 }
 for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
+  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
   plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
-await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true });
+await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo) } });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
-writeFileSync(join(stage, "package.json"), JSON.stringify({ name: "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
+writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "forkflow-demo" : "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "ForkFlow customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
+writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));
 
 // Small original F icon, rendered without extra image or native build tools.
 function crc32(bytes) { let crc = 0xffffffff; for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ 0xffffffff) >>> 0; }

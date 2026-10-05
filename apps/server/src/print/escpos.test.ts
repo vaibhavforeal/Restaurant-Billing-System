@@ -42,6 +42,14 @@ describe("EscPos", () => {
     expect(new EscPos().line().bytes()).toEqual(Buffer.from("\n", "ascii"));
   });
 
+  it("untrusted notes cannot emit feed, cut, or cash-drawer commands", () => {
+    const text = "Note: \u001bd\u007f\u001bp\u0000\u0019\u00fa\u001dVB\u0000\nextra";
+    const bytes = new EscPos().line(text).bytes();
+    expect([...bytes.subarray(0, -1)].every((byte) => byte >= 32 && byte < 127)).toBe(true);
+    expect(bytes.at(-1)).toBe(10);
+    expect(bytes.toString("ascii")).toContain("extra");
+  });
+
   it("hr sends 32 or 48 dashes + LF", () => {
     const pos = new EscPos();
     const hr32 = pos.hr(32).bytes();

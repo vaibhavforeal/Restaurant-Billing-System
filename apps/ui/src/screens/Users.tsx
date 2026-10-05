@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch } from "../api";
 import type { AdminUser } from "../types";
 
@@ -10,10 +10,13 @@ export function Users() {
   const [pin, setPin] = useState("");
   const [role, setRole] = useState<AdminUser["role"]>("waiter");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const [message, setMessage] = useState("");
 
   async function reload() {
-    const { users } = await apiFetch<{ users: AdminUser[] }>("/api/users");
-    setUsers(users);
+    const staff = await apiFetch<{ users: AdminUser[] }>("/api/users");
+    setUsers(staff.users);
   }
 
   useEffect(() => {
@@ -21,13 +24,16 @@ export function Users() {
   }, []);
 
   async function run(action: () => Promise<unknown>) {
+    if (lock.current) return;
+    lock.current = true; setBusy(true); setMessage("");
     setError("");
     try {
       await action();
       await reload();
+      setMessage("Saved.");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Request failed");
-    }
+    } finally { lock.current = false; setBusy(false); }
   }
 
   function addUser() {
@@ -49,18 +55,23 @@ export function Users() {
 
   return (
     <div className="legacy-screen">
-      <h2>Users</h2>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
-        <input type="password" placeholder="PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} style={{ width: 130 }} />
-        <select value={role} onChange={(e) => setRole(e.target.value as AdminUser["role"])}>
+      <h2>Users & captains</h2>
+      <p>Create captains here with a unique PIN. Choose the captain on each customer's order when they arrive.</p>
+      <fieldset disabled={busy} style={{ border: 0, padding: 0, minWidth: 0 }}>
+      <legend className="sr-only">Staff accounts</legend>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        <input aria-label="Staff name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 130 }} />
+        <input aria-label="Staff PIN" type="password" placeholder="PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} style={{ width: 130 }} />
+        <select aria-label="Staff role" value={role} onChange={(e) => setRole(e.target.value as AdminUser["role"])}>
           {ROLES.map((r) => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r} value={r}>{r === "waiter" ? "Captain / waiter" : r}</option>
           ))}
         </select>
-        <button onClick={addUser} disabled={!name.trim() || !/^\d{4,6}$/.test(pin)}>Add</button>
+        <button onClick={addUser} disabled={!name.trim() || !/^\d{4,6}$/.test(pin)}>{role === "waiter" ? "Add captain" : "Add user"}</button>
       </div>
-      <div style={{ color: "crimson", minHeight: 20 }}>{error}</div>
+      {error && <p role="alert">{error}</p>}
+      {message && <p role="status">{message}</p>}
+      <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
@@ -75,9 +86,9 @@ export function Users() {
             <tr key={u.id} style={{ borderBottom: "1px solid #eee", opacity: u.isActive ? 1 : 0.45 }}>
               <td style={{ padding: 6 }}>{u.name}</td>
               <td>
-                <select value={u.role} onChange={(e) => patchUser(u.id, { role: e.target.value as AdminUser["role"] })}>
+                <select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => patchUser(u.id, { role: e.target.value as AdminUser["role"] })}>
                   {ROLES.map((r) => (
-                    <option key={r} value={r}>{r}</option>
+                    <option key={r} value={r}>{r === "waiter" ? "Captain / waiter" : r}</option>
                   ))}
                 </select>
               </td>
@@ -92,6 +103,8 @@ export function Users() {
           ))}
         </tbody>
       </table>
+      </div>
+      </fieldset>
     </div>
   );
 }

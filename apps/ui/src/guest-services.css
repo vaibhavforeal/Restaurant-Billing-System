@@ -1,0 +1,14 @@
+.guest-services { margin-bottom: 26px; border: 1px solid #e9dfda; border-radius: 15px; padding: 20px; background: #fff; }
+.guest-services-heading h2 { margin: 0 0 4px; font-size: 19px; }
+.guest-services-heading p { margin: 0 0 17px; color: #84757d; font-size: 12px; }
+.guest-services-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.guest-service { border: 1px solid #eee5e0; background: #fdfbf9; border-radius: 11px; padding: 16px; }
+.guest-service h3 { margin: 0 0 5px; font-size: 14px; }
+.guest-service p { font-size: 12px; margin-bottom: 12px; }
+.guest-service > div > p { color: #887b81; }
+.guest-service button { border-color: #dfb9bd; color: #ac303c; background: #fff; font-size: 12px; }
+.guest-service-status { color: #836325; }
+.guest-service-resolved { color: #317148; }
+.guest-service-expired { color: #a04b42; }
+.guest-services .guest-services-error { color: #ac303c; font-size: 12px; }
+@media (max-width: 450px) { .guest-services { padding: 16px; } .guest-services-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; } }

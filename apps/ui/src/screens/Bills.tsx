@@ -3,6 +3,7 @@ import type { Bill } from "@forkflow/domain";
 import { apiFetch, session } from "../api";
 import { paiseToRupees } from "../money";
 import { connectWs } from "../ws";
+import { TableScroller } from "../PosControls";
 
 export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -22,15 +23,15 @@ export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
     const dispose = connectWs({ onEvent: (event) => { if (event === "order.updated") void reload(); }, onStatus: (connected) => { if (connected) void reload(); }, onAuthFail: () => session.clear() });
     return () => { active = false; dispose(); };
   }, [status]);
-  return <section className="legacy-screen">
-    <h2>Bills</h2>
-    <label>Show <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={busy}><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="all">All bills</option></select></label>
-    <p role="alert" style={{ color: "crimson" }}>{error}</p>
+  return <section className="legacy-screen pos-history">
+    <div className="pos-toolbar"><h2>Bills</h2>
+    <label>Show <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={busy}><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="all">All bills</option></select></label></div>
+    <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>
     {!bills.length && <p>No bills to show.</p>}
-    <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "left", borderSpacing: "8px 16px" }}>
-      <thead><tr><th>Bill</th><th>Date</th><th>Table / parcel</th><th>Total</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody>{bills.map((b) => <tr key={b.id}><td>#{b.billNo}</td><td>{new Date(b.createdAt).toLocaleString()}</td><td>{b.receipt.orderType === "parcel" ? "Parcel" : `${b.receipt.tableName} · ${b.receipt.splitLabel ?? "A"}`}</td><td>₹{paiseToRupees(b.totalPaise)}</td><td>{b.status}</td><td><button onClick={() => onOpenOrder(b.orderId)}>Open bill #{b.billNo}</button></td></tr>)}</tbody>
-    </table></div>
+    <TableScroller><table style={{ width: "100%", textAlign: "left", borderSpacing: "8px 16px" }}>
+      <thead><tr><th>Bill</th><th>Date</th><th>Table / parcel</th><th className="pos-money">Total</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>{bills.map((b) => <tr key={b.id}><td>#{b.billNo}</td><td>{new Date(b.createdAt).toLocaleString()}</td><td>{b.receipt.orderType === "parcel" ? "Parcel" : `${b.receipt.tableName} · ${b.receipt.splitLabel ?? "A"}`}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td><span className={`status ${b.status}`}>{b.status}</span></td><td><button onClick={() => onOpenOrder(b.orderId)}>Open bill #{b.billNo}</button></td></tr>)}</tbody>
+    </table></TableScroller>
     {more && <button disabled={busy} onClick={async () => {
       setBusy(true);
       try {

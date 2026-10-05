@@ -6,7 +6,7 @@ import {
 
 describe("table schemas", () => {
   it("TableCreate defaults sortOrder to 0, area to null, and trims name", () => {
-    expect(TableCreate.parse({ name: "  T1 " })).toEqual({ name: "T1", area: null, sortOrder: 0 });
+    expect(TableCreate.parse({ name: "  T1 " })).toEqual({ name: "T1", area: null, sortOrder: 0, priceTier: "non_ac" });
   });
 
   it("TableCreate rejects empty names", () => {

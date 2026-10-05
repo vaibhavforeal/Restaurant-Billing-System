@@ -1,0 +1,17 @@
+.settings-screen, .settings-screen > .pos-section, .settings-screen .panel { min-width: 0; }
+.printer-table-scroll { overflow-x: auto; max-width: 100%; }
+.printer-table-scroll table { min-width: 650px; }
+.printer-form > div > * { min-width: 0; max-width: 100%; }
+.windows-printer-picker { flex: 1 1 280px; }
+.windows-printer-picker label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.windows-printer-picker select { width: 100%; min-width: 0; }
+.print-profile-controls { flex: 1 1 170px; margin: 0; }
+.print-profile-controls label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.printer-form input[type="checkbox"], .print-profile-controls input[type="checkbox"] { width: auto; flex: 0 0 auto !important; }
+.print-profile-controls input[type="number"] { width: 5rem; flex: 0 0 5rem !important; }
+.print-job-card { flex-wrap: wrap; gap: 12px; overflow-wrap: anywhere; }
+@media (max-width: 650px) {
+  .printer-form > div > * { flex: initial !important; width: 100%; }
+  .printer-form input[type="checkbox"] { width: auto; }
+  .print-job-card > div { min-width: 0; }
+}

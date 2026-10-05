@@ -1,0 +1,15 @@
+.cloud-backups { margin-top: 24px; margin-bottom: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.cloud-backup-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px; }
+.cloud-backup-heading h3 { margin: 0; font-size: 16px; }
+.cloud-backup-state { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 12px; color: var(--muted); }
+.cloud-backup-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; margin: 16px 0; max-width: 650px; }
+.cloud-backup-fields label { display: grid; gap: 8px; min-width: 0; }
+.cloud-backup-fields input { width: 100%; min-width: 0; }
+.system-settings .cloud-backup-toggle { display: flex; align-items: center; gap: 10px; }
+.cloud-backup-toggle input { width: 16px; height: 16px; flex: 0 0 auto; }
+.cloud-backup-facts { display: flex; flex-wrap: wrap; gap: 20px 48px; margin: 16px 0; }
+.cloud-backup-facts dt { color: var(--muted); font-size: 12px; }
+.cloud-backup-facts dd { margin: 4px 0 0; font-size: 13px; }
+.cloud-backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.system-settings .cloud-backup-error { color: var(--danger-text, crimson); }
+@media (max-width: 650px) { .cloud-backup-fields { grid-template-columns: 1fr; } .cloud-backup-actions > button { flex: 1 1 160px; } }

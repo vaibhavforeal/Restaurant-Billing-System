@@ -1,5 +1,5 @@
-import { uuidv7 } from "@forkflow/domain";
-import type { SinkSend, PrinterTarget } from "./sinks.js";
+import { uuidv7, openDb, migrate, MIGRATIONS, type Database } from "@forkflow/domain";
+import { PrintOutcomeUnknown, type SinkSend, type PrinterTarget } from "./sinks.js";
 
 export interface PrintJobJson {
   id: string;
@@ -7,136 +7,144 @@ export interface PrintJobJson {
   printerName: string;
   kind: "kot" | "cancel" | "test" | "receipt";
   label: string;
-  status: "queued" | "printing" | "failed" | "done";
+  status: "queued" | "printing" | "failed" | "done" | "unknown";
   error: string | null;
   createdAt: number;
   attempts: number;
+  copyNumber: number;
+  copyCount: number;
 }
+const KEEP_DONE_JOBS = 100;
+// Failed and unknown jobs stay until retried or confirmed, but each holds its full ESC/POS payload (receipts include a QR raster).
+const KEEP_UNRESOLVED_JOBS = 200;
+interface StoredJob { job_json: string; target_json: string; payload: Buffer }
 
-interface QueuedJob {
-  json: PrintJobJson;
-  target: PrinterTarget;
-  bytes: Buffer;
-}
-
+/** SQLite is the source of truth, including inside a business transaction. */
 export class PrintQueue {
-  private jobsList: QueuedJob[] = [];
-  private perPrinterLock = new Map<string, Promise<void>>();
+  private db: Database;
+  private ownsDb: boolean;
+  private locks = new Map<string, Promise<void>>();
+  private stopped = false;
 
-  constructor(
-    private send: SinkSend,
-    private onChange: (job: PrintJobJson) => void,
-  ) {}
-
-  enqueue(
-    printer: { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string },
-    kind: "kot" | "cancel" | "test" | "receipt",
-    label: string,
-    bytes: Buffer,
-  ): PrintJobJson {
-    const job: QueuedJob = {
-      json: {
-        id: uuidv7(),
-        printerId: printer.id,
-        printerName: printer.name,
-        kind,
-        label,
-        status: "queued",
-        error: null,
-        createdAt: Date.now(),
-        attempts: 0,
-      },
-      target: { kind: printer.kind, connection: printer.connection },
-      bytes,
-    };
-
-    this.jobsList.unshift(job);
-    this.trimCompleted();
-
-    const snap = { ...job.json };
-    this.onChange(snap);
-    this.processQueue(printer.id);
-
-    return snap;
+  constructor(private send: SinkSend, private onChange: (job: PrintJobJson) => void, db?: Database, generation = "initial") {
+    this.ownsDb = !db;
+    this.db = db ?? openDb(":memory:");
+    if (!db) migrate(this.db, MIGRATIONS);
+    const previous = this.db.prepare("SELECT generation FROM print_queue_state WHERE id = 1").get() as { generation: string } | undefined;
+    const restored = previous !== undefined && previous.generation !== generation;
+    // Restored backups may predate a successful send, even for jobs saved as queued.
+    for (const row of this.db.prepare("SELECT job_json FROM print_jobs WHERE status = 'printing' OR (? = 1 AND status = 'queued')").all(restored ? 1 : 0) as StoredJob[]) {
+      const job = JSON.parse(row.job_json) as PrintJobJson;
+      job.status = "unknown";
+      job.error = restored ? "Database was restored. Check the paper before retrying this copy." : "Printing was interrupted. Check the paper before retrying this copy.";
+      this.save(job);
+    }
+    this.db.prepare("INSERT INTO print_queue_state (id, generation) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET generation = excluded.generation").run(generation);
   }
 
-  retry(jobId: string): PrintJobJson | null {
-    const job = this.jobsList.find((j) => j.json.id === jobId);
-    if (!job || job.json.status !== "failed") return null;
+  start(): void {
+    for (const row of this.db.prepare("SELECT DISTINCT printer_id FROM print_jobs WHERE status = 'queued'").all() as { printer_id: string }[]) {
+      this.schedule(row.printer_id);
+    }
+  }
 
-    job.json.status = "queued";
-    job.json.error = null;
-    job.json.attempts += 1;
-    const snap = { ...job.json };
-    this.onChange(snap);
-    this.processQueue(job.json.printerId);
+  enqueue(printer: { id: string; name: string; kind: PrinterTarget["kind"]; connection: string },
+    kind: PrintJobJson["kind"], label: string, bytes: Buffer, copies = 1): PrintJobJson {
+    if (this.stopped) throw new Error("Print queue is stopping");
+    if (!Number.isInteger(copies) || copies < 1 || copies > 5) throw new Error("Copies must be between 1 and 5");
+    const jobs = this.db.transaction(() => Array.from({ length: copies }, (_, index) => {
+      const job: PrintJobJson = { id: uuidv7(), printerId: printer.id, printerName: printer.name, kind, label,
+        status: "queued", error: null, createdAt: Date.now(), attempts: 0, copyNumber: index + 1, copyCount: copies };
+      this.db.prepare("INSERT INTO print_jobs (id, printer_id, status, job_json, target_json, payload) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(job.id, printer.id, job.status, JSON.stringify(job), JSON.stringify({ kind: printer.kind, connection: printer.connection }), bytes);
+      return job;
+    }))();
+    // I/O waits for the caller's surrounding synchronous transaction to commit.
+    queueMicrotask(() => {
+      if (this.stopped) return;
+      for (const job of jobs) if (this.get(job.id)) this.notify(job);
+      this.schedule(printer.id);
+    });
+    return { ...jobs[0]! };
+  }
 
-    return snap;
+  retry(jobId: string, checkedPaper = false): PrintJobJson | null {
+    if (this.stopped) return null;
+    const stored = this.get(jobId);
+    if (!stored) return null;
+    const job = JSON.parse(stored.job_json) as PrintJobJson;
+    if (job.status !== "failed" && !(job.status === "unknown" && checkedPaper)) return null;
+    job.status = "queued"; job.error = null; job.attempts += 1;
+    this.save(job);
+    this.notify(job);
+    this.schedule(job.printerId);
+    return { ...job };
   }
 
   jobs(): PrintJobJson[] {
-    return this.jobsList.map((j) => ({ ...j.json }));
+    return (this.db.prepare("SELECT job_json FROM print_jobs ORDER BY sequence DESC").all() as StoredJob[])
+      .map(row => JSON.parse(row.job_json) as PrintJobJson);
   }
 
-  private trimCompleted() {
-    // Keep every live/failed job; only successful history may be discarded.
-    let completed = 0;
-    this.jobsList = this.jobsList.filter((job) => job.json.status !== "done" || ++completed <= 100);
+  confirmPrinted(jobId: string): PrintJobJson | null {
+    const stored = this.get(jobId);
+    if (!stored) return null;
+    const job = JSON.parse(stored.job_json) as PrintJobJson;
+    if (job.status !== "unknown") return null;
+    job.status = "done"; job.error = "Confirmed on paper";
+    this.save(job); this.notify(job);
+    return job;
   }
 
-  private async processQueue(printerId: string): Promise<void> {
-    const existing = this.perPrinterLock.get(printerId);
-    if (existing) {
-      // Already processing this printer's queue
-      return;
-    }
+  async close(): Promise<void> {
+    this.stopped = true;
+    await Promise.all(this.locks.values());
+    if (this.ownsDb) this.db.close();
+  }
 
-    const work = (async () => {
-      while (true) {
-        // Find the OLDEST queued job for this printer (scan from end)
-        let job: QueuedJob | undefined;
-        for (let i = this.jobsList.length - 1; i >= 0; i--) {
-          const candidate = this.jobsList[i];
-          if (candidate!.json.printerId === printerId && candidate!.json.status === "queued") {
-            job = candidate;
-            break;
-          }
-        }
-        if (!job) break;
-
+  private get(id: string): StoredJob | undefined {
+    return this.db.prepare("SELECT job_json, target_json, payload FROM print_jobs WHERE id = ?").get(id) as StoredJob | undefined;
+  }
+  private save(job: PrintJobJson): void {
+    this.db.prepare("UPDATE print_jobs SET status = ?, job_json = ? WHERE id = ?").run(job.status, JSON.stringify(job), job.id);
+  }
+  /** Keeps the newest finished jobs, and the newest failed/unknown ones so they stay retryable; older payloads are dropped. */
+  private trim(): void {
+    const keep = this.db.prepare("DELETE FROM print_jobs WHERE status = ? AND sequence NOT IN (SELECT sequence FROM print_jobs WHERE status = ? ORDER BY sequence DESC LIMIT ?)");
+    keep.run("done", "done", KEEP_DONE_JOBS);
+    this.db.prepare(`DELETE FROM print_jobs WHERE status IN ('failed', 'unknown')
+      AND sequence NOT IN (SELECT sequence FROM print_jobs WHERE status IN ('failed', 'unknown') ORDER BY sequence DESC LIMIT ?)`).run(KEEP_UNRESOLVED_JOBS);
+  }
+  private notify(job: PrintJobJson): void {
+    try { this.onChange({ ...job }); } catch (error) { console.error("Print job notification failed", error); }
+  }
+  private schedule(printerId: string): void {
+    if (this.stopped || this.locks.has(printerId)) return;
+    let processingError = false;
+    const work = Promise.resolve().then(async () => {
+      while (!this.stopped) {
+        const row = this.db.prepare("SELECT job_json, target_json, payload FROM print_jobs WHERE printer_id = ? AND status = 'queued' ORDER BY sequence LIMIT 1")
+          .get(printerId) as StoredJob | undefined;
+        if (!row) break;
+        const job = JSON.parse(row.job_json) as PrintJobJson;
+        job.status = "printing";
+        this.save(job);
+        this.notify(job);
         try {
-          job.json.status = "printing";
-          this.onChange({ ...job.json });
-
-          try {
-            await this.send(job.target, job.bytes);
-            job.json.status = "done";
-            job.json.error = null;
-          } catch (err) {
-            job.json.status = "failed";
-            job.json.error = err instanceof Error ? err.message : "unknown error";
-          }
-
-          this.onChange({ ...job.json });
-          this.trimCompleted();
-        } catch (onChangeErr) {
-          // Defensive: if onChange throws, log but don't wedge the printer
-          console.error("onChange threw:", onChangeErr);
+          await this.send(JSON.parse(row.target_json) as PrinterTarget, row.payload);
+          job.status = "done"; job.error = null;
+        } catch (error) {
+          job.status = error instanceof PrintOutcomeUnknown ? "unknown" : "failed";
+          job.error = error instanceof Error ? error.message : "Print failed";
         }
+        this.save(job);
+        this.notify(job);
+        this.trim();
       }
-    })();
-
-    this.perPrinterLock.set(printerId, work);
-    try {
-      await work;
-    } finally {
-      this.perPrinterLock.delete(printerId);
-    }
-
-    // Re-check for newly queued jobs that may have arrived during final await
-    const hasMore = this.jobsList.some(
-      (j) => j.json.printerId === printerId && j.json.status === "queued"
-    );
-    if (hasMore) this.processQueue(printerId);
+    }).catch(error => { processingError = true; console.error("Print queue processing failed", error); }).finally(() => {
+      this.locks.delete(printerId);
+      if (!this.stopped && !processingError && this.db.prepare("SELECT 1 FROM print_jobs WHERE printer_id = ? AND status = 'queued' LIMIT 1").get(printerId)) this.schedule(printerId);
+    });
+    this.locks.set(printerId, work);
   }
 }

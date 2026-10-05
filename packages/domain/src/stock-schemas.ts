@@ -20,6 +20,7 @@ const Nonnegative = StockQuantity.refine((n) => n >= 0, "Quantity cannot be nega
 const Ref = z.string().min(8).max(64);
 const Name = z.string().trim().min(1).max(120);
 const Version = z.number().int().nonnegative();
+const PerSale = Nonnegative.refine((n) => n >= 0.001 && n <= 1_000_000, "Use a quantity from 0.001 to 1000000");
 
 export const StockCreate = z.object({
   clientRef: Ref, name: Name, unit: z.enum(STOCK_UNITS),
@@ -44,8 +45,23 @@ export const UnitCostSet = z.object({
 export const StockLinkUpdate = z.object({
   expectedVersion: Version,
   stockItemId: z.string().min(1).nullable(),
-  qtyPerSale: Nonnegative.refine((n) => n > 0 && n <= 1_000_000, "Use a quantity greater than zero, at most 1000000").default(1),
+  qtyPerSale: PerSale.default(1),
 }).strict();
+
+export const RecipeUpdate = z.object({
+  expectedVersion: Version,
+  ingredients: z.array(z.object({
+    stockItemId: z.string().trim().min(1, "Choose a stock item").max(64),
+    qtyPerSale: PerSale,
+  }).strict()).max(100, "A recipe can have at most 100 ingredients"),
+}).strict().superRefine(({ ingredients }, ctx) => {
+  const seen = new Set<string>();
+  ingredients.forEach((ingredient, index) => {
+    if (seen.has(ingredient.stockItemId)) ctx.addIssue({ code: "custom", message: "Select each ingredient only once", path: ["ingredients", index, "stockItemId"] });
+    seen.add(ingredient.stockItemId);
+  });
+});
+export type RecipeUpdateInput = z.infer<typeof RecipeUpdate>;
 
 export interface StockItem {
   id: string; name: string; unit: StockUnit; qty: number; lowStockThreshold: number | null;

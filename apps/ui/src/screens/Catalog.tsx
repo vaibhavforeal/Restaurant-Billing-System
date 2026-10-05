@@ -1,8 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { paiseToRupees } from "../money";
 import type { Category, Product, Station, StationInfo } from "../types";
 import { ProductEditor } from "./ProductEditor";
+import { CatalogTransfer } from "./CatalogTransfer";
+import { useNavigationGuard } from "../navigation-guard";
+import "../product-editor.css";
+
+function CatalogWriteGuard({ busy }: { busy: boolean }) {
+  useNavigationGuard(() => {
+    if (!busy) return true;
+    window.alert("Wait for the catalog change to finish saving before leaving.");
+    return false;
+  });
+  useEffect(() => {
+    if (!busy) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
+  return null;
+}
 
 export function Catalog() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -12,6 +30,9 @@ export function Catalog() {
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [newCatName, setNewCatName] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const lock = useRef(false);
 
   async function reload() {
     const [c, p, s] = await Promise.all([
@@ -29,14 +50,22 @@ export function Catalog() {
     reload().catch(() => setError("Failed to load catalog"));
   }, []);
 
-  async function run(action: () => Promise<unknown>) {
-    setError("");
+  async function run(action: () => Promise<unknown>, key = "catalog") {
+    if (lock.current) return;
+    lock.current = true; setBusy(key); setError(""); setMessage("");
     try {
       await action();
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Request failed");
-    }
+    } finally { lock.current = false; setBusy(null); }
+  }
+
+  function toggleSoldOut(product: Product) {
+    void run(async () => {
+      await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ isSoldOut: !product.isSoldOut }) });
+      setMessage(`${product.name} is ${product.isSoldOut ? "available" : "sold out"} for new orders.`);
+    }, product.id);
   }
 
   function addCategory() {
@@ -78,7 +107,7 @@ export function Catalog() {
         stations={stations}
         onDone={() => {
           setEditing(null);
-          void reload();
+          void reload().catch(() => setError("Failed to refresh catalog"));
         }}
       />
     );
@@ -88,11 +117,12 @@ export function Catalog() {
 
   return (
     <div className="catalog-layout">
+      <CatalogWriteGuard busy={busy !== null} />
       <aside className="panel category-editor">
         <h2>Categories</h2>
         <div style={{ display: "flex", gap: 4 }}>
-          <input value={newCatName} placeholder="New category" onChange={(e) => setNewCatName(e.target.value)} style={{ flex: 1 }} />
-          <button className="primary" onClick={addCategory}>Add</button>
+          <input value={newCatName} aria-label="New category" disabled={busy !== null} placeholder="New category" onChange={(e) => setNewCatName(e.target.value)} style={{ flex: 1 }} />
+          <button className="primary" disabled={busy !== null} onClick={addCategory}>Add</button>
         </div>
         <ul style={{ listStyle: "none", padding: 0 }}>
           {categories.map((c) => (
@@ -103,10 +133,10 @@ export function Catalog() {
               >
                 {c.name}
               </button>
-              <button onClick={() => move(c, -1)} title="Move up">▲</button>
-              <button onClick={() => move(c, 1)} title="Move down">▼</button>
-              <button onClick={() => rename(c)} title="Rename">✎</button>
-              <button onClick={() => patchCategory(c.id, { isActive: !c.isActive })} title={c.isActive ? "Deactivate" : "Activate"}>
+              <button disabled={busy !== null} onClick={() => move(c, -1)} title="Move up" aria-label={`Move ${c.name} up`}>▲</button>
+              <button disabled={busy !== null} onClick={() => move(c, 1)} title="Move down" aria-label={`Move ${c.name} down`}>▼</button>
+              <button disabled={busy !== null} onClick={() => rename(c)} title="Rename" aria-label={`Rename ${c.name}`}>✎</button>
+              <button disabled={busy !== null} onClick={() => patchCategory(c.id, { isActive: !c.isActive })} title={c.isActive ? "Deactivate" : "Activate"} aria-label={`${c.isActive ? "Deactivate" : "Activate"} ${c.name}`}>
                 {c.isActive ? "⏸" : "▶"}
               </button>
             </li>
@@ -117,44 +147,53 @@ export function Catalog() {
       <div className="panel catalog-products">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Products</h2>
-          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat} style={{ padding: "8px 16px" }}>
+          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
             New product
           </button>
         </div>
-        <div style={{ color: "crimson", minHeight: 20 }}>{error}</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <p className="product-editor-help">Availability applies to new orders. Existing orders stay unchanged.</p>
+        <CatalogTransfer busy={busy !== null} run={run} onImported={setMessage} />
+        <div role="alert" style={{ color: "var(--danger-text, crimson)", minHeight: 20 }}>{error}</div>
+        {message && <p role="status">{message}</p>}
+        <div className="catalog-table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
               <th style={{ padding: 6 }}>Name</th>
-              <th>Price</th>
+              <th>Non-AC</th>
+              <th>AC</th>
+              <th>Takeaway</th>
               <th>GST</th>
               <th>Veg</th>
               <th>Variants</th>
+              <th>Availability</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {visible.map((p) => (
               <tr key={p.id} style={{ borderBottom: "1px solid #eee", opacity: p.isActive ? 1 : 0.45 }}>
-                <td style={{ padding: 6 }}>{p.name}</td>
-                <td>₹{paiseToRupees(p.pricePaise)}</td>
+                <td className="catalog-product-name" style={{ padding: 6 }}><strong>{p.name}</strong>{p.description && <p>{p.description}</p>}{!p.isActive && <small>Inactive · </small>}{p.photoVersion && <small>Photo added</small>}</td>
+                <td className="pos-money">₹{paiseToRupees(p.pricePaise)}</td>
+                <td className="pos-money">₹{paiseToRupees(p.acPricePaise ?? p.pricePaise)}</td>
+                <td className="pos-money">₹{paiseToRupees(p.takeawayPricePaise ?? p.pricePaise)}</td>
                 <td>{p.gstRate}%</td>
                 <td>{p.isVeg ? "🟢" : "🔴"}</td>
                 <td>{p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
+                <td className="catalog-availability"><span className={p.isSoldOut ? "sold-out" : ""}>{p.isSoldOut ? "Sold out" : "Available"}</span><button disabled={busy !== null} aria-label={`Mark ${p.name} ${p.isSoldOut ? "available" : "sold out"}`} onClick={() => toggleSoldOut(p)}>{busy === p.id ? "Saving…" : p.isSoldOut ? "Mark available" : "Mark sold out"}</button></td>
                 <td>
-                  <button onClick={() => setEditing(p)}>Edit</button>
+                  <button disabled={busy !== null} onClick={() => setEditing(p)}>Edit</button>
                 </td>
               </tr>
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ padding: 12, color: "#777" }}>
+                <td colSpan={9} style={{ padding: 12, color: "var(--muted)" }}>
                   No products in this category yet.
                 </td>
               </tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

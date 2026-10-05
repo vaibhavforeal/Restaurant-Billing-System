@@ -1,0 +1,28 @@
+/* Shared viewport-sized workspace for tables and orders. */
+.compact-workspace { height: 100dvh; min-height: 0; overflow: hidden; grid-template-columns: 64px minmax(0, 1fr); }
+.compact-workspace .app-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.compact-workspace .workspace { display: flex; flex: 1; flex-direction: column; min-height: 0; width: 100%; max-width: none; margin: 0; padding: 12px; overflow: auto; }
+.compact-workspace .sidebar { height: 100%; min-height: 0; padding: 12px 7px; }
+.compact-workspace .sidebar .brand { margin: 0 auto 16px; }
+.compact-workspace .sidebar .brand-mark { width: 34px; height: 34px; }
+.compact-workspace .sidebar .brand > span:last-child,
+.compact-workspace .nav-item > span,
+.compact-workspace .sidebar-footer > div,
+.compact-workspace .nav-item.active::after { display: none; }
+.compact-workspace .nav-item { justify-content: center; min-height: 36px; padding: 8px; }
+.compact-workspace .sidebar-footer { justify-content: center; padding: 10px 0; }
+.compact-workspace .app-body > aside { flex-shrink: 0; max-height: 22dvh; overflow: auto; font-size: 12px; }
+.compact-workspace .app-body > .panel { flex-shrink: 0; max-height: 20dvh; overflow: auto; margin: 0; padding: 8px 12px; font-size: 12px; }
+
+@media (max-width: 700px) {
+  .compact-workspace { display: flex; flex-direction: column; }
+  .compact-workspace .sidebar { position: relative; flex-shrink: 0; height: auto; padding: 5px 48px 5px 6px; border-bottom: 1px solid var(--line); overflow: hidden; }
+  .compact-workspace .sidebar .brand, .compact-workspace .sidebar-footer { display: none; }
+  .compact-workspace .nav-items { display: flex; overflow: auto; scrollbar-width: none; gap: 2px; }
+  .compact-workspace .nav-item { width: auto; flex-shrink: 0; min-height: 34px; padding: 6px 9px; }
+  .compact-workspace .nav-item > span { display: inline; font-size: 11px; }
+  .compact-workspace .logout { position: absolute; top: 5px; right: 5px; width: 34px; border: 0; }
+  .compact-workspace .logout > span { display: none; }
+  .compact-workspace .app-body { flex: 1; }
+  .compact-workspace .workspace { padding: 8px; }
+}

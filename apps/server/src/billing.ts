@@ -6,8 +6,11 @@ import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
-import { consumeStock } from "@forkflow/domain";
+import { billUpiPayment, upiQrSvg } from "./print/upi.js";
+import { consumeStock, saveReportLines } from "@forkflow/domain";
 import { publishStock } from "./stock.js";
+import { readProfile } from "./print/profile.js";
+import { bestEffortPrint } from "./print/best-effort.js";
 
 interface BillRow {
   id: string; bill_no: number; order_id: string; status: Bill["status"];
@@ -15,7 +18,7 @@ interface BillRow {
   cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number;
   created_at: number; client_ref: string | null; request_json: string | null; receipt_json: string | null;
 }
-interface PrinterRow { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string; paper_width: 58 | 80 }
+interface PrinterRow { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string; paper_width: 58 | 80; receipt_profile: string }
 
 export function registerBilling(app: FastifyInstance): void {
   const db = app.db;
@@ -40,7 +43,17 @@ export function registerBilling(app: FastifyInstance): void {
     return p;
   }
   function printBill(bill: Bill, p: PrinterRow) {
-    return app.printQueue.enqueue(p, "receipt", `Bill #${bill.billNo}`, receiptSlip(bill, p.paper_width));
+    const profile = readProfile(p.receipt_profile);
+    return app.printQueue.enqueue(p, "receipt", `Bill #${bill.billNo}`, receiptSlip(bill, p.paper_width, profile), profile.copies);
+  }
+  // Rendering is best effort so a bad printer profile cannot block the sale; the queue insert stays atomic with the bill.
+  function printNewBill(bill: Bill, p: PrinterRow) {
+    const rendered = bestEffortPrint(app.log, `Bill #${bill.billNo}`, () => {
+      const profile = readProfile(p.receipt_profile);
+      return { bytes: receiptSlip(bill, p.paper_width, profile), copies: profile.copies };
+    });
+    const job = rendered.value ? app.printQueue.enqueue(p, "receipt", `Bill #${bill.billNo}`, rendered.value.bytes, rendered.value.copies) : null;
+    return { value: job, error: rendered.error };
   }
   function broadcast(orderId: string) {
     const order = loadOrderJson(db, orderId)!;
@@ -56,13 +69,20 @@ export function registerBilling(app: FastifyInstance): void {
     if (!items.length) throw httpError(409, "Add items before billing");
     const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
     if (unsent) throw httpError(409, "Send kitchen items before billing");
+    const { require_kitchen_acceptance } = db.prepare("SELECT require_kitchen_acceptance FROM settings WHERE id = 1").get() as { require_kitchen_acceptance: number };
+    if (order.type === "dine_in" && require_kitchen_acceptance === 1) {
+      const acceptedKots = new Set(order.kots.filter((kot) => kot.acceptedAt != null || kot.doneAt != null).map((kot) => kot.id));
+      if (items.some((item) => item.status === "sent" && item.kotId && !acceptedKots.has(item.kotId))) {
+        throw httpError(409, "Wait for the kitchen to accept all tickets before billing this table order");
+      }
+    }
     let totals;
     const { tax_inclusive } = db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number };
     try { totals = calculateBill(items, body.discountPaise, tax_inclusive === 1); }
     catch (err) { throw httpError(400, err instanceof Error ? err.message : "Invalid bill"); }
     const limit = roleFor(role).limits?.["max_discount_percent"];
     if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
-    const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter">;
+    const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId">;
     const receipt: ReceiptSnapshot = { ...profile, taxInclusive: tax_inclusive === 1, orderType: order.type, tableName: order.tableName, splitLabel: order.splitLabel,
       items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })) };
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
@@ -87,7 +107,7 @@ export function registerBilling(app: FastifyInstance): void {
       const existing = db.prepare("SELECT * FROM bills WHERE client_ref = ?").get(body.clientRef) as BillRow | undefined;
       if (existing) {
         if (existing.request_json !== requestJson) throw httpError(409, "Billing reference already used for a different request");
-        return { billId: existing.id, created: false, target: null };
+        return { billId: existing.id, created: false, job: null, printError: null };
       }
       if (db.prepare("SELECT id FROM bills WHERE order_id = ?").get(orderId)) throw httpError(409, "Order already billed; reload to view its bill");
       const value = preview(orderId, body, req.user.role);
@@ -101,18 +121,20 @@ export function registerBilling(app: FastifyInstance): void {
           value.discountPaise, body.discountNote || null, value.cgstPaise, value.sgstPaise, value.roundingPaise,
           value.totalPaise, Date.now(), req.user.id, body.clientRef, requestJson, JSON.stringify(value.receipt));
       for (const tax of value.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
+      saveReportLines(db, id);
       // All remaining pending items are stationless; deduct before changing status.
       const pending = db.prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'pending'").all(orderId) as { id: string }[];
       changedStockIds.push(...consumeStock(db, pending.map((item) => item.id), req.user.id));
       db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(orderId);
       db.prepare("UPDATE orders SET status = 'billed' WHERE id = ?").run(orderId);
-      return { billId: id, created: true, target };
+      const print = target ? printNewBill(getBill(id), target) : { value: null, error: null };
+      return { billId: id, created: true, job: print.value, printError: print.error };
     })();
     const bill = getBill(result.billId);
     if (result.created) publishStock(app, changedStockIds);
     const order = result.created ? broadcast(orderId) : loadOrderJson(db, orderId);
-    const job = result.target ? printBill(bill, result.target) : null;
-    return reply.status(result.created ? 201 : 200).send({ bill, order, job });
+    const job = result.job;
+    return reply.status(result.created ? 201 : 200).send({ bill, order, job, printError: result.printError });
   });
   app.post("/api/bills/:id/settle", { preHandler: app.requirePermission("bills.settle") }, async (req) => {
     const { id } = req.params as { id: string };
@@ -147,6 +169,16 @@ export function registerBilling(app: FastifyInstance): void {
     return { bills: rows.map((r) => getBill(r.id)) };
   });
   app.get("/api/bills/:id", { preHandler: read }, async (req) => ({ bill: getBill((req.params as { id: string }).id) }));
+  app.get("/api/bills/:id/upi-qr", { preHandler: read }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const bill = getBill((req.params as { id: string }).id);
+    const payment = billUpiPayment(bill);
+    return { payment: payment ? {
+      billId: bill.id, billNo: bill.billNo, restaurantName: bill.receipt.restaurantName,
+      upiId: payment.upiId, amountPaise: payment.amountPaise,
+      qrDataUrl: `data:image/svg+xml;base64,${Buffer.from(upiQrSvg(payment.uri)).toString("base64")}`,
+    } : null };
+  });
   app.get("/api/billing-printers", { preHandler: read }, async () => ({
     printers: db.prepare("SELECT id, name, paper_width AS paperWidth FROM printers WHERE is_active = 1 ORDER BY name").all(),
   }));

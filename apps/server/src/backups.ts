@@ -42,6 +42,7 @@ export class Backups {
   private config: Config;
   private lastError: string | null = null;
   private secondError: string | null = null;
+  private consumers = new Set<{ created: (name: string) => void; protectedNames: () => ReadonlySet<string> }>();
   constructor(readonly db: Database, readonly dataDir: string, private now = () => Date.now()) {
     this.folder = join(dataDir, "backups");
     mkdirSync(this.folder, { recursive: true });
@@ -55,6 +56,10 @@ export class Backups {
     })).sort((a, b) => b.createdAt - a.createdAt || b.name.localeCompare(a.name));
   }
   status() { return { ...this.config, folder: this.folder, backups: this.list(), lastError: this.lastError, secondError: this.secondError }; }
+  subscribe(consumer: { created: (name: string) => void; protectedNames: () => ReadonlySet<string> }): () => void {
+    this.consumers.add(consumer);
+    return () => { this.consumers.delete(consumer); };
+  }
   configure(input: unknown) {
     const config = BackupConfig.parse(input);
     if (config.secondLocation && resolve(config.secondLocation).toLowerCase() === resolve(this.folder).toLowerCase()) throw new Error("Choose a different second backup folder");
@@ -78,6 +83,10 @@ export class Backups {
       throw error;
     }
     this.copySecond(target, name);
+    for (const consumer of this.consumers) {
+      // Secondary services cannot turn a verified local backup into a failure.
+      try { consumer.created(name); } catch { /* consumers report their own errors */ }
+    }
     // Retention never runs before a verified snapshot exists. Preserve 10 manual
     // and 10 pre-update restore points independently of daily retention.
     try { this.prune(this.folder); } catch (e) { this.lastError = `Backup saved; retention failed: ${String(e)}`; }
@@ -101,10 +110,11 @@ export class Backups {
   }
   private prune(folder: string) {
     const counts = new Map<string, number>();
+    const protectedNames = folder === this.folder ? new Set([...this.consumers].flatMap((consumer) => [...consumer.protectedNames()])) : new Set<string>();
     for (const entry of this.list(folder)) {
       const count = (counts.get(entry.kind) ?? 0) + 1; counts.set(entry.kind, count);
       const expired = entry.kind === "daily" ? entry.createdAt < this.now() - this.config.retentionDays * 86400000 && count > 1 : count > 10;
-      if (expired) unlinkSync(join(folder, entry.name));
+      if (expired && !protectedNames.has(entry.name)) unlinkSync(join(folder, entry.name));
     }
   }
   daily() {

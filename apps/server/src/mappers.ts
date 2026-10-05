@@ -1,8 +1,11 @@
 import { orderStockWarnings, type Database } from "@forkflow/domain";
 
 export interface OrderRow {
+  captain_id?: string | null;
+  captain_name?: string | null;
   id: string;
   client_ref: string;
+  price_tier: import("@forkflow/domain").PriceTier;
   type: "dine_in" | "parcel";
   table_id: string | null;
   split_label: string | null;
@@ -35,6 +38,7 @@ export interface KotRow {
   station_id: string;
   order_id: string;
   created_at: number;
+  accepted_at: number | null;
   done_at: number | null;
 }
 
@@ -62,6 +66,7 @@ export function kotJson(r: KotRow) {
     stationId: r.station_id,
     orderId: r.order_id,
     createdAt: r.created_at,
+    acceptedAt: r.accepted_at,
     doneAt: r.done_at,
   };
 }
@@ -105,15 +110,19 @@ export function loadOrderJson(db: Database, orderId: string) {
     id: row.id,
     clientRef: row.client_ref,
     type: row.type,
+    priceTier: row.price_tier,
     tableId: row.table_id,
     splitLabel: row.split_label,
     tableName: row.table_name,
+    captainId: row.captain_id ?? null,
+    captainName: row.captain_name ?? null,
     status: row.status,
     openedBy: row.opened_by,
     openedAt: row.opened_at,
     closedAt: row.closed_at,
     items: items.map(orderItemJson),
     kots: kots.map(kotJson),
+    kitchenAcceptanceRequired: (db.prepare("SELECT require_kitchen_acceptance FROM settings WHERE id = 1").get() as { require_kitchen_acceptance: number }).require_kitchen_acceptance === 1,
     stockWarnings: orderStockWarnings(db, orderId),
   };
 }

@@ -1,0 +1,21 @@
+/* Staff-only density tokens. Guest menus and print documents keep their own layout. */
+:root {
+  --space-0: 0; --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px;
+  --space-6: 12px; --space-8: 16px; --space-12: 24px;
+  --control: 28px; --control-small: 24px; --control-primary: 32px; --control-touch: 40px;
+  --text-base: 13px; --text-secondary: 12px; --text-heading: 16px; --text-total: 24px;
+  --radius: 4px; --radius-panel: 6px; --border: 1px; --icon: 16px;
+  --rail: 104px; --category-rail: 132px; --cart-width: 380px; --header-height: 40px; --status-height: 24px;
+  --tile-height: 72px; --tile-width: 120px; --table-tile-width: 144px; --table-row: 32px;
+  --dialog-width: 720px; --dialog-wide: 880px; --auth-width: 360px; --column-small: 224px;
+  --focus-width: 3px; --shadow: 0 8px 24px #0002;
+  --pos-accent: #b92335; --pos-accent-hover: #a11e2e; --pos-accent-soft: #fff0f2;
+  --pos-primary: #b92335; --pos-primary-hover: #a11e2e; --pos-on-primary: #fff;
+  --pos-muted: #5d6572; --pos-success: #21683e; --pos-success-bg: #edf7f1;
+  --pos-warning: #805800; --pos-warning-bg: #fff4da; --pos-danger: #ac2133;
+}
+:root[data-theme="dark"] {
+  --pos-accent: #ff8995; --pos-accent-hover: #ffa8b0; --pos-accent-soft: #40272f;
+  --pos-muted: #b3bbc8; --pos-success: #96d9b2; --pos-success-bg: #20392d;
+  --pos-warning: #f3c77e; --pos-warning-bg: #3c3020; --pos-danger: #ff9ca7;
+}

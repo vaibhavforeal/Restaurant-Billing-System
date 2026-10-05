@@ -7,6 +7,11 @@ export interface QueuedRequest {
 }
 const PREFIX = "forkflow.queue.v1.";
 const GENERATION = "forkflow.generation";
+function isEmptyKitchenSend(path: string, body: unknown): boolean {
+  if (!/^\/api\/orders\/[^/]+\/send$/.test(path) || !body || typeof body !== "object") return false;
+  const itemIds = (body as { itemIds?: unknown }).itemIds;
+  return Array.isArray(itemIds) && itemIds.length === 0;
+}
 let actor: string | null = null;
 let running = false;
 let generationChecked = false;
@@ -30,6 +35,13 @@ export function discardRequest(id: string) {
 }
 export function startQueue(userId: string) {
   actor = userId; generationChecked = false;
+  // Older KOT buttons queued empty item lists. These rejected requests cannot
+  // create a ticket; remove only those failures, keeping real/ambiguous actions.
+  for (const entry of queuedRequests(userId)) {
+    try {
+      if (entry.error && isEmptyKitchenSend(entry.path, JSON.parse(entry.body))) discardRequest(entry.id);
+    } catch { /* keep unreadable requests for review */ }
+  }
   const onStorage = () => notifyQueue();
   window.addEventListener("storage", onStorage);
   void pump();
@@ -41,6 +53,7 @@ export function startQueue(userId: string) {
   };
 }
 export function reliablePost<T>(path: string, body: unknown, label: string, draftKey?: string): Promise<T> {
+  if (isEmptyKitchenSend(path, body)) return Promise.reject(new Error("No items are waiting for a kitchen ticket."));
   if (!actor || !localStorage.getItem(GENERATION)) return Promise.reject(new Error("Waiting for the server connection. Try again shortly."));
   if (!/^\/api\/(orders\/[^/]+\/(items|send|bill)|bills\/[^/]+\/settle)$/.test(path)) return Promise.reject(new Error("This action cannot be queued"));
   const existing = queuedRequests().find((r) => r.path === path);

@@ -1,6 +1,6 @@
 {
   "name": "forkflow",
-  "version": "0.6.2",
+  "version": "0.6.4",
   "private": true,
   "type": "module",
   "description": "Local Windows restaurant POS with SQLite, GST billing, kitchen orders and inventory.",
@@ -11,14 +11,21 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:packaging": "node --test tools/desktop-packaging.test.mjs",
     "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
     "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
     "dev:server": "tsx watch apps/server/src/main.ts",
     "dev:ui": "npm run dev -w @forkflow/ui",
     "dev:desktop": "npm run build:desktop && electron build/desktop/app",
     "build:desktop": "npm run build -w @forkflow/ui && node tools/build-desktop.mjs",
-    "package:win": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64",
-    "package:dir": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64 --dir"
+    "build:demo": "node tools/build-desktop.mjs --demo --check && npm run build -w @forkflow/ui && node tools/build-desktop.mjs --demo",
+    "build:kitchen": "node tools/build-kitchen.mjs",
+    "package:demo": "npm run build:demo && electron-builder --config electron-builder.demo.yml --win --x64",
+    "package:kitchen": "npm run build:kitchen && electron-builder --config electron-builder.kitchen.yml --win --x64",
+    "build:commercial": "node tools/build-desktop.mjs --commercial --check && npm run build -w @forkflow/ui && node tools/build-desktop.mjs --commercial",
+    "package:commercial": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64",
+    "package:win": "npm run package:commercial",
+    "package:dir": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --dir"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -27,6 +34,7 @@
     "concurrently": "^10.0.4",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
+    "jsqr": "^1.4.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.10"

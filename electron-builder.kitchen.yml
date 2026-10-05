@@ -1,0 +1,21 @@
+appId: in.forkflow.kitchen
+productName: ForkFlow Kitchen
+directories:
+  app: build/desktop/kitchen
+  output: dist/kitchen
+electronVersion: 43.4.0
+npmRebuild: false
+asar: true
+files: ["**/*"]
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/desktop/icon.ico
+  artifactName: "ForkFlow-Kitchen-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true

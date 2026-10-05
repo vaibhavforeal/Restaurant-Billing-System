@@ -18,3 +18,4 @@ data/
 
 .DS_Store
 Thumbs.db
+.superdesign/tmp/

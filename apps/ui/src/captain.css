@@ -1,0 +1,118 @@
+/* Captain extends the POS tokens without changing the counter layout. */
+:root {
+  --captain-touch: 44px; --captain-header: 48px; --captain-tile: 96px;
+  --captain-tile-width: 144px; --captain-cart: 350px; --captain-input: 16px;
+  --captain-wide: 1440px; --captain-dialog: 480px;
+}
+html[data-theme] :is(.captain-shell, .captain-dialog, .captain-offline) {
+  --control-touch: var(--captain-touch); --cart-width: var(--captain-cart);
+  --tile-height: var(--captain-tile); --tile-width: var(--captain-tile-width);
+}
+html[data-theme] .captain-shell { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
+html[data-theme] .captain-shell :is(button, select, summary) { min-height: var(--captain-touch); }
+html[data-theme] .captain-shell :is(input, textarea) { min-height: var(--captain-touch); font-size: var(--captain-input); }
+html[data-theme] .captain-header { display: flex; align-items: center; justify-content: space-between; flex: none; gap: var(--space-4); min-height: var(--captain-header); padding: var(--space-2) var(--space-6); padding-top: max(var(--space-2), env(safe-area-inset-top)); border-bottom: var(--border) solid var(--line); background: var(--surface); }
+html[data-theme] .captain-brand { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-0); border: 0; background: transparent; }
+html[data-theme] .captain-brand .brand { margin: 0; font-size: var(--text-heading); gap: var(--space-4); }
+html[data-theme] .captain-brand .brand-mark { width: var(--control-primary); height: var(--control-primary); border-radius: var(--radius); }
+html[data-theme] .captain-brand > span { padding-left: var(--space-4); border-left: var(--border) solid var(--line); color: var(--muted); font-size: var(--text-base); }
+html[data-theme] .captain-account { display: flex; align-items: center; gap: var(--space-4); max-width: 40%; }
+.captain-account span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-theme] .captain-shell .app-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+html[data-theme] .captain-shell .workspace { flex: 1; min-height: 0; max-width: var(--captain-wide); width: 100%; margin: 0 auto; padding: var(--space-4) var(--space-6) max(var(--space-4), env(safe-area-inset-bottom)); overflow: auto; }
+html[data-theme] .captain-shell .pos-statusbar { flex: none; padding-inline: var(--space-6); min-height: var(--status-height); height: auto; }
+html[data-theme] .captain-shell .pos-status-warning { max-height: 25dvh; overflow: auto; }
+html[data-theme] .captain-shell .page-header { min-height: var(--captain-touch); margin: 0; gap: var(--space-4); }
+html[data-theme] .captain-shell .page-header h2 { margin: 0; font-size: var(--text-heading); }
+html[data-theme] .captain-shell .page-header .actions { gap: var(--space-4); flex-wrap: wrap; }
+html[data-theme] .captain-shell .tables-screen { gap: var(--space-4); }
+html[data-theme] .captain-shell .tables-request-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+html[data-theme] .captain-shell .tables-request-summary { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-4); min-width: 0; }
+html[data-theme] .captain-shell .tables-request-summary-heading { flex: 1; }
+html[data-theme] .captain-shell .tables-request-summary button { width: 100%; font-size: var(--text-secondary); }
+html[data-theme] .captain-shell .tables-filter-bar { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-4); }
+html[data-theme] .captain-shell .tables-filter-bar .tabs { flex-wrap: nowrap; overflow-x: auto; min-width: 0; max-width: 100%; padding-bottom: var(--space-2); }
+html[data-theme] .captain-shell .tables-filter-bar .tabs button { flex: none; white-space: nowrap; }
+html[data-theme] .captain-shell .tables-search-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .55fr); gap: var(--space-4); }
+html[data-theme] .captain-shell .tables-search-controls :is(.search-field, input, select) { width: 100%; min-width: 0; }
+html[data-theme] .captain-shell .tables-search-controls .search-field { max-width: none; }
+html[data-theme] .captain-shell .table-grid { grid-template-columns: repeat(auto-fill, minmax(var(--captain-tile-width), 1fr)); gap: var(--space-4); }
+html[data-theme] .captain-shell .table-card { min-height: var(--captain-tile); padding: var(--space-6); }
+html[data-theme] .captain-shell .table-area > h3 { margin: var(--space-4) 0; }
+html[data-theme] .captain-shell .table-card .status { font-size: var(--text-secondary); }
+html[data-theme] .captain-shell .table-card > strong { font-size: var(--text-heading); }
+html[data-theme] .captain-shell .order-header { display: flex; flex-wrap: nowrap; }
+html[data-theme] .captain-shell .order-header > div:not(.pos-overflow) { min-width: 0; }
+html[data-theme] .captain-shell .order-header h2 { display: flex; flex-wrap: wrap; }
+html[data-theme] .captain-shell .captain-back { flex: none; width: var(--captain-touch); padding: 0; font-size: var(--text-total); }
+html[data-theme] .captain-shell .order-header > .pos-overflow { margin-left: auto; }
+html[data-theme] .captain-shell .pos-overflow summary { display: flex; align-items: center; }
+html[data-theme] .captain-shell .order-layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--captain-cart); gap: var(--space-6); }
+html[data-theme] .captain-shell .menu-browser { display: flex; flex-direction: column; min-width: 0; }
+html[data-theme] .captain-shell .menu-toolbar { flex: none; }
+html[data-theme] .captain-shell .pos-search-hint { display: none; }
+html[data-theme] .captain-shell .category-rail { flex-direction: row; overflow-x: auto; flex: none; gap: var(--space-4); border: 0; padding: var(--space-2); }
+html[data-theme] .captain-shell .category-rail button { white-space: nowrap; text-align: center; }
+html[data-theme] .captain-shell .menu-grid { grid-template-columns: repeat(auto-fill, minmax(var(--captain-tile-width), 1fr)); gap: var(--space-4); align-items: stretch; }
+html[data-theme] .captain-shell .menu-card { padding: var(--space-6); min-height: var(--captain-tile); }
+html[data-theme] .captain-shell .menu-card-name { line-height: 1.4; }
+html[data-theme] .captain-shell .menu-card-bottom > span:first-child { white-space: nowrap; }
+html[data-theme] .captain-shell .cart-heading { min-height: var(--captain-touch); padding: var(--space-4) var(--space-6); }
+html[data-theme] .captain-shell .cart-section { padding: var(--space-4) var(--space-6); }
+html[data-theme] .captain-shell .draft-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); padding-block: var(--space-4); }
+html[data-theme] .captain-shell .cart-item-name { grid-row: 1; grid-column: 1; padding: 0; align-self: center; }
+html[data-theme] .captain-shell .cart-item-name small { display: block; color: var(--muted); font-size: var(--text-secondary); }
+html[data-theme] .captain-shell .cart-remove { grid-row: 1; grid-column: 2; width: var(--captain-touch); height: var(--captain-touch); }
+html[data-theme] .captain-shell .qty-stepper { grid-row: 2; grid-column: 1; justify-self: start; }
+html[data-theme] .captain-shell .qty-stepper :is(button, input) { width: var(--captain-touch); min-width: var(--captain-touch); height: var(--captain-touch); padding: 0; }
+html[data-theme] .captain-shell .draft-row > .pos-money { grid-row: 2; grid-column: 2; align-self: center; text-align: right; }
+html[data-theme] .captain-shell .cart-row-notice { grid-column: 1 / -1; }
+html[data-theme] .captain-shell .saved-item-name { font-size: var(--text-base); }
+html[data-theme] .captain-shell .status.ready { background: var(--pos-success-bg); color: var(--pos-success); }
+html[data-theme] .captain-shell .cart-total { padding: var(--space-4) var(--space-6); }
+html[data-theme] .captain-shell .captain-send { padding: var(--space-4) var(--space-6) var(--space-6); }
+html[data-theme] .captain-shell .captain-send button { min-height: var(--captain-header); font-size: var(--text-heading); }
+html[data-theme] .captain-message { display: flex; align-items: center; gap: var(--space-4); margin: 0; padding: var(--space-4) var(--space-6); background: var(--pos-success-bg); color: var(--pos-success); }
+html[data-theme] .captain-shell .order-pane-switch, html[data-theme] .captain-shell .mobile-cart-link { display: none; }
+html[data-theme] .captain-dialog { width: min(var(--captain-dialog), calc(100vw - var(--space-8))); }
+html[data-theme] .captain-dialog :is(button, input, textarea, summary) { min-height: var(--captain-touch); }
+html[data-theme] .captain-dialog :is(input, textarea) { font-size: var(--captain-input); }
+html[data-theme] .captain-dialog .theme-toggle-label { display: inline; }
+.captain-dialog textarea { display: block; width: 100%; margin-top: var(--space-4); resize: vertical; }
+.captain-account-actions { display: grid; gap: var(--space-4); }
+.captain-note-chips, .captain-note-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-block: var(--space-6); }
+.captain-note-actions { justify-content: flex-end; }
+.captain-signout { margin-top: var(--space-6); width: 100%; }
+.captain-install { border-top: var(--border) solid var(--line); margin-top: var(--space-8); padding-top: var(--space-6); }
+.captain-install h3 { font-size: var(--text-heading); margin: 0 0 var(--space-4); }
+.captain-install p { color: var(--muted); font-size: var(--text-secondary); line-height: 1.5; margin: var(--space-4) 0; }
+.captain-offline { max-width: var(--captain-dialog); margin: 10dvh auto; padding: var(--space-8); }
+.captain-offline p { line-height: 1.5; }
+html[data-captain="true"] :is(.workspace-dialog, .auth-card) :is(button, summary, select, input) { min-height: var(--captain-touch); }
+html[data-captain="true"] .workspace-dialog :is(input, textarea) { font-size: var(--captain-input); }
+.captain-connection-list { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+.captain-connection-list > div { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 899px) {
+  html[data-theme] .captain-shell .order-layout { display: flex; }
+  html[data-theme] .captain-shell .order-pane-switch { display: flex; gap: var(--space-4); }
+  html[data-theme] .captain-shell .order-pane-switch button { flex: 1; }
+  html[data-theme] .captain-shell .order-layout.show-menu .order-cart,
+  html[data-theme] .captain-shell .order-layout.show-cart .menu-browser { display: none; }
+  html[data-theme] .captain-shell .menu-browser, html[data-theme] .captain-shell .order-cart { flex: 1; }
+  html[data-theme] .captain-shell .mobile-cart-link { display: flex; align-items: center; justify-content: space-between; flex: none; margin: 0; min-height: var(--captain-header); padding: var(--space-4) var(--space-6); background: var(--pos-primary); border-color: var(--pos-primary); color: var(--pos-on-primary); }
+  html[data-theme] .captain-shell .mobile-cart-link strong { white-space: nowrap; }
+}
+@media (max-width: 539px) {
+  html[data-theme] .captain-shell .workspace { padding-inline: var(--space-4); }
+  html[data-theme] .captain-brand .brand > span:last-child { display: none; }
+  html[data-theme] .captain-shell .tables-header { flex-wrap: nowrap; }
+  html[data-theme] .captain-shell .tables-header .actions button { font-size: var(--text-secondary); padding-inline: var(--space-4); }
+  html[data-theme] .captain-shell .table-grid, html[data-theme] .captain-shell .menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-theme] .captain-shell .table-card { padding: var(--space-4); }
+}
+@media (max-height: 600px) and (max-width: 899px) {
+  html[data-theme] .captain-shell .tables-request-strip { display: flex; }
+  html[data-theme] .captain-shell .tables-request-summary { flex: 1; }
+  html[data-theme] .captain-shell .tables-screen { overflow-y: auto; }
+  html[data-theme] .captain-shell .tables-layout { flex: none; min-height: 40dvh; }
+}

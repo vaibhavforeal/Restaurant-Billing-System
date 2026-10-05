@@ -52,6 +52,25 @@ describe("printers API", () => {
     expect(updated.isActive).toBe(false);
   });
 
+  it("deactivates a printer saved under older connection rules, but still validates connection changes", async () => {
+    const { app: testApp } = freshAppWithFakeSink();
+    app = testApp;
+    const admin = await setupAdmin(app);
+    const createRes = await app.inject({ method: "POST", url: "/api/printers", payload: { name: "Old", kind: "bluetooth", connection: "COM3" }, headers: auth(admin.token) });
+    const printerId = createRes.json().printer.id;
+    app.db.prepare("UPDATE printers SET connection = 'Front Bluetooth' WHERE id = ?").run(printerId);
+
+    const off = await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, payload: { isActive: false }, headers: auth(admin.token) });
+    expect(off.statusCode).toBe(200);
+    expect(off.json().printer).toMatchObject({ isActive: false, connection: "Front Bluetooth" });
+
+    const bad = await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, payload: { connection: "not a port" }, headers: auth(admin.token) });
+    expect(bad.statusCode).toBe(400);
+    const good = await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, payload: { connection: "COM4" }, headers: auth(admin.token) });
+    expect(good.statusCode).toBe(200);
+    expect(good.json().printer.connection).toBe("COM4");
+  });
+
   it("test-print enqueues a job", async () => {
     const { app: testApp, fake } = freshAppWithFakeSink();
     app = testApp;

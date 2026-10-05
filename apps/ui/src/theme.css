@@ -1,0 +1,70 @@
+/* Shared staff theme. Customer menus and printed receipts keep their own palette. */
+.theme-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 40px; padding: 6px 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); border-radius: 9px; flex-shrink: 0;
+}
+.theme-toggle-label { font-size: 12px; white-space: nowrap; }
+.theme-toggle-track { display: block; width: 42px; height: 24px; padding: 3px; border-radius: 20px; background: #e4e6eb; flex-shrink: 0; }
+.theme-toggle-thumb { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #555a66; box-shadow: 0 1px 3px #0002; transition: transform .18s ease; }
+.theme-toggle[aria-checked="true"] .theme-toggle-track { background: #d12d3b; }
+.theme-toggle[aria-checked="true"] .theme-toggle-thumb { transform: translateX(18px); color: #a82130; }
+.sidebar > .theme-toggle { margin-top: auto; margin-bottom: 6px; }
+.sidebar > .sidebar-footer { margin-top: 0; }
+.auth-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+.auth-card .auth-brand-row > .brand { margin: 0; }
+.auth-brand-row .theme-toggle-label { display: none; }
+.auth-brand-row .theme-toggle { padding: 6px; }
+.compact-workspace .theme-toggle { justify-content: center; padding: 6px 3px; }
+.compact-workspace .theme-toggle-label { display: none; }
+@media (min-width: 651px) and (max-width: 1150px) {
+  .sidebar .theme-toggle { justify-content: center; padding: 6px 3px; }
+  .sidebar .theme-toggle-label { display: none; }
+}
+@media (max-width: 650px) {
+  .sidebar > .theme-toggle { position: absolute; top: 7px; right: 94px; margin: 0; padding: 4px 6px; min-height: 34px; }
+  .sidebar .theme-toggle-label { display: none; }
+}
+@media (max-width: 700px) {
+  .compact-workspace .sidebar { padding-right: 100px; }
+  .compact-workspace .sidebar > .theme-toggle { position: absolute; top: 5px; right: 43px; margin: 0; padding: 4px; min-height: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { .theme-toggle-thumb { transition: none; } }
+@media print { .theme-toggle { display: none; } }
+
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark; color: #e8eaf0; background: #14171d;
+    --ink: #e8eaf0; --muted: #a7adba; --line: #363c48; --surface: #20242d;
+    --red: #ff8995; --red-hover: #ed7482; --red-light: #40272f;
+    --danger-text: #ff9ca7; --warning-text: #f3c77e; --success-text: #96d9b2;
+  }
+  html[data-theme="dark"] :is(button, input, select, textarea) { color: var(--ink); background-color: var(--surface); border-color: var(--line); }
+  html[data-theme="dark"] button:hover:not(:disabled) { background-color: #2d3340; border-color: #626d80; }
+  html[data-theme="dark"] :is(.sidebar, .topbar, .panel, .stat-card, .welcome-panel, .table-card, .menu-card, .order-cart, .kitchen-ticket, .legacy-screen, .auth-card, .tables-parcels, .tables-request-summary, .workspace-dialog, .billing-dialog, .billing-panel.billing-footer) { background: var(--surface); }
+  html[data-theme="dark"] .auth-shell { background: #14171d; }
+  html[data-theme="dark"] :is(.brand, .empty-state h3, label) { color: var(--ink); }
+  html[data-theme="dark"] :is(.nav-item, .brand-caption, .section-label, .cart-section h3, .cart-total p, .ticket-items small, .system-settings p, .auth-footnote, .service-inbox-heading p, .service-inbox-request small, .service-inbox-help, .service-inbox-empty, .tabs button) { color: var(--muted); }
+  html[data-theme="dark"] :is(th, .avatar, .role-badge, .stat-icon, .tabs .count, .cart-total, .license-preview, .product-photo-placeholder, .product-photo-preview, .menu-card.sold-out) { background: #292f3a; color: var(--muted); }
+  html[data-theme="dark"] .cart-total > div { color: var(--ink); }
+  html[data-theme="dark"] :is(.search-field, .tabs button.selected, .tabs button:disabled) { background: var(--surface); border-color: var(--line); }
+  html[data-theme="dark"] .search-field input { background: transparent; }
+  html[data-theme="dark"] tbody tr:hover { background: #292f3a; }
+  html[data-theme="dark"] :is(.cart-row, .ticket-location, .bill-summary) { border-color: var(--line); }
+  html[data-theme="dark"] :is(.primary, .brand-mark, .mobile-cart-link) { background: #d12d3b; color: #fff; border-color: #d12d3b; }
+  html[data-theme="dark"] button.primary:hover:not(:disabled) { background: #b6202e; border-color: #b6202e; }
+  html[data-theme="dark"] :is(.nav-item.active, .nav-item.active:disabled, .primary.soft, .stat-card:first-child .stat-icon) { background: var(--red-light); color: var(--red); }
+  html[data-theme="dark"] .text-button { color: var(--red); background: transparent; border-color: transparent; }
+  html[data-theme="dark"] :is(.nav-item, .tabs button) { background: transparent; }
+  html[data-theme="dark"] :is(.nav-item.active, .tabs button.selected, .tabs button:disabled) { background: var(--red-light); color: var(--red); }
+  html[data-theme="dark"] :is(.danger-text, [role="alert"], .tables-request-attention, .qr-pending-count) { color: #ff9ca7; }
+  html[data-theme="dark"] :is(.error-message:not(:empty), .billing-attention, .billing-dialog .billing-error, .license-badge.expired, .license-badge.invalid, .license-badge.clock_error, .qr-request-status.rejected) { background: #40272f; color: #ff9ca7; border-color: #75414b; }
+  html[data-theme="dark"] :is(.alert, .ticket-header span, .status.occupied, .status.pending, .status.open, .license-warning, .license-badge.grace, .qr-notification-banner, .qr-plan-note, .qr-request-status.pending, .service-inbox-status, .menu-sold-out-label, .tables-screen .status.reserved) { background: #3c3020; color: #f3c77e; border-color: #6d5533; }
+  html[data-theme="dark"] .tables-screen .table-card.reserved { background: #302a22; border-color: #92703a; }
+  html[data-theme="dark"] :is(.table-reservation-note, .qr-item-note, .qr-review-note, .catalog-availability > span.sold-out) { color: #f3c77e; }
+  html[data-theme="dark"] :is(.status.free, .status.sent, .status.settled, .status.paid, .license-badge.active, .license-message, .billing-dialog .billing-message, .billing-dialog .billing-paid, .qr-request-status.accepted, .service-inbox-resolved) { background: #20392d; color: #96d9b2; border-color: #426a52; }
+  html[data-theme="dark"] :is(.veg-indicator, .catalog-availability > span) { color: #96d9b2; border-color: #426a52; }
+  html[data-theme="dark"] .veg-indicator.non-veg { color: #edb58f; border-color: #77553f; }
+  html[data-theme="dark"] :is(.status.cancelled, .license-badge, .qr-request-status, .service-inbox-expired, .menu-glyph) { background: #292f3a; color: var(--muted); }
+  html[data-theme="dark"] .theme-toggle { color: var(--ink); }
+}

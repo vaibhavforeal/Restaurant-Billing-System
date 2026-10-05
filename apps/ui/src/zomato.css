@@ -1,0 +1,50 @@
+.zomato-screen { max-width: 1440px; }
+.zomato-status { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 13px 16px; background: var(--red-light); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; }
+.zomato-status span, .zomato-screen small { color: var(--muted); }
+.zomato-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 22px; }
+.zomato-tabs [aria-selected="true"] { color: var(--red); background: var(--red-light); border-color: var(--red); }
+.zomato-toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.zomato-screen label { display: grid; gap: 6px; }
+.zomato-screen input, .zomato-screen textarea, .zomato-screen select { width: 100%; background: var(--surface); color: var(--ink); }
+.zomato-screen input[type="search"] { min-width: 260px; }
+.zomato-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 18px 0 24px; }
+.zomato-metrics > div { border: 1px solid var(--line); border-radius: 10px; padding: 18px; background: var(--surface); }
+.zomato-metrics span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.zomato-metrics strong { display: block; font-size: 23px; font-variant-numeric: tabular-nums; }
+.zomato-metrics small { font-size: 12px; font-weight: 400; }
+.zomato-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.zomato-table { min-width: 1350px; }
+.zomato-table td:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.zomato-table th:nth-child(n+3), .zomato-table td:nth-child(n+3) { text-align: right; }
+.zomato-table td:first-child { min-width: 185px; max-width: 280px; overflow-wrap: anywhere; }
+.zomato-table small { display: block; font-size: 11px; margin-top: 3px; }
+.zomato-pill { display: inline-block; padding: 4px 9px; border-radius: 6px; font-size: 12px; border: 1px solid var(--line); text-transform: capitalize; }
+.zomato-pill.is-matched { color: #16814c; background: #eaf8ee; border-color: #b9dfc3; }
+.zomato-pill.is-review { color: #a65c04; background: #fff6e5; border-color: #efdbaf; }
+.zomato-import, .zomato-history { margin-top: 24px; }
+.zomato-fields { display: grid; gap: 16px; border: 0; padding: 0; }
+.zomato-fields > button { justify-self: start; }
+.zomato-fields textarea { font-family: Consolas, monospace; font-size: 12px; }
+.zomato-fields input[type="file"] { max-width: 330px; }
+.zomato-preview { border-top: 1px solid var(--line); padding-top: 18px; }
+.zomato-preview > button { margin-top: 16px; }
+.zomato-connection { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 24px; }
+.zomato-connection li { margin-bottom: 15px; }
+.zomato-check { display: flex !important; align-items: center; }
+.zomato-check input { width: auto; }
+.zomato-notice { margin-bottom: 20px; }
+.zomato-notice p:last-child, .zomato-empty p { margin-bottom: 0; }
+.zomato-empty { padding: 32px 24px; }
+.zomato-empty h3 { margin-bottom: 8px; }
+.zomato-order-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 18px; }
+.zomato-order-heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.zomato-order-heading h3 { margin: 0; overflow-wrap: anywhere; }
+.zomato-order ul { padding-left: 20px; }
+.zomato-order li { margin-bottom: 10px; }
+.zomato-order small { display: block; margin-top: 6px; }
+@media (max-width: 900px) { .zomato-connection { grid-template-columns: 1fr; } .zomato-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 480px) {
+  .zomato-tabs { gap: 4px; } .zomato-tabs button { padding: 8px; font-size: 12px; }
+  .zomato-toolbar > label { flex: 1 1 130px; } .zomato-toolbar > label:has(input[type="search"]) { flex-basis: 100%; }
+  .zomato-screen input[type="search"] { min-width: 0; } .zomato-metrics > div { padding: 13px; } .zomato-metrics strong { font-size: 19px; }
+}

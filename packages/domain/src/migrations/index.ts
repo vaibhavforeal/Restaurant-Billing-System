@@ -6,6 +6,22 @@ import { migration004 } from "./004-printer-kinds.js";
 import { migration005 } from "./005-billing-snapshots.js";
 import { migration006 } from "./006-inventory-ledger.js";
 import { migration007 } from "./007-kot-requests.js";
+import { migration008 } from "./008-licensing.js";
+import { migration009 } from "./009-guest-ordering.js";
+import { migration010 } from "./010-menu-experience.js";
+import { migration011 } from "./011-guest-services.js";
+import { migration012 } from "./012-reservations.js";
+import { migration013 } from "./013-license-management.js";
+import { migration014 } from "./014-print-profiles-and-jobs.js";
+import { migration015 } from "./015-upi-payments.js";
+
+import { migration016 } from "./016-service-pricing.js";
+import { migration017 } from "./017-report-prerequisites.js";
+import { migration018 } from "./018-table-captains.js";
+import { migration019 } from "./019-order-captains.js";
+import { migration020 } from "./020-kot-acceptance.js";
+import { migration021 } from "./021-zomato.js";
+import { migration022 } from "./022-kitchen-acceptance-setting.js";
 import { migration023 } from "./023-stock-costing.js";
 
-export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration023];
+export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015, migration016, migration017, migration018, migration019, migration020, migration021, migration022, migration023];

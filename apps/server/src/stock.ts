@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { can } from "@forkflow/core";
-import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, stockMilli, stockJson, appendStockMove, uuidv7, roleFor,
+import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7, roleFor,
   type StockRow, type StockLink, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { httpError } from "./http-error.js";
 
@@ -130,7 +130,7 @@ export function registerStock(app: FastifyInstance) {
       const product = db.prepare("SELECT stock_version FROM products WHERE id = ?").get(id) as { stock_version: number } | undefined;
       if (!product) throw httpError(404, "Product not found");
       const previous = links(id);
-      if (previous.length > 1) throw httpError(409, "This product has multiple stock links. Use the recipe editor when available.");
+      if (previous.length > 1) throw httpError(409, "This product has multiple stock links. Use the recipe editor to change them.");
       const unchanged = body.stockItemId === null ? previous.length === 0 : previous[0]?.stockItemId === body.stockItemId && previous[0].qtyPerSale === body.qtyPerSale;
       if (unchanged) return [];
       versionCheck(product.stock_version, body.expectedVersion);
@@ -141,6 +141,38 @@ export function registerStock(app: FastifyInstance) {
       return [...previous.map((l) => l.stockItemId), ...(body.stockItemId ? [body.stockItemId] : [])];
     })();
     publishStock(app, changedIds);
+    return { links: links(id), version: (db.prepare("SELECT stock_version FROM products WHERE id = ?").get(id) as { stock_version: number }).stock_version };
+  });
+
+  app.put("/api/products/:id/recipe", { preHandler: [manage, app.requireFeature("recipes")] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = RecipeUpdate.parse(req.body);
+    const changedIds = db.transaction(() => {
+      const product = db.prepare("SELECT stock_version FROM products WHERE id = ?").get(id) as { stock_version: number } | undefined;
+      if (!product) throw httpError(404, "Product not found");
+      const previous = links(id);
+      // Identical retries (including after an ambiguous response) never change
+      // link IDs or increment the version again. Ingredient order is immaterial.
+      const unchanged = previous.length === body.ingredients.length && previous.every((old) =>
+        body.ingredients.some((next) => next.stockItemId === old.stockItemId && next.qtyPerSale === old.qtyPerSale));
+      if (unchanged) return [];
+      if (product.stock_version !== body.expectedVersion) throw httpError(409, "Recipe changed on another counter. Reload the recipe and review before saving.");
+      // Validate the entire replacement before changing any saved link.
+      for (const ingredient of body.ingredients) {
+        const stock = db.prepare("SELECT name, is_active FROM stock_items WHERE id = ?").get(ingredient.stockItemId) as { name: string; is_active: number } | undefined;
+        if (!stock) throw httpError(400, "An ingredient no longer exists. Reload the stock list and choose another.");
+        if (!stock.is_active) throw httpError(400, `${stock.name} is archived. Reactivate it or choose another ingredient.`);
+      }
+      db.prepare("DELETE FROM product_stock_links WHERE product_id = ?").run(id);
+      const insert = db.prepare("INSERT INTO product_stock_links (id, product_id, stock_item_id, qty_per_sale) VALUES (?, ?, ?, ?)");
+      for (const ingredient of body.ingredients) insert.run(uuidv7(), id, ingredient.stockItemId, ingredient.qtyPerSale);
+      db.prepare("UPDATE products SET stock_version = stock_version + 1 WHERE id = ?").run(id);
+      return [...previous.map((link) => link.stockItemId), ...body.ingredients.map((ingredient) => ingredient.stockItemId)];
+    })();
+    if (changedIds.length) {
+      publishStock(app, changedIds);
+      app.broadcast("recipe.changed", { productId: id });
+    }
     return { links: links(id), version: (db.prepare("SELECT stock_version FROM products WHERE id = ?").get(id) as { stock_version: number }).stock_version };
   });
 }

@@ -1,0 +1,19 @@
+.demo-banner { display: flex; flex-wrap: wrap; flex: none; gap: 6px 16px; padding: 8px 16px; color: var(--ink); background: var(--pos-warning-bg, #fff0c2); border-bottom: 1px solid var(--line); font-size: 12px; }
+.kitchen-app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.kitchen-app-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.kitchen-app-header strong { font-size: 20px; }
+.kitchen-app-header small { display: block; color: var(--muted); }
+.kitchen-app-main { flex: 1; min-height: 0; overflow: auto; padding: 20px; }
+.kitchen-app .kitchen-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; }
+.kitchen-app .kitchen-ticket { font-size: 16px; }
+.kitchen-app .ticket-items small { font-size: 15px; font-weight: 600; }
+.kitchen-app .kitchen-ticket button { min-height: 48px; font-size: 16px; }
+.kitchen-start { padding: 16px; text-align: center; }
+.kitchen-connection { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; color: var(--muted); }
+@media (max-width: 650px) {
+  .kitchen-app-header { padding: 10px 12px; flex-wrap: wrap; }
+  .kitchen-app-header .actions { flex-wrap: wrap; }
+  .kitchen-app-header .theme-toggle-label { display: none; }
+  .kitchen-app-main { padding: 12px; }
+  .kitchen-app .kitchen-grid { grid-template-columns: minmax(0, 1fr); }
+}

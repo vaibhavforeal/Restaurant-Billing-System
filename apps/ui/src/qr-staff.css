@@ -1,0 +1,54 @@
+.qr-inbox, .qr-manager { margin-bottom: 22px; }
+.qr-inbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.qr-inbox-heading h3 { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
+.qr-inbox-heading p { color: var(--muted); margin: 0; font-size: 13px; }
+.qr-pending-count { min-width: 25px; padding: 2px 7px; text-align: center; border-radius: 20px; color: #b42332; background: var(--red-light); font-size: 12px; }
+.qr-refresh-note, .qr-help { color: var(--muted); font-size: 12px; margin: 12px 0; }
+.qr-inbox-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 12px; flex-wrap: wrap; }
+.qr-plan-note { border-left: 3px solid #c88b29; padding: 8px 12px; background: #fff8e9; font-size: 13px; }
+.qr-request-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: start; }
+.qr-request-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 17px; }
+.qr-request-title { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.qr-request-title h4 { margin: 0 0 4px; overflow-wrap: anywhere; }
+.qr-request-title time { color: var(--muted); font-size: 12px; }
+.qr-request-status { text-transform: capitalize; border-radius: 6px; padding: 3px 7px; font-size: 11px; background: #f0f1f4; color: #646977; }
+.qr-request-status.pending { background: #fff4d9; color: #835b0d; }
+.qr-request-status.accepted { background: #e9f6ec; color: #226536; }
+.qr-request-status.rejected { background: var(--red-light); color: #b42332; }
+.qr-request-items { list-style: none; padding: 0; margin: 15px 0; }
+.qr-request-items li { padding: 9px 0; border-bottom: 1px solid var(--line); }
+.qr-request-items li > div { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.qr-request-items li > div > span:first-child { overflow-wrap: anywhere; }
+.qr-request-items li > div > span:last-child { flex-shrink: 0; }
+.qr-item-note, .qr-review-note { font-size: 12px; color: #65512b; white-space: pre-wrap; overflow-wrap: anywhere; margin: 5px 0 0; }
+.qr-request-subtotal { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; }
+.qr-request-subtotal strong { font-size: 15px; white-space: nowrap; }
+.qr-request-card label, .qr-manager label { display: grid; gap: 6px; }
+.qr-request-card input, .qr-request-card select, .qr-request-card textarea, .qr-manager input, .qr-manager select { width: 100%; }
+.qr-card-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 12px; }
+.qr-request-card [role="alert"] { margin: 12px 0; overflow-wrap: anywhere; }
+.qr-empty { padding: 20px 0 8px; color: var(--muted); }
+.qr-manager-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+.qr-code-state { font-size: 13px; }
+.qr-code-preview { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: center; gap: 22px; margin-top: 22px; }
+.qr-code-preview > img { display: block; width: 240px; height: 240px; max-width: 100%; object-fit: contain; background: #fff; }
+.qr-code-preview p { font-size: 13px; color: var(--muted); }
+.qr-code-preview a { padding: 9px 0; font-weight: 600; }
+.qr-print-sheet { display: none; }
+@media (max-width: 650px) {
+  .qr-inbox-heading { align-items: start; flex-wrap: wrap; gap: 12px; }
+  .qr-inbox-heading > button { width: 100%; }
+  .qr-inbox-toolbar .tabs { flex-wrap: wrap; }
+  .qr-manager-fields, .qr-code-preview { grid-template-columns: minmax(0, 1fr); }
+  .qr-code-preview > img { margin: 0 auto; }
+  .qr-request-card { padding: 13px; }
+  .qr-request-subtotal { align-items: start; }
+}
+@media print {
+  body.printing-table-qr > :not(.qr-print-sheet) { display: none !important; }
+  body.printing-table-qr .qr-print-sheet { display: block; width: 100%; padding: 20mm 12mm; text-align: center; background: #fff; color: #000; }
+  body.printing-table-qr .qr-print-sheet img { display: block; width: 65mm; height: 65mm; margin: 10mm auto; }
+  body.printing-table-qr .qr-print-sheet h1 { font-size: 32pt; }
+  body.printing-table-qr .qr-print-sheet h2 { font-size: 23pt; }
+  body.printing-table-qr .qr-print-sheet p { font-size: 13pt; }
+}

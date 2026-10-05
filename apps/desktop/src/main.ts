@@ -3,11 +3,17 @@ import { fileURLToPath } from "node:url";
 import { appendFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
+import { startupDocument } from "../../ui/src/startup-screen.js";
+import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
+
+declare const __FORKFLOW_DEMO__: boolean;
+const demo = typeof __FORKFLOW_DEMO__ !== "undefined" && __FORKFLOW_DEMO__;
+if (demo) { app.setName("ForkFlow Demo"); app.setPath("userData", join(app.getPath("appData"), "forkflow-demo")); }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const port = process.env["FORKFLOW_PORT"] ?? "4100";
+const port = demo ? "4110" : process.env["FORKFLOW_PORT"] ?? "4100";
 const url = `http://127.0.0.1:${port}`;
-const dataDir = process.env["FORKFLOW_DATA_DIR"] ?? join(app.getPath("userData"), "data");
+const dataDir = demo ? prepareDemoDirectory(join(app.getPath("userData"), "data")) : process.env["FORKFLOW_DATA_DIR"] ?? join(app.getPath("userData"), "data");
 let server: UtilityProcess | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -110,19 +116,42 @@ else {
     if (response !== 1) return;
     recovering = true;
     await stopServer();
-    await window?.loadURL("data:text/html,<h2>Restoring ForkFlow backup…</h2>");
+    await window?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument("restoring"))}`);
     restarts = 5; // invalid backups produce a reviewable error, never silently fall back
     startServer(selection.filePaths[0]);
     recovering = false;
   }
+  async function resetDemo() {
+    if (!demo || recovering) return;
+    const { response } = await dialog.showMessageBox({ type: "question", title: "Reset ForkFlow Demo", message: "Start a fresh customer demo?", detail: "Demo orders and edits will be archived, then replaced with the sample restaurant. Connected demo kitchen displays will need to sign in again.", buttons: ["Cancel", "Reset sample data"], defaultId: 0, cancelId: 0 });
+    if (response !== 1) return;
+    recovering = true;
+    try {
+      await stopServer();
+      resetDemoDatabase(dataDir);
+      await window?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument("restoring"))}`);
+      restarts = 0; startServer();
+    } catch (error) { recovering = false; void failure(error instanceof Error ? error.message : "Demo reset failed."); }
+    finally { recovering = false; }
+  }
   app.on("second-instance", showWindow);
-  app.whenReady().then(() => {
-    window = new BrowserWindow({ width: 1280, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
-    void window.loadURL("data:text/html,<h2>Starting ForkFlow…</h2><p>Preparing the database and checking backups.</p>");
+  app.whenReady().then(async () => {
+    window = new BrowserWindow({ width: 1280, height: 800, show: false, backgroundColor: "#f6f7f9", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+    if (demo) {
+      window.setAutoHideMenuBar(false);
+      Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Demo", submenu: [
+        { label: "Open Kitchen display in browser", click: () => { void shell.openExternal(`${url}/kitchen/`); } },
+        { label: "Reset sample data", click: () => { void resetDemo(); } },
+        { type: "separator" }, { role: "quit" },
+      ] }, { role: "viewMenu" }]));
+    }
+    window.once("ready-to-show", showWindow);
     window.webContents.setWindowOpenHandler(({ url: target }) => { if (/^https?:\/\//.test(target)) void shell.openExternal(target); return { action: "deny" }; });
     window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(url + "/") && target !== url) event.preventDefault(); });
     window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
-    if (app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+    // Paint the self-contained splash before starting the server; no blank window or CDN dependency.
+    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument())}`);
+    if (!demo && app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
       app.setLoginItemSettings({ openAtLogin: true });
       appendFileSync(join(dataDir, "desktop-initialized"), "1");
     }
@@ -133,8 +162,10 @@ else {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Open ForkFlow", click: showWindow },
       { label: "Open data and backups", click: () => { void shell.openPath(dataDir); } },
-      { label: "Restore backup…", click: () => { void restore(); } },
-      { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+      ...(demo ? [{ label: "Reset sample data", click: () => { void resetDemo(); } }] : [
+        { label: "Restore backup…", click: () => { void restore(); } },
+        { label: "Start with Windows", type: "checkbox" as const, checked: app.getLoginItemSettings().openAtLogin, click: (item: Electron.MenuItem) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+      ]),
       { type: "separator" }, { label: "Quit ForkFlow (stops all counters)", click: () => app.quit() },
     ]));
     tray.on("double-click", showWindow);

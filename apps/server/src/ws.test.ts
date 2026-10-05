@@ -154,4 +154,21 @@ describe("WebSocket auth handshake", () => {
     expect(closed).toBe(false);
     ws.terminate();
   });
+
+  it("delivers a broadcast without re-verifying every client's session and license", async () => {
+    const db = openDb(":memory:");
+    migrate(db, MIGRATIONS);
+    app = buildServer({ db });
+    await app.ready();
+    const admin = await setupAdmin(app);
+
+    const ws = await wsAuth(app, admin.token);
+    const message = new Promise<string>((resolve) => ws.once("message", (raw: Buffer) => resolve(raw.toString())));
+    const status = vi.spyOn(app.licensing, "status");
+    app.broadcast("table.changed", { tableId: "t1" });
+
+    expect(JSON.parse(await message)).toEqual({ event: "table.changed", data: { tableId: "t1" } });
+    expect(status).not.toHaveBeenCalled();
+    ws.terminate();
+  });
 });

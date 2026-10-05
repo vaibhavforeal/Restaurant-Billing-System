@@ -1,0 +1,7 @@
+:root { font: 16px/1.5 "Segoe UI", sans-serif; color: #252830; background: #f6f7f9; color-scheme: light; }
+* { box-sizing: border-box; } body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+main { width: min(540px, 100%); padding: 32px; background: white; border: 1px solid #e1e3e8; border-radius: 12px; }
+.brand { color: #b92335; font-weight: 700; } h1 { font-size: 26px; line-height: 1.2; } p { color: #59616e; }
+label { display: block; font-weight: 600; margin-bottom: 8px; } input, button { font: inherit; width: 100%; padding: 12px; border: 1px solid #adb5c1; border-radius: 6px; }
+button { background: #b92335; color: white; cursor: pointer; border-color: #b92335; font-weight: 600; } button:disabled { opacity: .6; } :focus-visible { outline: 3px solid #cf7581; outline-offset: 3px; }
+.hint { font-size: 13px; } #error { color: #b92335; } #error:empty { display: none; }

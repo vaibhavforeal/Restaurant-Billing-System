@@ -1,4 +1,6 @@
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
+import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
+import type { PrintProfileInput } from "@forkflow/domain";
 
 export interface KotSlipCtx {
   kotNo: number;
@@ -40,7 +42,7 @@ export function contextLine(orderType: "dine_in" | "parcel", tableName: string |
   return `${tableName ?? "Table"} / ${splitLabel}`;
 }
 
-export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80): Buffer {
+export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
   const pos = new EscPos();
   const width = CHARS_PER_LINE[paperWidth];
 
@@ -68,12 +70,11 @@ export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80): Buffer {
     }
   }
 
-  pos.hr(width).align("center").line(ctx.stationName).feed(3).cut();
-
-  return pos.bytes();
+  pos.hr(width).align("center").line(ctx.stationName);
+  return finishSlip(pos, profile);
 }
 
-export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80): Buffer {
+export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
   const pos = new EscPos();
   const width = CHARS_PER_LINE[paperWidth];
 
@@ -91,9 +92,7 @@ export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80): Buffer {
     .bold(true)
     .line(`${ctx.item.qty} x ${ctx.item.name}`)
     .bold(false)
-    .line(`Reason: ${ctx.reason}`)
-    .feed(3)
-    .cut();
+    .line(`Reason: ${ctx.reason}`);
 
-  return pos.bytes();
+  return finishSlip(pos, profile);
 }

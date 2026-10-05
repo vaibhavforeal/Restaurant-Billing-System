@@ -1,0 +1,12 @@
+.keyboard-settings { max-width: 880px; }
+.keyboard-settings > p { max-width: 720px; }
+.keyboard-rows { border: 1px solid var(--line); border-radius: var(--radius-panel, 6px); overflow: hidden; }
+.keyboard-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 240px); gap: 16px; align-items: start; padding: 12px; border-bottom: 1px solid var(--line); }
+.keyboard-row:last-child { border-bottom: 0; }
+.keyboard-row label { color: var(--ink); font-weight: 600; }
+.keyboard-row p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.keyboard-row select { width: 100%; }
+.keyboard-row .keyboard-error { color: var(--pos-danger, #ac2133); }
+.keyboard-row select[aria-invalid="true"] { border-color: var(--pos-danger, #ac2133); }
+.keyboard-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 16px; }
+@media (max-width: 560px) { .keyboard-row { grid-template-columns: minmax(0, 1fr); gap: 8px; } .keyboard-row select { min-height: 40px; font-size: 16px; } }

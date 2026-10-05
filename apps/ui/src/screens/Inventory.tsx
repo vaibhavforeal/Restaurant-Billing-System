@@ -1,19 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import type { StockItem, StockLink, StockMove, StockUnit } from "@forkflow/domain";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { StockItem, StockMove, StockUnit } from "@forkflow/domain";
 import { apiFetch, session, type User } from "../api";
 import type { Product } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
 import type { StockCost, StockCostChange } from "@forkflow/domain";
 import { formatMovementCost, formatUnitCost, amountPaidToPaise, mergeCostChanges, mergeHistory, stockValueSummary } from "../stock-costs";
-import { useLicense } from "./LicenseSettings";
 import { PerUnitHint, SetUnitCostForm } from "./StockCostControls";
+import { RecipeEditor } from "./RecipeEditor";
+import { DishCosting } from "./DishCosting";
+import { useLicense } from "./LicenseSettings";
+import { Icon } from "../Icon";
+import "../recipes.css";
 
+type InventoryTab = "stock" | "recipes" | "costing";
+const TAB_LABELS: Record<InventoryTab, string> = { stock: "Stock", recipes: "Recipes", costing: "Dish costing" };
 const UNITS: StockUnit[] = ["pcs", "kg", "g", "L", "ml"];
 const quantity = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
-const panel = { background: "#fff", border: "1px solid var(--line)", borderRadius: 12, padding: 22, marginTop: 20 };
-const grid = { display: "flex", flexWrap: "wrap", alignItems: "end", gap: 12 } as const;
-const fieldStyle = { display: "grid", gap: 6 };
+const panel = { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-panel)", padding: "var(--space-6)", marginTop: "var(--space-4)" };
+const grid = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", alignItems: "end", gap: "var(--space-4)" } as const;
+const fieldStyle = { display: "grid", gap: "var(--space-2)" };
 function number(text: string) {
   if (!text.trim() || !Number.isFinite(Number(text))) throw new Error("Enter a valid quantity");
   return Number(text);
@@ -34,6 +40,12 @@ export function Inventory({ user }: { user: User }) {
   const creating = useRef(false);
   const createRequest = useRef<{ fingerprint: string; ref: string } | null>(null);
   const [message, setMessage] = useState("");
+  const [tab, setTab] = useState<InventoryTab>("stock");
+  const [recipeDirty, setRecipeDirty] = useState(false);
+  const [recipeBusy, setRecipeBusy] = useState(false);
+  const [recipeRefresh, setRecipeRefresh] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [reloadInventory, setReloadInventory] = useState(0);
   const { status } = useLicense();
   const canSeeCosts = user.role === "admin" && status?.features.recipes === true;
   const [costData, setCostData] = useState<{ items: StockCost[]; totalValuePaise: number } | null>(null);
@@ -49,22 +61,34 @@ export function Inventory({ user }: { user: User }) {
   }, [canSeeCosts, historyVersion]);
   const costById = new Map((costData?.items ?? []).map((c) => [c.stockItemId, c]));
   const valueSummary = costData ? stockValueSummary(costData.items) : null;
+  // Dish costing shows cost data, so only administrators get the tab (Basic plans see the upgrade prompt inside it).
+  const tabs: InventoryTab[] = user.role === "admin" ? ["stock", "recipes", "costing"] : ["stock", "recipes"];
+  function canLeaveRecipe() {
+    if (recipeBusy) return false;
+    return !recipeDirty || window.confirm("Discard your unsaved recipe or stock-item changes?");
+  }
 
   useEffect(() => {
     let active = true;
+    let sequence = 0;
     async function reload() {
+      const request = ++sequence;
       try {
         const [s, p] = await Promise.all([apiFetch<{ items: StockItem[] }>("/api/stock-items"), apiFetch<{ products: Product[] }>("/api/products")]);
-        if (active) { setItems(s.items); setProducts(p.products); setHistoryVersion((v) => v + 1); }
-      } catch (e) { if (active) setError(e instanceof Error ? e.message : "Could not load inventory"); }
+        if (active && request === sequence) { setItems(s.items); setProducts(p.products); setHistoryVersion((v) => v + 1); setError(""); }
+      } catch (e) { if (active && request === sequence) setError(e instanceof Error ? e.message : "Could not load inventory"); }
+      finally { if (active && request === sequence) setLoading(false); }
     }
     void reload();
     const dispose = connectWs({
-      onEvent: (event) => { if (event === "stock.changed") void reload(); },
-      onStatus: (up) => { setConnected(up); if (up) void reload(); }, onAuthFail: () => session.clear(),
+      onEvent: (event) => {
+        if (event === "stock.changed" || event === "catalog.changed") { void reload(); setRecipeRefresh((value) => value + 1); }
+        if (event === "recipe.changed") setRecipeRefresh((value) => value + 1);
+      },
+      onStatus: (up) => { setConnected(up); if (up) { void reload(); setRecipeRefresh((value) => value + 1); } }, onAuthFail: () => session.clear(),
     });
     return () => { active = false; dispose(); };
-  }, []);
+  }, [reloadInventory]);
   function saved(item: StockItem) {
     setItems((old) => [...old.filter((i) => i.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name)));
     setSelected(item); setHistoryVersion((v) => v + 1);
@@ -85,11 +109,28 @@ export function Inventory({ user }: { user: User }) {
   const low = items.filter((i) => i.isActive && i.isLow);
   const visible = items.filter((i) => (filter === "all" || (filter === "low" ? i.isActive && i.isLow : i.isActive)) && i.name.toLowerCase().includes(search.toLowerCase()));
   return <section className="screen inventory-screen">
-    <h2>Inventory</h2>
+    <div className="inventory-heading"><h2>Inventory</h2><div className="inventory-tabs" role="tablist" aria-label="Inventory sections">
+      {tabs.map((value) => <button key={value} id={`inventory-${value}-tab`} role="tab" aria-selected={tab === value} aria-controls={`inventory-${value}-panel`} disabled={recipeBusy} onClick={() => {
+        if (value === tab || !canLeaveRecipe()) return;
+        setTab(value); setRecipeDirty(false);
+      }} onKeyDown={(event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const at = tabs.indexOf(value);
+        const next = event.key === "Home" ? tabs[0]! : event.key === "End" ? tabs[tabs.length - 1]! : tabs[(at + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]!;
+        if (next !== tab && canLeaveRecipe()) { setTab(next); setRecipeDirty(false); document.getElementById(`inventory-${next}-tab`)?.focus(); }
+      }}>{TAB_LABELS[value]}</button>)}
+    </div></div>
     {!connected && <p role="status">Reconnecting…</p>}
-    <p role="status" style={{ color: low.length ? "#874500" : "#176336" }}>{low.length ? `${low.length} active stock item${low.length === 1 ? " is" : "s are"} low or out of stock.` : "No low-stock items."}</p>
-    <p role="alert" style={{ color: "crimson" }}>{error}</p><p role="status">{message}</p>
-    {canManage && <section style={panel} aria-label="Add stock item"><h3>Add stock item</h3>
+    {error && <div className="recipe-error"><p role="alert">{error}</p><button disabled={recipeBusy} onClick={() => setReloadInventory((value) => value + 1)}>Retry inventory load</button></div>}<p role="status">{tab === "stock" ? message : ""}</p>
+    {tab === "recipes" ? <div id="inventory-recipes-panel" role="tabpanel" aria-labelledby="inventory-recipes-tab">
+      <RecipesWorkspace products={products} items={items} loading={loading} canManage={canManage && status?.canOperate === true} fullRecipe={status?.features.recipes === true} refresh={recipeRefresh}
+        onDirtyChange={setRecipeDirty} onBusyChange={setRecipeBusy} canLeave={canLeaveRecipe} onStockCreated={(item) => setItems((old) => [...old.filter((entry) => entry.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name)))} />
+    </div> : tab === "costing" && canManage ? <div id="inventory-costing-panel" role="tabpanel" aria-labelledby="inventory-costing-tab">
+      <DishCosting fullRecipe={status?.features.recipes === true} refresh={recipeRefresh} />
+    </div> : <div id="inventory-stock-panel" role="tabpanel" aria-labelledby="inventory-stock-tab">
+    <p role="status" style={{ color: low.length ? "var(--warning-text, #874500)" : "var(--success-text, #176336)" }}>{low.length ? `${low.length} active stock item${low.length === 1 ? " is" : "s are"} low or out of stock.` : "No low-stock items."}</p>
+    {canManage && <details className="pos-section" aria-label="Add stock item"><summary>Add stock item</summary><div className="pos-section-body">
       <form onSubmit={(e) => { e.preventDefault(); void create(); }} style={grid}>
         <label style={fieldStyle}>Stock name<input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={busy} /></label>
         <label style={fieldStyle}>Unit<select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as StockUnit })} disabled={busy}>{UNITS.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
@@ -97,18 +138,18 @@ export function Inventory({ user }: { user: User }) {
         <label style={fieldStyle}>Low-stock threshold<input type="number" min="0" step="0.001" placeholder="Optional" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: e.target.value })} disabled={busy} /></label>
         <button className="primary" disabled={busy}>Add stock item</button>
       </form><p>Use up to 3 decimal places. The unit cannot be changed later.</p>
-    </section>}
+    </div></details>}
     <section style={panel}><h3>Stock balances</h3><div style={grid}>
       <label style={fieldStyle}>Find stock<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
       <label style={fieldStyle}>Show stock<select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="active">Active</option><option value="low">Low stock</option><option value="all">All, including archived</option></select></label>
     </div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "left", borderSpacing: "10px 14px" }}>
       <thead><tr><th>Name</th><th>On hand</th>{canSeeCosts && <><th>Avg cost</th><th>Stock value</th></>}<th>Threshold</th><th>Status</th><th>Action</th></tr></thead>
       <tbody>{visible.map((item) => <tr key={item.id}><td>{item.name}</td><td>{quantity(item.qty)} {item.unit}</td>{canSeeCosts && <><td>{costData ? formatUnitCost(costById.get(item.id)?.unitCostMilliPaise ?? null, item.unit) : "…"}</td><td>{costData ? (costById.get(item.id)?.valuePaise == null ? "—" : formatMovementCost(costById.get(item.id)!.valuePaise)) : "…"}</td></>}<td>{item.lowStockThreshold === null ? "At zero" : `${quantity(item.lowStockThreshold)} ${item.unit}`}</td>
-        <td style={{ color: item.isLow && item.isActive ? "#874500" : undefined }}>{!item.isActive ? "Archived" : item.qty <= 0 ? "Out of stock" : item.isLow ? "Low" : "Available"}</td>
+        <td style={{ color: item.isLow && item.isActive ? "var(--warning-text, #874500)" : undefined }}>{!item.isActive ? "Archived" : item.qty <= 0 ? "Out of stock" : item.isLow ? "Low" : "Available"}</td>
         <td><button onClick={() => setSelected(item)}>{canManage ? "Manage" : "View"} {item.name}</button></td></tr>)}</tbody>
     </table></div>{!visible.length && <p>No stock items match this view.</p>}{canSeeCosts && costData && valueSummary && <p>{valueSummary.label}: <strong>{formatMovementCost(costData.totalValuePaise)}</strong>{valueSummary.uncostedNote && <> <span className="muted">{valueSummary.uncostedNote}</span></>}</p>}{canSeeCosts && costError && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{costError}</p>}</section>
     {selected && <StockDetail key={`${selected.id}:${selected.version}`} item={selected} canManage={canManage} onSaved={saved} historyVersion={historyVersion} canSeeCosts={canSeeCosts} unitCostMilliPaise={costData ? (costById.get(selected.id)?.unitCostMilliPaise ?? null) : undefined} onNotice={setMessage} />}
-    <ProductStockLink products={products} items={items} canManage={canManage} />
+    </div>}
   </section>;
 }
 
@@ -146,7 +187,7 @@ function StockDetail({ item, canManage, onSaved, historyVersion, canSeeCosts, un
     <p>Balance when opened: <strong>{quantity(item.qty)} {item.unit}</strong>{" "}<button disabled={busy} onClick={() => void run(async () => {
       const result = await apiFetch<{ items: StockItem[] }>("/api/stock-items"); const next = result.items.find((s) => s.id === item.id); if (next) onSaved(next);
     })}>Refresh balance</button></p>
-    <p role="alert" style={{ color: "crimson" }}>{error}</p>
+    <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>
     {canManage && <>
       <form style={grid} onSubmit={(e) => { e.preventDefault(); void run(() => metadata()); }}>
         <label style={fieldStyle}>Item name<input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} disabled={busy} /></label>
@@ -154,7 +195,7 @@ function StockDetail({ item, canManage, onSaved, historyVersion, canSeeCosts, un
         <button disabled={busy}>Save stock details</button>
         <button type="button" disabled={busy} onClick={() => void run(() => metadata(!item.isActive))}>{item.isActive ? "Archive item" : "Reactivate item"}</button>
       </form>
-      {item.isActive && <form style={{ ...grid, marginTop: 24 }} onSubmit={(e) => { e.preventDefault(); void run(movement); }}>
+      {item.isActive && <form style={{ ...grid, marginTop: "var(--space-6)" }} onSubmit={(e) => { e.preventDefault(); void run(movement); }}>
         <label style={fieldStyle}>Movement<select value={reason} onChange={(e) => setReason(e.target.value as typeof reason)} disabled={busy}>
           <option value="purchase">Receive stock</option><option value="wastage">Record wastage</option><option value="adjustment">Physical stock count</option>
         </select></label>
@@ -182,7 +223,7 @@ function StockHistory({ itemId, unit, refresh, showCost }: { itemId: string; uni
     apiFetch<{ movements: StockMove[]; costChanges?: StockCostChange[] }>(`/api/stock-items/${itemId}/movements`).then((r) => { if (active) { setMoves(r.movements); setChanges(r.costChanges ?? []); setMore(r.movements.length === 100); setError(""); } }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load history"); });
     return () => { active = false; };
   }, [itemId, refresh]);
-  return <div><h4>Movement history</h4><p role="alert" style={{ color: "crimson" }}>{error}</p><div style={{ overflowX: "auto" }}>
+  return <div><h4>Movement history</h4><p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p><div style={{ overflowX: "auto" }}>
     <table style={{ width: "100%", textAlign: "left", borderSpacing: "10px 12px" }}><thead><tr><th>Date</th><th>Movement</th><th>Change</th><th>Balance after</th>{showCost && <th>Cost</th>}<th>Reason</th><th>Staff</th></tr></thead>
       <tbody>{mergeHistory(moves, showCost ? changes : []).map((row) => row.kind === "cost"
         ? <tr key={`cost:${row.id}`}><td>{new Date(row.at).toLocaleString()}</td><td>Unit cost set</td><td>—</td><td>—</td><td>{formatUnitCost(row.change.oldCostMilliPaise, unit)} → {formatUnitCost(row.change.newCostMilliPaise, unit)}</td><td>{row.change.note}</td><td>{row.change.createdByName ?? "—"}</td></tr>
@@ -198,47 +239,47 @@ function StockHistory({ itemId, unit, refresh, showCost }: { itemId: string; uni
   </div>;
 }
 
-function ProductStockLink({ products, items, canManage }: { products: Product[]; items: StockItem[]; canManage: boolean }) {
+function RecipesWorkspace({ products, items, loading, canManage, fullRecipe, refresh, onDirtyChange, onBusyChange, canLeave, onStockCreated }: {
+  products: Product[]; items: StockItem[]; loading: boolean; canManage: boolean; fullRecipe: boolean; refresh: number;
+  onDirtyChange: (dirty: boolean) => void; onBusyChange: (busy: boolean) => void; canLeave: () => boolean;
+  onStockCreated: (item: StockItem) => void;
+}) {
   const [productId, setProductId] = useState("");
-  return <section style={panel}><h3>Product stock link</h3>
-    <p>Stock used per item, including all variants.</p>
-    <label style={fieldStyle}>Menu product<select value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">Choose a product</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}{p.isActive ? "" : " (inactive)"}</option>)}</select></label>
-    {productId && <LinkEditor key={productId} productId={productId} items={items} canManage={canManage} />}
-  </section>;
-}
-
-function LinkEditor({ productId, items, canManage }: { productId: string; items: StockItem[]; canManage: boolean }) {
-  const [base, setBase] = useState<{ version: number; links: StockLink[] } | null>(null);
-  const [stockId, setStockId] = useState("");
-  const [qty, setQty] = useState("1");
+  const [search, setSearch] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [reload, setReload] = useState(0);
-  const lock = useRef(false);
-  useEffect(() => {
-    let active = true; setBase(null);
-    apiFetch<{ version: number; links: StockLink[] }>(`/api/products/${productId}/stock-links`).then((r) => {
-      if (active) { setBase(r); setStockId(r.links[0]?.stockItemId ?? ""); setQty(String(r.links[0]?.qtyPerSale ?? 1)); setError(""); }
-    }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load stock link"); });
-    return () => { active = false; };
-  }, [productId, reload]);
-  async function save() {
-    if (!base || lock.current) return;
-    lock.current = true; setBusy(true); setError(""); setMessage("");
-    try {
-      const result = await apiFetch<{ version: number; links: StockLink[] }>(`/api/products/${productId}/stock-links`, { method: "PUT", body: JSON.stringify({ expectedVersion: base.version, stockItemId: stockId || null, qtyPerSale: stockId ? number(qty) : 1 }) });
-      setBase(result); setMessage("Stock link saved. It applies to items when sent or billed.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not save stock link"); }
-    finally { lock.current = false; setBusy(false); }
+  const heading = useRef<HTMLHeadingElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const product = products.find((entry) => entry.id === productId);
+  const visible = products.filter((entry) => (showInactive || entry.isActive) && entry.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const busyChanged = useCallback((value: boolean) => { setBusy(value); onBusyChange(value); }, [onBusyChange]);
+  function choose(id: string) {
+    if (id === productId || !canLeave()) return;
+    setProductId(id); onDirtyChange(false);
   }
-  return <div><p role="alert" style={{ color: "crimson" }}>{error}</p><p role="status">{message}</p>
-    <button disabled={busy} onClick={() => setReload((v) => v + 1)}>Reload stock link</button>
-    {base && (base.links.length > 1 ? <p>This product has multiple stock links: {base.links.map((l) => `${l.stockName} (${l.qtyPerSale} ${l.unit})`).join(", ")}. This simple editor cannot replace a recipe.</p> :
-      <form style={{ ...grid, marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); void save(); }}>
-        <label style={fieldStyle}>Tracked stock<select value={stockId} onChange={(e) => setStockId(e.target.value)} disabled={!canManage || busy}><option value="">Not tracked</option>{items.filter((i) => i.isActive || i.id === stockId).map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit}){i.isActive ? "" : " — archived"}</option>)}</select></label>
-        <label style={fieldStyle}>Quantity per sale<input type="number" min="0.001" max="1000000" step="0.001" required value={qty} onChange={(e) => setQty(e.target.value)} disabled={!canManage || busy || !stockId} /></label>
-        {canManage && <button disabled={busy}>Save stock link</button>}
-      </form>)}
+  useEffect(() => { if (productId) heading.current?.focus(); }, [productId]);
+  function back() {
+    if (!canLeave()) return;
+    setProductId(""); onDirtyChange(false); requestAnimationFrame(() => searchInput.current?.focus());
+  }
+  return <div className={`recipes-workspace${productId ? " has-selection" : ""}`}>
+    <aside className="recipe-product-pane" aria-label="Menu items">
+      <div className="recipe-list-heading"><h3>Menu items</h3><span className="muted">{visible.length}</span></div>
+      <label className="recipe-product-search">Find menu item<input ref={searchInput} type="search" placeholder="Search menu items" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+      <label className="recipe-inactive-filter"><input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} /> Include inactive items</label>
+      <div className="recipe-product-list">
+        {visible.map((entry) => <button key={entry.id} className={productId === entry.id ? "selected" : ""} aria-pressed={productId === entry.id} disabled={busy} onClick={() => choose(entry.id)}>
+          <span>{entry.name}{!entry.isActive && <small>Inactive</small>}</span><Icon name="arrow" size={16} />
+        </button>)}
+        {!visible.length && <p className="recipe-list-empty">{loading ? "Loading menu items…" : products.length ? "No menu items match this view." : "Create a menu item in Catalog, then add its ingredients here."}</p>}
+      </div>
+    </aside>
+    <section className="recipe-detail-pane" aria-label="Selected recipe">
+      {product ? <>
+        <header className="recipe-product-heading"><button className="recipe-back" disabled={busy} onClick={back}>Back to menu items</button><div><p className="muted">Recipe</p><h3 ref={heading} tabIndex={-1}>{product.name}</h3></div>{!product.isActive && <span className="recipe-unit-tag">Inactive menu item</span>}</header>
+        <RecipeEditor key={product.id} productId={product.id} items={items} canManage={canManage} fullRecipe={fullRecipe} refresh={refresh} onDirtyChange={onDirtyChange}
+          onBusyChange={busyChanged} onStockCreated={onStockCreated} />
+      </> : <div className="recipe-welcome"><Icon name="kitchen" size={36} /><h3>Build recipes for your menu</h3><p>Choose a menu item to manage the ingredients used for each sale.</p><small>Stock balances and purchases are in the Stock tab.</small></div>}
+    </section>
   </div>;
 }

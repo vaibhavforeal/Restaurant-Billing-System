@@ -1,0 +1,9 @@
+.workspace-dialog.upi-preview-dialog { --dialog-wide: 440px; width: min(440px, calc(100vw - 24px)); }
+.upi-preview { text-align: center; overflow-wrap: anywhere; }
+.upi-preview p { margin: 0 0 10px; }
+.upi-preview .upi-preview-restaurant { font-size: 18px; font-weight: 650; }
+.upi-preview .upi-preview-bill { color: var(--muted); }
+.upi-preview .upi-preview-amount { font-size: 36px; line-height: 1.2; font-weight: 750; }
+.upi-preview-image { display: block; width: min(300px, 100%); height: auto; margin: 12px auto; background: #fff; }
+.upi-preview .upi-preview-id { font-size: 15px; font-weight: 600; }
+.upi-preview .upi-preview-note { color: var(--muted); padding-top: 12px; border-top: 1px solid var(--line); }

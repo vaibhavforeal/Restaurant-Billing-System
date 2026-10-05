@@ -1,0 +1,90 @@
+/* Sales analytics extend the shared POS tokens. */
+:root { --sales-chart-height: 208px; --sales-metric-size: var(--text-total); --sales-number-width-factor: 1.5; --sales-bar-height: var(--space-4); --sales-chart-min: 300px; }
+html[data-theme] .financial-home { display: flex; flex-direction: column; gap: var(--space-4); }
+html[data-theme] .dashboard.financial-home .page-header { margin-bottom: 0; }
+html[data-theme] .financial-home button { min-height: var(--control-touch); }
+html[data-theme] .sales-dashboard, html[data-theme] .sales-reports { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+html[data-theme] :is(.sales-dashboard, .sales-reports) :is(button, input, select, summary) { min-height: var(--control-touch); }
+html[data-theme] .sales-period { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-4); }
+.sales-presets { display: flex; gap: var(--space-2); }
+.report-view-switch { padding-bottom: var(--space-4); border-bottom: var(--border) solid var(--line); }
+.report-view-switch .pos-segments { width: min(100%, 320px); }
+.report-view-switch .pos-segments button { flex: 1; }
+html[data-theme] .sales-presets button[aria-pressed="true"] { background: var(--pos-accent-soft); color: var(--pos-accent); border-color: var(--pos-accent); }
+html[data-theme] .sales-period label { display: grid; gap: var(--space-1); }
+.sales-period input { width: 144px; }
+.sales-period .sales-refresh { margin-left: auto; }
+.sales-period-error { width: 100%; margin: 0; }
+.sales-range-caption { display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; color: var(--muted); font-size: var(--text-secondary); }
+html[data-theme] .sales-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+html[data-theme] .sales-metrics-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-8); }
+html[data-theme] .sales-metric, html[data-theme] .sales-chart-panel { min-width: 0; border: var(--border) solid var(--line); border-radius: var(--radius-panel); background: var(--surface); padding: var(--space-6); }
+.sales-metric p { color: var(--muted); margin: 0 0 var(--space-2); }
+.sales-metric { container-type: inline-size; }
+.sales-metric strong { display: block; font-size: clamp(var(--text-base), calc(100cqw / var(--sales-value-length) * var(--sales-number-width-factor)), var(--sales-metric-size)); font-variant-numeric: tabular-nums; line-height: 1.3; white-space: nowrap; }
+.sales-metric small { display: block; margin-top: var(--space-2); color: var(--muted); }
+html[data-theme] .sales-metrics-overview .sales-metric { padding: var(--space-8); }
+html[data-theme] .sales-metrics-overview .sales-metric-collections { border-left: var(--space-2) solid var(--pos-success); }
+.sales-metrics-overview .sales-metric-collections strong { color: var(--pos-success); }
+.sales-metrics-overview .sales-metric strong { font-weight: 600; letter-spacing: -0.02em; }
+.sales-charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(var(--sales-chart-min), 1fr); gap: var(--space-4); }
+.sales-chart-panel header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--space-4); }
+.sales-chart-panel header small, .sales-chart-panel p { color: var(--muted); }
+.sales-chart-panel h3 { margin: 0; }
+.sales-chart { margin: var(--space-4) 0 0; }
+.sales-chart svg { display: block; width: 100%; height: var(--sales-chart-height); overflow: visible; }
+.sales-chart svg text { font-size: 11px; fill: var(--muted); font-family: inherit; font-variant-numeric: tabular-nums; }
+.sales-chart .chart-grid { stroke: var(--line); stroke-width: 1; }
+.sales-chart .chart-sales { stroke: var(--pos-accent); fill: none; stroke-width: 2.5; }
+.sales-chart .chart-collections { stroke: var(--muted); fill: none; stroke-width: 2; stroke-dasharray: 6 4; }
+.sales-chart .chart-focus { stroke: var(--muted); stroke-dasharray: 2 3; }
+.sales-chart .chart-sales-dot { fill: var(--pos-accent); }
+.sales-chart .chart-collection-dot { fill: var(--muted); }
+.sales-chart-detail { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); min-height: var(--control-small); color: var(--muted); font-size: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sales-chart-detail strong { color: var(--ink); }
+.sales-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin-top: var(--space-4); font-size: var(--text-secondary); color: var(--muted); }
+.sales-legend span { display: flex; align-items: center; gap: var(--space-2); }
+.sales-legend i { width: var(--space-8); border-top: 3px solid var(--pos-accent); }
+.sales-legend i.collections { border-top: 2px dashed var(--muted); }
+.payment-bars { display: grid; gap: var(--space-8); margin: var(--space-8) 0; }
+.payment-bar-label { display: flex; justify-content: space-between; gap: var(--space-4); font-variant-numeric: tabular-nums; margin-bottom: var(--space-3); }
+.payment-bar-label strong { white-space: nowrap; }
+.payment-bar-track { height: var(--sales-bar-height); background: var(--line); border-radius: var(--radius); overflow: hidden; }
+.payment-bar-fill { height: 100%; background: var(--pos-accent); min-width: 0; }
+.payment-bar-label small { color: var(--muted); }
+.sales-chart-note { font-size: var(--text-secondary); margin: var(--space-4) 0 0; }
+.sales-report-links, .sales-service-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
+.sales-service-strip { padding: var(--space-4) var(--space-6); border: var(--border) solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--muted); }
+.sales-service-strip span + span { padding-left: var(--space-6); border-left: var(--border) solid var(--line); }
+.sales-service-strip strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.sales-report-links button { display: inline-flex; gap: var(--space-4); align-items: center; }
+.sales-report-empty { padding: var(--space-8); border: var(--border) dashed var(--line); border-radius: var(--radius); color: var(--muted); }
+.sales-report-table { max-height: 55dvh; overflow: auto; border: var(--border) solid var(--line); border-radius: var(--radius); }
+html[data-theme] .sales-report-table :is(th, td) { height: var(--table-row); padding: var(--space-2) var(--space-4); text-align: right; white-space: nowrap; }
+html[data-theme] .sales-report-table :is(th, td):first-child { text-align: left; }
+.sales-report-table thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.sales-report-table tfoot th, .sales-report-table tfoot td { position: sticky; bottom: 0; background: var(--surface); border-top: var(--border) solid var(--line); font-weight: 700; }
+.sales-report-table caption { text-align: left; padding: var(--space-4); color: var(--muted); }
+.sales-report-table .sales-date-button { min-height: var(--control-small); padding: 0; border: 0; background: transparent; color: var(--pos-accent); text-decoration: underline; }
+html[data-theme] .sales-report-table .sales-date-button { min-height: var(--control-small); }
+html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; background: transparent; }
+@media (min-width: 1001px) { html[data-theme] .sales-reports { height: 100%; min-height: 0; } .sales-reports .sales-report-table { flex: 1; min-height: 0; max-height: none; } .sales-reports > .legacy-screen { overflow: auto; } }
+@media (max-width: 1000px) { .sales-charts { grid-template-columns: minmax(0, 1.7fr) minmax(240px, 1fr); } }
+@media (max-width: 760px) {
+  html[data-theme] .sales-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-theme] .sales-metrics-overview { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .sales-charts { grid-template-columns: minmax(0, 1fr); }
+  .sales-period .sales-refresh { margin-left: 0; }
+  .sales-period input { width: 100%; }
+  .sales-period label { flex: 1; min-width: 120px; }
+  .sales-presets { width: 100%; }
+  .sales-presets button { flex: 1; }
+  .sales-service-strip span + span { border-left: 0; padding-left: 0; }
+}
+.operational-report-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+.operational-report-picker select { max-width: 100%; }
+.operational-report section { margin-top: 24px; }
+.operational-report h3 small { font-weight: 400; }
+.report-notes { margin: 12px 0; font-size: 13px; }
+.report-notes summary { cursor: pointer; }
+.report-notes p { max-width: 90ch; line-height: 1.5; }

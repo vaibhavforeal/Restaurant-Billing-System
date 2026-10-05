@@ -33,6 +33,8 @@ export interface BillTotals {
   sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];
 }
 export interface ReceiptSnapshot {
+  /** Absent on bills issued before UPI configuration was supported. */
+  upiId?: string;
   taxInclusive: boolean;
   restaurantName: string; address: string; gstin: string; fssai: string; receiptFooter: string;
   orderType: "dine_in" | "parcel"; tableName: string | null; splitLabel: string | null;

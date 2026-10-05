@@ -7,6 +7,9 @@ import {
 } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { menuPhotoUrl, validateMenuPhoto } from "./menu-photo.js";
+import { z } from "zod";
+import { registerCatalogTransfer } from "./catalog-transfer.js";
 
 interface CategoryRow {
   id: string;
@@ -20,10 +23,15 @@ interface ProductRow {
   category_id: string;
   name: string;
   price_paise: number;
+  ac_price_paise: number | null;
+  takeaway_price_paise: number | null;
   gst_rate: number;
   is_veg: number;
   kot_station_id: string | null;
   is_active: number;
+  description: string;
+  is_sold_out: number;
+  photo_hash: string | null;
 }
 
 interface VariantRow {
@@ -31,6 +39,8 @@ interface VariantRow {
   product_id: string;
   name: string;
   price_paise: number;
+  ac_price_paise: number | null;
+  takeaway_price_paise: number | null;
   is_active: number;
 }
 
@@ -45,6 +55,8 @@ const toVariant = (r: VariantRow) => ({
   id: r.id,
   name: r.name,
   pricePaise: r.price_paise,
+  acPricePaise: r.ac_price_paise,
+  takeawayPricePaise: r.takeaway_price_paise,
   isActive: r.is_active === 1,
 });
 
@@ -53,16 +65,24 @@ const toProduct = (r: ProductRow, variants: VariantRow[]) => ({
   categoryId: r.category_id,
   name: r.name,
   pricePaise: r.price_paise,
+  acPricePaise: r.ac_price_paise,
+  takeawayPricePaise: r.takeaway_price_paise,
   gstRate: r.gst_rate,
   isVeg: r.is_veg === 1,
   kotStationId: r.kot_station_id,
   isActive: r.is_active === 1,
   variants: variants.map(toVariant),
+  description: r.description,
+  isSoldOut: r.is_sold_out === 1,
+  photoVersion: r.photo_hash,
+  photoUrl: menuPhotoUrl(r.id, r.photo_hash),
 });
 
 export function registerCatalog(app: FastifyInstance): void {
+  registerCatalogTransfer(app);
   const read = app.requirePermission("catalog.read");
   const manage = app.requirePermission("catalog.manage");
+  const changed = () => app.broadcast("catalog.changed", {});
 
   const getCategory = (id: string) =>
     app.db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as CategoryRow | undefined;
@@ -76,6 +96,7 @@ export function registerCatalog(app: FastifyInstance): void {
     const body = CategoryCreate.parse(req.body);
     const id = uuidv7();
     app.db.prepare("INSERT INTO categories (id, name, sort_order) VALUES (?, ?, ?)").run(id, body.name, body.sortOrder);
+    changed();
     return reply.status(201).send({ category: toCategory(getCategory(id)!) });
   });
 
@@ -87,11 +108,13 @@ export function registerCatalog(app: FastifyInstance): void {
     app.db
       .prepare("UPDATE categories SET name = ?, sort_order = ?, is_active = ? WHERE id = ?")
       .run(body.name ?? row.name, body.sortOrder ?? row.sort_order, (body.isActive ?? row.is_active === 1) ? 1 : 0, id);
+    changed();
     return { category: toCategory(getCategory(id)!) };
   });
 
+  const productColumns = "ac_price_paise, takeaway_price_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash";
   const getProduct = (id: string) =>
-    app.db.prepare("SELECT * FROM products WHERE id = ?").get(id) as ProductRow | undefined;
+    app.db.prepare(`SELECT ${productColumns} FROM products WHERE id = ?`).get(id) as ProductRow | undefined;
   const getVariant = (id: string) =>
     app.db.prepare("SELECT * FROM variants WHERE id = ?").get(id) as VariantRow | undefined;
   const variantsFor = (productId: string) =>
@@ -106,7 +129,7 @@ export function registerCatalog(app: FastifyInstance): void {
   };
 
   app.get("/api/products", { preHandler: read }, async () => {
-    const products = app.db.prepare("SELECT * FROM products ORDER BY name").all() as ProductRow[];
+    const products = app.db.prepare(`SELECT ${productColumns} FROM products ORDER BY name`).all() as ProductRow[];
     const variants = app.db.prepare("SELECT * FROM variants ORDER BY name").all() as VariantRow[];
     const byProduct = new Map<string, VariantRow[]>();
     for (const v of variants) {
@@ -119,27 +142,30 @@ export function registerCatalog(app: FastifyInstance): void {
 
   app.post("/api/products", { preHandler: manage }, async (req, reply) => {
     const body = ProductCreate.parse(req.body);
+    const photo = validateMenuPhoto(body.photo);
     checkRefs(body.categoryId, body.kotStationId);
     const id = uuidv7();
     const write = app.db.transaction(() => {
       app.db
         .prepare(
-          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now());
+        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null);
       for (const v of body.variants) {
         app.db
-          .prepare("INSERT INTO variants (id, product_id, name, price_paise) VALUES (?, ?, ?, ?)")
-          .run(uuidv7(), id, v.name, v.pricePaise);
+          .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(uuidv7(), id, v.name, v.pricePaise, v.acPricePaise ?? null, v.takeawayPricePaise ?? null);
       }
     });
     write();
+    changed();
     return reply.status(201).send({ product: toProduct(getProduct(id)!, variantsFor(id)) });
   });
 
   app.patch("/api/products/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
     const body = ProductUpdate.parse(req.body);
+    const photo = validateMenuPhoto(body.photo);
     const row = getProduct(id);
     if (!row) throw httpError(404, "product not found");
     checkRefs(body.categoryId, body.kotStationId);
@@ -147,7 +173,9 @@ export function registerCatalog(app: FastifyInstance): void {
     const station = body.kotStationId === undefined ? row.kot_station_id : body.kotStationId;
     app.db
       .prepare(
-        "UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ? WHERE id = ?",
+        `UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ?,
+          description = ?, is_sold_out = ?, photo_data = CASE WHEN ? THEN ? ELSE photo_data END,
+          photo_hash = CASE WHEN ? THEN ? ELSE photo_hash END, ac_price_paise = ?, takeaway_price_paise = ? WHERE id = ?`,
       )
       .run(
         body.categoryId ?? row.category_id,
@@ -157,9 +185,37 @@ export function registerCatalog(app: FastifyInstance): void {
         (body.isVeg ?? row.is_veg === 1) ? 1 : 0,
         station,
         (body.isActive ?? row.is_active === 1) ? 1 : 0,
+        body.description ?? row.description,
+        (body.isSoldOut ?? row.is_sold_out === 1) ? 1 : 0,
+        photo === undefined ? 0 : 1, photo?.data ?? null,
+        photo === undefined ? 0 : 1, photo?.hash ?? null,
+        body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise,
+        body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise,
         id,
       );
+    changed();
     return { product: toProduct(getProduct(id)!, variantsFor(id)) };
+  });
+
+  app.get("/api/products/:id/photo", { preHandler: read }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const row = app.db.prepare("SELECT photo_data FROM products WHERE id = ?").get(id) as { photo_data: string | null } | undefined;
+    if (!row) throw httpError(404, "Product not found");
+    return { photo: row.photo_data };
+  });
+
+  // Public dish photos are addressed by product ID and content hash. This route
+  // returns only raster bytes and never exposes staff/catalog/stock metadata.
+  app.get("/api/menu-images/:id/:version", async (req, reply) => {
+    const { id, version } = z.object({ id: z.string().uuid(), version: z.string().regex(/^[a-f0-9]{64}$/) }).parse(req.params);
+    if (!["development", "active", "grace"].includes(app.licensing.status().state)) throw httpError(403, "Menu photo unavailable");
+    const row = app.db.prepare(`SELECT p.photo_data FROM products p JOIN categories c ON c.id = p.category_id
+      WHERE p.id = ? AND p.photo_hash = ? AND p.is_active = 1 AND c.is_active = 1`).get(id, version) as { photo_data: string | null } | undefined;
+    if (!row?.photo_data) throw httpError(404, "Menu photo unavailable");
+    return reply.type("image/jpeg").header("X-Content-Type-Options", "nosniff")
+      .header("Cache-Control", "private, max-age=3600, immutable")
+      .send(Buffer.from(row.photo_data.slice("data:image/jpeg;base64,".length), "base64"));
   });
 
   app.post("/api/products/:id/variants", { preHandler: manage }, async (req, reply) => {
@@ -168,8 +224,9 @@ export function registerCatalog(app: FastifyInstance): void {
     const body = VariantCreate.parse(req.body);
     const vid = uuidv7();
     app.db
-      .prepare("INSERT INTO variants (id, product_id, name, price_paise) VALUES (?, ?, ?, ?)")
-      .run(vid, id, body.name, body.pricePaise);
+      .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(vid, id, body.name, body.pricePaise, body.acPricePaise ?? null, body.takeawayPricePaise ?? null);
+    changed();
     return reply.status(201).send({ variant: toVariant(getVariant(vid)!) });
   });
 
@@ -179,8 +236,9 @@ export function registerCatalog(app: FastifyInstance): void {
     const row = getVariant(id);
     if (!row) throw httpError(404, "variant not found");
     app.db
-      .prepare("UPDATE variants SET name = ?, price_paise = ?, is_active = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.pricePaise ?? row.price_paise, (body.isActive ?? row.is_active === 1) ? 1 : 0, id);
+      .prepare("UPDATE variants SET name = ?, price_paise = ?, is_active = ?, ac_price_paise = ?, takeaway_price_paise = ? WHERE id = ?")
+      .run(body.name ?? row.name, body.pricePaise ?? row.price_paise, (body.isActive ?? row.is_active === 1) ? 1 : 0, body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise, body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise, id);
+    changed();
     return { variant: toVariant(getVariant(id)!) };
   });
 

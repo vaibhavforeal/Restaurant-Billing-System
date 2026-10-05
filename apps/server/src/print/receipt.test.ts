@@ -30,4 +30,41 @@ describe("receipts", () => {
     const rendered = renderBytes(receiptSlip(changed, 58));
     expect(rendered).not.toContain("A".repeat(33));
   });
+  it.each([58, 80] as const)("keeps long names, references and large amounts within %imm", (width) => {
+    const changed = { ...bill, discountNote: "Long discount reason ".repeat(15), receipt: { ...bill.receipt,
+      restaurantName: "A very long restaurant name ".repeat(4), address: "Floor 2\nMarket Road ".repeat(8),
+      items: [{ name: "Paneer tikka with extra vegetables and special sauce ".repeat(4), qty: 100, pricePaise: 9999999, gstRate: 5 }],
+    } };
+    const rendered = renderBytes(receiptSlip(changed, width)).replace(/<[0-9A-F]{2}>/g, "");
+    expect(rendered.split("\n").every((line) => line.length <= (width === 58 ? 32 : 48))).toBe(true);
+    expect(rendered).toContain("9999999.00");
+    expect(rendered).toContain("Floor 2\n");
+  });
+  it("shows unpaid and void bills without claiming payment was received", () => {
+    for (const status of ["unpaid", "void"] as const) {
+      const changed = { ...bill, status, payments: [] };
+      const html = receiptHtml(changed), slip = renderBytes(receiptSlip(changed, 58));
+      expect(html).not.toContain("PAID IN FULL"); expect(slip).not.toContain("PAID IN FULL");
+      if (status === "unpaid") {
+        expect(html).toContain("AMOUNT DUE ₹210.00"); expect(slip).toContain("AMOUNT DUE Rs.");
+      } else {
+        expect(html).toContain("VOID - NOT PAYABLE"); expect(slip).toContain("VOID - NOT PAYABLE");
+        expect(html).not.toContain("AMOUNT DUE"); expect(slip).not.toContain("AMOUNT DUE");
+      }
+    }
+  });
+  it("uses saved inclusive taxes, discount, split payments and a default footer", () => {
+    const totals = calculateBill([{ pricePaise: 10500, qty: 2, gstRate: 5 }], 1000, true);
+    const changed = { ...bill, ...totals, discountNote: '<b>Member discount</b>',
+      receipt: { ...bill.receipt, taxInclusive: true, receiptFooter: "", items: [{ name: '<img src=x onerror=alert(1)>', pricePaise: 10500, qty: 2, gstRate: 5 }] },
+      payments: [{ mode: "cash" as const, amountPaise: totals.totalPaise, createdAt: 1, refNote: null }],
+    };
+    const html = receiptHtml(changed), slip = renderBytes(receiptSlip(changed, 80));
+    expect(html).toContain("CGST (included)"); expect(html).toContain("SGST (included)");
+    expect(html).toContain("Prices include GST"); expect(slip).toContain("Prices include GST");
+    expect(html).toContain("-₹10.00"); expect(html).toContain("₹200.00");
+    expect(html).toContain("&lt;b&gt;Member discount&lt;/b&gt;"); expect(html).not.toContain("<img");
+    expect(html).toContain("Thank you for visiting."); expect(slip).toContain("Thank you for visiting.");
+    expect(html).toContain("size:A4 portrait"); expect(html).toContain("display:table-header-group");
+  });
 });

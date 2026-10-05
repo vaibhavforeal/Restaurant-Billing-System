@@ -1,0 +1,42 @@
+.license-settings { min-width: 0; }
+.license-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.license-heading h2 { margin: 0 0 5px; }
+.license-heading p, .license-help, .license-label { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.license-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.license-summary > div { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.license-summary strong { font-size: 24px; }
+.license-summary span { font-size: 12px; }
+.license-summary .license-date { font-size: 15px; line-height: 1.5; }
+.license-badge { display: inline-block; width: fit-content; border-radius: 5px; background: #eef0f3; color: #4e596b; padding: 3px 7px; font-size: 11px; }
+.license-badge.active { background: #e5f4eb; color: #236344; }
+.license-badge.expired, .license-badge.invalid, .license-badge.clock_error { background: #fbe7e9; color: #a62438; }
+.license-badge.grace { background: #fff2d4; color: #80510b; }
+.license-section { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 20px; }
+.license-section h3 { margin-top: 0; }
+.license-settings label { display: grid; gap: 6px; font-size: 12px; min-width: 0; margin: 10px 0; }
+.license-settings textarea, .license-settings input { min-width: 0; width: 100%; box-sizing: border-box; }
+.license-settings textarea { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+.license-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.license-settings code { overflow-wrap: anywhere; }
+.license-settings summary { cursor: pointer; font-weight: 600; }
+.license-preview { background: #f7f9fa; border: 1px solid var(--line); padding: 16px; border-radius: 8px; margin-top: 14px; font-size: 13px; overflow-wrap: anywhere; }
+.license-preview h4 { margin: 0 0 10px; }
+.license-warning { color: #80510b; background: #fff6e1; padding: 10px; border-radius: 6px; font-size: 12px; line-height: 1.6; }
+.license-message { background: #edf7f0; color: #236344; padding: 10px; border-radius: 6px; }
+.license-devices, .license-history { list-style: none; padding: 0; }
+.license-devices > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; }
+.license-devices > li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.license-devices small, .license-history small { display: block; color: var(--muted); margin-top: 6px; font-size: 11px; }
+.license-devices .license-badge { margin-left: 8px; }
+.license-devices .license-actions { flex-shrink: 0; }
+.license-device-form { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.license-device-form label { flex: 1; margin: 0; min-width: 150px; }
+.license-history > li { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+.license-history strong { font-weight: 500; }
+.license-recovery { width: 100%; }
+@media (max-width: 700px) {
+  .license-summary { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .license-summary > div { padding: 12px; }
+  .license-devices > li { flex-direction: column; align-items: stretch; }
+  .license-heading { flex-wrap: wrap; }
+}

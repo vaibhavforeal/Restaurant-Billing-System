@@ -1,6 +1,10 @@
 # Desktop POS — Design Spec
 
 **Date:** 2026-08-13
+**2026-09-29 update:** The user selected cloud plus offline commercialization.
+This document describes the existing local POS baseline. See the current
+[commercial architecture and licensing](../../operations/commercial-licensing.md).
+
 **Status:** Approved direction; supersedes the cloud/sync-first plan in `PROJECT_PLAN.md` for the current build.
 
 ## 1. What we're building

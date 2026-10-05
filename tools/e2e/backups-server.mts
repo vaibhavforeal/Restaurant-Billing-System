@@ -1,0 +1,24 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import fastifyStatic from "@fastify/static";
+import { MIGRATIONS, migrate, openDb } from "../../packages/domain/src/index.js";
+import { buildServer } from "../../apps/server/src/server.js";
+import { Backups } from "../../apps/server/src/backups.js";
+import { setupAdmin, createUser } from "../../apps/server/src/test-helpers.js";
+import { makeFakeSink } from "../../apps/server/src/print/sinks.js";
+
+const folder = mkdtempSync(join(tmpdir(), "forkflow-cloud-browser-"));
+const db = openDb(join(folder, "forkflow.db")); migrate(db, MIGRATIONS);
+const backups = new Backups(db, folder);
+const app = buildServer({ db, backups, port: 4169, sinkSend: makeFakeSink().send });
+await app.register(fastifyStatic, { root: resolve("apps/ui/dist"), setHeaders: (reply) => reply.header("Cache-Control", "no-cache") });
+app.setNotFoundHandler((req, reply) => req.method === "GET" && !req.url.startsWith("/api/") ? reply.sendFile("index.html") : reply.code(404).send({ error: "not found" }));
+app.addHook("onClose", async () => { db.close(); });
+const admin = await setupAdmin(app);
+await createUser(app, admin.token, { name: "Counter", pin: "2345", role: "cashier" });
+backups.daily();
+await app.listen({ host: "127.0.0.1", port: 4169 });
+const close = async () => { await app.close(); process.exit(0); };
+process.on("SIGINT", () => { void close(); }); process.on("SIGTERM", () => { void close(); });
+console.log(`Disposable cloud-backup fixture: http://127.0.0.1:4169/ (data: ${folder})`);

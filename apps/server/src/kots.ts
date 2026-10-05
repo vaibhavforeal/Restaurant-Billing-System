@@ -4,6 +4,9 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
+import { kotSlip } from "./print/templates.js";
+import { readProfile } from "./print/profile.js";
+import { bestEffortPrint } from "./print/best-effort.js";
 
 export function registerKots(app: FastifyInstance): void {
   const create = app.requirePermission("kots.create");
@@ -55,8 +58,9 @@ export function registerKots(app: FastifyInstance): void {
 
     const createdKots: Array<{ id: string; stationId: string }> = [];
     const changedStockIds: string[] = [];
+    const printErrors: string[] = [];
 
-    const write = app.db.transaction(() => {
+    const kotsWithContext = app.db.transaction(() => {
       const now = Date.now();
       const dateKey = localDateKey(now);
       for (const [stationId, itemIds] of byStation.entries()) {
@@ -75,84 +79,84 @@ export function registerKots(app: FastifyInstance): void {
       }
       if (body) app.db.prepare("INSERT INTO kot_requests (client_ref, order_id, user_id, fingerprint, kot_ids) VALUES (?, ?, ?, ?, ?)")
         .run(body.clientRef, id, req.user.id, fingerprint, JSON.stringify(createdKots.map((k) => k.id)));
-    });
-    write();
-    publishStock(app, changedStockIds);
+      const orderResult = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
+      const allItems = app.db
+        .prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY id")
+        .all(id) as OrderItemRow[];
+      const allKots = app.db
+        .prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at")
+        .all(id) as KotRow[];
 
-    const orderResult = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
-    const allItems = app.db
-      .prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY id")
-      .all(id) as OrderItemRow[];
-    const allKots = app.db
-      .prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at")
-      .all(id) as KotRow[];
+      const tableName = orderResult.table_id
+        ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(orderResult.table_id) as { name: string } | undefined)?.name ?? null
+        : null;
 
-    const tableName = orderResult.table_id
-      ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(orderResult.table_id) as { name: string } | undefined)?.name ?? null
-      : null;
+      const kotsWithContext = createdKots.map((ck) => {
+        const kotRow = allKots.find((k) => k.id === ck.id)!;
+        const kotItems = allItems.filter((i) => i.kot_id === ck.id);
+        return kotWithContextJson(kotRow, orderResult, tableName, kotItems);
+      });
 
-    const kotsWithContext = createdKots.map((ck) => {
-      const kotRow = allKots.find((k) => k.id === ck.id)!;
-      const kotItems = allItems.filter((i) => i.kot_id === ck.id);
-      return kotWithContextJson(kotRow, orderResult, tableName, kotItems);
-    });
+      // Print each KOT
+      for (const ck of createdKots) {
+        const kotRow = allKots.find((k) => k.id === ck.id)!;
+        const stationRow = app.db
+          .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
+          .get(ck.stationId) as { name: string; printer_id: string | null } | undefined;
 
-    // Print each KOT
-    for (const ck of createdKots) {
-      const kotRow = allKots.find((k) => k.id === ck.id)!;
-      const stationRow = app.db
-        .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
-        .get(ck.stationId) as { name: string; printer_id: string | null } | undefined;
+        if (!stationRow) continue;
 
-      if (!stationRow) continue;
+        const printerRow = stationRow.printer_id
+          ? (app.db
+              .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
+              .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
+          : undefined;
 
-      const printerRow = stationRow.printer_id
-        ? (app.db
-            .prepare("SELECT paper_width FROM printers WHERE id = ? AND is_active = 1")
-            .get(stationRow.printer_id) as { paper_width: number } | undefined)
-        : undefined;
+        if (!printerRow) continue;
 
-      if (!printerRow) continue;
+        const kotItemsForPrint = allItems.filter((i) => i.kot_id === ck.id);
 
-      const kotItemsForPrint = allItems.filter((i) => i.kot_id === ck.id);
-
-      // Build context line using kitchen-board rule
-      let contextLine: string;
-      if (orderResult.type === "parcel") {
-        contextLine = "Parcel";
-      } else if (tableName) {
-        if (orderResult.split_label === null || orderResult.split_label === "A") {
-          contextLine = tableName;
+        // Build context line using kitchen-board rule
+        let contextLine: string;
+        if (orderResult.type === "parcel") {
+          contextLine = "Parcel";
+        } else if (tableName) {
+          if (orderResult.split_label === null || orderResult.split_label === "A") {
+            contextLine = tableName;
+          } else {
+            contextLine = `${tableName} / ${orderResult.split_label}`;
+          }
         } else {
-          contextLine = `${tableName} / ${orderResult.split_label}`;
+          contextLine = "Table";
         }
-      } else {
-        contextLine = "Table";
+
+        const label = `KOT #${kotRow.kot_no} — ${contextLine}`;
+
+        const rendered = bestEffortPrint(app.log, `KOT #${kotRow.kot_no}`, () => kotSlip(
+          {
+            kotNo: kotRow.kot_no,
+            stationName: stationRow.name,
+            orderType: orderResult.type,
+            tableName,
+            splitLabel: orderResult.split_label,
+            items: kotItemsForPrint.map((i) => ({
+              qty: i.qty,
+              name: i.name_snapshot,
+              note: i.note,
+              cancelled: i.status === "cancelled",
+            })),
+            atMs: kotRow.created_at,
+          },
+          printerRow.paper_width as 58 | 80,
+          readProfile(printerRow.kot_profile),
+        ));
+        if (rendered.error) printErrors.push(rendered.error);
+        else app.enqueuePrint(ck.stationId, "kot", label, rendered.value!);
       }
-
-      const label = `KOT #${kotRow.kot_no} — ${contextLine}`;
-
-      const { kotSlip } = await import("./print/templates.js");
-      const bytes = kotSlip(
-        {
-          kotNo: kotRow.kot_no,
-          stationName: stationRow.name,
-          orderType: orderResult.type,
-          tableName,
-          splitLabel: orderResult.split_label,
-          items: kotItemsForPrint.map((i) => ({
-            qty: i.qty,
-            name: i.name_snapshot,
-            note: i.note,
-            cancelled: i.status === "cancelled",
-          })),
-          atMs: kotRow.created_at,
-        },
-        printerRow.paper_width as 58 | 80,
-      );
-
-      app.enqueuePrint(ck.stationId, "kot", label, bytes);
-    }
+      return kotsWithContext;
+    })();
+    publishStock(app, changedStockIds);
+    const orderResult = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
 
     for (const kot of kotsWithContext) {
       app.broadcast("kot.created", { kot });
@@ -165,7 +169,7 @@ export function registerKots(app: FastifyInstance): void {
       app.broadcast("table.changed", { tableId: orderResult.table_id! });
     }
 
-    return reply.status(200).send({ order: orderFull, kots: kotsWithContext });
+    return reply.status(200).send({ order: orderFull, kots: kotsWithContext, printErrors });
   });
 
   app.get("/api/kots", { preHandler: read }, async () => {
@@ -214,28 +218,47 @@ export function registerKots(app: FastifyInstance): void {
     };
   });
 
-  app.post("/api/kots/:id/done", { preHandler: update }, async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow | undefined;
-    if (!kot) throw httpError(404, "kot not found");
-
-    if (kot.done_at) {
-      return reply.status(200).send({ kot: kotJson(kot) });
-    }
-
-    const now = Date.now();
-    app.db.prepare("UPDATE kots SET done_at = ? WHERE id = ?").run(now, id);
-
-    const updated = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow;
+  function broadcastKotUpdated(updated: KotRow): void {
     const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(updated.order_id) as OrderRow;
     const tableName = order.table_id
       ? (app.db.prepare("SELECT name FROM dining_tables WHERE id = ?").get(order.table_id) as { name: string } | undefined)?.name ?? null
       : null;
     const items = app.db
       .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
-      .all(id) as OrderItemRow[];
+      .all(updated.id) as OrderItemRow[];
 
     app.broadcast("kot.updated", { kot: kotWithContextJson(updated, order, tableName, items) });
+  }
+
+  app.post("/api/kots/:id/accept", { preHandler: update }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow | undefined;
+    if (!kot) throw httpError(404, "kot not found");
+
+    if (kot.accepted_at !== null) {
+      return reply.status(200).send({ kot: kotJson(kot) });
+    }
+
+    app.db.prepare("UPDATE kots SET accepted_at = COALESCE(accepted_at, done_at, ?) WHERE id = ?").run(Date.now(), id);
+    const updated = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow;
+    broadcastKotUpdated(updated);
+    return reply.status(200).send({ kot: kotJson(updated) });
+  });
+
+  app.post("/api/kots/:id/done", { preHandler: update }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow | undefined;
+    if (!kot) throw httpError(404, "kot not found");
+
+    if (kot.done_at !== null && kot.accepted_at !== null) {
+      return reply.status(200).send({ kot: kotJson(kot) });
+    }
+
+    const now = Date.now();
+    app.db.prepare("UPDATE kots SET accepted_at = COALESCE(accepted_at, done_at, ?), done_at = COALESCE(done_at, ?) WHERE id = ?").run(now, now, id);
+
+    const updated = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow;
+    broadcastKotUpdated(updated);
 
     return reply.status(200).send({ kot: kotJson(updated) });
   });

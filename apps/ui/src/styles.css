@@ -2,7 +2,9 @@
 @layer base {
   :root { color-scheme: light; font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; color: #252830; background: #f6f7f9; font-synthesis: none; --red: #d12d3b; --red-hover: #b6202e; --red-light: #fff0f1; --ink: #252830; --muted: #727680; --line: #e7e8ec; --surface: #fff; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-size: 14px; line-height: 1.5; }
+  body { margin: 0; font-size: 14px; line-height: 1.5; -webkit-user-select: none; user-select: none; }
+  /* Keep normal selection and editing inside form fields. */
+  input, textarea, [contenteditable]:not([contenteditable="false"]) { -webkit-user-select: text; user-select: text; }
   button, input, select, textarea { font: inherit; }
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   button { min-height: 40px; padding: 9px 15px; background: #fff; color: var(--ink); border: 1px solid #dcdee4; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background .15s, border-color .15s, box-shadow .15s; }
@@ -245,4 +247,22 @@
     .menu-card { padding: 14px; }
   }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+}
+/* Ingredient entry keeps stock names readable and quantities beside their units. */
+.recipe-editor { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.recipe-editor-heading { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.recipe-editor-heading h4 { margin: 0; }
+.recipe-editor-heading span { color: var(--muted, #64748b); font-size: 13px; }
+.recipe-ingredients { display: grid; gap: 12px; margin-block: 18px; }
+.recipe-ingredient { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) auto; align-items: end; gap: 12px; }
+.recipe-ingredient label { display: grid; gap: 6px; min-width: 0; }
+.recipe-ingredient input, .recipe-ingredient select { width: 100%; min-width: 0; box-sizing: border-box; }
+.recipe-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.quick-payment { min-width: 0; margin-block: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.quick-payment label { display: grid; gap: 6px; margin-bottom: 14px; }
+.quick-payment input, .quick-payment select { width: 100%; min-width: 0; box-sizing: border-box; }
+.quick-payment .primary { width: 100%; white-space: normal; }
+@media (max-width: 600px) {
+  .recipe-ingredient { grid-template-columns: minmax(0, 1fr) auto; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .recipe-ingredient label:first-child { grid-column: 1 / -1; }
 }

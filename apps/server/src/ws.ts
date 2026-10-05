@@ -6,6 +6,7 @@ import { sessionUser } from "./auth.js";
 interface ClientInfo {
   token: string;
   userId: string;
+  device: unknown;
 }
 
 export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): void {
@@ -24,11 +25,16 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
       if (!user) {
         ws.close(4401, "unauthenticated");
         clients.delete(ws);
+      } else if (!app.licensing.sessionAllowed(info.token, info.device) || !app.licensing.status(info.device).canOperate) {
+        ws.close(4403, "device or license unavailable");
+        clients.delete(ws);
       }
     }
   });
 
-  // Periodic revalidation every 60s
+  // Sessions and licenses are rechecked every 60s, and immediately by the code that revokes them (logout,
+  // user changes, license/device changes). Broadcasts do not recheck: that cost every client's session and
+  // license verification on each event.
   const revalidateInterval = setInterval(() => {
     app.wsRevalidate();
   }, 60000);
@@ -49,7 +55,7 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
         if (authenticated) return; // Ignore subsequent frames
 
         try {
-          const frame = JSON.parse(raw.toString()) as { type?: string; token?: string };
+          const frame = JSON.parse(raw.toString()) as { type?: string; token?: string; device?: string };
           if (frame.type !== "auth" || typeof frame.token !== "string") {
             socket.close(4401, "unauthenticated");
             return;
@@ -60,10 +66,14 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
             socket.close(4401, "unauthenticated");
             return;
           }
+          if (!app.licensing.sessionAllowed(frame.token, frame.device) || !app.licensing.status(frame.device).canOperate) {
+            socket.close(4403, "device or license unavailable");
+            return;
+          }
 
           clearTimeout(timeout);
           authenticated = true;
-          clients.set(socket, { token: frame.token, userId: user.id });
+          clients.set(socket, { token: frame.token, userId: user.id, device: frame.device });
           socket.send(JSON.stringify({ event: "auth.ok", data: {} }));
         } catch {
           socket.close(4401, "unauthenticated");

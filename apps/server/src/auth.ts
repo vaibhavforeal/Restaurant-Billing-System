@@ -2,6 +2,7 @@ import { hashPassword, verifyPassword, can } from "@forkflow/core";
 import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
+import { deviceHash } from "./licensing.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const THROTTLE_AFTER = 5;
@@ -20,6 +21,7 @@ export interface AuthedUser {
 }
 
 interface SessionRow {
+  device: string | null;
   user_id: string;
   expires_at: number;
   name: string;
@@ -27,64 +29,75 @@ interface SessionRow {
   is_active: number;
 }
 
-export function sessionUser(db: Database, token: string): AuthedUser | null {
+/** The live session's user plus the device it was created on, from a single lookup. */
+function sessionRecord(db: Database, token: string): { user: AuthedUser; device: string | null } | null {
   const row = db
     .prepare(
-      `SELECT s.user_id, s.expires_at, u.name, u.role, u.is_active
+      `SELECT s.user_id, s.expires_at, s.device, u.name, u.role, u.is_active
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token = ?`,
     )
     .get(token) as SessionRow | undefined;
   if (!row || row.expires_at < Date.now() || !row.is_active) return null;
-  return { id: row.user_id, name: row.name, role: row.role };
+  return { user: { id: row.user_id, name: row.name, role: row.role }, device: row.device };
 }
 
-export function registerAuth(app: FastifyInstance): void {
+export function sessionUser(db: Database, token: string): AuthedUser | null {
+  return sessionRecord(db, token)?.user ?? null;
+}
+
+export function registerAuth(app: FastifyInstance, demo = false): void {
   // Plugin-scoped: each server instance gets its own throttle state.
   const loginThrottle = new Map<string, ThrottleState>();
 
-  const createSession = (userId: string): string => {
+  const createSession = (userId: string, credential: unknown): string => {
     const token = randomBytes(32).toString("hex");
     const now = Date.now();
     // opportunistic housekeeping: drop expired sessions on each new login
     app.db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
     app.db
-      .prepare("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
-      .run(token, userId, now, now + SESSION_TTL_MS);
+      .prepare("INSERT INTO sessions (token, user_id, created_at, expires_at, device) VALUES (?, ?, ?, ?, ?)")
+      .run(token, userId, now, now + SESSION_TTL_MS, deviceHash(credential));
     return token;
   };
 
-  const userForToken = (header: string | undefined): AuthedUser | null => {
+  /** The signed-in user for this request, or null when the token is missing, expired, or from another device. */
+  const authenticate = (req: FastifyRequest): AuthedUser | null => {
+    const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) return null;
-    const token = header.slice("Bearer ".length);
-    return sessionUser(app.db, token);
+    const session = sessionRecord(app.db, header.slice("Bearer ".length));
+    if (!session || !app.licensing.deviceAllowed(session.device, req.headers["x-forkflow-device"])) return null;
+    return session.user;
   };
 
   const requireAuth: preHandlerHookHandler = async (req: FastifyRequest, reply: FastifyReply) => {
-    const user = userForToken(req.headers.authorization);
+    const user = authenticate(req);
     if (!user) return reply.status(401).send({ error: "unauthenticated" });
     req.user = user;
+    app.licensing.assertAccess(req);
   };
 
   app.decorate("requireAuth", requireAuth);
   app.decorate("requirePermission", (slug: string): preHandlerHookHandler => {
     return async (req, reply) => {
-      const user = userForToken(req.headers.authorization);
+      const user = authenticate(req);
       if (!user) return reply.status(401).send({ error: "unauthenticated" });
       if (!can(roleFor(user.role), slug)) {
         return reply.status(403).send({ error: "forbidden", permission: slug });
       }
       req.user = user;
+      app.licensing.assertAccess(req);
     };
   });
 
   app.get("/api/needs-setup", async () => {
     // users-count is the canonical signal; settings.setup_complete is informational only
     const row = app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
-    return { needsSetup: row.n === 0 };
+    return { needsSetup: row.n === 0, ...(demo ? { demo: true } : {}) };
   });
 
   app.post("/api/setup", async (req, reply) => {
+    if (app.licensing.enabled && !deviceHash(req.headers["x-forkflow-device"])) return reply.status(400).send({ error: "A device credential is required" });
     const body = SetupBody.parse(req.body);
     const existing = app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
     if (existing.n > 0) return reply.status(409).send({ error: "already set up" });
@@ -108,11 +121,12 @@ export function registerAuth(app: FastifyInstance): void {
     });
     write();
 
-    const token = createSession(id);
+    const token = createSession(id, req.headers["x-forkflow-device"]);
     return reply.status(201).send({ token, user: { id, name: body.adminName, role: "admin" } });
   });
 
   app.post("/api/login", async (req, reply) => {
+    if (app.licensing.enabled && !deviceHash(req.headers["x-forkflow-device"])) return reply.status(400).send({ error: "A device credential is required" });
     const { pin } = LoginBody.parse(req.body);
     const ip = req.ip;
 
@@ -132,7 +146,7 @@ export function registerAuth(app: FastifyInstance): void {
       if (await verifyPassword(pin, u.pin_hash)) {
         // Success: reset throttle
         loginThrottle.delete(ip);
-        const token = createSession(u.id);
+        const token = createSession(u.id, req.headers["x-forkflow-device"]);
         return { token, user: { id: u.id, name: u.name, role: u.role } };
       }
     }

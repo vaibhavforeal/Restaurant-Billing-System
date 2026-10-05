@@ -36,6 +36,8 @@ describe("migration 004: printer kinds", () => {
       connection: "192.168.1.100",
       paper_width: 80,
       is_active: 1,
+      receipt_profile: '{"copies":1,"feedLines":3,"autoCut":true}',
+      kot_profile: '{"copies":1,"feedLines":3,"autoCut":true}',
     });
 
     // Verify bluetooth kind now works
@@ -77,6 +79,8 @@ describe("migration 004: printer kinds", () => {
       connection: "192.168.1.100",
       paper_width: 80,
       is_active: 1,
+      receipt_profile: '{"copies":1,"feedLines":3,"autoCut":true}',
+      kot_profile: '{"copies":1,"feedLines":3,"autoCut":true}',
     });
 
     // Verify station survived and still references the printer

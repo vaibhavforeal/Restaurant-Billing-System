@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { PrintQueue } from "./queue.js";
 import { makeFakeSink } from "./sinks.js";
 
@@ -34,6 +34,21 @@ describe("PrintQueue", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(changes[changes.length - 1]).toEqual({ status: "failed", error: "printer offline" });
+  });
+
+  it("keeps only the newest failed jobs so payloads cannot grow without bound", async () => {
+    const queue = new PrintQueue(async () => { throw new Error("printer offline"); }, () => {});
+    const printer = { id: "p1", name: "Printer 1", kind: "network" as const, connection: "test" };
+    for (let i = 1; i <= 205; i++) queue.enqueue(printer, "kot", `KOT ${i}`, Buffer.from("data"));
+    await vi.waitFor(() => expect(queue.jobs().filter((job) => job.status === "failed").length).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(queue.jobs().some((job) => job.label === "KOT 205" && job.status === "failed")).toBe(true));
+    const jobs = queue.jobs();
+    expect(jobs).toHaveLength(200);
+    expect(jobs.every((job) => job.status === "failed")).toBe(true);
+    expect(jobs.some((job) => job.label === "KOT 205")).toBe(true);
+    expect(jobs.some((job) => job.label === "KOT 5")).toBe(false);
+    expect(jobs.some((job) => job.label === "KOT 6")).toBe(true);
+    await queue.close();
   });
 
   it("retries a failed job", async () => {

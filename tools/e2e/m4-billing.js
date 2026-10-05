@@ -66,7 +66,7 @@
   await click(`Open bill #${inclusive.billNo}`); await click('View receipt');
   await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('Prices include GST'), 'old receipt');
   check((await api(`/bills/${inclusive.id}`)).bill.taxInclusive, 'Old inclusive bill unchanged after mode switch');
-  await click('reports');
+  await click('Reports & Analytics');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');
   check(document.body.innerText.includes('105.00') || document.body.innerText.includes('110.00'), 'Day-end payment breakdown rendered');
   const report = (await api('/reports/day-end')).report;
