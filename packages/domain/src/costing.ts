@@ -1,5 +1,6 @@
 import { stockMilli, type StockUnit } from "./stock-schemas.js";
 import type { PriceTier } from "./pricing.js";
+import type { OperationalReport, ReportCell, ReportColumn, ReportTable } from "./operational-reports.js";
 
 /**
  * Weighted-average costing arithmetic. Costs are integer milli-paise (thousandths of a paise)
@@ -77,4 +78,85 @@ export function dishCost(links: Array<{ stockName: string; qtyPerSale: number; u
   }
   if (missing.length > 0) return { costPaise: null, status: "incomplete", missing };
   return { costPaise: total, status: "complete", missing };
+}
+
+/** One billed line: revenue is pre-GST taxable value; cost is null when unknown, saleMoves is 0 when the dish has no recipe. */
+export interface ProfitLine {
+  categoryName: string; name: string; qty: number; revenuePaise: number; costPaise: number | null; saleMoves: number;
+}
+type LineStatus = "costed" | "unknown" | "none";
+const lineStatus = (line: ProfitLine): LineStatus => line.saleMoves === 0 ? "none" : line.costPaise === null ? "unknown" : "costed";
+const percentOf = (part: number, whole: number): number | null => whole === 0 ? null : Math.round(part * 1000 / whole) / 10;
+const column = (key: string, label: string, format?: ReportColumn["format"]): ReportColumn => format ? { key, label, format } : { key, label };
+const STATUS_LABELS: Record<LineStatus, string> = { costed: "Costed", unknown: "Cost unknown", none: "No recipe" };
+
+interface ProfitGroup { name: string; qty: number; revenue: number; costedRevenue: number; cost: number; counts: Record<LineStatus, number> }
+
+function groupLines(lines: ProfitLine[], key: (line: ProfitLine) => string, label: (line: ProfitLine) => string): ProfitGroup[] {
+  const groups = new Map<string, ProfitGroup>();
+  for (const line of lines) {
+    const k = key(line);
+    const g = groups.get(k) ?? { name: label(line), qty: 0, revenue: 0, costedRevenue: 0, cost: 0, counts: { costed: 0, unknown: 0, none: 0 } };
+    const status = lineStatus(line);
+    g.qty += line.qty; g.revenue += line.revenuePaise; g.counts[status]++;
+    if (status === "costed") { g.costedRevenue += line.revenuePaise; g.cost += line.costPaise!; }
+    groups.set(k, g);
+  }
+  return [...groups.values()];
+}
+
+function groupStatus(counts: Record<LineStatus, number>): string {
+  const present = (Object.keys(STATUS_LABELS) as LineStatus[]).filter((s) => counts[s] > 0);
+  if (present.length === 1) return STATUS_LABELS[present[0]!];
+  return present.map((s) => `${counts[s]} ${STATUS_LABELS[s].toLowerCase()}`).join(", ");
+}
+
+/** Food cost and gross profit. Only fully costed lines count towards cost %; the rest are reported as excluded revenue. */
+export function buildProfitReport(input: {
+  from: string; to: string; today: string; timezone: string; generatedAt: number; lines: ProfitLine[];
+  wastage: { costPaise: number; unknownCount: number }; adjustments: { costPaise: number; unknownCount: number };
+}): Omit<OperationalReport, "kind"> & { kind: "profit" } {
+  let revenue = 0, costedRevenue = 0, cost = 0, unknownRevenue = 0, noRecipeRevenue = 0;
+  for (const line of input.lines) {
+    revenue += line.revenuePaise;
+    const status = lineStatus(line);
+    if (status === "costed") { costedRevenue += line.revenuePaise; cost += line.costPaise!; }
+    else if (status === "unknown") unknownRevenue += line.revenuePaise;
+    else noRecipeRevenue += line.revenuePaise;
+  }
+  const summaryRow = (metric: string, amount: number | null, percent: number | null = null): Record<string, ReportCell> => ({ metric, amount, percent });
+  const summary: ReportTable = {
+    title: "Summary",
+    columns: [column("metric", "Metric"), column("amount", "Amount", "money"), column("percent", "Percent", "percent")],
+    rows: [
+      summaryRow("Revenue (pre-GST)", revenue), summaryRow("Costed revenue", costedRevenue), summaryRow("Ingredient cost", cost),
+      summaryRow("Gross profit", costedRevenue - cost), summaryRow("Food cost %", null, percentOf(cost, costedRevenue)),
+      summaryRow("Wastage cost", input.wastage.costPaise), summaryRow("Count adjustments (net)", input.adjustments.costPaise),
+      summaryRow("Excluded: cost unknown", unknownRevenue), summaryRow("Excluded: no recipe", noRecipeRevenue),
+    ],
+  };
+  const breakdown = (title: string, nameLabel: string, groups: ProfitGroup[]): ReportTable => ({
+    title,
+    columns: [column("name", nameLabel), column("qty", "Quantity", "quantity"), column("revenue", "Revenue", "money"), column("cost", "Cost", "money"),
+      column("profit", "Gross profit", "money"), column("costPercent", "Food cost %", "percent"), column("status", "Status")],
+    rows: groups.map((g): Record<string, ReportCell> => {
+      const costed = g.counts.costed > 0;
+      return { name: g.name, qty: g.qty, revenue: g.revenue, cost: costed ? g.cost : null, profit: costed ? g.costedRevenue - g.cost : null,
+        costPercent: costed ? percentOf(g.cost, g.costedRevenue) : null, status: groupStatus(g.counts) };
+    }),
+  });
+  const byCategory = groupLines(input.lines, (l) => l.categoryName, (l) => l.categoryName);
+  const byDish = groupLines(input.lines, (l) => `${l.categoryName} ${l.name}`, (l) => l.name);
+
+  const notes = ["Revenue is bill taxable value after discount, excluding GST, by bill issue date."];
+  if (unknownRevenue > 0 || noRecipeRevenue > 0) {
+    notes.push("Food cost % and gross profit use only fully costed sales. Sales whose cost is unknown and sales of dishes with no recipe are excluded and shown separately in the summary.");
+  }
+  if (input.lines.some((l) => lineStatus(l) === "unknown")) notes.push("Sales before costing was set up have no recorded cost.");
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (input.wastage.unknownCount > 0) notes.push(`${plural(input.wastage.unknownCount, "wastage movement has", "wastage movements have")} no recorded cost and ${input.wastage.unknownCount === 1 ? "is" : "are"} not in the wastage cost.`);
+  if (input.adjustments.unknownCount > 0) notes.push(`${plural(input.adjustments.unknownCount, "count adjustment has", "count adjustments have")} no recorded cost and ${input.adjustments.unknownCount === 1 ? "is" : "are"} not in the net adjustment cost.`);
+
+  return { kind: "profit", from: input.from, to: input.to, today: input.today, timezone: input.timezone, generatedAt: input.generatedAt, notes,
+    tables: [summary, breakdown("By category", "Category", byCategory), breakdown("By dish", "Dish", byDish)] };
 }

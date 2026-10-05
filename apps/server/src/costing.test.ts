@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type StockItem, type StockMove, type StockCostChange } from "@forkflow/domain";
+import { localDateKey, uuidv7, type OperationalReport, type StockItem, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { freshApp, setupAdmin, auth, createUser } from "./test-helpers.js";
 
 // Roles are code and only admins hold stock.manage, so a test hook lets one role name behave as a stock
@@ -283,6 +283,113 @@ describe("stock costing", () => {
         expect(res.statusCode).toBe(403);
         expect(res.json().permission).toBe("costs.read");
       }
+    });
+  });
+
+  describe("profit report", () => {
+    const today = () => localDateKey(Date.now());
+    const profit = (query = `?from=${today()}&to=${today()}`, as = token) => request("GET", `/api/reports/profit${query}`, undefined, as);
+    const summary = (report: OperationalReport) => Object.fromEntries(report.tables[0]!.rows.map((row) => [row.metric, row]));
+    async function sellParcel(productId: string, qty = 1) {
+      const order = await request("POST", "/api/orders", { clientRef: uuidv7(), type: "parcel", tableId: null });
+      expect(order.statusCode).toBe(201);
+      const id = order.json().order.id as string;
+      expect((await request("POST", `/api/orders/${id}/items`, { items: [{ productId, qty, clientRef: uuidv7() }] })).statusCode).toBe(200);
+      const preview = await request("POST", `/api/orders/${id}/bill-preview`, { discountPaise: 0 });
+      expect(preview.statusCode).toBe(200);
+      const bill = await request("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey, discountPaise: 0 });
+      expect(bill.statusCode).toBe(201);
+      return { orderId: id, billId: bill.json().bill.id as string };
+    }
+    async function dish(name: string, links: Array<{ stockItemId: string; qtyPerSale: number }>) {
+      const cat = await request("POST", "/api/categories", { name: `Cat ${name}` });
+      const product = await request("POST", "/api/products", { name, categoryId: cat.json().category.id, pricePaise: 10_000, gstRate: 0, kotStationId: null });
+      expect(product.statusCode).toBe(201);
+      const id = product.json().product.id as string;
+      if (links.length) expect((await request("PUT", `/api/products/${id}/recipe`, { expectedVersion: 0, ingredients: links })).statusCode).toBe(200);
+      return id;
+    }
+
+    it("reports profit from frozen costs and never rewrites the past", async () => {
+      const paneer = await stock(10);
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const tikka = await dish("Paneer Tikka", [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      await sellParcel(tikka);
+      const first = await profit();
+      expect(first.statusCode).toBe(200);
+      const report = first.json().report as OperationalReport & { kind: string };
+      expect(report.kind).toBe("profit");
+      expect(report.from).toBe(today());
+      const s = summary(report);
+      expect(s["Revenue (pre-GST)"]!.amount).toBe(10_000);
+      expect(s["Ingredient cost"]!.amount).toBe(4_800);
+      expect(s["Gross profit"]!.amount).toBe(5_200);
+      expect(s["Food cost %"]!.percent).toBe(48);
+      expect(report.tables[2]!.rows[0]).toMatchObject({ name: "Paneer Tikka", qty: 1, revenue: 10_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "Costed" });
+      expect(report.tables[1]!.rows[0]).toMatchObject({ name: "Cat Paneer Tikka", cost: 4_800 });
+      // A later purchase at a new price and a manual cost change must not touch history.
+      expect((await purchase(paneer.id, { quantity: 10, costPaise: 500_000 })).statusCode).toBe(201);
+      expect((await unitCost(paneer.id, 60_000_000)).statusCode).toBe(201);
+      const second = (await profit()).json().report as OperationalReport;
+      expect(second.tables).toEqual(report.tables);
+    });
+
+    it("excludes cost-unknown and no-recipe sales and reverses cancelled consumption", async () => {
+      const paneer = await stock(10);
+      const salt = await stock(10, "Salt");
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const costedDish = await dish("Tikka", [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      const unknownDish = await dish("Salted", [{ stockItemId: salt.id, qtyPerSale: 0.01 }]);
+      const plain = await dish("Water", []);
+      await sellParcel(costedDish); await sellParcel(unknownDish); await sellParcel(plain);
+      const report = (await profit()).json().report as OperationalReport;
+      const s = summary(report);
+      expect(s["Revenue (pre-GST)"]!.amount).toBe(30_000);
+      expect(s["Costed revenue"]!.amount).toBe(10_000);
+      expect(s["Excluded: cost unknown"]!.amount).toBe(10_000);
+      expect(s["Excluded: no recipe"]!.amount).toBe(10_000);
+      expect(report.tables[2]!.rows.map((r) => [r.name, r.status])).toEqual([["Salted", "Cost unknown"], ["Tikka", "Costed"], ["Water", "No recipe"]]);
+      expect(report.notes).toContain("Sales before costing was set up have no recorded cost.");
+    });
+
+    it("ignores sale movements that were reversed", async () => {
+      const paneer = await stock(10);
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const tikka = await dish("Paneer Tikka", [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      await sellParcel(tikka);
+      const sale = app.db.prepare("SELECT id, order_item_id AS orderItemId FROM stock_moves WHERE reason = 'sale'").get() as { id: string; orderItemId: string };
+      app.db.prepare(`INSERT INTO stock_moves (id, stock_item_id, delta, reason, created_at, order_item_id, reversal_of, cost_paise)
+        VALUES (?, ?, 0.15, 'cancel_reversal', ?, ?, ?, 4800)`).run(uuidv7(), paneer.id, Date.now(), sale.orderItemId, sale.id);
+      const report = (await profit()).json().report as OperationalReport;
+      expect(report.tables[2]!.rows[0]).toMatchObject({ revenue: 10_000, cost: null, status: "No recipe" });
+      expect(summary(report)["Ingredient cost"]!.amount).toBe(0);
+    });
+
+    it("counts wastage and count adjustments by movement date, leaving unknown cost out", async () => {
+      const paneer = await stock(10);
+      const salt = await stock(10, "Salt");
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const move = (id: string, reason: string, quantity: number) =>
+        request("POST", `/api/stock-items/${id}/movements`, { clientRef: uuidv7(), expectedVersion: version(id), reason, quantity, note: "Test" });
+      expect((await move(paneer.id, "wastage", 0.5)).statusCode).toBe(201);
+      expect((await move(paneer.id, "adjustment", 8.5)).statusCode).toBe(201);
+      expect((await move(salt.id, "wastage", 1)).statusCode).toBe(201);
+      const report = (await profit()).json().report as OperationalReport;
+      const s = summary(report);
+      expect(s["Wastage cost"]!.amount).toBe(16_000);
+      expect(s["Count adjustments (net)"]!.amount).toBe(32_000);
+      expect(report.notes.some((n) => /1 wastage movement has no recorded cost/.test(n))).toBe(true);
+      const empty = (await profit("?from=2020-01-01&to=2020-01-02")).json().report as OperationalReport;
+      expect(summary(empty)["Wastage cost"]!.amount).toBe(0);
+    });
+
+    it("rejects ranges over 366 days and refuses cashiers", async () => {
+      expect((await profit("?from=2024-01-01&to=2025-01-02")).statusCode).toBe(400);
+      expect((await profit("?from=2024-01-01&to=2024-12-31")).statusCode).toBe(200);
+      const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+      const res = await profit(undefined, cashier);
+      expect(res.statusCode).toBe(403);
+      expect(res.json().permission).toBe("costs.read");
     });
   });
 });

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { UnitCostSet, dishCost, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type StockCost, type StockRow } from "@forkflow/domain";
+import { UnitCostSet, buildProfitReport, dishCost, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@forkflow/domain";
 import { httpError } from "./http-error.js";
+import { reportRange } from "./sales-reports.js";
 import { publishStock, versionCheck } from "./stock.js";
 
 const PRICE_TIERS: PriceTier[] = ["non_ac", "ac", "takeaway"];
@@ -96,5 +97,28 @@ export function registerCosting(app: FastifyInstance): void {
       else for (const v of variants) if (v.is_active === 1) row(v.id, `${p.name} · ${v.name}`, v);
     }
     return { dishes, taxInclusive };
+  });
+
+  app.get("/api/reports/profit", { preHandler: costs }, async (req) => {
+    const { from, to, bounds } = reportRange(req.query);
+    // One synchronous read transaction keeps lines, wastage and adjustments on the same snapshot.
+    const { lines, wastage, adjustments } = db.transaction(() => {
+      // Sale movements that were later reversed (cancelled items) no longer count as consumption.
+      const sales = `(SELECT m.cost_paise FROM stock_moves m WHERE m.order_item_id = l.order_item_id AND m.reason = 'sale'
+        AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id))`;
+      const lines = (db.prepare(`SELECT l.category_name AS categoryName, l.name, l.qty, l.taxable_paise AS revenuePaise,
+          (SELECT COUNT(*) FROM ${sales}) AS saleMoves,
+          (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves,
+          (SELECT 0 - SUM(cost_paise) FROM ${sales}) AS costPaise
+        FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
+        WHERE b.created_at >= ? AND b.created_at < ? AND b.status != 'void'
+        ORDER BY l.category_name COLLATE NOCASE, l.name COLLATE NOCASE, l.bill_id, l.order_item_id`).all(...bounds) as Array<ProfitLine & { unknownMoves: number }>)
+        .map(({ unknownMoves, ...line }): ProfitLine => ({ ...line, costPaise: unknownMoves > 0 ? null : line.costPaise }));
+      const movements = (reason: string) => db.prepare(`SELECT COALESCE(0 - SUM(cost_paise), 0) AS costPaise, COUNT(*) - COUNT(cost_paise) AS unknownCount
+        FROM stock_moves WHERE reason = ? AND created_at >= ? AND created_at < ?`).get(reason, ...bounds) as { costPaise: number; unknownCount: number };
+      return { lines, wastage: movements("wastage"), adjustments: movements("adjustment") };
+    })();
+    const report = buildProfitReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines, wastage, adjustments });
+    return { report };
   });
 }

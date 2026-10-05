@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blendUnitCost, moveCostPaise, preGstPaise, dishCost } from "./costing.js";
+import { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine } from "./costing.js";
 
 describe("weighted-average costing", () => {
   it("blends deliveries into a weighted average", () => {
@@ -42,5 +42,60 @@ describe("weighted-average costing", () => {
       .toEqual({ costPaise: 4_803, status: "complete", missing: [] });
     expect(dishCost([{ stockName: "Paneer", qtyPerSale: 0.15, unitCostMilliPaise: 32_000_000 }, { stockName: "Cream", qtyPerSale: 0.05, unitCostMilliPaise: null }]))
       .toEqual({ costPaise: null, status: "incomplete", missing: ["Cream"] });
+  });
+});
+
+describe("profit report", () => {
+  const base = { from: "2026-10-01", to: "2026-10-05", today: "2026-10-05", timezone: "Asia/Kolkata", generatedAt: 1 };
+  const none = { costPaise: 0, unknownCount: 0 };
+  const lines: ProfitLine[] = [
+    { categoryName: "Mains", name: "Paneer Tikka", qty: 2, revenuePaise: 10_000, costPaise: 4_800, saleMoves: 2 },
+    { categoryName: "Mains", name: "Dal", qty: 1, revenuePaise: 5_000, costPaise: null, saleMoves: 1 },
+    { categoryName: "Drinks", name: "Water", qty: 1, revenuePaise: 2_000, costPaise: null, saleMoves: 0 },
+  ];
+  const summary = (report: ReturnType<typeof buildProfitReport>) =>
+    Object.fromEntries(report.tables[0]!.rows.map((row) => [row.metric, row]));
+
+  it("builds profit totals, statuses and notes", () => {
+    const report = buildProfitReport({ ...base, lines, wastage: { costPaise: 1_000, unknownCount: 0 }, adjustments: none });
+    expect(report).toMatchObject({ kind: "profit", from: "2026-10-01", to: "2026-10-05", today: "2026-10-05", timezone: "Asia/Kolkata", generatedAt: 1 });
+    expect(report.tables.map((t) => t.title)).toEqual(["Summary", "By category", "By dish"]);
+    const s = summary(report);
+    expect(Object.keys(s)).toEqual(["Revenue (pre-GST)", "Costed revenue", "Ingredient cost", "Gross profit", "Food cost %", "Wastage cost", "Count adjustments (net)", "Excluded: cost unknown", "Excluded: no recipe"]);
+    expect(s["Revenue (pre-GST)"]!.amount).toBe(17_000);
+    expect(s["Costed revenue"]!.amount).toBe(10_000);
+    expect(s["Ingredient cost"]!.amount).toBe(4_800);
+    expect(s["Gross profit"]!.amount).toBe(5_200);
+    expect(s["Food cost %"]).toMatchObject({ amount: null, percent: 48 });
+    expect(s["Wastage cost"]!.amount).toBe(1_000);
+    expect(s["Excluded: cost unknown"]!.amount).toBe(5_000);
+    expect(s["Excluded: no recipe"]!.amount).toBe(2_000);
+    expect(report.tables[0]!.columns.map((c) => [c.key, c.format])).toEqual([["metric", undefined], ["amount", "money"], ["percent", "percent"]]);
+    expect(report.notes).toContain("Revenue is bill taxable value after discount, excluding GST, by bill issue date.");
+    expect(report.notes.some((n) => /cost is unknown/.test(n) && /no recipe/.test(n))).toBe(true);
+    expect(report.notes).toContain("Sales before costing was set up have no recorded cost.");
+    expect(report.tables[2]!.columns.map((c) => c.key)).toEqual(["name", "qty", "revenue", "cost", "profit", "costPercent", "status"]);
+    expect(report.tables[2]!.columns.find((c) => c.key === "costPercent")!.format).toBe("percent");
+  });
+
+  it("breaks revenue down by category and dish with a status per row", () => {
+    const report = buildProfitReport({ ...base, lines, wastage: none, adjustments: none });
+    const dishes = Object.fromEntries(report.tables[2]!.rows.map((r) => [r.name, r]));
+    expect(dishes["Paneer Tikka"]).toMatchObject({ qty: 2, revenue: 10_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "Costed" });
+    expect(dishes["Dal"]).toMatchObject({ revenue: 5_000, cost: null, profit: null, costPercent: null, status: "Cost unknown" });
+    expect(dishes["Water"]).toMatchObject({ revenue: 2_000, cost: null, status: "No recipe" });
+    const categories = Object.fromEntries(report.tables[1]!.rows.map((r) => [r.name, r]));
+    expect(categories["Mains"]).toMatchObject({ qty: 3, revenue: 15_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "1 costed, 1 cost unknown" });
+    expect(categories["Drinks"]).toMatchObject({ status: "No recipe" });
+  });
+
+  it("stays quiet when everything is costed and reports unknown wastage and adjustments", () => {
+    const quiet = buildProfitReport({ ...base, lines: [lines[0]!], wastage: none, adjustments: none });
+    expect(quiet.notes).toEqual(["Revenue is bill taxable value after discount, excluding GST, by bill issue date."]);
+    const noisy = buildProfitReport({ ...base, lines: [], wastage: { costPaise: 0, unknownCount: 2 }, adjustments: { costPaise: -300, unknownCount: 1 } });
+    expect(noisy.notes.some((n) => /2 wastage movements/.test(n))).toBe(true);
+    expect(noisy.notes.some((n) => /1 count adjustment/.test(n))).toBe(true);
+    expect(summary(noisy)["Food cost %"]).toMatchObject({ percent: null });
+    expect(summary(noisy)["Count adjustments (net)"]!.amount).toBe(-300);
   });
 });
