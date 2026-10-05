@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DishCost, DishPrice } from "@forkflow/domain";
+import type { DishCost } from "@forkflow/domain";
 import { PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
 import { apiFetch } from "../api";
-import { sortDishes } from "../dish-costing";
+import { COSTING_PRO_NOTE, formatTierPrice, sortDishes } from "../dish-costing";
 import { formatMovementCost } from "../stock-costs";
 
 const TIERS = ["non_ac", "ac", "takeaway"] as const;
 const cell = { padding: "6px 10px", verticalAlign: "top" } as const;
-
-function tierCell(price: DishPrice | undefined) {
-  if (!price) return "—";
-  if (price.costPercent === null || price.marginPaise === null) return `${formatMovementCost(price.preGstPaise)} · cost unknown`;
-  return `${formatMovementCost(price.preGstPaise)} · ${price.costPercent.toFixed(1)}% · ${price.marginPaise < 0 ? "loss " : "margin "}${formatMovementCost(Math.abs(price.marginPaise))}`;
-}
 
 export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refresh: number }) {
   const [data, setData] = useState<{ dishes: DishCost[]; taxInclusive: boolean } | null>(null);
@@ -33,7 +27,7 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
   const { costed, noRecipe } = useMemo(() => sortDishes(data?.dishes ?? [], activeCategory), [data, activeCategory]);
 
   if (!fullRecipe) return <section className="dish-costing" aria-label="Dish costing">
-    <p className="recipe-access-note">Dish costing is part of the Pro plan. Basic supports one ingredient per menu item; costing recipes with several ingredients requires Pro.</p>
+    <p className="recipe-access-note">{COSTING_PRO_NOTE}</p>
   </section>;
 
   return <section className="dish-costing" aria-label="Dish costing">
@@ -58,7 +52,7 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
           <tbody>{costed.map((dish) => <tr key={`${dish.productId}:${dish.variantId ?? ""}`}>
             <th scope="row" style={cell}>{dish.name}<br /><small className="muted">{dish.categoryName}</small></th>
             <td style={cell}>{dish.costPaise === null ? "Cost unknown" : formatMovementCost(dish.costPaise)}</td>
-            {TIERS.map((tier) => <td key={tier} style={cell}>{tierCell(dish.prices.find((price) => price.tier === tier))}</td>)}
+            {TIERS.map((tier) => <td key={tier} style={cell}>{formatTierPrice(dish.prices.find((price) => price.tier === tier))}</td>)}
             <td style={cell}>{dish.status === "incomplete" ? `Incomplete — missing cost for ${dish.missing.join(", ")}` : "Complete"}</td>
           </tr>)}</tbody>
         </table>

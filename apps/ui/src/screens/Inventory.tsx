@@ -5,7 +5,7 @@ import type { Product } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
 import type { StockCost, StockCostChange } from "@forkflow/domain";
-import { formatMovementCost, formatUnitCost, amountPaidToPaise, mergeCostChanges, mergeHistory } from "../stock-costs";
+import { formatMovementCost, formatUnitCost, amountPaidToPaise, mergeCostChanges, mergeHistory, stockValueSummary } from "../stock-costs";
 import { useLicense } from "./LicenseSettings";
 import { PerUnitHint, SetUnitCostForm } from "./StockCostControls";
 
@@ -48,6 +48,7 @@ export function Inventory({ user }: { user: User }) {
     return () => { active = false; };
   }, [canSeeCosts, historyVersion]);
   const costById = new Map((costData?.items ?? []).map((c) => [c.stockItemId, c]));
+  const valueSummary = costData ? stockValueSummary(costData.items) : null;
 
   useEffect(() => {
     let active = true;
@@ -105,7 +106,7 @@ export function Inventory({ user }: { user: User }) {
       <tbody>{visible.map((item) => <tr key={item.id}><td>{item.name}</td><td>{quantity(item.qty)} {item.unit}</td>{canSeeCosts && <><td>{costData ? formatUnitCost(costById.get(item.id)?.unitCostMilliPaise ?? null, item.unit) : "…"}</td><td>{costData ? (costById.get(item.id)?.valuePaise == null ? "—" : formatMovementCost(costById.get(item.id)!.valuePaise)) : "…"}</td></>}<td>{item.lowStockThreshold === null ? "At zero" : `${quantity(item.lowStockThreshold)} ${item.unit}`}</td>
         <td style={{ color: item.isLow && item.isActive ? "#874500" : undefined }}>{!item.isActive ? "Archived" : item.qty <= 0 ? "Out of stock" : item.isLow ? "Low" : "Available"}</td>
         <td><button onClick={() => setSelected(item)}>{canManage ? "Manage" : "View"} {item.name}</button></td></tr>)}</tbody>
-    </table></div>{!visible.length && <p>No stock items match this view.</p>}{canSeeCosts && costData && <p>Total stock value (active items): <strong>{formatMovementCost(costData.totalValuePaise)}</strong></p>}{canSeeCosts && costError && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{costError}</p>}</section>
+    </table></div>{!visible.length && <p>No stock items match this view.</p>}{canSeeCosts && costData && valueSummary && <p>{valueSummary.label}: <strong>{formatMovementCost(costData.totalValuePaise)}</strong>{valueSummary.uncostedNote && <> <span className="muted">{valueSummary.uncostedNote}</span></>}</p>}{canSeeCosts && costError && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{costError}</p>}</section>
     {selected && <StockDetail key={`${selected.id}:${selected.version}`} item={selected} canManage={canManage} onSaved={saved} historyVersion={historyVersion} canSeeCosts={canSeeCosts} unitCostMilliPaise={costData ? (costById.get(selected.id)?.unitCostMilliPaise ?? null) : undefined} onNotice={setMessage} />}
     <ProductStockLink products={products} items={items} canManage={canManage} />
   </section>;

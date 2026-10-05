@@ -49,6 +49,18 @@ export function formatMovementCost(paise: number | null | undefined): string {
   return `${paise < 0 ? "-" : ""}₹${twoDecimals.format(Math.abs(paise) / 100)}`;
 }
 
+/**
+ * The stock value total covers costed active items only (an item without a cost is never valued at ₹0), so the
+ * label says so and a note counts the active items left out.
+ */
+export function stockValueSummary(items: Array<{ isActive: boolean; valuePaise: number | null }>): { label: string; uncostedNote: string | null } {
+  const uncosted = items.filter((item) => item.isActive && item.valuePaise === null).length;
+  return {
+    label: "Total value of costed active items",
+    uncostedNote: uncosted === 0 ? null : `${uncosted} ${uncosted === 1 ? "item has" : "items have"} no cost and ${uncosted === 1 ? "is" : "are"} not included.`,
+  };
+}
+
 /** Add another page of cost changes; a change at a page boundary can be returned twice, so de-duplicate by id. */
 export function mergeCostChanges(prior: StockCostChange[], next: StockCostChange[]): StockCostChange[] {
   const seen = new Set(prior.map((change) => change.id));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StockCostChange, StockMove } from "@forkflow/domain";
-import { amountPaidToPaise, formatMovementCost, formatUnitCost, mergeCostChanges, mergeHistory, perUnitHint, rupeesPerUnitToMilliPaise } from "./stock-costs";
+import { amountPaidToPaise, formatMovementCost, formatUnitCost, mergeCostChanges, mergeHistory, perUnitHint, rupeesPerUnitToMilliPaise, stockValueSummary } from "./stock-costs";
 
 describe("formatUnitCost", () => {
   it("shows two decimals from one rupee up", () => {
@@ -73,6 +73,21 @@ describe("formatMovementCost", () => {
     expect(formatMovementCost(0)).toBe("₹0.00");
     expect(formatMovementCost(null)).toBe("Cost unknown");
     expect(formatMovementCost(undefined)).toBe("Cost unknown");
+  });
+});
+
+describe("stockValueSummary", () => {
+  const item = (isActive: boolean, valuePaise: number | null) => ({ isActive, valuePaise });
+  it("labels the total as covering costed active items only", () => {
+    expect(stockValueSummary([item(true, 32_000), item(false, null)])).toEqual({ label: "Total value of costed active items", uncostedNote: null });
+  });
+  it("counts active items without a cost, ignoring archived ones", () => {
+    expect(stockValueSummary([item(true, 32_000), item(true, null), item(false, null)]).uncostedNote).toBe("1 item has no cost and is not included.");
+    expect(stockValueSummary([item(true, null), item(true, null), item(true, 0)]).uncostedNote).toBe("2 items have no cost and are not included.");
+  });
+  it("treats zero value (no stock on hand) as costed", () => {
+    expect(stockValueSummary([item(true, 0)]).uncostedNote).toBeNull();
+    expect(stockValueSummary([]).uncostedNote).toBeNull();
   });
 });
 

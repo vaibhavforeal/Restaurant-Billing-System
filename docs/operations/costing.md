@@ -11,8 +11,11 @@ Costing is for administrators on the Pro plan. It needs the `costs.read`
 permission, which only administrators hold, and the signed `recipes`
 entitlement. Cashiers and other roles see no cost columns, no **Dish costing**
 tab and no **Food cost & profit** report, and the server refuses their requests
-with 403 (`/api/stock-items` never includes cost). On Basic, administrators see
-an upgrade note in place of the tab and the report, and cannot enter costs.
+with 403 (`/api/stock-items` never includes cost). On Basic, administrators
+still see the **Dish costing** tab and the **Food cost & profit** report option,
+but each shows only an upgrade note ("Ingredient costing and profit reports are
+part of the Pro plan."), and they cannot enter costs. All costing is Pro,
+whatever the number of ingredients in a recipe.
 
 Costing runs on the restaurant's local server. It adds database migration 023
 and no new dependencies. Backups, restores and recovery already cover the cost
@@ -64,11 +67,16 @@ current average, is recorded in the item's history as **Unit cost set**, and is
 needed again only if the average becomes wrong. It does not change past
 movements. Archived items cannot be changed.
 
+An opening balance entered when you create a stock item has no cost, so the
+item starts as **Cost not set**; set a starting unit cost to value it. Opening
+balances are not counted as count adjustments in the profit report.
+
 ### Read stock cost
 
-The **Stock** list gains **Avg cost** and **Stock value** columns plus a total
-stock value. An item without a cost shows **Cost not set** and is left out of the
-total. Movement history shows each movement's cost and the **Unit cost set**
+The **Stock** list gains **Avg cost** and **Stock value** columns plus a
+**Total value of costed active items**. An item without a cost shows **Cost not
+set** and is left out of the total (never counted as ₹0); a note under the total
+says how many active items have no cost and are not included. Movement history shows each movement's cost and the **Unit cost set**
 entries in time order.
 
 ## Dish costing
@@ -82,6 +90,8 @@ that has variants, with:
   cost as a percentage of that price, and the margin per plate. A blank service
   price uses the normal price, as it does at ordering. If menu prices include
   GST, GST is removed first so that cost % and margin compare like with like.
+- A free item (price ₹0 before GST) shows **no price** for that service
+  instead of a cost % and margin.
 - **Status**: **Complete**, or **Incomplete — missing cost for** the named
   ingredients (the recipe cost is then unknown, never a partial total).
 
@@ -110,6 +120,12 @@ sales are shown as excluded revenue instead of as zero cost:
 - **Excluded: cost unknown** — at least one ingredient had no cost when the sale
   was recorded.
 - **Excluded: no recipe** — the dish consumes no stock.
+
+The By category and By dish tables show **Revenue** (all sales in the row) and
+**Costed revenue** (only its fully costed sales). **Cost**, **Gross profit** and
+**Food cost %** use costed revenue, so on every row Costed revenue − Cost =
+Gross profit. The By dish table starts with the dish's **Category**, so dishes
+with the same name in different categories stay separate.
 
 Rows in the tables carry a status so you can see which dishes are affected.
 Wastage or count movements with no recorded cost are counted in a note and left

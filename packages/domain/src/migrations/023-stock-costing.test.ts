@@ -21,6 +21,11 @@ describe("migration 023 stock costing", () => {
       expect(() => db.prepare("UPDATE stock_moves SET cost_paise = 1").run()).toThrow(/append-only/);
       expect(() => db.prepare(`INSERT INTO stock_cost_changes (id, stock_item_id, new_cost_milli_paise, note, created_at, created_by)
         VALUES ('z', 's', 0, 'bad', 3, 'u')`).run()).toThrow();
+      // Every cost change records why and who (spec §3).
+      expect(() => db.prepare(`INSERT INTO stock_cost_changes (id, stock_item_id, new_cost_milli_paise, created_at, created_by)
+        VALUES ('no-note', 's', 100, 4, 'u')`).run()).toThrow(/NOT NULL.*note/);
+      expect(() => db.prepare(`INSERT INTO stock_cost_changes (id, stock_item_id, new_cost_milli_paise, note, created_at)
+        VALUES ('no-user', 's', 100, 'x', 5)`).run()).toThrow(/NOT NULL.*created_by/);
     } finally {
       db.close();
     }

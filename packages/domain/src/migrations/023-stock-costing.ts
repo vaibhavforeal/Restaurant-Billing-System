@@ -15,9 +15,9 @@ export const migration023: Migration = {
         stock_item_id        TEXT NOT NULL REFERENCES stock_items(id),
         old_cost_milli_paise INTEGER,
         new_cost_milli_paise INTEGER NOT NULL CHECK (new_cost_milli_paise > 0),
-        note                 TEXT,
+        note                 TEXT NOT NULL,
         created_at           INTEGER NOT NULL,
-        created_by           TEXT REFERENCES users(id),
+        created_by           TEXT NOT NULL REFERENCES users(id),
         client_ref           TEXT UNIQUE,
         request_json         TEXT
       );

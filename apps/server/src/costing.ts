@@ -39,7 +39,7 @@ export function registerCosting(app: FastifyInstance): void {
     return reply.status(created ? 201 : 200).send({ item: stockJson(row), unitCostMilliPaise: row.unit_cost_milli_paise });
   });
 
-  app.get("/api/costing/stock", { preHandler: costs }, async () => {
+  app.get("/api/costing/stock", { preHandler: costs }, async (_req, reply) => {
     const rows = db.prepare("SELECT * FROM stock_items ORDER BY name COLLATE NOCASE, id").all() as StockRow[];
     const items: StockCost[] = rows.map((row) => ({
       stockItemId: row.id, name: row.name, unit: row.unit, qty: row.qty, isActive: row.is_active === 1,
@@ -47,10 +47,11 @@ export function registerCosting(app: FastifyInstance): void {
       valuePaise: moveCostPaise(stockMilli(row.qty), row.unit_cost_milli_paise),
     }));
     const totalValuePaise = items.reduce((sum, item) => sum + (item.isActive ? item.valuePaise ?? 0 : 0), 0);
+    reply.header("Cache-Control", "no-store");
     return { items, totalValuePaise };
   });
 
-  app.get("/api/costing/dishes", { preHandler: costs }, async () => {
+  app.get("/api/costing/dishes", { preHandler: costs }, async (_req, reply) => {
     const taxInclusive = (db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number }).tax_inclusive === 1;
     const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, c.name AS category_name
       FROM products p JOIN categories c ON c.id = p.category_id WHERE p.is_active = 1
@@ -96,10 +97,11 @@ export function registerCosting(app: FastifyInstance): void {
       if (!variants) row(null, p.name, p);
       else for (const v of variants) if (v.is_active === 1) row(v.id, `${p.name} · ${v.name}`, v);
     }
+    reply.header("Cache-Control", "no-store");
     return { dishes, taxInclusive };
   });
 
-  app.get("/api/reports/profit", { preHandler: costs }, async (req) => {
+  app.get("/api/reports/profit", { preHandler: costs }, async (req, reply) => {
     const { from, to, bounds } = reportRange(req.query);
     // One synchronous read transaction keeps lines, wastage and adjustments on the same snapshot.
     const { lines, wastage, adjustments } = db.transaction(() => {
@@ -114,11 +116,14 @@ export function registerCosting(app: FastifyInstance): void {
         WHERE b.created_at >= ? AND b.created_at < ? AND b.status != 'void'
         ORDER BY l.category_name COLLATE NOCASE, l.name COLLATE NOCASE, l.bill_id, l.order_item_id`).all(...bounds) as Array<ProfitLine & { unknownMoves: number }>)
         .map(({ unknownMoves, ...line }): ProfitLine => ({ ...line, costPaise: unknownMoves > 0 ? null : line.costPaise }));
-      const movements = (reason: string) => db.prepare(`SELECT COALESCE(0 - SUM(cost_paise), 0) AS costPaise, COUNT(*) - COUNT(cost_paise) AS unknownCount
-        FROM stock_moves WHERE reason = ? AND created_at >= ? AND created_at < ?`).get(reason, ...bounds) as { costPaise: number; unknownCount: number };
-      return { lines, wastage: movements("wastage"), adjustments: movements("adjustment") };
+      // Opening balances (written when a stock item is created, with no cost yet) are the only adjustments without a
+      // client reference; every manual count carries one. They are not count corrections, so they are left out.
+      const movements = (reason: string, extra = "") => db.prepare(`SELECT COALESCE(0 - SUM(cost_paise), 0) AS costPaise, COUNT(*) - COUNT(cost_paise) AS unknownCount
+        FROM stock_moves WHERE reason = ? AND created_at >= ? AND created_at < ?${extra}`).get(reason, ...bounds) as { costPaise: number; unknownCount: number };
+      return { lines, wastage: movements("wastage"), adjustments: movements("adjustment", " AND client_ref IS NOT NULL") };
     })();
     const report = buildProfitReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines, wastage, adjustments });
+    reply.header("Cache-Control", "no-store");
     return { report };
   });
 }

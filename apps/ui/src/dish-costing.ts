@@ -1,4 +1,16 @@
-import type { DishCost } from "@forkflow/domain";
+import type { DishCost, DishPrice } from "@forkflow/domain";
+import { formatMovementCost } from "./stock-costs";
+
+/** Upgrade note shown wherever costing is unavailable on Basic. All costing, whatever the recipe size, is Pro. */
+export const COSTING_PRO_NOTE = "Ingredient costing and profit reports are part of the Pro plan.";
+
+/** One service-price cell on the Dish costing tab: "price · cost % · margin", or why it cannot be costed. */
+export function formatTierPrice(price: DishPrice | undefined): string {
+  if (!price) return "—";
+  if (price.preGstPaise === 0) return "no price"; // free item: there is nothing to measure cost % or margin against
+  if (price.costPercent === null || price.marginPaise === null) return `${formatMovementCost(price.preGstPaise)} · cost unknown`;
+  return `${formatMovementCost(price.preGstPaise)} · ${price.costPercent.toFixed(1)}% · ${price.marginPaise < 0 ? "loss " : "margin "}${formatMovementCost(Math.abs(price.marginPaise))}`;
+}
 
 const byName = (a: DishCost, b: DishCost) => a.name.localeCompare(b.name);
 const nonAcPercent = (dish: DishCost) => dish.prices.find((price) => price.tier === "non_ac")?.costPercent ?? null;

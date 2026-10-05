@@ -90,13 +90,13 @@ const percentOf = (part: number, whole: number): number | null => whole === 0 ? 
 const column = (key: string, label: string, format?: ReportColumn["format"]): ReportColumn => format ? { key, label, format } : { key, label };
 const STATUS_LABELS: Record<LineStatus, string> = { costed: "Costed", unknown: "Cost unknown", none: "No recipe" };
 
-interface ProfitGroup { name: string; qty: number; revenue: number; costedRevenue: number; cost: number; counts: Record<LineStatus, number> }
+interface ProfitGroup { category: string; name: string; qty: number; revenue: number; costedRevenue: number; cost: number; counts: Record<LineStatus, number> }
 
 function groupLines(lines: ProfitLine[], key: (line: ProfitLine) => string, label: (line: ProfitLine) => string): ProfitGroup[] {
   const groups = new Map<string, ProfitGroup>();
   for (const line of lines) {
     const k = key(line);
-    const g = groups.get(k) ?? { name: label(line), qty: 0, revenue: 0, costedRevenue: 0, cost: 0, counts: { costed: 0, unknown: 0, none: 0 } };
+    const g = groups.get(k) ?? { category: line.categoryName, name: label(line), qty: 0, revenue: 0, costedRevenue: 0, cost: 0, counts: { costed: 0, unknown: 0, none: 0 } };
     const status = lineStatus(line);
     g.qty += line.qty; g.revenue += line.revenuePaise; g.counts[status]++;
     if (status === "costed") { g.costedRevenue += line.revenuePaise; g.cost += line.costPaise!; }
@@ -135,18 +135,21 @@ export function buildProfitReport(input: {
       summaryRow("Excluded: cost unknown", unknownRevenue), summaryRow("Excluded: no recipe", noRecipeRevenue),
     ],
   };
-  const breakdown = (title: string, nameLabel: string, groups: ProfitGroup[]): ReportTable => ({
+  // Revenue is every sale in the row; profit and cost % use only its costed revenue, so Costed revenue − Cost = Gross profit.
+  const breakdown = (title: string, nameLabel: string, groups: ProfitGroup[], withCategory: boolean): ReportTable => ({
     title,
-    columns: [column("name", nameLabel), column("qty", "Quantity", "quantity"), column("revenue", "Revenue", "money"), column("cost", "Cost", "money"),
+    columns: [...(withCategory ? [column("category", "Category")] : []), column("name", nameLabel), column("qty", "Quantity", "quantity"),
+      column("revenue", "Revenue", "money"), column("costedRevenue", "Costed revenue", "money"), column("cost", "Cost", "money"),
       column("profit", "Gross profit", "money"), column("costPercent", "Food cost %", "percent"), column("status", "Status")],
     rows: groups.map((g): Record<string, ReportCell> => {
       const costed = g.counts.costed > 0;
-      return { name: g.name, qty: g.qty, revenue: g.revenue, cost: costed ? g.cost : null, profit: costed ? g.costedRevenue - g.cost : null,
+      return { ...(withCategory ? { category: g.category } : {}), name: g.name, qty: g.qty, revenue: g.revenue,
+        costedRevenue: costed ? g.costedRevenue : null, cost: costed ? g.cost : null, profit: costed ? g.costedRevenue - g.cost : null,
         costPercent: costed ? percentOf(g.cost, g.costedRevenue) : null, status: groupStatus(g.counts) };
     }),
   });
   const byCategory = groupLines(input.lines, (l) => l.categoryName, (l) => l.categoryName);
-  const byDish = groupLines(input.lines, (l) => `${l.categoryName} ${l.name}`, (l) => l.name);
+  const byDish = groupLines(input.lines, (l) => JSON.stringify([l.categoryName, l.name]), (l) => l.name);
 
   const notes = ["Revenue is bill taxable value after discount, excluding GST, by bill issue date."];
   if (unknownRevenue > 0 || noRecipeRevenue > 0) {
@@ -158,5 +161,5 @@ export function buildProfitReport(input: {
   if (input.adjustments.unknownCount > 0) notes.push(`${plural(input.adjustments.unknownCount, "count adjustment has", "count adjustments have")} no recorded cost and ${input.adjustments.unknownCount === 1 ? "is" : "are"} not in the net adjustment cost.`);
 
   return { kind: "profit", from: input.from, to: input.to, today: input.today, timezone: input.timezone, generatedAt: input.generatedAt, notes,
-    tables: [summary, breakdown("By category", "Category", byCategory), breakdown("By dish", "Dish", byDish)] };
+    tables: [summary, breakdown("By category", "Category", byCategory, false), breakdown("By dish", "Dish", byDish, true)] };
 }

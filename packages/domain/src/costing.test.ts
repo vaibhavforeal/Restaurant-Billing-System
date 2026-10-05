@@ -74,19 +74,34 @@ describe("profit report", () => {
     expect(report.notes).toContain("Revenue is bill taxable value after discount, excluding GST, by bill issue date.");
     expect(report.notes.some((n) => /cost is unknown/.test(n) && /no recipe/.test(n))).toBe(true);
     expect(report.notes).toContain("Sales before costing was set up have no recorded cost.");
-    expect(report.tables[2]!.columns.map((c) => c.key)).toEqual(["name", "qty", "revenue", "cost", "profit", "costPercent", "status"]);
+    expect(report.tables[1]!.columns.map((c) => c.key)).toEqual(["name", "qty", "revenue", "costedRevenue", "cost", "profit", "costPercent", "status"]);
+    expect(report.tables[2]!.columns.map((c) => c.key)).toEqual(["category", "name", "qty", "revenue", "costedRevenue", "cost", "profit", "costPercent", "status"]);
     expect(report.tables[2]!.columns.find((c) => c.key === "costPercent")!.format).toBe("percent");
+    for (const table of report.tables.slice(1)) expect(table.columns.find((c) => c.key === "costedRevenue")).toEqual({ key: "costedRevenue", label: "Costed revenue", format: "money" });
+    expect(report.tables[2]!.columns[0]).toEqual({ key: "category", label: "Category" });
   });
 
   it("breaks revenue down by category and dish with a status per row", () => {
     const report = buildProfitReport({ ...base, lines, wastage: none, adjustments: none });
     const dishes = Object.fromEntries(report.tables[2]!.rows.map((r) => [r.name, r]));
-    expect(dishes["Paneer Tikka"]).toMatchObject({ qty: 2, revenue: 10_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "Costed" });
-    expect(dishes["Dal"]).toMatchObject({ revenue: 5_000, cost: null, profit: null, costPercent: null, status: "Cost unknown" });
-    expect(dishes["Water"]).toMatchObject({ revenue: 2_000, cost: null, status: "No recipe" });
+    expect(dishes["Paneer Tikka"]).toMatchObject({ category: "Mains", qty: 2, revenue: 10_000, costedRevenue: 10_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "Costed" });
+    expect(dishes["Dal"]).toMatchObject({ category: "Mains", revenue: 5_000, costedRevenue: null, cost: null, profit: null, costPercent: null, status: "Cost unknown" });
+    expect(dishes["Water"]).toMatchObject({ category: "Drinks", revenue: 2_000, costedRevenue: null, cost: null, status: "No recipe" });
     const categories = Object.fromEntries(report.tables[1]!.rows.map((r) => [r.name, r]));
-    expect(categories["Mains"]).toMatchObject({ qty: 3, revenue: 15_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "1 costed, 1 cost unknown" });
+    // Revenue stays the full total; profit reconciles against costed revenue (10,000 − 4,800 = 5,200).
+    expect(categories["Mains"]).toMatchObject({ qty: 3, revenue: 15_000, costedRevenue: 10_000, cost: 4_800, profit: 5_200, costPercent: 48, status: "1 costed, 1 cost unknown" });
+    for (const row of [...report.tables[1]!.rows, ...report.tables[2]!.rows]) {
+      if (row.cost !== null) expect((row.costedRevenue as number) - (row.cost as number)).toBe(row.profit);
+    }
     expect(categories["Drinks"]).toMatchObject({ status: "No recipe" });
+  });
+
+  it("keeps same-named dishes in different categories apart", () => {
+    const report = buildProfitReport({ ...base, wastage: none, adjustments: none, lines: [
+      { categoryName: "Lunch", name: "Thali", qty: 1, revenuePaise: 20_000, costPaise: 8_000, saleMoves: 1 },
+      { categoryName: "Dinner", name: "Thali", qty: 1, revenuePaise: 30_000, costPaise: 9_000, saleMoves: 1 },
+    ] });
+    expect(report.tables[2]!.rows.map((r) => [r.category, r.name, r.revenue])).toEqual([["Lunch", "Thali", 20_000], ["Dinner", "Thali", 30_000]]);
   });
 
   it("stays quiet when everything is costed and reports unknown wastage and adjustments", () => {

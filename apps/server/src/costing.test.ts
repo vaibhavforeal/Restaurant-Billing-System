@@ -130,10 +130,11 @@ describe("stock costing", () => {
       // Stock history is append-only, so movement times come from the (fake) clock.
       vi.setSystemTime(500);
       const item = await stock(1);
-      const insert = app.db.prepare("INSERT INTO stock_cost_changes (id, stock_item_id, old_cost_milli_paise, new_cost_milli_paise, note, created_at) VALUES (?, ?, NULL, ?, 'n', ?)");
-      insert.run("c-a", item.id, 1, 1_000);
-      insert.run("c-b", item.id, 2, 2_000);
-      insert.run("c-c", item.id, 3, 3_000);
+      const admin = (app.db.prepare("SELECT id FROM users WHERE name = 'Asha'").get() as { id: string }).id;
+      const insert = app.db.prepare("INSERT INTO stock_cost_changes (id, stock_item_id, old_cost_milli_paise, new_cost_milli_paise, note, created_at, created_by) VALUES (?, ?, NULL, ?, 'n', ?, ?)");
+      insert.run("c-a", item.id, 1, 1_000, admin);
+      insert.run("c-b", item.id, 2, 2_000, admin);
+      insert.run("c-c", item.id, 3, 3_000, admin);
       // Opening balance at t=500 plus 100 purchases at t=1500..2490: the first page is full, the second holds the opening move.
       for (let i = 0; i < 100; i++) {
         vi.setSystemTime(1_500 + i * 10);
@@ -350,6 +351,47 @@ describe("stock costing", () => {
       expect(s["Excluded: no recipe"]!.amount).toBe(10_000);
       expect(report.tables[2]!.rows.map((r) => [r.name, r.status])).toEqual([["Salted", "Cost unknown"], ["Tikka", "Costed"], ["Water", "No recipe"]]);
       expect(report.notes).toContain("Sales before costing was set up have no recorded cost.");
+    });
+
+    it("treats a dish with one costed and one uncosted ingredient as cost unknown", async () => {
+      const paneer = await stock(10);
+      const cream = await stock(10, "Cream");
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const malai = await dish("Malai Paneer", [{ stockItemId: paneer.id, qtyPerSale: 0.15 }, { stockItemId: cream.id, qtyPerSale: 0.05 }]);
+      await sellParcel(malai);
+      // The paneer sale movement has a frozen cost; the cream one does not.
+      expect(app.db.prepare("SELECT COUNT(cost_paise) AS costed, COUNT(*) AS total FROM stock_moves WHERE reason = 'sale'").get()).toEqual({ costed: 1, total: 2 });
+      const report = (await profit()).json().report as OperationalReport;
+      const s = summary(report);
+      expect(report.tables[2]!.rows[0]).toMatchObject({ name: "Malai Paneer", revenue: 10_000, costedRevenue: null, cost: null, profit: null, costPercent: null, status: "Cost unknown" });
+      expect(s["Excluded: cost unknown"]!.amount).toBe(10_000);
+      expect(s["Costed revenue"]!.amount).toBe(0);
+      expect(s["Ingredient cost"]!.amount).toBe(0); // the paneer's partial 4,800 is not counted
+      expect(s["Gross profit"]!.amount).toBe(0);
+    });
+
+    it("does not count opening balances as count adjustments", async () => {
+      const paneer = await stock(10);
+      const salt = await stock(10, "Salt");
+      expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+      const fresh = (await profit()).json().report as OperationalReport;
+      expect(fresh.notes.some((n) => /count adjustment/.test(n))).toBe(false);
+      expect(summary(fresh)["Count adjustments (net)"]!.amount).toBe(0);
+      const count = (id: string, quantity: number) =>
+        request("POST", `/api/stock-items/${id}/movements`, { clientRef: uuidv7(), expectedVersion: version(id), reason: "adjustment", quantity, note: "Count" });
+      expect((await count(paneer.id, 9)).statusCode).toBe(201);
+      expect((await count(salt.id, 9)).statusCode).toBe(201);
+      const counted = (await profit()).json().report as OperationalReport;
+      expect(summary(counted)["Count adjustments (net)"]!.amount).toBe(32_000);
+      expect(counted.notes.filter((n) => /count adjustment/.test(n))).toEqual(["1 count adjustment has no recorded cost and is not in the net adjustment cost."]);
+    });
+
+    it("tells clients not to cache cost data", async () => {
+      for (const url of [`/api/reports/profit?from=${today()}&to=${today()}`, "/api/costing/stock", "/api/costing/dishes"]) {
+        const res = await request("GET", url);
+        expect(res.statusCode).toBe(200);
+        expect(res.headers["cache-control"]).toBe("no-store");
+      }
     });
 
     it("ignores sale movements that were reversed", async () => {

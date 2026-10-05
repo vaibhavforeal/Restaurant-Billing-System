@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DishCost } from "@forkflow/domain";
-import { sortDishes } from "./dish-costing";
+import { COSTING_PRO_NOTE, formatTierPrice, sortDishes } from "./dish-costing";
 
 function dish(name: string, category: string, nonAcPercent: number | null, status: DishCost["status"] = nonAcPercent === null ? "incomplete" : "complete"): DishCost {
   const known = nonAcPercent !== null;
@@ -49,5 +49,28 @@ describe("sortDishes", () => {
     const rows = [dish("B", "Mains", 10), dish("A", "Mains", 50)];
     sortDishes(rows, "all");
     expect(rows.map((d) => d.name)).toEqual(["B", "A"]);
+  });
+});
+
+describe("formatTierPrice", () => {
+  const price = (preGstPaise: number, costPercent: number | null, marginPaise: number | null) => ({ tier: "non_ac" as const, pricePaise: preGstPaise, preGstPaise, costPercent, marginPaise });
+  it("shows price, cost % and margin or loss", () => {
+    expect(formatTierPrice(price(10_000, 48, 5_200))).toBe("₹100.00 · 48.0% · margin ₹52.00");
+    expect(formatTierPrice(price(3_000, 160, -1_800))).toBe("₹30.00 · 160.0% · loss ₹18.00");
+  });
+  it("says cost unknown when the recipe is not fully costed", () => {
+    expect(formatTierPrice(price(10_000, null, null))).toBe("₹100.00 · cost unknown");
+  });
+  it("says no price for a free item instead of ₹0.00 · cost unknown", () => {
+    expect(formatTierPrice(price(0, null, null))).toBe("no price");
+  });
+  it("shows a dash when the tier is missing", () => {
+    expect(formatTierPrice(undefined)).toBe("—");
+  });
+});
+
+describe("COSTING_PRO_NOTE", () => {
+  it("says all costing is Pro without implying Basic can cost single-ingredient recipes", () => {
+    expect(COSTING_PRO_NOTE).toBe("Ingredient costing and profit reports are part of the Pro plan.");
   });
 });
