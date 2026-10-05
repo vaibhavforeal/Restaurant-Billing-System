@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  type Bill, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
+  type Bill, type Database, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
@@ -22,23 +22,26 @@ interface BillRow {
 }
 interface PrinterRow { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string; paper_width: 58 | 80; receipt_profile: string }
 
+/** A bill's JSON, including its credit notes. */
+export function loadBill(db: Database, id: string): Bill {
+  const r = db.prepare("SELECT * FROM bills WHERE id = ?").get(id) as BillRow | undefined;
+  if (!r) throw httpError(404, "bill not found");
+  if (!r.receipt_json) throw httpError(409, "This legacy bill has no saved receipt");
+  const taxes = db.prepare("SELECT gst_rate AS gstRate, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM bill_taxes WHERE bill_id = ? ORDER BY gst_rate").all(id) as TaxLine[];
+  const payments = db.prepare("SELECT mode, amount_paise AS amountPaise, ref_note AS refNote, created_at AS createdAt FROM payments WHERE bill_id = ? ORDER BY id").all(id) as Bill["payments"];
+  const receipt = JSON.parse(r.receipt_json) as ReceiptSnapshot;
+  return { id, billNo: r.bill_no, orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
+    discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
+    roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
+    receipt, taxInclusive: receipt.taxInclusive, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise) };
+}
+
 export function registerBilling(app: FastifyInstance): void {
   const db = app.db;
   const read = app.requirePermission("bills.read");
   const create = app.requirePermission("bills.create");
   const getRow = (id: string) => db.prepare("SELECT * FROM bills WHERE id = ?").get(id) as BillRow | undefined;
-  const getBill = (id: string): Bill => {
-    const r = getRow(id);
-    if (!r) throw httpError(404, "bill not found");
-    if (!r.receipt_json) throw httpError(409, "This legacy bill has no saved receipt");
-    const taxes = db.prepare("SELECT gst_rate AS gstRate, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM bill_taxes WHERE bill_id = ? ORDER BY gst_rate").all(id) as TaxLine[];
-    const payments = db.prepare("SELECT mode, amount_paise AS amountPaise, ref_note AS refNote, created_at AS createdAt FROM payments WHERE bill_id = ? ORDER BY id").all(id) as Bill["payments"];
-    const receipt = JSON.parse(r.receipt_json) as ReceiptSnapshot;
-    return { id, billNo: r.bill_no, orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
-      discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
-      roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
-      receipt, taxInclusive: receipt.taxInclusive, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise) };
-  };
+  const getBill = (id: string): Bill => loadBill(db, id);
   function printer(id: string): PrinterRow {
     const p = db.prepare("SELECT * FROM printers WHERE id = ? AND is_active = 1").get(id) as PrinterRow | undefined;
     if (!p) throw httpError(400, "Choose an active receipt printer");

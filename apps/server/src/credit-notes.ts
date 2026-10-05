@@ -1,8 +1,10 @@
 import { verifyPassword } from "@forkflow/core";
-import { CreditPreview, creditFor, refundState, refundableByMode, voidRemainder,
-  type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode } from "@forkflow/domain";
+import { CreditPreview, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
+  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type VoidBillInput } from "@forkflow/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";
+import { loadOrderJson } from "./mappers.js";
 
 interface MoneyRow { taxable_paise: number; cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number }
 const money = (r: MoneyRow): Money => ({ taxablePaise: r.taxable_paise, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise, roundingPaise: r.rounding_paise, totalPaise: r.total_paise });
@@ -70,26 +72,30 @@ export function refundableOf(credit: BillCredit): Record<PayMode, number> & { to
   return { ...refundableByMode(credit.paid, credit.refunded), total: sum(credit.paid) - sum(credit.refunded) };
 }
 
-interface CreditBillRow { id: string; status: "unpaid" | "paid" | "void"; total_paise: number; cgst_paise: number; sgst_paise: number; rounding_paise: number }
+interface CreditBillRow { id: string; order_id: string; status: "unpaid" | "paid" | "void"; total_paise: number }
 
 /**
  * The credit a void or refund of this bill would issue, or the HTTP error that stops it. Shared by the preview and the
  * writes so both apply identical rules. A bill with no stored lines can only be voided: its credit is the bill totals.
  */
 export function draftCredit(db: Database, billId: string, kind: "void" | "refund", requested: Array<{ orderItemId: string; qty: number }> = []): { bill: CreditBillRow; credit: BillCredit; draft: CreditDraft } {
-  const bill = db.prepare("SELECT id, status, total_paise, cgst_paise, sgst_paise, rounding_paise FROM bills WHERE id = ?").get(billId) as CreditBillRow | undefined;
+  const bill = db.prepare("SELECT id, order_id, status, total_paise FROM bills WHERE id = ?").get(billId) as CreditBillRow | undefined;
   if (!bill) throw httpError(404, "bill not found");
-  if (bill.status === "void") throw httpError(409, "Nothing left to refund on this bill");
+  if (bill.status === "void") throw httpError(409, kind === "void" ? "This bill is already void" : "Nothing left to refund on this bill");
   const credit = loadBillCredit(db, billId);
   if (kind === "refund") {
     if (bill.status !== "paid") throw httpError(409, "Only paid bills can be refunded");
     if (credit.lines.length === 0) throw httpError(409, "This older bill can only be voided");
+    if (credit.lines.every((l) => (credit.credited[l.orderItemId]?.qty ?? 0) >= l.qty)) throw httpError(409, "Nothing left to refund on this bill");
     if (requested.length === 0) throw httpError(400, "Choose the items to refund");
   }
   if (credit.lines.length === 0) {
+    // Older bills can only be voided (refunds are refused above and a void ends the bill), so no earlier credit exists:
+    // the credit is the whole bill. Taxable comes from the per-rate taxes so the totals match them exactly.
     const taxes = db.prepare("SELECT gst_rate AS gstRate, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM bill_taxes WHERE bill_id = ? ORDER BY gst_rate").all(billId) as CreditDraft["taxes"];
-    const totals: Money = { taxablePaise: bill.total_paise - bill.cgst_paise - bill.sgst_paise - bill.rounding_paise, cgstPaise: bill.cgst_paise,
-      sgstPaise: bill.sgst_paise, roundingPaise: bill.rounding_paise, totalPaise: bill.total_paise };
+    const sum = (f: "taxablePaise" | "cgstPaise" | "sgstPaise") => taxes.reduce((s, t) => s + t[f], 0);
+    const taxablePaise = sum("taxablePaise"), cgstPaise = sum("cgstPaise"), sgstPaise = sum("sgstPaise");
+    const totals: Money = { taxablePaise, cgstPaise, sgstPaise, roundingPaise: bill.total_paise - taxablePaise - cgstPaise - sgstPaise, totalPaise: bill.total_paise };
     return { bill, credit, draft: { lines: [], taxes, totals } };
   }
   try {
@@ -117,6 +123,70 @@ export async function resolveApprover(app: FastifyInstance, req: FastifyRequest,
   throw httpError(401, "Admin PIN is incorrect");
 }
 
+type RefundInput = VoidBillInput["refunds"];
+
+/** Refunds must stay within what each method paid, less what it already refunded. */
+export function checkRefundMethods(credit: BillCredit, refunds: RefundInput): void {
+  const held = refundableOf(credit);
+  const asked: Record<PayMode, number> = { cash: 0, upi: 0, card: 0 };
+  for (const r of refunds) asked[r.mode] += r.amountPaise;
+  for (const mode of ["cash", "upi", "card"] as const) {
+    if (asked[mode] > held[mode]) throw httpError(400, `Refund by ${mode} cannot exceed what was paid by ${mode}`);
+  }
+}
+
+/** A void's refunds: none on an unpaid bill; on a paid bill exactly the money still held (paid − already refunded). */
+function checkVoidRefunds(bill: CreditBillRow, credit: BillCredit, refunds: RefundInput): void {
+  if (bill.status === "unpaid") {
+    if (refunds.length > 0) throw httpError(400, "An unpaid bill has no payments to refund");
+    return;
+  }
+  const held = refundableOf(credit).total;
+  const asked = refunds.reduce((s, r) => s + r.amountPaise, 0);
+  // Money held only shrinks (other refunds) and a bill only goes unpaid -> paid, so asking for more than is held, or
+  // refunding nothing on a paid bill that still holds money, means the bill changed after the counter reviewed it.
+  if (asked > held || (refunds.length === 0 && held > 0)) throw httpError(409, "This bill changed — review again");
+  if (asked !== held) throw httpError(400, "Refund amounts must equal the credit note total");
+  checkRefundMethods(credit, refunds);
+}
+
+/** Append a credit note with its lines, per-rate taxes and refund payments; returns its id. Call inside the write transaction. */
+export function writeCreditNote(db: Database, note: {
+  billId: string; kind: "void" | "refund"; reason: string; draft: CreditDraft; refunds: RefundInput;
+  requestedBy: string; approvedBy: string; clientRef: string; requestJson: string; now: number;
+}): string {
+  const id = uuidv7();
+  const t = note.draft.totals;
+  db.prepare(`INSERT INTO credit_notes (id, cn_no, bill_id, kind, reason, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise,
+      requested_by, approved_by, created_at, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, nextSequence(db, "credit_note_no"), note.billId, note.kind, note.reason, t.taxablePaise, t.cgstPaise, t.sgstPaise, t.roundingPaise, t.totalPaise,
+      note.requestedBy, note.approvedBy, note.now, note.clientRef, note.requestJson);
+  const line = db.prepare(`INSERT INTO credit_note_lines (credit_note_id, order_item_id, name, category_id, category_name, gst_rate, qty,
+      taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const l of note.draft.lines) {
+    line.run(id, l.orderItemId, l.name, l.categoryId, l.categoryName, l.gstRate, l.qty, l.taxablePaise, l.cgstPaise, l.sgstPaise, l.roundingPaise, l.totalPaise);
+  }
+  const tax = db.prepare("INSERT INTO credit_note_taxes (credit_note_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?)");
+  for (const x of note.draft.taxes) tax.run(id, x.gstRate, x.taxablePaise, x.cgstPaise, x.sgstPaise);
+  const refund = db.prepare("INSERT INTO refund_payments (id, credit_note_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+  for (const r of note.refunds) refund.run(uuidv7(), id, r.mode, r.amountPaise, r.refNote || null, note.now);
+  return id;
+}
+
+/** The earlier credit note written for this reference, if any; a reference reused with a different request is refused. */
+export function replayedCreditNote(db: Database, clientRef: string, requestJson: string): { id: string; billId: string } | null {
+  const row = db.prepare("SELECT id, bill_id AS billId, request_json AS requestJson FROM credit_notes WHERE client_ref = ?").get(clientRef) as { id: string; billId: string; requestJson: string } | undefined;
+  if (!row) return null;
+  if (row.requestJson !== requestJson) throw httpError(409, "Credit note reference already used for a different request");
+  return { id: row.id, billId: row.billId };
+}
+
+/** The bill (with its credit notes) and the one credit note a write produced. */
+function billWithNote(db: Database, billId: string, noteId: string): { bill: Bill; creditNote: BillCreditNote } {
+  const bill = loadBill(db, billId);
+  return { bill, creditNote: bill.creditNotes.find((n) => n.id === noteId)! };
+}
+
 export function registerCreditNotes(app: FastifyInstance): void {
   const db = app.db;
   const refundPermission = app.requirePermission("bills.refund");
@@ -126,5 +196,47 @@ export function registerCreditNotes(app: FastifyInstance): void {
     const body = CreditPreview.parse(req.body ?? {});
     const { credit, draft } = draftCredit(db, id, body.kind, body.lines ?? []);
     return { preview: { lines: draft.lines, taxes: draft.taxes, totals: draft.totals, refundable: refundableOf(credit) } };
+  });
+
+  app.post("/api/bills/:id/void", { preHandler: refundPermission }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { approverPin, ...request } = VoidBill.parse(req.body ?? {});
+    // The retry fingerprint never holds the PIN: a retry is identical when the bill, reason and refunds are.
+    const requestJson = JSON.stringify({ billId: id, kind: "void", ...request });
+    const earlier = replayedCreditNote(db, request.clientRef, requestJson);
+    if (earlier) {
+      const replayed = billWithNote(db, earlier.billId, earlier.id);
+      return reply.status(200).send({ ...replayed, order: loadOrderJson(db, replayed.bill.orderId) });
+    }
+    const approver = await resolveApprover(app, req, approverPin);
+
+    const result = db.transaction(() => {
+      // Another request may have written this reference, voided or refunded the bill while the PIN was checked.
+      const replay = replayedCreditNote(db, request.clientRef, requestJson);
+      if (replay) return { created: false, ...billWithNote(db, replay.billId, replay.id), tables: [] as string[] };
+      const { bill, credit, draft } = draftCredit(db, id, "void");
+      checkVoidRefunds(bill, credit, request.refunds);
+      // Read before the order closes: cancelling deactivates its table links.
+      const own = db.prepare("SELECT table_id FROM orders WHERE id = ?").get(bill.order_id) as { table_id: string | null } | undefined;
+      const linked = (db.prepare(`SELECT tl.table_id FROM table_links tl JOIN orders o ON o.id = tl.order_id
+        WHERE tl.order_id = ? AND o.status IN ('open', 'billed') ORDER BY tl.linked_at, tl.id`).all(bill.order_id) as Array<{ table_id: string }>).map((r) => r.table_id);
+      const now = Date.now();
+      const noteId = writeCreditNote(db, { billId: id, kind: "void", reason: request.reason, draft, refunds: request.refunds,
+        requestedBy: req.user.id, approvedBy: approver.id, clientRef: request.clientRef, requestJson, now });
+      db.prepare("UPDATE bills SET status = 'void' WHERE id = ?").run(id);
+      if (bill.status === "unpaid") {
+        db.prepare("UPDATE orders SET status = 'cancelled', closed_at = ?, cancelled_by = ?, cancel_reason = ? WHERE id = ?").run(now, req.user.id, request.reason, bill.order_id);
+      }
+      const tables = [...new Set([...(own?.table_id ? [own.table_id] : []), ...linked])];
+      // The response bill is built inside the transaction so a bill that cannot be shown (no saved receipt) rolls the void back.
+      return { created: true, ...billWithNote(db, id, noteId), tables };
+    })();
+
+    const order = loadOrderJson(db, result.bill.orderId)!;
+    if (result.created) {
+      app.broadcast("order.updated", { order });
+      for (const tableId of result.tables) app.broadcast("table.changed", { tableId });
+    }
+    return reply.status(result.created ? 201 : 200).send({ bill: result.bill, creditNote: result.creditNote, order });
   });
 }
