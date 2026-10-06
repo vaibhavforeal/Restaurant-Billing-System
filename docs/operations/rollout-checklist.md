@@ -137,6 +137,8 @@ Run a short mock service with real staff roles and printers. Check each **Expect
 - [ ] **Quick takeaway:** a parcel order billed and paid with the cash-change helper.
 - [ ] **Discount:** cashier applies a discount within 10%; over 10% is refused for the cashier.
 - [ ] **Cancel:** cancel a sent item with a reason; check it appears in the cancellations report.
+- [ ] **Refund:** on a paid bill, as a cashier choose **Refund items**, refund one item with the manager's PIN under **Admin approval**. **Expect:** a wrong PIN is refused; the right one issues CN-n and the credit note prints; the bill shows **Partly refunded**; Reports → Day-end / GST shows the credit-notes block and net figures.
+- [ ] **Void:** void an unpaid table bill and a paid bill. **Expect:** the unpaid void frees the table; the paid void refunds the money by the method you choose; both appear in Reports → Detailed reports → Credit notes.
 - [ ] **Guest QR (Pro):** print a table QR, order from a phone, accept the request on the POS.
 - [ ] **Inventory (if used):** receive stock with an amount paid, check the stock decreases after a sale; on Pro, check Dish costing and the Food cost & profit report.
 - [ ] **Day end:** open Reports → Day-end / GST. **Expect:** totals match the bills you just made. Export the CSV and open it.

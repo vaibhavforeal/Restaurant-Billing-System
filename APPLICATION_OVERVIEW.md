@@ -111,7 +111,7 @@ Restaurant Billing Software/
 ├── packages/
 │   ├── core/src/                PIN hashing, permission checks, signature verification
 │   └── domain/src/              SQLite access, schemas, business calculations
-│       └── migrations/          Ordered schema migrations 001 through 024
+│       └── migrations/          Ordered schema migrations 001 through 025
 ├── tools/
 │   ├── build-desktop.mjs         Stage development, Demo, or commercial desktop app
 │   ├── build-kitchen.mjs         Stage the Kitchen client
@@ -208,7 +208,7 @@ The server also declares local `@forkflow/core` and `@forkflow/domain` workspace
 
 [openDb](packages/domain/src/db.ts) enables write-ahead logging (`WAL`), foreign keys, a 5-second busy timeout, and `synchronous=NORMAL`. The server holds an exclusive data-directory lock. Windows uses an exclusive named pipe derived from the resolved directory; other platforms use `proper-lockfile`.
 
-[Migrations](packages/domain/src/migrations/index.ts) currently run from **001 through 024**. Startup checks the schema version, creates a required backup before upgrading an existing database, and applies pending migrations. A database with a schema newer than the application is rejected.
+[Migrations](packages/domain/src/migrations/index.ts) currently run from **001 through 025**. Startup checks the schema version, creates a required backup before upgrading an existing database, and applies pending migrations. A database with a schema newer than the application is rejected.
 
 ### Main table groups
 
@@ -218,14 +218,14 @@ The server also declares local `@forkflow/core` and `@forkflow/domain` workspace
 | Catalog | `categories`, `products`, `variants` |
 | Tables and reservations | `dining_tables`, `reservations`, `table_links`, `order_table_events` |
 | Orders and kitchen | `orders`, `order_items`, `kots`, `kot_requests` |
-| Billing and payments | `bills`, `bill_taxes`, `payments`, `bill_settlements`, `bill_report_lines`, `sequences` |
+| Billing and payments | `bills`, `bill_taxes`, `payments`, `bill_settlements`, `bill_report_lines`, `credit_notes`, `credit_note_lines`, `credit_note_taxes`, `refund_payments`, `sequences` |
 | Inventory | `stock_items`, `product_stock_links`, `stock_moves`, `stock_cost_changes` |
 | Printing | `printers`, `kot_stations`, `print_jobs`, `print_queue_state` |
 | Guest interactions | `table_qr`, `guest_requests`, `guest_service_requests` |
 | Licensing | `license_state`, `licensed_devices`, `license_events` |
 | Zomato ledger | `zomato_settings`, `zomato_orders`, `zomato_events`, `zomato_settlements`, `zomato_imports` |
 
-Orders connect to tables where applicable, and contain order items and KOTs. Bills preserve issued financial details, with separate taxes, settlement records, payments, and reporting lines. Product recipes use stock links; stock movements preserve consumption and cancellation reversal history, including the cost value each movement carried. Products also store uploaded menu photos in the database, so ordinary database backups include them.
+Orders connect to tables where applicable, and contain order items and KOTs. Bills preserve issued financial details, with separate taxes, settlement records, payments, and reporting lines. Voids and refunds are append-only credit notes (with their own lines, taxes, and refund payments) that never edit the bill. Product recipes use stock links; stock movements preserve consumption and cancellation reversal history, including the cost value each movement carried. Products also store uploaded menu photos in the database, so ordinary database backups include them.
 
 ### Financial and stock rules
 
@@ -303,6 +303,7 @@ Printer submission success means the transport/spooler accepted the bytes; it do
 - **Quick takeaway** for cashiers/admins: cart, kitchen send, bill issue, received payment, cash change, receipt options, and interrupted-checkout recovery.
 - UPI QR codes generated locally with the configured restaurant UPI ID and final payable amount on eligible unpaid bills.
 - Staff verify UPI receipt in the bank/payment app before recording settlement. There is no automatic payment-gateway confirmation.
+- **Voids and refunds** for administrators and cashiers (`bills.refund`): a whole bill (paid or unpaid) can be voided and chosen items on a paid bill refunded by item and quantity. Each action creates a numbered, dated credit note (CN-n); the original bill is never edited, except that a void marks it VOID. Credit amounts come from the bill's stored item lines (discount, GST, and round-off), so credit notes always sum exactly to the bill. Cashiers need an active administrator's PIN ("Admin approval"; wrong PINs lock out after five tries, counted separately from login) while administrators approve themselves. Staff choose refund methods, never more than was paid per method. An unpaid void cancels the order and frees the table and any linked tables. Stock is not restored. Older bills without stored item lines can only be voided. Credit notes print or open as a slip (`credit_note` print kind). See [Refunds and voids](docs/operations/refunds-and-voids.md).
 
 ### Inventory and recipes
 
@@ -321,7 +322,7 @@ Printer submission success means the transport/spooler accepted the bytes; it do
 - Date-filtered sales, collections, and day-end/GST reports with CSV export.
 - Item/category sales, cashier collections, hourly sales, KOT performance, cancellations, and stock consumption/wastage reports.
 - Order analytics comparing takeaway and dine-in, item rankings, category performance, daily trends, and busy hours.
-- Issued-sales reporting uses bill issue dates, including eligible unpaid bills. Collection reporting uses payment dates and can include payments against older bills.
+- Issued-sales reporting uses bill issue dates, including eligible unpaid bills and void bills (voids stay in their issue day's gross sales). Credit notes are subtracted on their own date; day-end shows a credit-notes block, net figures, and net GST per rate, the sales report adds Credit notes and Net sales columns, and a Credit notes detailed report exports CSV. Collection reporting uses payment dates and can include payments against older bills.
 - Date boundaries use the **server's local timezone**; supported range reports generally limit requests to 366 days.
 - Exports use the displayed report snapshot and include relevant dates, timezone, and calculation notes.
 
@@ -394,6 +395,7 @@ The backend exposes JSON REST endpoints under `/api`. The table below maps route
 | Kitchen | `/api/orders/:id/send`, `/api/kots`, `/api/kots/:id/accept`, `/api/kots/:id/done` | [kots.ts](apps/server/src/kots.ts) |
 | Billing | `/api/orders/:id/bill-preview`, `/api/orders/:id/bill`, `/api/bills/:id/settle` | [billing.ts](apps/server/src/billing.ts) |
 | Receipts/pay QR | `/api/bills/:id/receipt`, `/api/bills/:id/print`, `/api/bills/:id/upi-qr` | [billing.ts](apps/server/src/billing.ts) |
+| Voids/refunds | `/api/bills/:id/credit-preview`, `/api/bills/:id/void`, `/api/bills/:id/refund`, `/api/credit-notes/:id/receipt`, `/api/credit-notes/:id/print` | [credit-notes.ts](apps/server/src/credit-notes.ts) |
 | Reports | `/api/reports/day-end`, `/api/reports/sales`, `/api/reports/operations/:kind`, `/api/reports/analytics` | [reports.ts](apps/server/src/reports.ts), [sales-reports.ts](apps/server/src/sales-reports.ts), [operational-reports.ts](apps/server/src/operational-reports.ts), [order-analytics.ts](apps/server/src/order-analytics.ts) |
 | Stock/recipes | `/api/stock-items`, `/api/stock-items/:id/movements`, `/api/products/:id/stock-links`, `/api/products/:id/recipe` | [stock.ts](apps/server/src/stock.ts) |
 | Costing | `/api/stock-items/:id/unit-cost`, `/api/costing/stock`, `/api/costing/dishes`, `/api/reports/profit` | [costing.ts](apps/server/src/costing.ts) |
@@ -584,7 +586,7 @@ This overview records what checks exist. Historical test counts in handoff docum
 | Google Drive | Preferences, queue/worker, injectable contract | OAuth, credential protection, real Drive adapter, cloud restore |
 | Zomato | Setup metadata, CSV imports, reconciliation ledger | Approved live provider access, verified inbound integration, live status actions |
 | Guest QR | Restaurant-LAN menus, requests, and service calls | Public hosted ordering and cloud coordination |
-| Payments | Recorded cash/UPI/card settlement and local UPI QR | Gateway confirmation, bank reconciliation, and refund/void workflows |
+| Payments | Recorded cash/UPI/card settlement, local UPI QR, and void/refund credit notes with admin approval | Gateway confirmation, bank reconciliation, and correcting a recorded payment method (refunds and voids are implemented; gateway refunds are not) |
 | Inventory | Stock ledger, recipes, deductions, reversals, adjustments, ingredient costing, dish costing, food cost and profit report | Full supplier/purchase-order management, procurement automation, and inter-outlet inventory from the historical plan |
 | Table splits and merges | Independent bill groups sharing a table; moving a party; merging open orders into one bill with linked tables | Un-merging, moving individual items between orders, and post-issue financial restructuring are not implemented |
 | AI | Separate menu-ingestion experiment | Integrated AI onboarding, forecasting, voice/copilot workflows, and automated recommendations |
@@ -604,6 +606,7 @@ This overview records what checks exist. Historical test counts in handoff docum
 | Table workspace and bookings | [Tables](docs/operations/tables-workspace.md), [Move and merge](docs/operations/table-move-merge.md), [Reservations](docs/operations/table-reservations.md) |
 | Fast parcel checkout | [Quick takeaway](docs/operations/quick-takeaway.md) |
 | Billing output and QR payment | [Bill formats](docs/operations/bill-format.md), [UPI payments](docs/operations/upi-payments.md) |
+| Voids, refunds, and credit notes | [Refunds and voids](docs/operations/refunds-and-voids.md) |
 | Printer settings and job recovery | [Printers](docs/operations/printer-settings.md) |
 | Recipe editing and stock behavior | [Recipes](docs/operations/recipes.md) |
 | Ingredient costs, dish costing, and profit | [Inventory costing](docs/operations/costing.md) |

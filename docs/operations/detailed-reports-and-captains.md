@@ -8,11 +8,12 @@ Refresh reloads the data; a failed refresh clears old results and disables expor
 
 | Report | Contents and basis |
 | --- | --- |
-| Item / category sales | Issued bills, including unpaid bills, grouped by saved item/variant and category. Quantity, distinct bills, subtotal, discount, taxable value, GST, rounding and final sales. Voids are excluded. |
+| Item / category sales | Issued bills, including unpaid bills, grouped by saved item/variant and category. Quantity, distinct bills, subtotal, discount, taxable value, GST, rounding and final sales, net of credit notes (voids and refunds) on the day they were issued. |
 | Cashier collections | Cash, UPI, card and distinct paid bills by the staff member who settled the bill, using payment date. Includes collections for older bills. |
 | Hourly sales | All 24 local hours across the selected dates, with bill count, discounts, GST, sales and average bill. |
 | KOT performance | Kitchen summary and ticket details: completed, pending, fully cancelled, send/completion timestamps, completion duration and pending age. |
 | Cancellation details | Item, quantity, original menu value, exact cancellation time, staff, reason, order reference and KOT. Whole-order cancellations appear separately. |
+| Credit notes | Every void and refund in the range: CN number, date, bill, kind, reason, requested by, approved by, refund methods, taxable value, GST and total. See [Refunds and voids](refunds-and-voids.md). |
 | Stock consumption / wastage | Opening, received, consumed, cancellation reversals, wastage, count adjustments and closing quantities, plus movement details. |
 
 Item reports allocate saved GST, discount and rounding using integer paise; totals
