@@ -125,8 +125,9 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     const { pin } = LoginBody.parse(req.body);
     const ip = req.ip;
 
-    // Throttle: check if this IP is in cooldown
-    if (throttle.pinCooldown(ip)) {
+    // Throttle: refuse while this IP is in cooldown; otherwise count the attempt as a failure now, before the async PIN
+    // checks, so parallel wrong PINs cannot all slip past this check. A right PIN clears it below.
+    if (!throttle.beginPinAttempt(ip)) {
       return reply.status(429).send({ error: "too many attempts" });
     }
 
@@ -145,9 +146,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
       }
     }
 
-    // Failure: increment throttle counter
-    throttle.recordPinFailure(ip);
-
+    // Failure: already counted by beginPinAttempt
     return reply.status(401).send({ error: "invalid pin" });
   });
 

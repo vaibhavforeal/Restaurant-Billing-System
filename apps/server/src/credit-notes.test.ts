@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { uuidv7, type Bill, type BillCreditNote, type PayMode } from "@forkflow/domain";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
@@ -268,6 +268,37 @@ describe("credit preview, approval and bill credit data", () => {
       expect((app.db.prepare("SELECT status FROM bills WHERE id = ?").get(b.id) as { status: string }).status).toBe("paid");
     });
 
+    it("counts wrong approval PINs sent in parallel before they are verified, so a burst cannot slip past the cooldown", async () => {
+      const b = await bill();
+      const refunds = [{ mode: "cash", amountPaise: 10500 }];
+      const burst = await Promise.all(Array.from({ length: 6 }, () => voidBill(b.id, { approverPin: "0000", refunds })));
+      const codes = burst.map((r) => r.statusCode);
+      expect(codes.filter((c) => c === 401).length).toBeLessThanOrEqual(5);
+      expect(codes.filter((c) => c === 429).length).toBeGreaterThanOrEqual(1);
+      expect((await voidBill(b.id, { refunds })).statusCode).toBe(429);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(0);
+
+      // once the cooldown is over the right PIN approves again
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(Date.now() + 61_000);
+        const ok = await voidBill(b.id, { refunds });
+        expect(ok.statusCode, ok.body).toBe(201);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("refuses a paid void whose money held no longer matches the credit it would issue", async () => {
+      const b = await bill();
+      // an earlier credit of 3499 that refunded only 3000: the bill still holds 7500 but only 7001 is left to credit
+      priorCredit(b.id, 1, [3333, 83, 83, 0, 3499], [["cash", 3000]]);
+      const res = await voidBill(b.id, { refunds: [{ mode: "cash", amountPaise: 7500 }] });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toBe("This bill changed — review again");
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
+    });
+
     it("is not available to a waiter", async () => {
       const b = await bill();
       const waiter = await createUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
@@ -484,6 +515,22 @@ describe("credit preview, approval and bill credit data", () => {
       const res = await refundBill(issued.id, { lines, refunds: [{ mode: "card", amountPaise: 2000 }, { mode: "cash", amountPaise: 1499 }] });
       expect(res.statusCode, res.body).toBe(201);
       expect(res.json().creditNote.refunds).toEqual([{ mode: "card", amountPaise: 2000, refNote: null }, { mode: "cash", amountPaise: 1499, refNote: null }]);
+    });
+
+    it("refuses more cash than the cash still held on a split bill, even within the bill's remaining total", async () => {
+      const issued = await bill(3, false);
+      const paid = await app.inject({ method: "POST", url: `/api/bills/${issued.id}/settle`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: 6000 }, { mode: "card", amountPaise: 4500 }] } });
+      expect(paid.statusCode, paid.body).toBe(200);
+      const lines = [{ orderItemId: orderItemOf(issued.id), qty: 1 }];
+      expect((await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(201);
+      // 2501 cash and 4500 card are left (7001 in all); 3499 more by cash is within the total but over the cash
+      const over = await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      expect(over.statusCode).toBe(400);
+      expect(over.json().error).toBe("Refund by cash cannot exceed what was paid by cash");
+      const fits = await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 2501 }, { mode: "card", amountPaise: 998 }] });
+      expect(fits.statusCode, fits.body).toBe(201);
+      expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(2);
     });
 
     it("counts money already refunded by a method against its limit", async () => {

@@ -178,7 +178,7 @@ gets its own bill, and the table frees when all groups settle.
 Pick a receipt printer at checkout, or use **View receipt → Print / save PDF**.
 The selected printer is remembered on that browser. **Bills** provides unpaid
 bills, paid history and reprints. **Reports** shows issued sales and GST by bill
-date, plus payments received that date (which may cover older bills), using the
+date less credit notes (voids and refunds) by their own date, plus payments received that date net of refunds (which may cover older bills), using the
 server's local timezone.
 
 The redesigned [bill formats](docs/operations/bill-format.md) include compact

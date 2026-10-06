@@ -1,6 +1,6 @@
 # Sales and payment collections
 
-Admins and cashiers see issued sales, collections received and bills issued cards
+Admins and cashiers see net sales, collections received and bills issued cards
 above the sales and collection graphs on **Home**, automatically covering the
 latest seven server-local dates. Date controls and
 bottom shortcuts are omitted from Home. Captain/waiter users
@@ -11,10 +11,12 @@ financial reports. This feature adds no dependencies or database migrations.
 
 - In **Reports**, choose **Today**, **7 days**, **30 days**, or apply a custom date range of up to
   366 days. Dates use the restaurant server's calendar and displayed timezone.
-- Reports show issued sales, collections received, issued bill count and current unpaid
-  balances. The Home trend chart compares daily sales with daily collections. Select a
-  date with the pointer, or focus the chart and use Left/Right, Home or End.
-- Cash, UPI and card bars show receipt totals and their share of collections.
+- Reports show net sales, collections received, issued bill count and current unpaid
+  balances. The Home trend chart compares daily net sales with daily collections
+  (net of refunds). Select a date with the pointer, or focus the chart and use
+  Left/Right, Home or End.
+- Cash (net), UPI (net) and card (net) bars show receipt totals less refunds paid
+  out by that method, and their share of collections.
 - Open **Reports** in the main navigation, then select **Sales** or **Collections**.
   Use **Export → Export … CSV** for the loaded report. Currency is exported as
   decimal INR with dates, server timezone and a total row.
@@ -29,14 +31,19 @@ range cannot replace the current range.
 
 ## What the figures mean
 
-**Issued sales** (gross) sum saved bill snapshots by bill creation date, void bills
-included, with their existing GST and rounding. Credit notes (voids and refunds) are
-taken off on the date each credit note was made. The dashboard's **Issued sales**
-card is the gross figure; the Sales report shows **Credit notes** and **Net sales**
-columns beside it, per day and in total.
+**Net sales** are gross sales less credit notes. Gross sales sum saved bill
+snapshots by bill creation date, void bills included, with their existing GST and
+rounding; credit notes (voids and refunds) are taken off on the date each credit
+note was made. The headline **Net sales** card shows "Gross ₹X − credit notes ₹Y"
+beneath it when the period has credit notes, and the trend chart plots daily net
+sales (a day with more credit notes than sales goes below zero). The Sales report
+shows gross **Sales**, **Credit notes** and **Net sales** columns, per day and in
+total.
 
 **Collections** sum saved payment rows by payment
-receipt date, including payments for older bills, less refunds paid out that day. These are different measures
+receipt date, including payments for older bills, less refunds paid out that day.
+The Collections report and CSV label the method columns **Cash (net)**, **UPI
+(net)** and **Card (net)**, with **Refunds** and **Received (net)** beside them. These are different measures
 and can legitimately differ. Split payments contribute to each payment method;
 the range's bill count counts distinct bills, even if a bill has receipts on
 multiple dates. Complimentary bills count as sales bills without inventing a

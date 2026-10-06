@@ -188,8 +188,11 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
       const status = e instanceof ApiError ? e.status : 0;
       const message = e instanceof Error ? e.message : "Request failed";
       if (status === 401) setPin("");
-      if (status === 409) { setTick((n) => n + 1); onStale(); }
-      setError(status === 429 ? "Too many wrong PINs — wait a moment and try again." : message);
+      // A conflict, or no answer at all (network error or timeout: the credit note may have been saved anyway), reloads the
+      // bill and the preview so a saved credit note shows before anyone edits and resubmits under a new reference.
+      if (status === 409 || status === 0) { setTick((n) => n + 1); onStale(); }
+      setError(status === 429 ? "Too many wrong PINs — wait a moment and try again."
+        : status === 0 ? "No answer from the server. The bill was reloaded — check its credit notes before trying again." : message);
     } finally { lock.current = false; changeBusy(false); }
   }
 

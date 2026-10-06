@@ -40,6 +40,12 @@ that were merged into it. Kitchen tickets already sent are not changed.
 The bill is marked **VOID**. It still counts in the sales of the day it was
 issued; the credit note takes that amount off on the day you void it.
 
+Because voiding an unpaid bill cancels its order, that order is also counted in
+the day-end **Orders cancelled on this date** count and listed under **Cancelled orders** in the
+**Cancellation details** report, on the day you void it. Those are counts and
+reasons only, with no money, so nothing is counted twice: the money is handled by
+the credit note alone.
+
 ## Refunding items
 
 1. Open a paid bill and choose **Refund items**.
@@ -94,10 +100,12 @@ note was made that day. Closed days and filed GST never change.
   value, net CGST and SGST, and **Net GST per rate** (bills minus credit notes).
   **Net payments received** takes refunds off each method, so net cash received
   matches the drawer.
-- **Sales dashboard and Sales report**: the dashboard's Issued sales card is gross
-  (void bills included); the Sales report adds **Credit notes** and **Net sales**
-  columns, per day and in total. The Collections view shows receipts net of refunds
-  paid out that day.
+- **Sales dashboard and Sales report**: the headline card is **Net sales** (issued
+  bills, void bills included, less credit notes), with "Gross ₹X − credit notes ₹Y"
+  beneath it when there are credit notes, and the Home trend chart plots daily net
+  sales. The Sales report shows gross **Sales**, **Credit notes** and **Net sales**
+  columns, per day and in total. Collections (cards, chart, the Cash/UPI/Card (net)
+  columns and the CSV) are receipts net of refunds paid out that day.
 - **Item/category sales, hourly sales, cashier collections and order analytics**
   are net of credit notes. Refunds count against the cashier who requested them.
   Voids of older bills without saved item lines cannot be itemised, so they do not
@@ -125,7 +133,9 @@ bill number and date, the items and quantities, GST per rate, the total, the
 refund methods, the reason, and the approver. **View** opens the slip in the
 browser, where **Print / save PDF** gives an A4 copy. Printing uses the same print
 queue as bills and KOTs: check **Settings → Print jobs** if it does not print.
-The original receipt reprints exactly as it was issued.
+The original receipt reprints with its items, taxes and totals exactly as issued;
+a voided bill's reprint is marked **VOID - NOT PAYABLE** instead of showing an
+amount due or "Paid in full".
 
 ## Things to know
 

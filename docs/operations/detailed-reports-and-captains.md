@@ -12,7 +12,7 @@ Refresh reloads the data; a failed refresh clears old results and disables expor
 | Cashier collections | Cash, UPI, card and distinct paid bills by the staff member who settled the bill, using payment date. Includes collections for older bills. Refunds are subtracted from the cashier who requested them. |
 | Hourly sales | All 24 local hours across the selected dates, with bill count, discounts, GST, sales and average bill, net of credit notes. |
 | KOT performance | Kitchen summary and ticket details: completed, pending, fully cancelled, send/completion timestamps, completion duration and pending age. |
-| Cancellation details | Item, quantity, original menu value, exact cancellation time, staff, reason, order reference and KOT. Whole-order cancellations appear separately. |
+| Cancellation details | Item, quantity, original menu value, exact cancellation time, staff, reason, order reference and KOT. Whole-order cancellations appear separately, including an order cancelled by voiding its unpaid bill (it also counts in the day-end "Orders cancelled on this date"); these rows carry no money, so the void's value is counted once, in its credit note. |
 | Credit notes | Every void and refund in the range: CN number, date, bill, kind, reason, requested by, approved by, refund methods, taxable value, GST and total. See [Refunds and voids](refunds-and-voids.md). |
 | Stock consumption / wastage | Opening, received, consumed, cancellation reversals, wastage, count adjustments and closing quantities, plus movement details. |
 

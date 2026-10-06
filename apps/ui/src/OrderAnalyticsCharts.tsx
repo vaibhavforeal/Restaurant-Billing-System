@@ -46,7 +46,7 @@ export function OrderTrend({ report }: { report: OrderAnalyticsReport }) {
         <line className="chart-focus" x1={x(index)} x2={x(index)} y1={18} y2={158} />
         <circle className="chart-sales-dot" cx={x(index)} cy={y(day.takeawayOrders)} r={4} /><circle className="chart-collection-dot" cx={x(index)} cy={y(day.tableOrders)} r={3} />
       </svg>
-      <figcaption className="sales-chart-detail" aria-live="polite"><strong>{day.date}</strong><span>Takeaway <strong>{day.takeawayOrders}</strong></span><span>Tables <strong>{day.tableOrders}</strong></span><span>Sales <strong>{reportMoney(day.totalPaise)}</strong></span></figcaption>
+      <figcaption className="sales-chart-detail" aria-live="polite"><strong>{day.date}</strong><span>Takeaway <strong>{day.takeawayOrders}</strong></span><span>Tables <strong>{day.tableOrders}</strong></span><span>Net sales <strong>{reportMoney(day.totalPaise)}</strong></span></figcaption>
     </figure>
   </section>;
 }

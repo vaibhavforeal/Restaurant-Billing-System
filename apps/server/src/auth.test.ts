@@ -1,5 +1,5 @@
 import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "./server.js";
 
 function freshApp() {
@@ -213,6 +213,28 @@ describe("login throttling", () => {
       expect(fresh.statusCode).toBe(200);
     } finally {
       await app2.close();
+    }
+  });
+
+  it("counts wrong PINs sent in parallel before they are verified, so a burst cannot slip past the cooldown", async () => {
+    app = freshApp();
+    await setup(app);
+    const login = (pin: string) => app.inject({ method: "POST", url: "/api/login", payload: { pin } });
+
+    const burst = await Promise.all(Array.from({ length: 6 }, () => login("9999")));
+    const codes = burst.map((r) => r.statusCode);
+    expect(codes.filter((c) => c === 401).length).toBeLessThanOrEqual(5);
+    expect(codes.filter((c) => c === 429).length).toBeGreaterThanOrEqual(1);
+    expect((await login("1234")).statusCode).toBe(429);
+
+    // once the cooldown is over the right PIN signs in again
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 61_000);
+      const ok = await login("1234");
+      expect(ok.statusCode, ok.body).toBe(200);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

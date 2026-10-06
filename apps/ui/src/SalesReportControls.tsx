@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { localDay, recentPeriod, reportMoney, type ReportPeriod, type SalesReport } from "./sales-report";
+import { localDay, recentPeriod, salesMetrics, type ReportPeriod, type SalesReport } from "./sales-report";
 
 export function SalesPeriodControls({ period, today = localDay(), loading, onChange, onRefresh }: {
   period: ReportPeriod; today?: string | undefined; loading: boolean; onChange: (period: ReportPeriod) => void; onRefresh: () => void;
@@ -25,12 +25,7 @@ export function SalesPeriodControls({ period, today = localDay(), loading, onCha
 }
 
 export function SalesMetrics({ report, variant = "report" }: { report: SalesReport; variant?: "report" | "dashboard" }) {
-  const metrics = [
-    { label: "Issued sales", value: reportMoney(report.sales.totalPaise), note: "Includes GST and rounding" },
-    { label: "Collections received", value: reportMoney(report.collections.totalPaise), note: "By payment date · includes older bills" },
-    { label: "Bills issued", value: String(report.sales.billCount), note: "On the selected bill dates" },
-    { label: "Still unpaid", value: reportMoney(report.sales.outstandingPaise), note: "Selected-period bills · current balance" },
-  ];
+  const metrics = salesMetrics(report);
   const visibleMetrics = variant === "dashboard" ? metrics.slice(0, 3) : metrics;
   return <div className={`sales-metrics${variant === "dashboard" ? " sales-metrics-overview" : ""}`}>{visibleMetrics.map((metric) => <div className={`sales-metric${metric.label === "Collections received" ? " sales-metric-collections" : ""}`} key={metric.label}><p>{metric.label}</p><strong style={{ "--sales-value-length": metric.value.length } as CSSProperties}>{metric.value}</strong><small>{metric.note}</small></div>)}</div>;
 }

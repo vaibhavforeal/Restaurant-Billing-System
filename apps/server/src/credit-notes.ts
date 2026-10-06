@@ -113,7 +113,8 @@ export async function resolveApprover(app: FastifyInstance, req: FastifyRequest,
   if (req.user.role === "admin") return { id: req.user.id, name: req.user.name };
   if (!approverPin) throw httpError(403, "Admin approval is required");
   const throttle = app.approvalThrottle;
-  if (throttle.pinCooldown(req.ip)) throw httpError(429, "too many attempts");
+  // Counted as a failure before the async PIN checks so parallel wrong PINs cannot all pass the cooldown; a right PIN clears it.
+  if (!throttle.beginPinAttempt(req.ip)) throw httpError(429, "too many attempts");
   const admins = app.db.prepare("SELECT id, name, pin_hash FROM users WHERE role = 'admin' AND is_active = 1").all() as Array<{ id: string; name: string; pin_hash: string }>;
   for (const admin of admins) {
     if (await verifyPassword(approverPin, admin.pin_hash)) {
@@ -121,7 +122,6 @@ export async function resolveApprover(app: FastifyInstance, req: FastifyRequest,
       return { id: admin.id, name: admin.name };
     }
   }
-  throttle.recordPinFailure(req.ip);
   throw httpError(401, "Admin PIN is incorrect");
 }
 
@@ -138,12 +138,15 @@ export function checkRefundMethods(credit: BillCredit, refunds: RefundInput): vo
 }
 
 /** A void's refunds: none on an unpaid bill; on a paid bill exactly the money still held (paid − already refunded). */
-function checkVoidRefunds(bill: CreditBillRow, credit: BillCredit, refunds: RefundInput): void {
+function checkVoidRefunds(bill: CreditBillRow, credit: BillCredit, draft: CreditDraft, refunds: RefundInput): void {
   if (bill.status === "unpaid") {
     if (refunds.length > 0) throw httpError(400, "An unpaid bill has no payments to refund");
     return;
   }
   const held = refundableOf(credit).total;
+  // Defensive: a paid void refunds exactly the money held, so that must equal the credit it issues — never let a credit
+  // note's total and its refund payments diverge.
+  if (held !== draft.totals.totalPaise) throw httpError(409, "This bill changed — review again");
   const asked = refunds.reduce((s, r) => s + r.amountPaise, 0);
   // Money held only shrinks (other refunds) and a bill only goes unpaid -> paid, so asking for more than is held, or
   // refunding nothing on a paid bill that still holds money, means the bill changed after the counter reviewed it.
@@ -225,7 +228,7 @@ async function issueCredit(app: FastifyInstance, req: FastifyRequest, reply: Fas
     const replay = replayedCreditNote(db, request.clientRef, requestJson);
     if (replay) return { created: false, ...billWithNote(db, replay.billId, replay.id), tables: [] as string[] };
     const { bill, credit, draft } = draftForWrite(db, id, kind, input.lines);
-    if (kind === "void") checkVoidRefunds(bill, credit, request.refunds);
+    if (kind === "void") checkVoidRefunds(bill, credit, draft, request.refunds);
     else checkRefundAmounts(credit, draft, request.refunds);
     // Read before the order closes: cancelling deactivates its table links.
     const own = db.prepare("SELECT table_id FROM orders WHERE id = ?").get(bill.order_id) as { table_id: string | null } | undefined;

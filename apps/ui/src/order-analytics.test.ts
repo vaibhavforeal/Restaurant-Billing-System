@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
-import { analyticsCsv, averageOrder, orderShare, rankedItems } from "./order-analytics";
+import { analyticsCsv, analyticsMetrics, averageOrder, orderShare, rankedItems } from "./order-analytics";
 
 const report: OrderAnalyticsReport = {
   from: "2026-09-27", to: "2026-09-29", today: "2026-09-29", timezone: "Asia/Kolkata", generatedAt: 1790670000000, orderType: "parcel",
@@ -26,5 +26,17 @@ describe("order analytics display and export", () => {
     for (const text of ["Breakdown filter: Quick takeaway", "Order comparison (all order types)", "Highest moving items (ranked by sales)", "Category performance", "Daily order trend", "Busy hours", '"100.01"', '"220.00"', '"12:00"', '"33.3"']) expect(csv).toContain(text);
     expect(csv).toContain('"\'=HYPERLINK(""bad"")"'); expect(csv).toContain('"\'+Meals"');
     expect(csv.indexOf('"Juice"')).toBeLessThan(csv.indexOf('"\'=HYPERLINK'));
+  });
+  it("labels sales as net of credit notes in the headline cards and the export", () => {
+    const metrics = analyticsMetrics(report);
+    expect(metrics.map((m) => m.label)).toEqual(["Billed orders", "Net sales", "Items sold", "Average order"]);
+    expect(metrics[1]).toMatchObject({ value: "₹100.01" });
+    expect(metrics[1]!.note).toMatch(/credit notes/);
+    expect(metrics[3]).toMatchObject({ value: "₹100.01", note: "Net sales ÷ billed orders" });
+    const csv = analyticsCsv(report, "sales");
+    expect(csv).toContain('"Net sales INR"');
+    expect(csv).not.toContain("Issued sales");
+    expect(csv).not.toContain("void bills excluded");
+    expect(csv).toMatch(/credit notes/i);
   });
 });
