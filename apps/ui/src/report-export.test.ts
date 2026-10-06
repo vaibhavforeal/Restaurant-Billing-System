@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayEndCsv, type DayEndReport } from "./report-export";
+import { dayEndCsv, netTaxes, type DayEndReport } from "./report-export";
 
 function report(): DayEndReport {
   return {
@@ -12,6 +12,11 @@ function report(): DayEndReport {
     ],
     payments: [{ mode: "cash", amountPaise: 10000 }, { mode: "upi", amountPaise: 5555 }],
     cancellations: { orderCount: 3 },
+    creditNotes: { count: 1, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25, totalPaise: 1050,
+      taxes: [{ gstRate: 5, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25 }] },
+    refunds: [{ mode: "cash", amountPaise: 1050 }],
+    net: { totalPaise: 19350, taxablePaise: 18000, cgstPaise: 700, sgstPaise: 700 },
+    netPayments: [{ mode: "cash", amountPaise: 8950 }, { mode: "upi", amountPaise: 5555 }],
   };
 }
 
@@ -23,7 +28,7 @@ describe("day-end CSV export", () => {
     const prefix = '"2026-09-29","Asia/Calcutta",';
     const rows = result.split("\r\n").slice(1, -1);
     expect(rows.every((row) => row.startsWith(prefix))).toBe(true);
-    expect(rows).toHaveLength(19);
+    expect(rows).toHaveLength(45);
     expect(result).toContain('"Number of bills","","2","count"');
     expect(result).toContain('"Subtotal before discount","","200.00","INR"');
     expect(result).toContain('"Discounts","","10.00","INR"');
@@ -39,10 +44,37 @@ describe("day-end CSV export", () => {
     expect(result).toContain('"Total received","","155.55","INR"');
   });
 
+  it("exports credit notes, refunds, net sales, net GST per rate and net payments", () => {
+    const result = dayEndCsv(report());
+    expect(result).toContain('"Credit notes (voids and refunds)","Credit notes issued","","1","count"');
+    expect(result).toContain('"Credit notes (voids and refunds)","Credit note total","","10.50","INR"');
+    expect(result).toContain('"Credit notes (voids and refunds)","Taxable","","10.00","INR"');
+    expect(result).toContain('"Credit notes GST breakdown","Taxable","5","10.00","INR"');
+    expect(result).toContain('"Refunds paid on this date","CASH","","10.50","INR"');
+    expect(result).toContain('"Refunds paid on this date","UPI","","0.00","INR"');
+    expect(result).toContain('"Refunds paid on this date","Total refunded","","10.50","INR"');
+    expect(result).toContain('"Net sales (after credit notes)","Net sales including GST and rounding","","193.50","INR"');
+    expect(result).toContain('"Net GST breakdown","Taxable","5","90.00","INR"');
+    expect(result).toContain('"Net GST breakdown","CGST","5","2.25","INR"');
+    expect(result).toContain('"Net GST breakdown","Taxable","12","90.00","INR"');
+    expect(result).toContain('"Net payments received (after refunds)","CASH","","89.50","INR"');
+    expect(result).toContain('"Net payments received (after refunds)","Total received","","145.05","INR"');
+  });
+
+  it("computes net GST per rate as gross minus credit notes, including rates only credited", () => {
+    expect(netTaxes(report().taxes, report().creditNotes.taxes)).toEqual([
+      { gstRate: 5, taxablePaise: 9000, cgstPaise: 225, sgstPaise: 225 },
+      { gstRate: 12, taxablePaise: 9000, cgstPaise: 540, sgstPaise: 540 },
+    ]);
+    expect(netTaxes([], [{ gstRate: 18, taxablePaise: 100, cgstPaise: 9, sgstPaise: 9 }])).toEqual([{ gstRate: 18, taxablePaise: -100, cgstPaise: -9, sgstPaise: -9 }]);
+  });
+
   it("exports an empty business date with explicit zero totals and all payment modes", () => {
     const empty = report();
     empty.sales = { billCount: 0, subtotalPaise: 0, discountPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 };
     empty.taxes = []; empty.payments = []; empty.cancellations.orderCount = 0;
+    empty.creditNotes = { count: 0, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, totalPaise: 0, taxes: [] };
+    empty.refunds = []; empty.netPayments = []; empty.net = { totalPaise: 0, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0 };
     const result = dayEndCsv(empty);
     expect(result).toContain('"Number of bills","","0","count"');
     expect(result).toContain('"Sales including GST and rounding","","0.00","INR"');

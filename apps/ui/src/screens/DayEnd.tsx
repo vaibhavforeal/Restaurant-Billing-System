@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import { paiseToRupees } from "../money";
-import { dayEndCsv, type DayEndReport } from "../report-export";
+import { dayEndCsv, netTaxes, type DayEndReport } from "../report-export";
 import { downloadText } from "../download";
 import { OverflowMenu } from "../PosControls";
 function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
@@ -48,13 +48,41 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
         <dt>Orders cancelled on this date</dt><dd>{report.cancellations.orderCount}</dd>
       </dl>
       </section><section><h3>GST breakdown</h3>
+      <p>Before credit notes.</p>
       <table style={{ width: "100%", textAlign: "right", borderSpacing: 8 }}><thead><tr><th>Rate</th><th>Taxable</th><th>CGST</th><th>SGST</th></tr></thead><tbody>
         {report.taxes.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)}</td><td>{money(t.sgstPaise)}</td></tr>)}
       </tbody></table>
       </section><section><h3>Payments received on this date</h3>
       <p>Includes payments for older bills. This can differ from today's issued sales.</p>
       <dl className="pos-totals">{(["cash", "upi", "card"] as const).map((mode) => <Fragment key={mode}><dt>{mode.toUpperCase()}</dt><dd>{money(report.payments.find((p) => p.mode === mode)?.amountPaise ?? 0)}</dd></Fragment>)}</dl>
-      <strong>Total received: {money(report.payments.reduce((sum, p) => sum + p.amountPaise, 0))}</strong></section></div>
+      <strong>Total received: {money(report.payments.reduce((sum, p) => sum + p.amountPaise, 0))}</strong></section>
+      <section aria-label="Credit notes"><h3>Credit notes (voids and refunds)</h3>
+      <p>Dated by when the credit note was issued, so earlier days never change.</p>
+      <dl className="pos-totals">
+        <dt>Credit notes issued</dt><dd>{report.creditNotes.count}</dd>
+        <dt>Taxable value</dt><dd>{money(report.creditNotes.taxablePaise)}</dd>
+        <dt>CGST</dt><dd>{money(report.creditNotes.cgstPaise)}</dd><dt>SGST</dt><dd>{money(report.creditNotes.sgstPaise)}</dd>
+        <dt>Credit note total</dt><dd>{money(report.creditNotes.totalPaise)}</dd>
+      </dl>
+      {report.creditNotes.taxes.length > 0 && <table style={{ width: "100%", textAlign: "right", borderSpacing: 8 }}><caption>Credited GST per rate</caption><thead><tr><th>Rate</th><th>Taxable</th><th>CGST</th><th>SGST</th></tr></thead><tbody>
+        {report.creditNotes.taxes.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)}</td><td>{money(t.sgstPaise)}</td></tr>)}
+      </tbody></table>}
+      <h4>Refunds paid on this date</h4>
+      <dl className="pos-totals">{(["cash", "upi", "card"] as const).map((mode) => <Fragment key={mode}><dt>{mode.toUpperCase()}</dt><dd>{money(report.refunds.find((r) => r.mode === mode)?.amountPaise ?? 0)}</dd></Fragment>)}</dl>
+      <strong>Total refunded: {money(report.refunds.reduce((sum, r) => sum + r.amountPaise, 0))}</strong></section>
+      <section aria-label="Net sales"><h3>Net sales after credit notes</h3>
+      <dl className="pos-totals">
+        <dt>Net taxable value</dt><dd>{money(report.net.taxablePaise)}</dd>
+        <dt>Net CGST</dt><dd>{money(report.net.cgstPaise)}</dd><dt>Net SGST</dt><dd>{money(report.net.sgstPaise)}</dd>
+        <dt>Net sales including GST and rounding</dt><dd>{money(report.net.totalPaise)}</dd>
+      </dl>
+      <table style={{ width: "100%", textAlign: "right", borderSpacing: 8 }}><caption>Net GST per rate</caption><thead><tr><th>Rate</th><th>Taxable</th><th>CGST</th><th>SGST</th></tr></thead><tbody>
+        {netTaxes(report.taxes, report.creditNotes.taxes).map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)}</td><td>{money(t.sgstPaise)}</td></tr>)}
+      </tbody></table>
+      <h4>Net payments received</h4>
+      <p>Payments received minus refunds paid on this date.</p>
+      <dl className="pos-totals">{(["cash", "upi", "card"] as const).map((mode) => <Fragment key={mode}><dt>{mode.toUpperCase()}</dt><dd>{money(report.netPayments.find((p) => p.mode === mode)?.amountPaise ?? 0)}</dd></Fragment>)}</dl>
+      <strong>Net received: {money(report.netPayments.reduce((sum, p) => sum + p.amountPaise, 0))}</strong></section></div>
     </>}
   </section>;
 }

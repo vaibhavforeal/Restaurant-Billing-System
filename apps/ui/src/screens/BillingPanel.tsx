@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
+import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -10,6 +11,7 @@ import { reliablePost } from "../retry-queue";
 import { kitchenBillingBlockReason } from "../kitchen-billing";
 import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
+import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
 import "../billing-panel.css";
 
@@ -37,7 +39,7 @@ export function BillSummary({ value, compact = false }: { value: BillTotals; com
   </div>;
 }
 
-export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined }) {
+export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** Void and refund are offered to admins and cashiers only. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -58,6 +60,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const settlement = useRef<{ clientRef: string; fingerprint: string } | null>(null);
   const billRevision = useRef(0);
   const [job, setJob] = useState<PrintJobInfo | null>(null);
+  const [creditKind, setCreditKind] = useState<"void" | "refund" | null>(null);
   const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(preferredPayment);
   const [cashReceived, setCashReceived] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
@@ -204,6 +207,14 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     const { bill: value } = await reliablePost<{ bill: Bill }>(`/api/bills/${bill.id}/settle`, { clientRef: settlement.current.clientRef, payments: rows }, "Record payment");
     acceptBill(value); setMessage("Payment recorded. This group is settled."); await onChanged();
   }
+  function creditIssued(result: { bill: Bill }) {
+    acceptBill(result.bill);
+    onChanged().catch(() => { /* the order refreshes on the next update */ });
+  }
+  async function reloadBill() {
+    try { acceptBill((await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`)).bill); } catch { /* keep the last confirmed bill */ }
+    try { await onChanged(); } catch { /* keep the last confirmed order */ }
+  }
   async function viewReceipt() {
     if (!bill) return;
     const response = await fetch(`/api/bills/${bill.id}/receipt`, { headers: authHeaders() });
@@ -223,8 +234,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const totals = bill ?? preview;
   const canShowQr = !!bill && bill.status === "unpaid" && !!bill.receipt.upiId && bill.totalPaise > 0;
   const canGoToTables = bill?.status === "paid" && order.type === "dine_in" && !!onGoToTables;
+  const canVoid = !!bill && (role === "admin" || role === "cashier") && bill.status !== "void" && bill.refundState !== "refunded";
+  const canRefund = canVoid && bill?.status === "paid" && bill.totalPaise > 0;
+  // A cancelled order with no bill has nothing to bill; a voided bill on a cancelled order stays viewable.
+  if (order.status === "cancelled" && !bill) return null;
   return <section aria-label="Billing" className="billing-panel billing-footer">
-    {bill && <div className="billing-footer-total"><span>Bill #{bill.billNo}<span className={`status ${bill.status}`}>{bill.status}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
+    {bill && <div className="billing-footer-total"><span>Bill #{bill.billNo}<span className={`status ${bill.status} refund-${bill.refundState}`}>{billStatusLabel(bill)}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
     <div className="billing-footer-actions">
       {!bill && order.status === "open" && <>
         <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => openDialog(true)}>{shortcut("discount", "Discount")}</button>
@@ -239,7 +254,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     {error && <button className="billing-attention" onClick={() => openDialog()}>Billing needs attention</button>}
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
       <header className="billing-dialog-header">
-        <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill #${bill.billNo} — ${bill.status}` : quick ? "Takeaway checkout" : "Billing"}</h2>
+        <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill #${bill.billNo} — ${billStatusLabel(bill)}` : quick ? "Takeaway checkout" : "Billing"}</h2>
         {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector("input")?.focus(); }}>{shortcut("discount", "Discount")}</button>}
         <button disabled={blocked} onClick={closeDialog} aria-label="Close billing">Close</button>
       </header>
@@ -250,6 +265,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
           <div className="billing-review">
             {totals && <BillSummary value={totals} compact />}
             {bill?.discountNote && <p className="billing-note">Discount reason: {bill.discountNote}</p>}
+            {bill && <BillItemLines items={order.items} refundedQty={bill.refundedQty} showRefunded={bill.creditNotes.length > 0} />}
             <details ref={options} className="billing-options" open={!totals}>
               <summary>Bill options</summary>
               <div className="billing-options-fields">
@@ -296,6 +312,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
               <p className="billing-remaining">Remaining: {money(bill.totalPaise - entered)}</p>
               <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Record the entered payment amounts")} disabled={entered !== bill.totalPaise} onClick={() => void run(settle)}>{shortcut("billing", "Settle bill")}</button>
             </fieldset>}
+            {bill.status === "void" && <p className="billing-note" role="status">This bill is void.</p>}
             {bill.status === "paid" && <p className="billing-paid">Paid: {bill.payments.length ? bill.payments.map((p) => `${p.mode.toUpperCase()} ${money(p.amountPaise)}`).join(" + ") : "No payment due"}</p>}
             <div className="billing-receipt-actions">
               {canGoToTables && <button className="primary" disabled={blocked} onClick={goToTables}>Go to tables</button>}
@@ -305,7 +322,10 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
                 setJob(result.job); setMessage("Receipt queued for printing.");
               })}>Print receipt</button>}
               {html && <button disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
+              {canRefund && <button disabled={blocked} onClick={() => setCreditKind("refund")}>Refund items</button>}
+              {canVoid && <button className="billing-void" disabled={blocked} onClick={() => setCreditKind("void")}>Void bill</button>}
             </div>
+            <CreditNoteList notes={bill.creditNotes} printers={printers} printerId={printerId} />
             {job && <p className="billing-print-status" role="status">Receipt print: {job.status === "done" ? "submitted" : job.status}{job.error ? ` — ${job.error}. Check the paper before reprinting. An admin can retry the affected copy in Settings.` : ""}{job.copyCount > 1 ? ` · ${job.copyCount} copies requested; each copy is tracked in Settings.` : ""}</p>}
           </div>}
         </div>
@@ -313,5 +333,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       </div>
     </dialog>, document.body)}
     {bill && <UpiQrPreview billId={bill.id} open={showQr && canShowQr} onClose={() => setShowQr(false)} />}
+    {bill && (role === "admin" || role === "cashier") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
   </section>;
 }

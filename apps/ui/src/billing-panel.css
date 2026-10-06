@@ -72,3 +72,29 @@ html:has(.billing-dialog[open]), body:has(.billing-dialog[open]) { overflow: hid
   .billing-awaiting-preview .billing-options-fields { grid-template-columns: minmax(0, 1fr); }
   .billing-receipt-frame { height: min(300px, 42dvh); }
 }
+
+/* Void, refund and credit notes. */
+.billing-footer .status.void { background: #fff3f4; color: #b42332; }
+.billing-footer .status.refund-partly_refunded, .billing-footer .status.refund-refunded { background: #fff4da; color: #805800; }
+.billing-void { color: #b42332; }
+.credit-note-list ul, .bill-item-lines ul, .credit-note-items, .credit-note-preview ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.credit-note-list h3, .bill-item-lines h3 { font-size: 13px; margin: 12px 0 6px; }
+.credit-note-list li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.credit-note-list li p { margin: 4px 0; font-size: 12px; }
+.credit-note-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 12px; }
+.credit-note-head .pos-money { margin-left: auto; }
+.credit-note-kind { text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+.bill-item-lines li, .credit-note-preview li { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.credit-note-actions { display: grid; gap: 6px; }
+.credit-note-buttons { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.credit-note-buttons label { display: grid; gap: 3px; font-size: 12px; }
+.credit-note-form { display: grid; gap: 12px; }
+.credit-note-form fieldset { margin: 0; padding: 10px 12px; min-width: 0; }
+.credit-note-items li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }
+.credit-note-stepper { display: flex; align-items: center; gap: 4px; }
+.credit-note-stepper input { width: 64px; text-align: center; }
+.credit-note-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.credit-note-reasons button[aria-pressed="true"] { border-color: var(--red, #bf303b); font-weight: 600; }
+.credit-note-refund-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; margin-bottom: 8px; }
+.credit-note-footer { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.credit-note-result { display: grid; gap: 12px; }

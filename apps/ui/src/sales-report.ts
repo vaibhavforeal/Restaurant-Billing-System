@@ -4,11 +4,12 @@ export interface SalesTotals {
   billCount: number; subtotalPaise: number; discountPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; outstandingPaise: number;
 }
-export interface CollectionTotals { billCount: number; cashPaise: number; upiPaise: number; cardPaise: number; totalPaise: number }
-export interface SalesDay { date: string; sales: SalesTotals; collections: CollectionTotals }
+/** Collections are already net of refunds paid out (per method and in total); `refundPaise` is what was refunded. */
+export interface CollectionTotals { billCount: number; cashPaise: number; upiPaise: number; cardPaise: number; refundPaise: number; totalPaise: number }
+export interface SalesDay { date: string; sales: SalesTotals; creditNotePaise: number; netTotalPaise: number; collections: CollectionTotals }
 export interface SalesReport {
   from: string; to: string; today: string; timezone: string; generatedAt: number;
-  sales: SalesTotals; collections: CollectionTotals; daily: SalesDay[];
+  sales: SalesTotals; creditNotePaise: number; netTotalPaise: number; collections: CollectionTotals; daily: SalesDay[];
 }
 export type SalesReportKind = "sales" | "collections";
 export interface ReportPeriod { from: string; to: string }
@@ -22,11 +23,11 @@ export function recentPeriod(days: number, end = localDay()): ReportPeriod {
 /** Export the displayed report snapshot; money cells are decimal rupees. */
 export function salesReportCsv(report: SalesReport, kind: SalesReportKind): string {
   const headings = kind === "sales"
-    ? ["Bill date", "Bills issued", "Subtotal INR", "Discount INR", "CGST INR", "SGST INR", "Rounding INR", "Sales incl GST and rounding INR", "Unpaid current INR"]
-    : ["Payment date", "Bills with payments", "Cash INR", "UPI INR", "Card INR", "Total received INR"];
-  const values = (day: Pick<SalesDay, "sales" | "collections">) => kind === "sales"
-    ? [day.sales.billCount, ...[day.sales.subtotalPaise, day.sales.discountPaise, day.sales.cgstPaise, day.sales.sgstPaise, day.sales.roundingPaise, day.sales.totalPaise, day.sales.outstandingPaise].map(paiseToRupees)]
-    : [day.collections.billCount, ...[day.collections.cashPaise, day.collections.upiPaise, day.collections.cardPaise, day.collections.totalPaise].map(paiseToRupees)];
+    ? ["Bill date", "Bills issued", "Subtotal INR", "Discount INR", "CGST INR", "SGST INR", "Rounding INR", "Sales incl GST and rounding INR", "Credit notes INR", "Net sales INR", "Unpaid current INR"]
+    : ["Payment date", "Bills with payments", "Cash INR", "UPI INR", "Card INR", "Refunds INR", "Net received INR"];
+  const values = (day: Pick<SalesDay, "sales" | "collections" | "creditNotePaise" | "netTotalPaise">) => kind === "sales"
+    ? [day.sales.billCount, ...[day.sales.subtotalPaise, day.sales.discountPaise, day.sales.cgstPaise, day.sales.sgstPaise, day.sales.roundingPaise, day.sales.totalPaise, day.creditNotePaise, day.netTotalPaise, day.sales.outstandingPaise].map(paiseToRupees)]
+    : [day.collections.billCount, ...[day.collections.cashPaise, day.collections.upiPaise, day.collections.cardPaise, day.collections.refundPaise, day.collections.totalPaise].map(paiseToRupees)];
   const rows = [["From", "To", "Server timezone", ...headings],
     ...report.daily.map((day) => [report.from, report.to, report.timezone, day.date, ...values(day)]),
     [report.from, report.to, report.timezone, "TOTAL", ...values(report)]];

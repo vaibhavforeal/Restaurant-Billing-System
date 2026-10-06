@@ -35,8 +35,11 @@ export class ApiError extends Error {
   }
 }
 
-/** fetch with the session token attached; clears the session on a 401. */
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * fetch with the session token attached; clears the session on a 401.
+ * `keepSessionOnMessage` names a 401 that is not an expired session (a wrong approval PIN), which must not sign the user out.
+ */
+export async function apiFetch<T>(path: string, init?: RequestInit, options?: { keepSessionOnMessage?: string }): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("x-forkflow-device", deviceCredential());
   if (init?.body) headers.set("content-type", "application/json");
@@ -44,9 +47,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (token) headers.set("authorization", `Bearer ${token}`);
 
   const res = await fetch(path, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(15_000) });
-  if (res.status === 401) session.clear();
+  if (res.status === 401 && !options?.keepSessionOnMessage) session.clear();
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
+    if (res.status === 401 && options?.keepSessionOnMessage && body.error !== options.keepSessionOnMessage) session.clear();
     throw new ApiError(res.status, body.error === "validation" ? (body.issues?.[0]?.message ?? "Check the form values") : (body.error ?? res.statusText));
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
