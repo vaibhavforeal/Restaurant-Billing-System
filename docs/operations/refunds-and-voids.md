@@ -63,9 +63,10 @@ not need to log in. An administrator who does the void or refund themselves
 approves it automatically. Both names are saved on the credit note.
 
 - The PIN must belong to an active administrator.
-- A wrong PIN shows "Admin PIN is incorrect". After 5 wrong tries from the same
-  device the screen asks you to wait a few minutes. This counter is separate from
-  the sign-in counter.
+- A wrong PIN shows "Admin PIN is incorrect". After 5 wrong PINs from the same
+  device there is a short wait before it can be tried again, starting at 2
+  seconds and growing to at most a minute. This counter is separate from the
+  sign-in counter.
 
 ## Choosing refund methods
 
@@ -91,12 +92,16 @@ note was made that day. Closed days and filed GST never change.
   taxable value, CGST and SGST, the credited GST per rate, and refunds paid per
   payment method. Below it, **Net sales after credit notes** shows net taxable
   value, net CGST and SGST, and **Net GST per rate** (bills minus credit notes).
-  **Net payments received** takes refunds off each method, so expected cash
+  **Net payments received** takes refunds off each method, so net cash received
   matches the drawer.
-- **Sales report** adds **Credit notes** and **Net sales** columns. The Collections
-  view shows receipts net of refunds paid out that day.
+- **Sales dashboard and Sales report**: the dashboard's Issued sales card is gross
+  (void bills included); the Sales report adds **Credit notes** and **Net sales**
+  columns, per day and in total. The Collections view shows receipts net of refunds
+  paid out that day.
 - **Item/category sales, hourly sales, cashier collections and order analytics**
-  are net of credit notes. Refunds count against the cashier who made them.
+  are net of credit notes. Refunds count against the cashier who requested them.
+  Voids of older bills without saved item lines cannot be itemised, so they do not
+  appear in item and category sales.
 - **Food cost & profit** (Pro) uses revenue net of credit notes. Ingredient cost
   is not changed.
 - **Reports → Detailed reports → Credit notes** lists every credit note in the
@@ -112,7 +117,8 @@ amount.
 When a credit note is made, the result offers **Print credit note** (choose a
 printer first if there is more than one) and **View**. The bill view also lists
 every credit note on the bill, with date, kind, amount, reason, who requested
-and approved, and **Reprint** and **View**.
+and approved, and **View**. **Reprint** appears there once a receipt printer is
+set for the bill view.
 
 The slip shows the restaurant name and GSTIN, **CREDIT NOTE CN-n**, the original
 bill number and date, the items and quantities, GST per rate, the total, the

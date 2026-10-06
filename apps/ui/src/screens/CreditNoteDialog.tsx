@@ -189,7 +189,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
       const message = e instanceof Error ? e.message : "Request failed";
       if (status === 401) setPin("");
       if (status === 409) { setTick((n) => n + 1); onStale(); }
-      setError(status === 429 ? "Too many wrong PIN attempts. Wait a few minutes, then try again." : message);
+      setError(status === 429 ? "Too many wrong PINs — wait a moment and try again." : message);
     } finally { lock.current = false; changeBusy(false); }
   }
 

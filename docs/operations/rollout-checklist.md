@@ -141,7 +141,7 @@ Run a short mock service with real staff roles and printers. Check each **Expect
 - [ ] **Void:** void an unpaid table bill and a paid bill. **Expect:** the unpaid void frees the table; the paid void refunds the money by the method you choose; both appear in Reports → Detailed reports → Credit notes.
 - [ ] **Guest QR (Pro):** print a table QR, order from a phone, accept the request on the POS.
 - [ ] **Inventory (if used):** receive stock with an amount paid, check the stock decreases after a sale; on Pro, check Dish costing and the Food cost & profit report.
-- [ ] **Day end:** open Reports → Day-end / GST. **Expect:** totals match the bills you just made. Export the CSV and open it.
+- [ ] **Day end:** open Reports → Day-end / GST. **Expect:** gross sales match the bills you just made (voided bills are still included), and the net figures reflect the credit notes. Export the CSV and open it.
 
 ---
 

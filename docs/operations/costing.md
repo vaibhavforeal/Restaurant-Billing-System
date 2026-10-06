@@ -106,7 +106,9 @@ Summary, a By category table and a By dish table, and **Export CSV** includes th
 dates, timezone and calculation notes.
 
 - **Revenue (pre-GST)** is the bill taxable value after discount, excluding GST,
-  by bill issue date. Void bills are excluded.
+  by bill issue date, less the taxable value of credit notes (voids and
+  refunds) on the date each was made. Ingredient cost is not reduced by a void or
+  refund.
 - **Ingredient cost** is the cost recorded when the dish's ingredients were taken
   from stock, less any that were reversed by cancellations.
 - **Gross profit** is costed revenue minus ingredient cost. **Food cost %** is

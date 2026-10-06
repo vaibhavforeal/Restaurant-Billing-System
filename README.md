@@ -203,8 +203,9 @@ Printer settings now discover installed Windows printers and offer separate
 bill/KOT copy counts, feed lines and auto-cut settings. Print jobs persist in
 SQLite, with uncertain interrupted copies held for staff review. See
 [Printer setup and recovery](docs/operations/printer-settings.md).
-Real thermal printer hardware, particularly USB/Bluetooth, still needs a hardware smoke test. Voids/refunds and
-payment gateway integration are not part of this milestone.
+Real thermal printer hardware, particularly USB/Bluetooth, still needs a hardware smoke test. Payment gateway
+integration is not part of this milestone. Voids and refunds are covered by
+[Refunds and voids](docs/operations/refunds-and-voids.md).
 
 ## Item import and export
 

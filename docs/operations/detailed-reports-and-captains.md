@@ -8,9 +8,9 @@ Refresh reloads the data; a failed refresh clears old results and disables expor
 
 | Report | Contents and basis |
 | --- | --- |
-| Item / category sales | Issued bills, including unpaid bills, grouped by saved item/variant and category. Quantity, distinct bills, subtotal, discount, taxable value, GST, rounding and final sales, net of credit notes (voids and refunds) on the day they were issued. |
-| Cashier collections | Cash, UPI, card and distinct paid bills by the staff member who settled the bill, using payment date. Includes collections for older bills. |
-| Hourly sales | All 24 local hours across the selected dates, with bill count, discounts, GST, sales and average bill. |
+| Item / category sales | Issued bills by issue date (voids included), less credit-note quantities and values on the date each credit note was made. Grouped by saved item/variant and category, including unpaid bills: quantity, distinct bills, subtotal, discount, taxable value, GST, rounding and final sales. Voids of older bills without saved item lines are not itemised here. |
+| Cashier collections | Cash, UPI, card and distinct paid bills by the staff member who settled the bill, using payment date. Includes collections for older bills. Refunds are subtracted from the cashier who requested them. |
+| Hourly sales | All 24 local hours across the selected dates, with bill count, discounts, GST, sales and average bill, net of credit notes. |
 | KOT performance | Kitchen summary and ticket details: completed, pending, fully cancelled, send/completion timestamps, completion duration and pending age. |
 | Cancellation details | Item, quantity, original menu value, exact cancellation time, staff, reason, order reference and KOT. Whole-order cancellations appear separately. |
 | Credit notes | Every void and refund in the range: CN number, date, bill, kind, reason, requested by, approved by, refund methods, taxable value, GST and total. See [Refunds and voids](refunds-and-voids.md). |

@@ -29,14 +29,20 @@ range cannot replace the current range.
 
 ## What the figures mean
 
-**Issued sales** sum saved, non-void bill snapshots by bill creation date, including
-their existing GST and rounding. **Collections** sum saved payment rows by payment
-receipt date, including payments for older bills. These are different measures
+**Issued sales** (gross) sum saved bill snapshots by bill creation date, void bills
+included, with their existing GST and rounding. Credit notes (voids and refunds) are
+taken off on the date each credit note was made. The dashboard's **Issued sales**
+card is the gross figure; the Sales report shows **Credit notes** and **Net sales**
+columns beside it, per day and in total.
+
+**Collections** sum saved payment rows by payment
+receipt date, including payments for older bills, less refunds paid out that day. These are different measures
 and can legitimately differ. Split payments contribute to each payment method;
 the range's bill count counts distinct bills, even if a bill has receipts on
 multiple dates. Complimentary bills count as sales bills without inventing a
-receipt. Void bills and their receipts are excluded, matching existing day-end
-semantics; this is not an immutable historical cash ledger.
+receipt. A voided bill stays in the gross sales of its issue day; its credit note reduces
+the day it was made. See [Refunds and voids](refunds-and-voids.md). This is not an
+immutable historical cash ledger.
 
 **Still unpaid** is the current unpaid balance of bills issued in the selected
 period, not the restaurant's entire outstanding balance or its balance as of a
