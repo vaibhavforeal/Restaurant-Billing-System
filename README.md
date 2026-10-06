@@ -134,10 +134,16 @@ the dependencies successfully and the prebuilt SQLite binary passed all tests.
 That fallback skips Electron's download; run `node node_modules/electron/install.js`
 before using `dev:desktop`. The browser/server development path works without it.
 
-The customer installer is written to `dist/commercial/ForkFlow-Setup-0.6.4.exe`.
+The customer installer is written to `dist/commercial/ForkFlow-Setup-0.7.0.exe`.
 `package:win` aliases `package:commercial`; both require the public verification
 key. `package:dir` creates the same licensed app without an installer. Development
 builds are for internal use and cannot pass the installer edition check.
+
+Version 0.7.0 adds inventory costing (weighted-average ingredient costs, dish costing and a
+food cost & profit report), table move and merge with linked tables, and refunds and voids
+recorded as dated credit notes with admin-PIN approval. See
+[costing](docs/operations/costing.md), [table move and merge](docs/operations/table-move-merge.md)
+and [refunds and voids](docs/operations/refunds-and-voids.md).
 
 Version 0.6.4 prepares Google Drive backups with saved preferences, a persistent
 upload queue and a provider adapter. Account linking is deferred; settings show

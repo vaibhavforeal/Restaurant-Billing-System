@@ -1,6 +1,6 @@
 # ForkFlow — Application Overview
 
-**Application version:** 0.6.4  
+**Application version:** 0.7.0  
 **Documented:** 5 October 2026  
 **Scope:** The current source tree, including changes present in the workspace. This describes the implementation, not a certification of an installed executable or a new test run.
 
@@ -489,13 +489,13 @@ npm run package:commercial
 
 The path above is an example and must point to the operator's actual public key. Do not supply the private signing key. Close processes using the target build stage before rebuilding it.
 
-### Distribution outputs for version 0.6.4
+### Distribution outputs for version 0.7.0
 
 | Edition | App ID | Installer |
 | --- | --- | --- |
-| Customer | `in.forkflow.pos` | `dist/commercial/ForkFlow-Setup-0.6.4.exe` |
-| Demo | `in.forkflow.demo` | `dist/demo/ForkFlow-Demo-Setup-0.6.4.exe` |
-| Kitchen | `in.forkflow.kitchen` | `dist/kitchen/ForkFlow-Kitchen-Setup-0.6.4.exe` |
+| Customer | `in.forkflow.pos` | `dist/commercial/ForkFlow-Setup-0.7.0.exe` |
+| Demo | `in.forkflow.demo` | `dist/demo/ForkFlow-Demo-Setup-0.7.0.exe` |
+| Kitchen | `in.forkflow.kitchen` | `dist/kitchen/ForkFlow-Kitchen-Setup-0.7.0.exe` |
 
 Customer and Demo installers use per-machine installation with a selectable directory. Kitchen is per-user. Installers create desktop shortcuts and retain application data on uninstall. Main/Demo packages include the UI, server, Electron runtime, and SQLite driver; they do not include the restaurant's live database.
 

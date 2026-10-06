@@ -18,7 +18,7 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
   npm.cmd run package:commercial
   ```
   **Expect:** `dist/commercial/ForkFlow-Setup-<version>.exe` with today's date.
-- [ ] **Version number.** If any restaurant already runs 0.6.4, raise `version` in `package.json` (for example to `0.7.0`) before building. A new version number is what triggers the automatic pre-update backup on their PC.
+- [ ] **Version number.** The current version is 0.7.0. For each later release, raise `version` in `package.json` before building. A new version number is what triggers the automatic pre-update backup on their PC.
 - [ ] **Kitchen client** (only if the kitchen uses a Windows PC): `npm.cmd run package:kitchen` → `dist/kitchen/ForkFlow-Kitchen-Setup-<version>.exe`.
 - [ ] Copy the installer(s) and a signed license file for this restaurant to a USB stick.
 

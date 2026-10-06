@@ -1,6 +1,6 @@
 {
   "name": "forkflow",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Local Windows restaurant POS with SQLite, GST billing, kitchen orders and inventory.",

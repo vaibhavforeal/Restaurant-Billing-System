@@ -27,7 +27,7 @@ not download a separate Node runtime or compile SQLite. Electron supplies the
 runtime. The builder's first run downloads Electron/NSIS packaging tools.
 Close apps or test servers using `build/desktop/commercial` before rebuilding it.
 
-Output: `dist/commercial/ForkFlow-Setup-0.6.4.exe`. The package includes the server,
+Output: `dist/commercial/ForkFlow-Setup-0.7.0.exe`. The package includes the server,
 UI, runtime and SQLite. Customer PCs do not need Node, npm or a compiler.
 `package:win` creates the licensed customer edition. For a sample-data demo use
 `npm run package:demo`; its separate installer is written to `dist/demo`.
