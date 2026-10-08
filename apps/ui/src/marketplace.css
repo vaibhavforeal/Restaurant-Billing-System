@@ -7,7 +7,8 @@
 .marketplace-tag { display: inline-block; padding: var(--space-1) var(--space-3); border: var(--border) solid var(--line); border-radius: var(--radius); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .marketplace-pill { flex: none; padding: var(--space-2) var(--space-4); border-radius: var(--radius); font-size: var(--text-secondary); font-weight: 600; border: var(--border) solid var(--line); color: var(--muted); }
 .marketplace-pill.is-on { color: var(--pos-success); background: var(--pos-success-bg); border-color: transparent; }
-.marketplace-pill.is-soon { color: var(--pos-warning); background: var(--pos-warning-bg); border-color: transparent; }
+.marketplace-pill.is-soon, .marketplace-pill.is-locked { color: var(--pos-warning); background: var(--pos-warning-bg); border-color: transparent; }
+.marketplace-plan-note { color: var(--muted); font-size: var(--text-secondary); margin: 0; }
 .marketplace-description { margin: 0; color: var(--muted); font-size: var(--text-base); flex: 1; }
 .marketplace-error { margin: 0; color: var(--pos-danger); font-size: var(--text-secondary); }
 .marketplace-card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); }

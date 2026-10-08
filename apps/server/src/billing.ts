@@ -76,13 +76,6 @@ export function registerBilling(app: FastifyInstance): void {
     if (!items.length) throw httpError(409, "Add items before billing");
     const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
     if (unsent) throw httpError(409, "Send kitchen items before billing");
-    const { require_kitchen_acceptance } = db.prepare("SELECT require_kitchen_acceptance FROM settings WHERE id = 1").get() as { require_kitchen_acceptance: number };
-    if (order.type === "dine_in" && require_kitchen_acceptance === 1) {
-      const acceptedKots = new Set(order.kots.filter((kot) => kot.acceptedAt != null || kot.doneAt != null).map((kot) => kot.id));
-      if (items.some((item) => item.status === "sent" && item.kotId && !acceptedKots.has(item.kotId))) {
-        throw httpError(409, "Wait for the kitchen to accept all tickets before billing this table order");
-      }
-    }
     let totals;
     const { tax_inclusive } = db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number };
     try { totals = calculateBill(items, body.discountPaise, tax_inclusive === 1); }

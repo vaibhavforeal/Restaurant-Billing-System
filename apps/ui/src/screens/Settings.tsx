@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
 import { SystemSettings } from "./SystemSettings";
@@ -8,9 +8,9 @@ import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } fro
 import "../printer-settings.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, requireKitchenAcceptance: true, upiId: "" };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "" };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "taxInclusive" | "requireKitchenAcceptance" | "upiId">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "taxInclusive" | "upiId">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -21,7 +21,9 @@ const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "taxInclusive" |
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
 
-export function Settings() {
+/** `section: "plan"` opens and scrolls to Plan & devices, e.g. from a Marketplace card that needs a different plan. */
+export function Settings({ section }: { section?: "plan" | undefined } = {}) {
+  const planSection = useRef<HTMLDetailsElement>(null);
   // Profile section
   const [form, setForm] = useState<SettingsData>(EMPTY_SETTINGS);
   const [profileStatus, setProfileStatus] = useState<"" | "saved" | "error">("");
@@ -45,6 +47,11 @@ export function Settings() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (section !== "plan" || !planSection.current) return;
+    planSection.current.open = true;
+    planSection.current.scrollIntoView({ block: "start" });
+  }, [section, loaded]); // the sections render only after the settings load
 
   // Load all data on mount
   useEffect(() => {
@@ -308,13 +315,6 @@ export function Settings() {
             </select>
           </label>
           <small>Applies to new bills. Existing bills keep their original tax calculation.</small>
-          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={form.requireKitchenAcceptance} disabled={busy}
-              aria-describedby="kitchen-accept-help"
-              onChange={(e) => setForm({ ...form, requireKitchenAcceptance: e.target.checked })} />
-            Require kitchen acceptance before billing dine-in orders
-          </label>
-          <small id="kitchen-accept-help">Turn this off if your kitchen only receives printed KOTs and does not use the Kitchen screen. Dine-in tables can then be billed as soon as items are sent.</small>
           <label style={{ display: "grid", gap: 4 }}>
             UPI ID for bill payments
             <input value={form.upiId} placeholder="restaurant@bank" maxLength={255}
@@ -573,7 +573,7 @@ export function Settings() {
         )}
       </div></details>
       <details className="pos-section"><summary>Backups & connections</summary><SystemSettings /></details>
-      <details className="pos-section"><summary>Plan & devices</summary><LicenseSettings /></details>
+      <details ref={planSection} className="pos-section"><summary>Plan & devices</summary><LicenseSettings /></details>
     </div>
   );
 }

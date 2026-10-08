@@ -10,7 +10,6 @@ export const UpiId = z.string().trim().max(255).refine(
 export const SettingsUpdate = z.object({
   upiId: UpiId.optional(),
   taxInclusive: z.boolean().optional(),
-  requireKitchenAcceptance: z.boolean().optional(),
   restaurantName: z.string().trim().min(1),
   address: z.string().trim().max(500).default(""),
   gstin: z.string().trim().max(15).default(""),

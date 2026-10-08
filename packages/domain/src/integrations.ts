@@ -1,21 +1,26 @@
 import { z } from "zod";
+import type { Feature } from "./licensing.js";
 
-/** Static registry of third-party integrations the Marketplace can turn on or off. Only on/off state is stored (integration_state). */
-export type IntegrationId = "zomato" | "swiggy";
+/** Static registry of integrations and add-ons the Marketplace can turn on or off. Only on/off state is stored (integration_state). */
+export type IntegrationId = "zomato" | "swiggy" | "kds";
 export type IntegrationStatus = "available" | "coming_soon";
 
 export interface IntegrationDef {
   id: IntegrationId;
   name: string;
   description: string;
-  category: "delivery";
+  category: "delivery" | "kitchen";
   status: IntegrationStatus;
   /** Page the "Set up" action opens once the integration is on; null when there is nothing to configure yet. */
   setupPage: "zomato" | null;
+  /** Licence feature the plan must include before this can be turned on; absent when every plan has it. */
+  feature?: Feature;
 }
 
 export interface IntegrationInfo extends IntegrationDef {
   enabled: boolean;
+  /** False when the installation's plan lacks `feature`; the stored switch is kept but has no effect. */
+  licensed: boolean;
   updatedAt: number | null;
 }
 
@@ -35,6 +40,15 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     category: "delivery",
     status: "coming_soon",
     setupPage: null,
+  },
+  {
+    id: "kds",
+    name: "Kitchen Display (KDS)",
+    description: "Show KOTs on kitchen screens and tablets so the kitchen can see what to cook and mark tickets done.",
+    category: "kitchen",
+    status: "available",
+    setupPage: null,
+    feature: "kds",
   },
 ];
 

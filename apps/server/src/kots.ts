@@ -3,6 +3,7 @@ import { publishStock } from "./stock.js";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { assertKdsActive } from "./kds.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { kotSlip } from "./print/templates.js";
 import { readProfile } from "./print/profile.js";
@@ -172,6 +173,7 @@ export function registerKots(app: FastifyInstance): void {
   });
 
   app.get("/api/kots", { preHandler: read }, async () => {
+    assertKdsActive(app.db);
     const kots = app.db
       .prepare("SELECT * FROM kots WHERE done_at IS NULL ORDER BY created_at")
       .all() as KotRow[];
@@ -227,22 +229,8 @@ export function registerKots(app: FastifyInstance): void {
     app.broadcast("kot.updated", { kot: kotWithContextJson(updated, order, tableName, items) });
   }
 
-  app.post("/api/kots/:id/accept", { preHandler: update }, async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow | undefined;
-    if (!kot) throw httpError(404, "kot not found");
-
-    if (kot.accepted_at !== null) {
-      return reply.status(200).send({ kot: kotJson(kot) });
-    }
-
-    app.db.prepare("UPDATE kots SET accepted_at = COALESCE(accepted_at, done_at, ?) WHERE id = ?").run(Date.now(), id);
-    const updated = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow;
-    broadcastKotUpdated(updated);
-    return reply.status(200).send({ kot: kotJson(updated) });
-  });
-
   app.post("/api/kots/:id/done", { preHandler: update }, async (req, reply) => {
+    assertKdsActive(app.db);
     const { id } = req.params as { id: string };
     const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow | undefined;
     if (!kot) throw httpError(404, "kot not found");

@@ -6,9 +6,11 @@ import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { SalesDashboard } from "../SalesDashboard";
 import { useShortcutLabels } from "../pos-shortcuts";
+import { useIntegrations } from "../integrations";
 
 export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
+  const { isEnabled } = useIntegrations();
   const financial = user.role === "admin" || user.role === "cashier";
   const [stats, setStats] = useState<{ free: number; orders: number; billed: number } | null>(null);
   const [error, setError] = useState("");
@@ -29,7 +31,7 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
   const links: Array<{ page: Page; icon: IconName; title: string }> = [
     { page: { name: "tables" }, icon: "tables", title: "Tables" },
     ...(user.role === "admin" || user.role === "cashier" ? [
-      { page: { name: "kitchen" } as Page, icon: "kitchen" as const, title: "Kitchen" },
+      ...(isEnabled("kds") ? [{ page: { name: "kitchen" } as Page, icon: "kitchen" as const, title: "Kitchen" }] : []),
       { page: { name: "bills" } as Page, icon: "bills" as const, title: "Bills" },
       { page: { name: "reports" } as Page, icon: "reports" as const, title: "Reports & Analytics" },
     ] : []),

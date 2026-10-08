@@ -12,7 +12,7 @@ describe("customer demo data", () => {
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM bills WHERE status = 'paid'").get()).toEqual({ n: 8 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'open'").get()).toEqual({ n: 3 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM kots WHERE done_at IS NULL").get()).toEqual({ n: 3 });
-      expect(app.db.prepare("SELECT COUNT(*) AS n FROM kots WHERE done_at IS NULL AND accepted_at IS NOT NULL").get()).toEqual({ n: 1 });
+      expect(app.db.prepare("SELECT enabled FROM integration_state WHERE id = 'kds'").get()).toEqual({ enabled: 1 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM product_stock_links").get()).toEqual({ n: 12 });
       app.db.prepare("UPDATE users SET name = 'Customer demo edit' WHERE role = 'admin'").run();
       await seedDemo(app);

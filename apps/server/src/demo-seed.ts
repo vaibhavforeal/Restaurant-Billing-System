@@ -13,7 +13,7 @@ export async function seedDemo(app: FastifyInstance) {
   if ((db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n) throw new Error("Refusing to seed demo content into an existing restaurant.");
   db.exec("CREATE TABLE demo_meta (complete INTEGER NOT NULL); INSERT INTO demo_meta VALUES (0)");
   let token = "";
-  async function request(url: string, payload?: object, method: "POST" | "PUT" = "POST") {
+  async function request(url: string, payload?: object, method: "POST" | "PUT" | "PATCH" = "POST") {
     const response = await app.inject({ method, url, ...(payload === undefined ? {} : { payload }), headers: { authorization: `Bearer ${token}` } });
     if (response.statusCode >= 400) throw new Error(`Demo setup ${url}: ${response.body}`);
     return response.json();
@@ -22,6 +22,7 @@ export async function seedDemo(app: FastifyInstance) {
   await request("/api/users", { name: "Demo Cashier", pin: "2345", role: "cashier" });
   const captain = (await request("/api/users", { name: "Suraj (demo)", pin: "3456", role: "waiter" })).user;
   await request("/api/users", { name: "Demo Kitchen", pin: "4567", role: "kitchen" });
+  await request("/api/integrations/kds", { enabled: true }, "PATCH");
   const station = db.prepare("SELECT id FROM kot_stations ORDER BY id LIMIT 1").get() as { id: string };
   const tables: Array<{ id: string }> = [];
   for (let n = 1; n <= 8; n++) tables.push((await request("/api/tables", { name: `T${String(n).padStart(2, "0")}`, area: n <= 4 ? "Main dining" : "Garden", sortOrder: n })).table);
@@ -51,14 +52,13 @@ export async function seedDemo(app: FastifyInstance) {
   }
   for (let i = 0; i < 8; i++) {
     const sample = await order(i % 4, i);
-    for (const kot of sample.kots) { await request(`/api/kots/${kot.id}/accept`, {}); await request(`/api/kots/${kot.id}/done`, {}); }
+    for (const kot of sample.kots) await request(`/api/kots/${kot.id}/done`, {});
     const preview = (await request(`/api/orders/${sample.order.id}/bill-preview`, { discountPaise: 0 })).preview;
     const bill = (await request(`/api/orders/${sample.order.id}/bill`, { clientRef: randomUUID(), previewKey: preview.previewKey })).bill;
     await request(`/api/bills/${bill.id}/settle`, { clientRef: randomUUID(), payments: [{ mode: ["cash", "card", "upi"][i % 3], amountPaise: bill.totalPaise }] });
   }
   await order(0, 0);
-  const accepted = await order(2, 3);
-  for (const kot of accepted.kots) await request(`/api/kots/${kot.id}/accept`, {});
+  await order(2, 3);
   await order(null, 7);
   db.prepare("UPDATE demo_meta SET complete = 1").run();
   db.prepare("DELETE FROM sessions").run();

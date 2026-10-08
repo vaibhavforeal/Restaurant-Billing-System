@@ -1,6 +1,7 @@
 import { INTEGRATIONS, IntegrationToggle, isIntegrationId, type Database, type IntegrationId, type IntegrationInfo } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { integrationLicensed } from "./kds.js";
 
 interface StateRow { id: string; enabled: number; updated_at: number }
 
@@ -14,7 +15,7 @@ function listIntegrations(db: Database): IntegrationInfo[] {
   const rows = new Map((db.prepare("SELECT id, enabled, updated_at FROM integration_state").all() as StateRow[]).map((r) => [r.id, r]));
   return INTEGRATIONS.map((def) => {
     const row = rows.get(def.id);
-    return { ...def, enabled: row?.enabled === 1, updatedAt: row?.updated_at ?? null };
+    return { ...def, enabled: row?.enabled === 1, licensed: integrationLicensed(db, def), updatedAt: row?.updated_at ?? null };
   });
 }
 
@@ -33,6 +34,8 @@ export function registerIntegrations(app: FastifyInstance): void {
     const body = IntegrationToggle.parse(req.body);
     const def = INTEGRATIONS.find((integration) => integration.id === id)!;
     if (def.status === "coming_soon" && body.enabled) throw httpError(409, `${def.name} is coming soon and cannot be turned on yet`);
+    // Turning off stays allowed so an admin can clear a switch left on by a plan downgrade.
+    if (body.enabled && !integrationLicensed(app.db, def)) throw httpError(403, "Kitchen Display requires the Pro plan");
     const changed = app.db.transaction(() => {
       // A repeat of the current value writes nothing, so updated_at/updated_by keep recording the last real change.
       if (integrationEnabled(app.db, id) === body.enabled) return false;

@@ -30,6 +30,7 @@ import { PrintQueue } from "./print/queue.js";
 import { readProfile } from "./print/profile.js";
 import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discovery.js";
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
+import { provideLicensedFeatures } from "./kds.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
 import { registerIntegrations } from "./integrations.js";
 import { registerZomato, type ZomatoProvider } from "./zomato.js";
@@ -115,11 +116,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       app.log.error(err);
       return reply.status(status).send({ error: "internal error" });
     }
-    const code = typeof err === "object" && err !== null && "code" in err && err.code === "menu_changed" ? err.code : undefined;
+    const code = typeof err === "object" && err !== null && "code" in err && (err.code === "menu_changed" || err.code === "kds_off") ? err.code : undefined;
     return reply.status(status).send({ error: message, ...(code ? { code } : {}) });
   });
 
   configureLicensing(app, opts.licensing);
+  provideLicensedFeatures(app.db, () => app.licensing.status().features);
   registerAuth(app, opts.demo ?? false);
   registerWs(app, opts.authTimeoutMs);
   registerLicensing(app);

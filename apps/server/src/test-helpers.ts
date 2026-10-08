@@ -1,4 +1,5 @@
-import { MIGRATIONS, migrate, openDb, type IntegrationId } from "@forkflow/domain";
+import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { MIGRATIONS, PLANS, migrate, openDb, type IntegrationId, type Plan } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -84,4 +85,25 @@ export function enableIntegration(app: FastifyInstance, id: IntegrationId): void
   if (!admin) throw new Error("enableIntegration needs an admin user; call setupAdmin first");
   app.db.prepare(`INSERT INTO integration_state (id, enabled, updated_at, updated_by) VALUES (?,1,?,?)
     ON CONFLICT(id) DO UPDATE SET enabled=1, updated_at=excluded.updated_at, updated_by=excluded.updated_by`).run(id, Date.now(), admin.id);
+}
+
+/** A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device). */
+export async function commercialApp(plan: Plan) {
+  const keys = generateKeyPairSync("ed25519");
+  const installationId = randomUUID(), device = "d".repeat(64);
+  const db = openDb(":memory:");
+  migrate(db, MIGRATIONS);
+  const app = buildServer({ db, licensing: { publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId } });
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+  const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const now = Date.now();
+  const claims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), revision: 1, plan,
+    maxDevices: PLANS[plan].maxDevices, features: PLANS[plan].features, issuedAt: now - 1000, expiresAt: now + 86_400_000, graceUntil: now + 2 * 86_400_000 };
+  const message = `ff1.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
+  const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
+  const activated = await app.inject({ method: "PUT", url: "/api/license", payload: { license }, headers });
+  if (activated.statusCode !== 200) throw new Error(`commercialApp activation failed: ${activated.body}`);
+  const registered = await app.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Counter" }, headers });
+  if (registered.statusCode !== 200) throw new Error(`commercialApp device registration failed: ${registered.body}`);
+  return { app, headers };
 }

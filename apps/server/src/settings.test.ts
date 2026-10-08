@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, requireKitchenAcceptance: true, upiId: "",
+      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "",
     });
 
     const put = await app.inject({
@@ -31,6 +31,14 @@ describe("settings", () => {
 
     const after = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
     expect(after.json().settings).toMatchObject({ gstin: "29ABCDE1234F1Z5", receiptFooter: "Thank you, visit again!" });
+  });
+
+  it("ignores the removed requireKitchenAcceptance field", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const put = await app.inject({ method: "PUT", url: "/api/settings", payload: { restaurantName: "Cafe", requireKitchenAcceptance: false }, headers: auth(admin.token) });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().settings).not.toHaveProperty("requireKitchenAcceptance");
   });
 
   it("rejects a blank restaurant name with 400", async () => {

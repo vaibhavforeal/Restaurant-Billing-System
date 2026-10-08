@@ -8,7 +8,6 @@ import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
 import { reliablePost } from "../retry-queue";
-import { kitchenBillingBlockReason } from "../kitchen-billing";
 import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
@@ -69,8 +68,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const dialogTitleId = useId();
   const quick = !!onPrepare;
   const blocked = busy || disabled;
-  const kitchenBlockReason = !bill && order.status === "open" ? kitchenBillingBlockReason(order) : null;
-  const kitchenBlockId = useId();
   const itemsKey = JSON.stringify(order.items);
 
   function openDialog(showOptions = false) {
@@ -109,7 +106,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Failed to load billing"); });
     return () => { active = false; };
   }, [order.id, order.status]);
-  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, kitchenBlockReason]);
+  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason]);
   useEffect(() => { setHtml(""); setFrameReady(false); }, [bill?.id, bill?.status]);
   useEffect(() => { setShowQr(false); }, [bill?.id, bill?.status]);
   useEffect(() => {
@@ -146,7 +143,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     } finally { lock.current = false; setBusy(false); onBusyChange?.(false); }
   }
   async function getPreview() {
-    if (kitchenBlockReason) throw new Error(kitchenBlockReason);
     const discountPaise = rupeesToPaise(discount);
     if (discountPaise === null) throw new Error("Enter a valid discount amount");
     if (discountPaise > 0 && !reason.trim()) throw new Error("Enter a discount reason");
@@ -162,7 +158,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null };
   }
   async function issue() {
-    if (kitchenBlockReason) throw new Error(kitchenBlockReason);
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
     const { bill: value, job: printJob, printError } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>(`/api/orders/${order.id}/bill`, createRequest.current, "Issue bill");
     acceptBill(value); setPreview(null); setJob(printJob);
@@ -170,7 +165,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     await onChanged();
   }
   async function issueAndPay() {
-    if (kitchenBlockReason) throw new Error(kitchenBlockReason);
     const request = createRequest.current;
     if (!request || !preview || hasDraft) throw new Error("Review the takeaway total first");
     const received = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview.totalPaise;
@@ -229,7 +223,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
   const quickReceived = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview?.totalPaise ?? 0;
   const cashValid = quickMode !== "cash" || (quickReceived !== null && quickReceived >= (preview?.totalPaise ?? 0));
-  const previewDisabled = blocked || !!kitchenBlockReason || (!quick && hasDraft) || (!hasDraft && !order.items.some((item) => item.status !== "cancelled"));
+  const previewDisabled = blocked || (!quick && hasDraft) || (!hasDraft && !order.items.some((item) => item.status !== "cancelled"));
   const previewLabel = quick ? busy ? "Preparing checkout…" : preview ? "Refresh total" : "Checkout" : "Preview bill";
   const totals = bill ?? preview;
   const canShowQr = !!bill && bill.status === "unpaid" && !!bill.receipt.upiId && bill.totalPaise > 0;
@@ -243,13 +237,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     <div className="billing-footer-actions">
       {!bill && order.status === "open" && <>
         <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => openDialog(true)}>{shortcut("discount", "Discount")}</button>
-        <button className="primary pos-pay" {...shortcutProps("billing")} title={kitchenBlockReason ?? shortcut("billing", "Review total and payment")} aria-describedby={kitchenBlockReason ? kitchenBlockId : undefined} disabled={previewDisabled} onClick={() => void run(getPreview)}>{quick ? busy ? "Preparing…" : shortcut("billing", "Pay") : shortcut("billing", "Preview bill")}</button>
+        <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Review total and payment")} disabled={previewDisabled} onClick={() => void run(getPreview)}>{quick ? busy ? "Preparing…" : shortcut("billing", "Pay") : shortcut("billing", "Preview bill")}</button>
       </>}
       {bill && <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Open bill / payment")} disabled={busy} onClick={() => openDialog()}>{bill.status === "unpaid" ? "Record payment" : "View bill"}</button>}
       {canShowQr && <button disabled={blocked} onClick={() => setShowQr(true)}>Show UPI QR</button>}
       {canGoToTables && <button className="primary" disabled={blocked} onClick={goToTables}>Go to tables</button>}
     </div>
-    {kitchenBlockReason && <p id={kitchenBlockId} className="billing-kitchen-wait" role="status">{kitchenBlockReason}</p>}
     <div className="pos-printer-status">Printer: {printerId ? printers.find((p) => p.id === printerId)?.name ?? "Selected printer" : "Browser / A4"}{job ? ` · ${job.status}` : ""}</div>
     {error && <button className="billing-attention" onClick={() => openDialog()}>Billing needs attention</button>}
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
@@ -280,7 +273,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
             </details>
             {!bill && order.status === "open" && <>
               {hasDraft && !quick && <p className="billing-note">Punch or remove the items in your cart before billing.</p>}
-              {kitchenBlockReason && <p className="billing-note" role="status">{kitchenBlockReason}</p>}
               <button {...(!preview ? shortcutProps("billing") : {})} title={!preview ? shortcut("billing", "Refresh server total") : "Refresh server total"} className={preview ? "billing-refresh" : "primary billing-refresh"} disabled={previewDisabled} onClick={() => void run(getPreview)}>{previewLabel}</button>
             </>}
           </div>
@@ -294,10 +286,10 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
               {quickMode === "cash" && <p className="billing-change" role="status">Change: {money(Math.max(0, (quickReceived ?? 0) - preview.totalPaise))}</p>}
               {quickMode === "upi" && preview.receipt.upiId && preview.totalPaise > 0 && <>
                 <p className="billing-note">Customer paying by QR? Issue the bill first, then verify payment before settling.</p>
-                <button disabled={blocked || !!kitchenBlockReason || hasDraft} onClick={() => void run(issue)}>{printerId ? "Print UPI bill" : "Issue UPI bill"}</button>
+                <button disabled={blocked || hasDraft} onClick={() => void run(issue)}>{printerId ? "Print UPI bill" : "Issue UPI bill"}</button>
               </>}
-              <p className="billing-note">Confirm after receiving payment.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue bill and record received payment")} disabled={blocked || !!kitchenBlockReason || hasDraft || !cashValid} onClick={() => void run(issueAndPay)}>{shortcut("billing", printerId ? "Pay & print" : "Record payment")}</button>
-            </fieldset> : <div className="billing-issue"><p>Issuing freezes the items and totals.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue the reviewed bill")} disabled={blocked || !!kitchenBlockReason || hasDraft} onClick={() => void run(issue)}>{shortcut("billing", printerId ? "Save & print bill" : "Issue bill")}</button></div>}
+              <p className="billing-note">Confirm after receiving payment.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue bill and record received payment")} disabled={blocked || hasDraft || !cashValid} onClick={() => void run(issueAndPay)}>{shortcut("billing", printerId ? "Pay & print" : "Record payment")}</button>
+            </fieldset> : <div className="billing-issue"><p>Issuing freezes the items and totals.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue the reviewed bill")} disabled={blocked || hasDraft} onClick={() => void run(issue)}>{shortcut("billing", printerId ? "Save & print bill" : "Issue bill")}</button></div>}
           </div>}
           {bill && <div className="billing-payment">
             {bill.status === "unpaid" && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>

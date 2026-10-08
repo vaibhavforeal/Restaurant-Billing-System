@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
-import { auth, createUser, enableIntegration, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
+import { auth, commercialApp, createUser, enableIntegration, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
+import { kdsActive } from "./kds.js";
 import type { ZomatoProvider } from "./zomato.js";
 
 let app: FastifyInstance;
@@ -25,13 +26,58 @@ describe("GET /api/integrations", () => {
     const res = await get(admin.token);
     expect(res.statusCode).toBe(200);
     expect(res.headers["cache-control"]).toBe("no-store");
-    const list = res.json().integrations as { id: string; enabled: boolean; updatedAt: number | null }[];
-    expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy"]);
-    expect(list.every((i) => i.enabled === false && i.updatedAt === null)).toBe(true);
+    const list = res.json().integrations as { id: string; enabled: boolean; licensed: boolean; updatedAt: number | null }[];
+    expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds"]);
+    expect(list.every((i) => i.enabled === false && i.updatedAt === null && i.licensed === true)).toBe(true);
     expect((await get()).statusCode).toBe(401);
     expect((await get(waiter.token)).statusCode).toBe(403);
     expect((await get(kitchen.token)).statusCode).toBe(403);
     expect((await get(cashier.token)).statusCode).toBe(200);
+  });
+});
+
+describe("kds licensing", () => {
+  const kdsOf = (res: { json(): { integrations: { id: string; licensed: boolean; enabled: boolean }[] } }) => res.json().integrations.find((i) => i.id === "kds")!;
+
+  it("reports kds as unlicensed on Basic", async () => {
+    const c = await commercialApp("basic"); app = c.app;
+    const res = await app.inject({ method: "GET", url: "/api/integrations", headers: c.headers });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(kdsOf(res).licensed).toBe(false);
+    expect(res.json().integrations.find((i: { id: string }) => i.id === "zomato").licensed).toBe(true);
+  });
+
+  it("allows turning kds off but not on while unlicensed", async () => {
+    const c = await commercialApp("basic"); app = c.app;
+    const on = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: true } });
+    expect(on.statusCode).toBe(403);
+    expect(on.json().error).toBe("Kitchen Display requires the Pro plan");
+    enableIntegration(app, "kds"); // a plan downgrade can leave the stored switch on
+    const off = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: false } });
+    expect(off.statusCode, off.body).toBe(200);
+    expect(off.json().integration).toMatchObject({ id: "kds", enabled: false, licensed: false });
+  });
+
+  it("lets a Pro admin turn kds on", async () => {
+    const c = await commercialApp("pro"); app = c.app;
+    const on = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: true } });
+    expect(on.statusCode, on.body).toBe(200);
+    expect(on.json().integration).toMatchObject({ id: "kds", enabled: true, licensed: true });
+  });
+});
+
+describe("kdsActive", () => {
+  it("needs the switch on in a development build", async () => {
+    app = freshApp(); await setupAdmin(app);
+    expect(kdsActive(app.db)).toBe(false);
+    enableIntegration(app, "kds");
+    expect(kdsActive(app.db)).toBe(true);
+  });
+
+  it("stays inactive on Basic even with the switch on", async () => {
+    const c = await commercialApp("basic"); app = c.app;
+    enableIntegration(app, "kds");
+    expect(kdsActive(app.db)).toBe(false);
   });
 });
 

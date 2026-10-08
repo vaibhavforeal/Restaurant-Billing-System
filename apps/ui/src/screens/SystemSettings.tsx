@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch, authHeaders, session } from "../api";
 import { CloudBackupSettings } from "./CloudBackupSettings";
+import { useIntegrations } from "../integrations";
 
 interface BackupStatus {
   retentionDays: number; secondLocation: string; folder: string;
@@ -20,6 +21,7 @@ async function download(path: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean }) {
+  const kitchenDisplay = useIntegrations().isEnabled("kds");
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [days, setDays] = useState(30);
   const [second, setSecond] = useState("");
@@ -72,6 +74,7 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
       <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-ForkFlow-Shortcut.ps1"))}>Download Edge shortcut setup</button>
     </div>)}</div>
     <p>On a counter PC, right-click the downloaded file → Run with PowerShell to create a desktop shortcut. Reserve the main PC's IP address in your router so the address stays the same.</p>
+    {kitchenDisplay && <>
     <h2>Kitchen displays</h2>
     <p>Install ForkFlow Kitchen on a kitchen PC and enter a POS address above, or open a Kitchen link on a tablet. Create a staff member with the Kitchen role in Users, then sign in with that PIN.</p>
     <ul>{connections.map(connection => <li key={connection.url}><a href={`${connection.url}/kitchen/`} target="_blank" rel="noreferrer">{connection.url}/kitchen/</a></li>)}</ul>
@@ -79,7 +82,8 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
       const kitchenUrl = new URL("/kitchen/", connection.url).href;
       return <li key={kitchenUrl}><a href={kitchenUrl} target="_blank" rel="noreferrer">{kitchenUrl}</a></li>;
     })}</ul></>}
-    <p>The main POS must stay running. Tickets, acceptance and completion synchronize over the restaurant network. In Chrome choose Install Kitchen; on iPad use Add to Home Screen. Installation uses the restaurant certificate described below.</p>
+    <p>The main POS must stay running. Tickets and completion synchronize over the restaurant network. In Chrome choose Install Kitchen; on iPad use Add to Home Screen. Installation uses the restaurant certificate described below.</p>
+    </>}
     <h2>Captain tablets</h2>
     {captain?.enabled ? <>
       <p>Trust the restaurant certificate on each tablet once, then open a secure Captain link below. Sign in with a staff PIN and choose Install Captain from the account menu.</p>

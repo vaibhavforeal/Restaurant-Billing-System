@@ -2,6 +2,7 @@ import { apiFetch, session, type User } from "./api";
 import { Brand, Icon, type IconName } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 import { useIntegrations } from "./integrations";
+import { navTabVisible } from "./integrations-model";
 import { readPreference, useShortcutLabels } from "./pos-shortcuts";
 
 export type Page =
@@ -12,7 +13,7 @@ export type Page =
   | { name: "kitchen" }
   | { name: "catalog" }
   | { name: "users" }
-  | { name: "settings" }
+  | { name: "settings"; section?: "plan" }
   | { name: "bills" }
   | { name: "zomato" }
   | { name: "marketplace" }
@@ -79,7 +80,7 @@ export function NavBar({
             ]
           : [{ page: { name: "kitchen" }, label: "kitchen" }]; // kitchen role
 
-  const tabs = roleTabs.filter((t) => t.page.name !== "zomato" || isEnabled("zomato"));
+  const tabs = roleTabs.filter((t) => navTabVisible(t.page.name, user.role, isEnabled));
 
   // Order and takeaway pages belong to tables and orders.
   const activeTab = page.name === "order" || page.name === "takeaway" ? "tables" : page.name === "bills" ? "reports" : page.name;

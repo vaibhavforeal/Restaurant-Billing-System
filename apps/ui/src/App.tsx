@@ -61,6 +61,15 @@ function ZomatoRoute({ user, onNavigate }: { user: User; onNavigate: (page: Page
   return <Suspense fallback={<p role="status">Loading Zomato workspace…</p>}><Zomato user={user} /></Suspense>;
 }
 
+/** Admins and cashiers reach the kitchen board only while the Kitchen Display is on. Kitchen staff cannot read the Marketplace, so their board explains a turned-off KDS itself. */
+function KitchenRoute({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
+  const { ready, isEnabled } = useIntegrations();
+  if (user.role === "kitchen") return <Kitchen />;
+  if (!ready) return <p role="status">Loading kitchen display…</p>;
+  if (!isEnabled("kds")) return <IntegrationOff name="Kitchen Display" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  return <Kitchen />;
+}
+
 function StaffApp() {
   usePosShortcuts();
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -134,10 +143,10 @@ function StaffApp() {
           {page.name === "tables" && <Tables user={user} captain={captain} qrInbox={page.qrInbox} onOpenOrder={onOpenOrder} onTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "takeaway" && canQuickBill && <QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} />}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
-          {page.name === "kitchen" && <Kitchen />}
+          {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
           {page.name === "catalog" && <Catalog />}
           {page.name === "users" && <Users />}
-          {page.name === "settings" && <Settings />}
+          {page.name === "settings" && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <Inventory user={user} />}

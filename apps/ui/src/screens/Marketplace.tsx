@@ -6,7 +6,7 @@ import { useIntegrations } from "../integrations";
 import type { Page } from "../NavBar";
 import "../marketplace.css";
 
-const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery" };
+const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen" };
 
 export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { integrations, ready, setEnabled, refresh } = useIntegrations();
@@ -30,7 +30,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
   }
 
   return <section className="screen marketplace-screen">
-    <div className="page-header"><div><h2>Marketplace</h2><p>Connect ForkFlow to delivery platforms and other services</p></div></div>
+    <div className="page-header"><div><h2>Marketplace</h2><p>Connect ForkFlow to delivery platforms and add-ons</p></div></div>
     {user.role !== "admin" && <p className="marketplace-note">Only an admin can turn integrations on or off.</p>}
     {!ready && <p role="status">Loading integrations…</p>}
     {ready && integrations.length === 0 && <div className="panel marketplace-empty" role="status"><p>Integrations could not be loaded.</p><button onClick={refresh}>Try again</button></div>}
@@ -43,12 +43,14 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
         return <li key={info.id} className="panel marketplace-card">
           <div className="marketplace-card-head">
             <div><h3>{info.name}</h3><span className="marketplace-tag">{categoryLabel[info.category]}</span></div>
-            <span className={`marketplace-pill is-${info.status === "coming_soon" ? "soon" : info.enabled ? "on" : "off"}`}>{label}</span>
+            <span className={`marketplace-pill is-${info.status === "coming_soon" ? "soon" : !info.licensed ? "locked" : info.enabled ? "on" : "off"}`}>{label}</span>
           </div>
           <p className="marketplace-description">{info.description}</p>
+          {!info.licensed && <p className="marketplace-plan-note">Upgrade to Pro to use the Kitchen Display</p>}
           {error && <p role="alert" className="marketplace-error">{error}</p>}
           <div className="marketplace-card-foot">
-            {info.enabled && info.status === "available" && info.setupPage ? <button onClick={() => onNavigate({ name: info.setupPage! })}>Set up</button> : <span />}
+            {!info.licensed && user.role === "admin" ? <button onClick={() => onNavigate({ name: "settings", section: "plan" })}>View licence</button>
+              : info.enabled && info.status === "available" && info.setupPage ? <button onClick={() => onNavigate({ name: info.setupPage! })}>Set up</button> : <span />}
             <button
               type="button" role="switch" className="marketplace-switch"
               aria-checked={info.status === "available" && info.enabled}

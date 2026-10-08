@@ -45,11 +45,15 @@ export function IntegrationsProvider({ user, children }: { user: User; children:
   useEffect(() => {
     if (!allowed) return;
     void load();
-    return connectWs({
+    // `licensed` comes from the installation's licence, so a licence import or expiry changes the list too.
+    const licenseChanged = () => void load();
+    window.addEventListener("forkflow:license-changed", licenseChanged);
+    const dispose = connectWs({
       onEvent: (event) => { if (event === "integrations.changed") void load(); },
       onStatus: (connected) => { if (connected) void load(); },
       onAuthFail: () => session.clear(),
     });
+    return () => { window.removeEventListener("forkflow:license-changed", licenseChanged); dispose(); };
   }, [allowed, load]);
 
   const setEnabled = useCallback(async (id: IntegrationId, enabled: boolean) => {

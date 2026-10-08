@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7 } from "@forkflow/domain";
-import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 type Fake = ReturnType<typeof freshAppWithFakeSink>["fake"];
 
@@ -22,6 +22,7 @@ describe("moving an order to another table", () => {
   beforeEach(async () => {
     ({ app, fake } = freshAppWithFakeSink());
     const admin = await setupAdmin(app);
+    enableIntegration(app, "kds");
     token = admin.token; userId = admin.user.id;
     const category = (await request("POST", "/api/categories", { name: "Food" })).json().category.id as string;
     kitchenStationId = ((await request("GET", "/api/kot-stations")).json().stations[0] as { id: string }).id;
@@ -237,7 +238,7 @@ describe("moving an order to another table", () => {
 
       const receiving = await openOrder(tables["T3"]!);
       const [receivingKot] = await addAndSend(receiving, [kitchenProductId]);
-      expect((await request("POST", `/api/kots/${receivingKot!.id}/accept`)).statusCode).toBe(200);
+      expect((await request("POST", `/api/kots/${receivingKot!.id}/done`)).statusCode).toBe(200);
       const folded = await openOrder(tables["T4"]!);
       const [foldedKot] = await addAndSend(folded, [grillProductId]);
       await addItems(folded, [waterProductId]);
@@ -251,14 +252,14 @@ describe("moving an order to another table", () => {
       const res = await merge(folded, receiving);
       expect(res.statusCode, res.body).toBe(200);
       expect(res.json().printErrors).toEqual([]);
-      const order = res.json().order as { id: string; tableId: string; tableLabel: string; mergedInto: string | null; captainName: string; status: string; items: Array<{ id: string; status: string }>; kots: Array<{ id: string; acceptedAt: number | null }> };
+      const order = res.json().order as { id: string; tableId: string; tableLabel: string; mergedInto: string | null; captainName: string; status: string; items: Array<{ id: string; status: string }>; kots: Array<{ id: string; doneAt: number | null }> };
       expect(order).toMatchObject({ id: receiving, tableId: tables["T3"], tableLabel: "T3, T4", captainName: "Meena", status: "open" });
       expect(order.items).toHaveLength(3);
       expect(order.items.map((i) => i.id)).toEqual(expect.arrayContaining(foldedItemIds));
       expect(order.items.map((i) => i.status).sort()).toEqual(["pending", "sent", "sent"]);
       expect(order.kots).toHaveLength(2);
-      expect(order.kots.find((k) => k.id === receivingKot!.id)!.acceptedAt).not.toBeNull();
-      expect(order.kots.find((k) => k.id === foldedKot!.id)!.acceptedAt).toBeNull();
+      expect(order.kots.find((k) => k.id === receivingKot!.id)!.doneAt).not.toBeNull();
+      expect(order.kots.find((k) => k.id === foldedKot!.id)!.doneAt).toBeNull();
 
       expect(orderRow(folded)).toMatchObject({ status: "cancelled", merged_into: receiving, table_id: tables["T4"] });
       expect(order.mergedInto).toBeNull();
@@ -277,7 +278,6 @@ describe("moving an order to another table", () => {
       expect(saleMoves()).toEqual(movesBefore);
       expect(app.db.prepare("SELECT order_id FROM order_items WHERE id = ?").get((movesBefore[0] as { order_item_id: string }).order_item_id)).toEqual({ order_id: receiving });
 
-      expect((await request("POST", `/api/kots/${foldedKot!.id}/accept`)).statusCode).toBe(200);
       const preview = await bill(receiving);
       expect(preview.subtotalPaise).toBe(20000 + 15000 + 2000);
       expect(preview.receipt.tableName).toBe("T3, T4");

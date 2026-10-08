@@ -79,7 +79,6 @@ export interface AdminUser {
 export interface SettingsData {
   upiId: string;
   taxInclusive: boolean;
-  requireKitchenAcceptance: boolean;
   restaurantName: string;
   address: string;
   gstin: string;
@@ -134,7 +133,6 @@ export interface Order {
   closedAt: number | null;
   items: OrderItem[];
   kots: Kot[];
-  kitchenAcceptanceRequired?: boolean;
 }
 
 export interface Kot {

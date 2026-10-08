@@ -126,7 +126,6 @@ export function loadOrderJson(db: Database, orderId: string) {
     closedAt: row.closed_at,
     items: items.map(orderItemJson),
     kots: kots.map(kotJson),
-    kitchenAcceptanceRequired: (db.prepare("SELECT require_kitchen_acceptance FROM settings WHERE id = 1").get() as { require_kitchen_acceptance: number }).require_kitchen_acceptance === 1,
     stockWarnings: orderStockWarnings(db, orderId),
   };
 }

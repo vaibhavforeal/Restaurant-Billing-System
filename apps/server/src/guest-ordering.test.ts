@@ -5,7 +5,7 @@ import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
   type GuestMenu, type GuestReceipt, type GuestRequest, type GuestSubmission, type LicenseClaims, type QrTable } from "@forkflow/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
-import { SETUP } from "./test-helpers.js";
+import { SETUP, enableIntegration } from "./test-helpers.js";
 import { localMinute } from "./reservation-rules.js";
 
 const keys = generateKeyPairSync("ed25519");
@@ -29,6 +29,7 @@ async function fixture() {
   const device = "a".repeat(64);
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
+  enableIntegration(app, "kds");
   const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
   const api = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });

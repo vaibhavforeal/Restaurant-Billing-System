@@ -1,5 +1,6 @@
 ﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@forkflow/domain";
+import { featureSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
 import { downloadText } from "../download";
 import { useNavigationGuard } from "../navigation-guard";
@@ -129,7 +130,7 @@ export function LicenseSettings() {
         <div><span className="license-label">Renewal due</span><strong className="license-date">{status.expiresAt === null ? "Awaiting activation" : dateTime(status.expiresAt, timezone)}</strong><span>{status.revision ? `License revision ${status.revision}` : "Import a license to get started"}</span></div>
       </div>
       <p role={status.canOperate ? "status" : "alert"}>{status.message}</p>
-      {status.plan && <p className="license-help">Recipe editing: {status.features.recipes ? "included" : "not included"}. QR ordering: {status.features.qrOrdering ? "included" : "not included"}.<br />Offline grace ends: {dateTime(status.graceUntil, timezone)}. Times use {timezone} on the restaurant server.</p>}
+      {status.plan && <p className="license-help">{featureSummary(status.features)}<br />Offline grace ends: {dateTime(status.graceUntil, timezone)}. Times use {timezone} on the restaurant server.</p>}
       <details className="license-identity"><summary>Activation details</summary>
         <p>Installation ID: <code>{status.installationId}</code></p>
         <p className="license-help">Download these details for your license provider when activating or renewing.</p>
@@ -152,7 +153,7 @@ export function LicenseSettings() {
         {preview && <section className="license-preview" aria-label="License preview">
           <h4>{preview.alreadyInstalled ? "This license is already installed" : "Verified license"}</h4>
           <p>{planName(preview.currentPlan)} to <strong>{planName(preview.plan)}</strong> / Revision {preview.revision} / {preview.maxDevices} devices</p>
-          <p>Recipe editing {preview.features.recipes ? "included" : "not included"}. QR ordering {preview.features.qrOrdering ? "included" : "not included"}.</p>
+          <p>{featureSummary(preview.features)}</p>
           <p>Renewal due: {dateTime(preview.expiresAt, timezone)}<br />Offline grace ends: {dateTime(preview.graceUntil, timezone)}</p>
           {preview.blockedDevices.length > 0 && <p className="license-warning" role="status">The following devices will be blocked by this limit: {preview.blockedDevices.map((d) => d.name).join(", ")}. Their registrations and restaurant data are retained.</p>}
           {!preview.alreadyInstalled && <button className="primary" disabled={busy} onClick={() => { void run(async () => {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type OperationalReport, appendStockMove } from "@forkflow/domain";
-import { freshAppWithFakeSink, setupAdmin, createUser, auth } from "./test-helpers.js";
+import { freshAppWithFakeSink, setupAdmin, createUser, auth, enableIntegration } from "./test-helpers.js";
 
 describe("operational reports", () => {
   let app: FastifyInstance, token: string, categoryId: string, productId: string;
@@ -27,7 +27,7 @@ describe("operational reports", () => {
     return bill;
   }
   beforeEach(async () => {
-    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app));
+    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app)); enableIntegration(app, "kds");
     categoryId = (await post("/api/categories", { name: "Meals" })).category.id;
     productId = (await post("/api/products", { name: "Meal", categoryId, pricePaise: 10001, gstRate: 5, kotStationId: null })).product.id;
   });

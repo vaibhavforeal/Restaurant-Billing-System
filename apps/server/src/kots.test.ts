@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { auth, createUser, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
 import { uuidv7 } from "@forkflow/domain";
 
 let app: ReturnType<typeof freshApp>;
@@ -79,7 +79,7 @@ async function sentTableKot(app: ReturnType<typeof freshApp>, adminToken: string
 describe("kots: print faults", () => {
   it("sends the ticket and reports the problem when its KOT slip cannot be queued", async () => {
     app = freshApp();
-    const { token } = await setupAdmin(app);
+    const { token } = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId, kitchenStationId } = await fixtures(app, token);
     const printer = await app.inject({ method: "POST", url: "/api/printers", headers: auth(token), payload: { name: "Kitchen", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } });
     const printerId = printer.json().printer.id as string;
@@ -97,73 +97,20 @@ describe("kots: print faults", () => {
   });
 });
 
-describe("kots: kitchen acceptance", () => {
-  it("persists acceptance, exposes it on the board and order, and preserves it through replay and done", async () => {
+describe("kots: no acceptance step", () => {
+  it("has no accept route", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
-    const { orderId, kotId } = await sentTableKot(app, admin.token);
-    const acceptedAt = Date.now();
-    const clock = vi.spyOn(Date, "now").mockReturnValue(acceptedAt);
-    const accept = () => app.inject({ method: "POST", url: `/api/kots/${kotId}/accept`, headers: auth(admin.token) });
-
-    const first = await accept();
-    expect(first.statusCode).toBe(200);
-    expect(first.json().kot).toMatchObject({ id: kotId, acceptedAt, doneAt: null });
-    expect(app.db.prepare("SELECT accepted_at, done_at FROM kots WHERE id = ?").get(kotId)).toEqual({ accepted_at: acceptedAt, done_at: null });
-    const board = await app.inject({ method: "GET", url: "/api/kots", headers: auth(admin.token) });
-    expect(board.json().kots[0]).toMatchObject({ acceptedAt, doneAt: null });
-    const order = await app.inject({ method: "GET", url: `/api/orders/${orderId}`, headers: auth(admin.token) });
-    expect(order.json().order.kots[0]).toMatchObject({ acceptedAt, doneAt: null });
-
-    clock.mockReturnValue(acceptedAt + 100);
-    expect((await accept()).json().kot.acceptedAt).toBe(acceptedAt);
-    const done = await app.inject({ method: "POST", url: `/api/kots/${kotId}/done`, headers: auth(admin.token) });
-    expect(done.json().kot).toMatchObject({ acceptedAt, doneAt: acceptedAt + 100 });
-    expect((await accept()).json().kot).toMatchObject({ acceptedAt, doneAt: acceptedAt + 100 });
-  });
-
-  it("broadcasts one contextual kot.updated when a ticket is accepted", async () => {
-    app = freshApp();
-    const admin = await setupAdmin(app);
-    const { orderId, kotId } = await sentTableKot(app, admin.token);
-    const broadcast = vi.spyOn(app, "broadcast");
-    const accept = () => app.inject({ method: "POST", url: `/api/kots/${kotId}/accept`, headers: auth(admin.token) });
-    const result = await accept();
-    expect(result.statusCode).toBe(200);
-    expect(broadcast).toHaveBeenCalledExactlyOnceWith("kot.updated", {
-      kot: expect.objectContaining({
-        id: kotId, orderId, acceptedAt: result.json().kot.acceptedAt, doneAt: null,
-        orderType: "dine_in", tableName: "T-Accept", splitLabel: "A",
-        items: [expect.objectContaining({ name: "Biryani", qty: 2, note: "Mild", status: "sent" })],
-      }),
-    });
-    await accept();
-    expect(broadcast).toHaveBeenCalledTimes(1);
-  });
-
-  it("requires kots.update for acceptance, permits kitchen and cashier, and rejects unknown tickets", async () => {
-    app = freshApp();
-    const admin = await setupAdmin(app);
-    const waiter = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
-    const kitchen = await createUser(app, admin.token, { name: "Chef", pin: "4321", role: "kitchen" });
-    const cashier = await createUser(app, admin.token, { name: "Cashier", pin: "9876", role: "cashier" });
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { kotId } = await sentTableKot(app, admin.token);
-    const accept = (token?: string) => app.inject({ method: "POST", url: `/api/kots/${kotId}/accept`, headers: token ? auth(token) : {} });
-    expect((await accept()).statusCode).toBe(401);
-    expect((await accept(waiter.token)).statusCode).toBe(403);
+    const accept = await app.inject({ method: "POST", url: `/api/kots/${kotId}/accept`, headers: auth(admin.token) });
+    expect(accept.statusCode).toBe(404);
     expect(app.db.prepare("SELECT accepted_at FROM kots WHERE id = ?").get(kotId)).toEqual({ accepted_at: null });
-    expect((await accept(kitchen.token)).statusCode).toBe(200);
-    app.db.prepare("UPDATE kots SET accepted_at = NULL WHERE id = ?").run(kotId);
-    expect((await accept(cashier.token)).statusCode).toBe(200);
-    const missing = await app.inject({ method: "POST", url: "/api/kots/nope/accept", headers: auth(admin.token) });
-    expect(missing.statusCode).toBe(404);
-    expect(missing.json().error).toBe("kot not found");
   });
 });
 
 describe("kots: send-to-kitchen", () => {
   it("replays the same request after later punches without sending the later round", async () => {
-    app = freshApp(); const admin = await setupAdmin(app);
+    app = freshApp(); const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId } = await fixtures(app, admin.token);
     const created = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel" } });
     const orderId = created.json().order.id;
@@ -182,7 +129,7 @@ describe("kots: send-to-kitchen", () => {
   });
   it("groups items by station and assigns per-day KOT numbers", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId, biryaniHalfVariantId, kebabId, kitchenStationId, grillStationId } = await fixtures(app, admin.token);
 
     const orderRes = await app.inject({
@@ -241,7 +188,7 @@ describe("kots: send-to-kitchen", () => {
 
   it("items with no station stay pending", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { dalId, biryaniId } = await fixtures(app, admin.token);
 
     const orderRes = await app.inject({
@@ -278,7 +225,7 @@ describe("kots: send-to-kitchen", () => {
 
   it("409 when nothing to send (no items or all no-station)", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { dalId } = await fixtures(app, admin.token);
 
     const orderRes = await app.inject({
@@ -311,7 +258,7 @@ describe("kots: send-to-kitchen", () => {
 
   it("broadcasts kot.created for each KOT", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId, kebabId } = await fixtures(app, admin.token);
 
     await app.ready();
@@ -362,7 +309,7 @@ describe("kots: send-to-kitchen", () => {
 describe("kots: board and done", () => {
   it("GET /api/kots shows only not-done with tableName join", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId } = await fixtures(app, admin.token);
 
     const tableRes = await app.inject({
@@ -430,7 +377,7 @@ describe("kots: board and done", () => {
 
   it("POST /api/kots/:id/done is idempotent and broadcasts kot.updated", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId } = await fixtures(app, admin.token);
 
     const orderRes = await app.inject({
@@ -494,7 +441,7 @@ describe("kots: board and done", () => {
 
   it("kitchen role can read and done, waiter cannot done", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const waiter = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
     const kitchen = await createUser(app, admin.token, { name: "Chef", pin: "4321", role: "kitchen" });
     const { biryaniId } = await fixtures(app, admin.token);
@@ -561,7 +508,7 @@ describe("kots: board and done", () => {
 
   it("404s on unknown kot", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
 
     const res = await app.inject({
       method: "POST", url: "/api/kots/nope/done",
@@ -573,7 +520,7 @@ describe("kots: board and done", () => {
 
   it("KOT board payload includes splitLabel from order", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId } = await fixtures(app, admin.token);
 
     const tableRes = await app.inject({
@@ -612,7 +559,7 @@ describe("kots: board and done", () => {
 
   it("send response KOT context includes splitLabel", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupAdmin(app); enableIntegration(app, "kds");
     const { biryaniId } = await fixtures(app, admin.token);
 
     const tableRes = await app.inject({
