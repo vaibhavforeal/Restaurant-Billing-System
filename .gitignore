@@ -18,4 +18,10 @@ data/
 
 .DS_Store
 Thumbs.db
-.superdesign/tmp/
+.superdesign/
+
+# Local tool state and test output (not part of the app)
+.codex/
+.playwright-mcp/
+output/
+Screenshots/
