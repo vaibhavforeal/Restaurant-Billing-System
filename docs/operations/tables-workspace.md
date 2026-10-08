@@ -16,18 +16,11 @@ choose a group or **New split**. To change a party's table or bill two tables
 together, see [moving and merging tables](table-move-merge.md); a table linked
 to another table's bill shows **with T3** and opens the combined order.
 
-For table orders, send kitchen items with **KOT**, then wait for the kitchen to
-choose **Accept order** on every active ticket. Billing becomes available as soon
-as all those tickets are accepted; the kitchen can mark them **Done** later.
-Sending another round requires acceptance of its new tickets before billing.
-Cancelled items do not hold up billing, and items without a kitchen station do
-not need acceptance. Takeaway checkout can still bill immediately after sending.
-
-This wait is controlled by **Settings > Restaurant profile > Require kitchen
-acceptance before billing dine-in orders**, which is on by default. Turn it off
-if your kitchen only receives printed KOTs and does not use a Kitchen screen;
-tables can then be billed as soon as items are sent. The setting applies to
-existing and new orders straight away. Only administrators can change it.
+For table orders, send kitchen items with **KOT**. The table can be billed as soon
+as its kitchen items are sent; billing never waits for the kitchen. Items with a
+kitchen station must be sent before billing. If the restaurant uses the Kitchen
+Display (a Pro add-on turned on in the [Marketplace](marketplace.md)), the kitchen
+sees each ticket and clears it with **Done**.
 
 **Reservations** opens the booking schedule. Admins and cashiers manage bookings;
 waiters can view them. A currently held table shows **Reserved**, and clicking

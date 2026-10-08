@@ -10,6 +10,10 @@
   check(!document.querySelector('.sidebar') && !document.querySelector('[aria-label="Main navigation"]'), 'Dedicated kitchen has no POS navigation');
   check((await originalFetch('/api/orders', { headers })).status === 403, 'Kitchen PIN cannot read billing orders');
   check(!localStorage.getItem('forkflow.token') && !!localStorage.getItem('forkflow.kitchen.token'), 'Kitchen sign-in uses its own session storage');
+  check(tickets().every(ticket => ticket.querySelectorAll('button').length === 1 && ticket.querySelector('button').textContent.includes('Done')) && !document.body.textContent.includes('Accept order'), 'Tickets offer only Done, with no acceptance step');
+  const device = localStorage.getItem('forkflow.device.v1');
+  const adminToken = (await (await originalFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forkflow-device': device }, body: JSON.stringify({ pin: '1234' }) })).json()).token;
+  const setKds = enabled => originalFetch('/api/integrations/kds', { method: 'PATCH', headers: { authorization: `Bearer ${adminToken}`, 'x-forkflow-device': device, 'content-type': 'application/json' }, body: JSON.stringify({ enabled }) });
   const before = tickets().length;
   let failRead = true, failWrite = false;
   window.fetch = async (...args) => {
@@ -24,8 +28,16 @@
     [...document.querySelectorAll('button')].find(button => button.textContent === 'Retry').click();
     await wait(() => tickets().every(ticket => !ticket.querySelector('button').disabled));
     check(!document.querySelector('[role="alert"]'), 'Retry recovers live ticket data');
+    const ticketCount = tickets().length;
+    check((await setKds(false)).status === 200, 'Admin turns the Kitchen Display off from another session');
+    await wait(() => document.body.textContent.includes('Kitchen Display is turned off') && !tickets().length);
+    check(document.body.textContent.includes('Ask an admin to turn it on in the Marketplace'), 'Board shows the turned-off notice live, without a reload');
+    check((await originalFetch('/api/kots', { headers })).status === 403, 'Kitchen API refuses tickets while KDS is off');
+    check((await setKds(true)).status === 200, 'Admin turns the Kitchen Display back on');
+    await wait(() => tickets().length === ticketCount);
+    check(!document.body.textContent.includes('Kitchen Display is turned off'), 'Open tickets return live when KDS is turned back on');
     const ticket = tickets().find(ticket => ticket.querySelector('strong').textContent === 'KOT #12');
-    if (!ticket) throw Error('Run demo-kitchen.js and acceptance first');
+    if (!ticket) throw Error('Run demo-kitchen.js first');
     failWrite = true; ticket.querySelector('button').click();
     await wait(() => document.querySelector('.error-message')?.textContent.includes('Test connection interruption'));
     check(ticket.isConnected, 'Failed Done request keeps the ticket available for retry');
@@ -39,5 +51,5 @@
       check(requests.every(request => !new URL(request.url).pathname.startsWith('/api/')), 'Installed kitchen caches no restaurant API data');
     }
     return checks;
-  } finally { window.fetch = originalFetch; }
+  } finally { window.fetch = originalFetch; await setKds(true); }
 })()

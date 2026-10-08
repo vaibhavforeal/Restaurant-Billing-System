@@ -24,6 +24,7 @@
   const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forkflow-device': device }, body: JSON.stringify({ pin }) })).json()).token;
   const adminToken = await login('1234');
   const setZomato = async enabled => { const r = await call('PATCH', '/api/integrations/zomato', adminToken, { enabled }); if (r.status !== 200) throw new Error('Fixture PATCH failed: ' + r.status); };
+  const setKds = async enabled => { const r = await call('PATCH', '/api/integrations/kds', adminToken, { enabled }); if (r.status !== 200) throw new Error('Fixture KDS PATCH failed: ' + r.status); };
   const me = (await call('GET', '/api/me', ownToken)).json.user;
 
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
@@ -54,7 +55,7 @@
 
     // ---------- Shared: the API contract as this role sees it ----------
     const list = await call('GET', '/api/integrations', ownToken);
-    check(list.status === 200 && /no-store/.test(list.cache ?? '') && list.json.integrations.map(i => i.id).join() === 'zomato,swiggy' && list.json.integrations.every(i => i.enabled === false), 'GET /api/integrations is no-store and lists Zomato and Swiggy, both off');
+    check(list.status === 200 && /no-store/.test(list.cache ?? '') && list.json.integrations.map(i => i.id).join() === 'zomato,swiggy,kds' && list.json.integrations.every(i => i.enabled === false), 'GET /api/integrations is no-store and lists Zomato and Swiggy, both off');
     const disabledHook = await call('POST', '/api/integrations/zomato/webhook', ownToken, undefined, '{}');
     check(disabledHook.status === 503 && /turned off in the Marketplace/.test(disabledHook.json?.error ?? ''), 'Zomato webhook answers 503 "turned off in the Marketplace" while the switch is off');
     check((await call('GET', '/api/zomato/orders', ownToken)).status === 200, 'Zomato read routes stay available while the switch is off');
@@ -125,12 +126,52 @@
       check(rows().length === 0 && alertsText().includes('Turn on Zomato or Swiggy in the Marketplace') && !!navItem('marketplace') && !navItem('zomato'), 'Turned off: Zomato nav item and Alerts rows are gone and the hint returns');
       check(((await call('GET', '/api/zomato/orders', ownToken)).json.orders ?? []).length === 1, 'Turning Zomato off leaves its orders untouched');
 
+      // ---------- Kitchen Display: an add-on that starts off; the Kitchen tab and board follow its switch ----------
+      await setKds(false);
+      await goto('marketplace'); await wait(() => card('Kitchen Display (KDS)'), 'KDS card');
+      const kdsCard = card('Kitchen Display (KDS)');
+      check(pill('Kitchen Display (KDS)') === 'Disabled' && kdsCard.querySelector('.marketplace-tag').textContent === 'Kitchen' && !sw('Kitchen Display (KDS)').disabled && !navItem('kitchen'), 'KDS is a Kitchen add-on, off by default, with the Kitchen tab hidden');
+      const refused = await call('GET', '/api/kots', ownToken);
+      check(refused.status === 403 && refused.json?.code === 'kds_off', 'Kitchen API refuses tickets while KDS is off');
+      sw('Kitchen Display (KDS)').click();
+      await wait(() => pill('Kitchen Display (KDS)') === 'Enabled' && !!navItem('kitchen'), 'KDS on');
+      check((await call('GET', '/api/kots', ownToken)).status === 200, 'Turning KDS on shows the Kitchen tab and opens the kitchen API');
+      await goto('kitchen'); await wait(() => heading() === 'Kitchen display', 'kitchen board');
+      check(!document.body.textContent.includes('Accept order'), 'Admin sees the kitchen board with no acceptance step');
+      await setKds(false);
+      await wait(() => document.body.textContent.includes('Kitchen Display is turned off') && !navItem('kitchen'), 'KDS off notice');
+      check(window.__marketplaceNoReload === true && [...document.querySelectorAll('.marketplace-empty button')].some(b => b.textContent === 'Open Marketplace'), 'Turning KDS off from another counter hides the board live and offers the Marketplace');
+
+      // ---------- A licence change refreshes the Marketplace live; View licence opens Plan & devices ----------
+      // The fixture is a development build (always licensed), so the integrations list is rewritten as if the plan lacked KDS.
+      let unlicensed = true;
+      const countingFetch = window.fetch;
+      window.fetch = async (path, init) => {
+        const response = await countingFetch(path, init);
+        if (!unlicensed || String(path) !== '/api/integrations' || (init?.method && init.method !== 'GET')) return response;
+        const body = await response.clone().json();
+        body.integrations = body.integrations.map(i => i.id === 'kds' ? { ...i, licensed: false } : i);
+        return new Response(JSON.stringify(body), { status: response.status, headers: response.headers });
+      };
+      try {
+        await goto('marketplace'); await wait(() => card('Kitchen Display (KDS)'), 'KDS card');
+        window.dispatchEvent(new Event('forkflow:license-changed'));
+        await wait(() => pill('Kitchen Display (KDS)') === 'Pro plan', 'KDS locked after a licence change');
+        check(sw('Kitchen Display (KDS)').disabled && card('Kitchen Display (KDS)').textContent.includes('Upgrade to Pro to use the Kitchen Display'), 'A licence change refreshes the Marketplace live: KDS is locked without the plan');
+        [...card('Kitchen Display (KDS)').querySelectorAll('button')].find(b => b.textContent === 'View licence').click();
+        const plan = () => [...document.querySelectorAll('details')].find(d => d.querySelector('summary')?.textContent === 'Plan & devices');
+        await wait(() => plan()?.open && plan().getBoundingClientRect().top < innerHeight && plan().getBoundingClientRect().bottom > 0, 'Plan & devices open and in view');
+        check(true, 'View licence opens Plan & devices');
+      } finally { unlicensed = false; window.fetch = countingFetch; }
+      window.dispatchEvent(new Event('forkflow:license-changed'));
+      await goto('marketplace'); await wait(() => pill('Kitchen Display (KDS)') === 'Disabled' && !sw('Kitchen Display (KDS)').disabled, 'KDS unlocked again');
+      check(true, 'Restoring the licence unlocks the KDS switch live');
     } else if (me.role === 'cashier') {
       // ---------- Cashier: read-only Marketplace ----------
       check((await call('PATCH', '/api/integrations/zomato', ownToken, { enabled: true })).status === 403, 'A cashier PATCH is refused with 403');
       await goto('marketplace'); await wait(() => card('Zomato') && card('Swiggy'), 'cards');
       const switches = [...document.querySelectorAll('.marketplace-card [role="switch"]')];
-      check(heading() === 'Marketplace' && switches.length === 2 && switches.every(s => s.disabled) && !switches.some(s => !s.disabled) && document.body.textContent.includes('Only an admin can turn integrations on or off.'), 'Cashier sees both cards with every switch disabled and an admin-only note');
+      check(heading() === 'Marketplace' && switches.length === 3 && switches.every(s => s.disabled) && !switches.some(s => !s.disabled) && document.body.textContent.includes('Only an admin can turn integrations on or off.'), 'Cashier sees both cards with every switch disabled and an admin-only note');
       check(pill('Zomato') === 'Disabled' && pill('Swiggy') === 'Coming soon' && !navItem('zomato'), 'Cashier sees the same statuses and no Zomato nav item while it is off');
       sw('Zomato').click(); await sleep(250);
       check(patches === 0 && pill('Zomato') === 'Disabled', 'Clicking a disabled cashier switch sends no request');
@@ -151,12 +192,17 @@
       await goto('home'); await wait(homeReady, 'home');
       check(rows().length === 0 && alertsText().includes('Ask an admin to turn on Zomato or Swiggy in the Marketplace.') && !alertsText().includes('Turn on Zomato'), 'Cashier Alerts hides Zomato rows again and asks an admin to turn it on');
 
+      // ---------- Cashier: the Kitchen tab follows the admin KDS switch live ----------
+      await setKds(false); await wait(() => !navItem('kitchen'), 'Kitchen tab hidden');
+      await setKds(true); await wait(() => !!navItem('kitchen'), 'Kitchen tab shown');
+      await setKds(false); await wait(() => !navItem('kitchen'), 'Kitchen tab hidden again');
+      check(window.__marketplaceNoReload === true, 'Cashier Kitchen tab follows the admin KDS switch live');
     } else throw new Error('Run as admin (1234) or cashier (2345)');
     window.__marketplaceResult = { status: 'passed', role: me.role, checks };
     return window.__marketplaceResult;
   } catch (error) { window.__marketplaceResult = { status: 'failed', role: me.role, checks, error: String(error) }; throw error; }
   finally {
     window.fetch = nativeFetch;
-    try { await setZomato(false); } catch { /* fixture already stopped */ }
+    try { await setZomato(false); await setKds(false); } catch { /* fixture already stopped */ }
   }
 })();

@@ -1,7 +1,7 @@
 # Marketplace
 
-The **Marketplace** is where an administrator turns online-order integrations on or
-off. It is in the sidebar for administrators and cashiers. Waiters and the kitchen do
+The **Marketplace** is where an administrator turns online-order integrations and
+add-ons such as the Kitchen Display on or off. It is in the sidebar for administrators and cashiers. Waiters and the kitchen do
 not see it, and the server refuses them (403) if they ask for it directly.
 
 Every integration starts **off** after an upgrade. Nothing is shown or requested for
@@ -10,8 +10,9 @@ refused. Only live events are refused: CSV imports are still accepted.
 
 ## What you see
 
-Each integration is a card with its name, a **Delivery** tag, a short description, a
-status (**Enabled**, **Disabled** or **Coming soon**) and an on/off switch. An enabled
+Each integration is a card with its name, a **Delivery** or **Kitchen** tag, a short
+description, a status (**Enabled**, **Disabled**, **Coming soon** or **Pro plan**) and an
+on/off switch. An enabled
 card also has a **Set up** button that opens the integration's own screen (for Zomato,
 the existing Zomato workspace).
 
@@ -50,6 +51,29 @@ The Marketplace switch is separate from the **enabled** setting inside Zomato's
 connection settings. That setting means "live webhook receiving is on" and is not
 changed by the Marketplace.
 
+## What turning the Kitchen Display on or off does
+
+The Kitchen Display (KDS) is a paid add-on: it needs a licence that includes the
+`kds` feature (the **Pro** plan; development and demo builds include it). Licences
+issued before the Kitchen Display became an add-on do not include it, so those
+installations need a reissued licence. Without the feature the card shows **Pro plan**,
+the note "Upgrade to Pro to use the Kitchen Display" and, for admins, **View licence**;
+the switch can only be turned off (a downgraded plan may have left it on).
+
+| | Kitchen Display off (or not in the plan) | Kitchen Display on |
+| --- | --- | --- |
+| Sidebar | No **kitchen** item for admins and cashiers | **kitchen** item |
+| Kitchen board (`/kitchen/`, ForkFlow Kitchen app, kitchen tab) | "Kitchen Display is turned off. Ask an admin to turn it on in the Marketplace." | Open tickets, each with a **Done** button |
+| Settings → Backups & connections | No "Kitchen displays" section | Kitchen display links and set-up notes |
+| Kitchen API | `GET /api/kots` and `POST /api/kots/:id/done` answer 403 with `code: "kds_off"` | Available to admin, cashier and kitchen staff |
+| Sending and printing KOTs | Unchanged | Unchanged |
+| Billing | Never waits for the kitchen | Never waits for the kitchen |
+
+Kitchen staff cannot read the Marketplace, so their board learns the state from the
+kitchen API and refreshes when an administrator flips the switch, without a reload.
+Turning the Kitchen Display off keeps every ticket; turning it back on shows the open
+tickets again.
+
 ## Why Swiggy is "Coming soon"
 
 Swiggy is in the list so the layout and Alerts are ready for it, but there is no Swiggy
@@ -62,13 +86,13 @@ An integration is one registry entry plus the screen and data source behind it.
 
 1. **Registry.** Add an entry to `INTEGRATIONS` in `packages/domain/src/integrations.ts`
    and its id to `IntegrationId`: `id`, `name`, `description`, `category`, `status`
-   (`available` or `coming_soon`) and `setupPage` (the page opened by **Set up**, or
-   `null`). Only on/off state is stored, in the `integration_state` table (no migration
+   (`available` or `coming_soon`), `setupPage` (the page opened by **Set up**, or
+   `null`) and, for a paid add-on, `feature` (the licence feature it needs). Only on/off state is stored, in the `integration_state` table (no migration
    is needed for a new id).
 2. **Screen.** Add the page, make it reachable only when
    `useIntegrations().isEnabled("<id>")` is true, and show `IntegrationOff` otherwise,
-   as `ZomatoRoute` does in `apps/ui/src/App.tsx`. Hide its sidebar item in
-   `apps/ui/src/NavBar.tsx` the same way.
+   as `ZomatoRoute` does in `apps/ui/src/App.tsx`. Hide its sidebar item by adding
+   the page to `TAB_INTEGRATION` in `apps/ui/src/integrations-model.ts`.
 3. **Data source.** Server routes for the integration should check
    `integrationEnabled(app.db, "<id>")` (`apps/server/src/integrations.ts`) wherever it
    receives live data, as the Zomato webhook does. To surface open orders in Home
@@ -82,7 +106,8 @@ An integration is one registry entry plus the screen and data source behind it.
 - `integrations.configure` (administrators only) changes one:
   `PATCH /api/integrations/:id` with exactly `{ "enabled": true | false }`. A body that
   is empty, not a boolean or has extra keys returns 400; an unknown id returns 404;
-  enabling a "Coming soon" integration returns 409.
+  enabling a "Coming soon" integration returns 409; enabling one whose licence
+  feature the plan lacks returns 403. Each listed integration has `licensed`.
 - A change broadcasts `integrations.changed` only when the stored value actually
   changes. The record keeps the time and the user who made the change.
 - Migration 026 only creates `integration_state`; it adds no rows and no dependencies.

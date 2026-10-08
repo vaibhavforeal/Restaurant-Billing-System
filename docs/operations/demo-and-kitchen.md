@@ -65,10 +65,11 @@ choose a free HTTPS port if another POS is already using 4443.
 ## Ticket workflow and connectivity
 
 Sending an order from POS or Captain creates the same ticket on connected
-kitchen displays. **Accept order** acknowledges it and unlocks the existing
-dine-in billing rule (an administrator can switch that rule off in Settings for
-restaurants that only print KOTs). **Done** completes it and updates the main POS and other
-displays. Kitchen sign-in has its own browser session and does not replace a
+kitchen displays. The Kitchen Display only shows tickets: **Done** completes one and
+updates the main POS and other displays. Billing never waits for the kitchen.
+Kitchen screens need the Kitchen Display turned on in the [Marketplace](marketplace.md)
+(a Pro add-on; the demo has it on). While it is off, every kitchen screen shows
+"Kitchen Display is turned off" and comes back on its own when an admin turns it on. Kitchen sign-in has its own browser session and does not replace a
 cashier session on the same origin. Existing server roles and device licensing
 still apply; the Kitchen role cannot access billing/orders APIs.
 
@@ -98,9 +99,10 @@ shortcuts and data folders. Updating the normal POS to serve `/kitchen/` require
 the current UI build; its existing KOT APIs and database remain the source of
 truth. Neither customer installer contains your restaurant database.
 
-`tools/e2e/demo-kitchen.js` exercises sending a ticket from Demo and verifies
-that billing remains blocked until a second Kitchen client accepts it. Then
-run its `window.__kitchenBillingGate.afterAcceptance()` continuation. On the
+`tools/e2e/demo-kitchen.js` sends a ticket from Demo and verifies that the table
+is billed straight away while the ticket stays open (6 checks). On a separate
 Kitchen browser run `tools/e2e/kitchen-app.js` for permissions, storage isolation,
-failed refresh/write retry, completion and cache checks. These scripts require
+the Done-only ticket, the live turned-off notice when an admin switches the
+Kitchen Display off and on, failed refresh/write retry, completion and cache
+checks (14 checks). These scripts require
 the sample demo on port 4110 and must not be pointed at a restaurant server.

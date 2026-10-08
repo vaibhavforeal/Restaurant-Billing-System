@@ -77,7 +77,6 @@ only, and no KOT numbers. A move prints `T3 -> T7`. A merge prints the combined
 name, `T3, T4`. If a slip cannot print, the order screen shows the problem and
 the change still stands; check the printer and tell the kitchen directly. A
 station with no active printer gets no slip, so tell that station directly.
-Kitchen acceptance before billing applies to all tickets on the combined order.
 
 ## What cannot be undone
 

@@ -20,20 +20,6 @@ API guards, honest upload status and working local snapshots. Inspect desktop
 and mobile layouts in light/dark themes. This uses a temporary restaurant and
 makes no Google requests.
 
-## Table billing requires kitchen acceptance
-
-Build the UI and start `node --import tsx tools/e2e/captain-server.mts`.
-Open `http://127.0.0.1:4139/` in two separate agent-browser sessions. Sign in
-as admin (1234) in the first and kitchen (4567) in the second. Run
-`tools/e2e/kitchen-billing.js` with UTF-8 stdin in the admin session. Require
-`status: awaiting-kitchen-acceptance`, and inspect the disabled Preview bill
-button and waiting message. In the kitchen session, click **Accept order** on
-the returned table/KOT. Then evaluate
-`window.__kitchenBillingGate.afterAcceptance()` in the admin session and require
-`status: passed`. This covers sending from the cart, disabled billing and F10,
-both API guards, live acceptance updates, and issuing before **Done**. All orders
-and printing belong to the disposable fixture.
-
 ## Reports analytics
 
 Build the UI and start `node --import tsx tools/e2e/order-analytics-server.mts`.
@@ -101,13 +87,19 @@ server after testing.
 
 Use the same sales-dashboard fixture (port 4145, Zomato off). Sign in as admin
 **1234** and run `tools/e2e/marketplace.js` the same way as above (session
-`marketplace`); require `status: passed` (28 checks). Then sign out, sign in as
-cashier **2345** and run it again (12 checks; read-only Marketplace, live enable and
+`marketplace`); require `status: passed` (36 checks). Then sign out, sign in as
+cashier **2345** and run it again (13 checks; read-only Marketplace, live enable and
 disable from a second admin session obtained through the API, the live "Zomato is
 turned off" notice without a reload). The script detects the role from `/api/me`,
 turns Zomato off again in `finally`, and keeps its result in
 `window.__marketplaceResult` (progress in `window.__marketplaceProgress`).
 
+It also covers the Kitchen Display card (off by default, Kitchen tag), the kitchen
+API refusing tickets with `kds_off` while it is off, the Kitchen tab and board
+appearing when it is turned on, the live "Kitchen Display is turned off" notice, and
+the cashier Kitchen tab following the switch, a licence change (simulated by rewriting
+the integrations list) locking the KDS card live, and **View licence** opening Plan &
+devices; `finally` turns KDS off again.
 It covers the integrations API contract, one PATCH for pending and rapid
 double-clicks (a wrapped `fetch` counts them), the disabled Swiggy switch, nav and
 Alerts gating, the Zomato webhook gate and a failed save. Real keystrokes cannot be

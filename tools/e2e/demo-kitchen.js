@@ -1,6 +1,6 @@
-﻿// Run on the isolated ForkFlow Demo, signed in as admin at /.
-// After this script returns, accept the ticket in a separate kitchen session,
-// then run window.__kitchenBillingGate.afterAcceptance().
+// Run on the isolated ForkFlow Demo, signed in as admin at /.
+// Sends a table KOT and bills it straight away: billing never waits for the kitchen.
+// The ticket stays open on the Kitchen Display for tools/e2e/kitchen-app.js.
 (async () => {
   if (location.origin !== "http://127.0.0.1:4110") throw new Error("Isolated demo on port 4110 required");
   const checks = [];
@@ -28,6 +28,8 @@
     }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, ...(await response.json()) };
   };
+  const integrations = (await api("/api/integrations")).integrations;
+  check(integrations.find((i) => i.id === "kds")?.enabled === true, "Demo starts with the Kitchen Display turned on");
   const previewButton = () => document.querySelector(".billing-footer-actions .pos-pay");
   const table = (await api("/api/tables")).tables.find((t) => t.status === "free");
   if (!table) throw new Error("Unused fixture table required");
@@ -40,34 +42,18 @@
   kotButton.click();
   await wait(() => document.querySelector(".captain-message")?.textContent.includes("Sent to kitchen"), "send acknowledged");
   const order = (await api("/api/orders")).orders.find((o) => o.tableId === table.id);
-  check(order.kots.length === 1 && order.kots[0].acceptedAt === null, "New KOT starts unaccepted");
-  await wait(() => previewButton()?.disabled && document.querySelector(".billing-kitchen-wait"), "billing blocked");
-  check(document.querySelector(".billing-kitchen-wait").textContent.includes(`#${order.kots[0].kotNo}`), "Billing explains which KOT is waiting");
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", bubbles: true }));
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  check(previewButton()?.disabled && !document.querySelector(".billing-dialog")?.open, "Billing shortcut cannot bypass kitchen acceptance");
-  for (const endpoint of ["bill-preview", "bill"]) {
-    const response = await api(`/api/orders/${order.id}/${endpoint}`, "POST", { clientRef: crypto.randomUUID(), previewKey: "a".repeat(64) });
-    check(response.status === 409 && response.error.includes("accept all tickets"), `${endpoint} API rejects an unaccepted table KOT`);
-  }
-  check((await api(`/api/orders/${order.id}/bill`)).bill === null, "Blocked requests create no bill");
-  window.__kitchenBillingGate = {
-    orderId: order.id, kotId: order.kots[0].id, kotNo: order.kots[0].kotNo, tableName: table.name,
-    async afterAcceptance() {
-      await wait(() => !previewButton()?.disabled && !document.querySelector(".billing-kitchen-wait"), "live billing unlock");
-      check(true, "Kitchen acceptance unlocks billing over WebSocket without reloading");
-      const accepted = (await api(`/api/orders/${order.id}`)).order;
-      check(accepted.kots[0].acceptedAt != null && accepted.kots[0].doneAt === null, "Acceptance unlocks billing before Done");
-      previewButton().click();
-      await wait(() => button("Issue bill") && !button("Issue bill").disabled, "reviewed preview");
-      await click("Issue bill");
-      await wait(() => button("Record payment"), "issued bill");
-      const bill = (await api(`/api/orders/${order.id}/bill`)).bill;
-      check(bill?.status === "unpaid" && bill.totalPaise === 23100, "Accepted table order issues its correct bill through the UI");
-      window.__kitchenBillingResult = { status: "passed", checks, billNo: bill.billNo };
-      return window.__kitchenBillingResult;
-    },
-  };
-  return { status: "awaiting-kitchen-acceptance", checks, tableName: table.name, kotNo: order.kots[0].kotNo };
+  check(order.kots.length === 1 && order.kots[0].doneAt === null, "New KOT is open on the Kitchen Display");
+  check(!("kitchenAcceptanceRequired" in order), "Orders carry no kitchen-acceptance flag");
+  await wait(() => previewButton() && !previewButton().disabled, "billing available");
+  check(!document.querySelector(".billing-kitchen-wait"), "Billing shows no kitchen wait");
+  previewButton().click();
+  await wait(() => button("Issue bill") && !button("Issue bill").disabled, "reviewed preview");
+  await click("Issue bill");
+  await wait(() => button("Record payment"), "issued bill");
+  const bill = (await api(`/api/orders/${order.id}/bill`)).bill;
+  check(bill?.status === "unpaid" && bill.totalPaise === 23100, "A table with an open KOT is billed straight away");
+  const after = (await api(`/api/orders/${order.id}`)).order;
+  check(after.kots[0].doneAt === null, "Billing does not complete the kitchen ticket");
+  window.__demoKitchenResult = { status: "passed", checks, tableName: table.name, kotNo: order.kots[0].kotNo };
+  return window.__demoKitchenResult;
 })();
-

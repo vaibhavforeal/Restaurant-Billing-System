@@ -49,7 +49,7 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 ## 2. Basic setup for testing
 
 - [ ] **Settings → Restaurant profile:** GST number, address, receipt footer, tax mode, UPI ID (if used). Save.
-- [ ] **Kitchen acceptance:** decide with the owner. Leave "Require kitchen acceptance before billing dine-in orders" **on** if the kitchen will use a Kitchen screen; turn it **off** if the kitchen only gets printed KOTs.
+- [ ] **Kitchen screen:** decide with the owner. If the kitchen will use a Kitchen screen (Pro plan), turn on **Kitchen Display (KDS)** in the Marketplace; if it only gets printed KOTs, leave it off.
 - [ ] Add staff: at least one cashier, one captain/waiter and one kitchen user, each with their own PIN.
 - [ ] Add 3–5 test menu items across two kitchen stations (for example Kitchen and Bar), and tables T1–T6, including at least one AC table if the restaurant uses AC pricing.
 
@@ -119,9 +119,10 @@ Phones need HTTPS to install the Captain app. Do this on the main PC, from the f
 
 ## 6. Kitchen screen (if used)
 
+- [ ] **Marketplace:** as admin, turn on **Kitchen Display (KDS)**. **Expect:** the switch turns on and a **kitchen** item appears in the sidebar. (Needs the Pro plan.)
 - [ ] **Windows kitchen PC:** install the Kitchen client, enter `http://<main-PC-IP>:4100`, sign in as the kitchen user. **Or tablet:** open `https://<main-PC-IP>:4443/kitchen/` and install it like the Captain app.
 - [ ] Send an order from the POS. **Expect:** the ticket appears within a few seconds with the right table.
-- [ ] Tap **Accept order**, then **Done**. **Expect:** the POS reflects both; if kitchen acceptance is on, billing unlocks after **Accept**.
+- [ ] Tap **Done**. **Expect:** the ticket leaves every kitchen screen; billing was already possible as soon as the order was sent.
 - [ ] Leave the kitchen screen open for 30+ minutes. **Expect:** still live (send another order to confirm).
 
 ---
@@ -130,7 +131,7 @@ Phones need HTTPS to install the Captain app. Do this on the main PC, from the f
 
 Run a short mock service with real staff roles and printers. Check each **Expect** as you go.
 
-- [ ] **Dine-in:** captain opens T1, adds items from two stations, sends. Kitchen accepts. Cashier previews and issues the bill, records payment split between cash and UPI. **Expect:** totals and GST are correct; T1 becomes free.
+- [ ] **Dine-in:** captain opens T1, adds items from two stations, sends. Cashier previews and issues the bill, records payment split between cash and UPI. **Expect:** totals and GST are correct; T1 becomes free.
 - [ ] **Split bills:** two groups at T2 (A and B), each billed and paid separately.
 - [ ] **Move a table:** move T3's order to T5. **Expect:** order follows; kitchen screen shows T5; each station with open tickets prints a "TABLE CHANGE  T3 -> T5" slip.
 - [ ] **Merge tables:** open T4 and T6, then merge T6 into T4 ("Bill at T4"). **Expect:** T6 card shows "with T4"; T4 shows "T4, T6"; one bill containing everything; after payment both tables are free.
