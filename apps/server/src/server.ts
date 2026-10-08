@@ -31,6 +31,7 @@ import { readProfile } from "./print/profile.js";
 import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discovery.js";
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
+import { registerIntegrations } from "./integrations.js";
 import { registerZomato, type ZomatoProvider } from "./zomato.js";
 
 export interface ServerOptions {
@@ -141,6 +142,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCosting(app);
   registerGuestOrdering(app, opts.port);
   registerGuestServices(app);
+  registerIntegrations(app);
   registerZomato(app, opts.zomatoProvider);
   const cloudBackups = opts.backups ? new CloudBackups(opts.backups, opts.cloudBackupProvider) : undefined;
   if (cloudBackups) {

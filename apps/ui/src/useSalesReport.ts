@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiFetch, session } from "./api";
-import { connectWs } from "./ws";
+import { apiFetch } from "./api";
 import type { ReportPeriod, SalesReport } from "./sales-report";
 
-export function useSalesReport(initialPeriod?: ReportPeriod, live = false) {
+export function useSalesReport(initialPeriod?: ReportPeriod) {
   const [period, setPeriod] = useState<ReportPeriod | null>(initialPeriod ?? null);
   const [report, setReport] = useState<SalesReport | null>(null);
   const [error, setError] = useState("");
@@ -22,15 +21,5 @@ export function useSalesReport(initialPeriod?: ReportPeriod, live = false) {
       .finally(() => { if (request === revision.current) setLoading(false); });
     return () => { revision.current++; controller.abort(); };
   }, [period?.from, period?.to, version]);
-  useEffect(() => {
-    if (!live) return;
-    let scheduled: ReturnType<typeof setTimeout> | undefined;
-    let connectedOnce = false;
-    const schedule = () => { clearTimeout(scheduled); scheduled = setTimeout(refresh, 400); };
-    const stop = connectWs({ onEvent: (event) => { if (event === "order.updated") schedule(); },
-      onStatus: (connected) => { if (connected) { if (connectedOnce) schedule(); connectedOnce = true; } }, onAuthFail: () => session.clear() });
-    const timer = setInterval(refresh, 60000);
-    return () => { stop(); clearTimeout(scheduled); clearInterval(timer); };
-  }, [live, refresh]);
   return { period, setPeriod, report, error, loading, refresh };
 }

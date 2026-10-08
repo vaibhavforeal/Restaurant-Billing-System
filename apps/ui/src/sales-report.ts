@@ -33,13 +33,6 @@ export function salesMetrics(report: SalesReport): SalesMetric[] {
   ];
 }
 
-/** The daily trend: net sales against net collections, with the value range to scale (net values can go below zero). */
-export function salesTrend(report: SalesReport): { points: Array<{ date: string; salesPaise: number; collectionsPaise: number }>; min: number; max: number } {
-  const points = report.daily.map((day) => ({ date: day.date, salesPaise: day.netTotalPaise, collectionsPaise: day.collections.totalPaise }));
-  const values = points.flatMap((p) => [p.salesPaise, p.collectionsPaise]);
-  return { points, min: Math.min(0, ...values), max: Math.max(100, ...values) };
-}
-
 /** Export the displayed report snapshot; money cells are decimal rupees. */
 export function salesReportCsv(report: SalesReport, kind: SalesReportKind): string {
   const headings = kind === "sales"

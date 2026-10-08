@@ -1,0 +1,25 @@
+import { describe, expect, it } from "vitest";
+import { INTEGRATIONS, IntegrationToggle, isIntegrationId } from "./integrations.js";
+
+describe("integration registry", () => {
+  it("lists Zomato then Swiggy, with Swiggy coming soon", () => {
+    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy"]);
+    const [zomato, swiggy] = INTEGRATIONS;
+    expect(zomato).toMatchObject({ status: "available", setupPage: "zomato", category: "delivery" });
+    expect(swiggy).toMatchObject({ status: "coming_soon", setupPage: null, category: "delivery" });
+  });
+
+  it("recognises only registered ids", () => {
+    expect(isIntegrationId("zomato")).toBe(true);
+    expect(isIntegrationId("swiggy")).toBe(true);
+    expect(isIntegrationId("dineout")).toBe(false);
+    expect(isIntegrationId("__proto__")).toBe(false);
+  });
+
+  it("accepts only a strict boolean toggle body", () => {
+    expect(IntegrationToggle.safeParse({}).success).toBe(false);
+    expect(IntegrationToggle.safeParse({ enabled: "yes" }).success).toBe(false);
+    expect(IntegrationToggle.safeParse({ enabled: true, x: 1 }).success).toBe(false);
+    expect(IntegrationToggle.safeParse({ enabled: false }).success).toBe(true);
+  });
+});

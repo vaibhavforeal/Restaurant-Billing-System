@@ -17,6 +17,9 @@ const paths = {
   bag: "M5 7h14l1 14H4L5 7Zm4 0V5a3 3 0 0 1 6 0v2",
   clock: "M12 6v6l4 2m-4 8a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z",
   check: "m5 12 4 4L19 6",
+  marketplace: "M4 9 5.5 4h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6",
+  refresh: "M20 11a8 8 0 0 0-14.6-4.5M4 4v4h4m-4 5a8 8 0 0 0 14.6 4.5M20 20v-4h-4",
+  alert: "M12 8v5m0 3.5v.5M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z",
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({ name, size = 20, style }: { name: IconName; size?: number; style?: CSSProperties }) {

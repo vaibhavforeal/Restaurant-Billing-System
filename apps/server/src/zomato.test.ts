@@ -3,7 +3,7 @@ import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
 import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoImportKind, type ZomatoReconciliation } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
-import { auth, createUser, setupAdmin } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, setupAdmin } from "./test-helpers.js";
 import type { ZomatoProvider } from "./zomato.js";
 
 let app: FastifyInstance;
@@ -53,7 +53,23 @@ describe("Zomato setup and reconciliation", () => {
     for (const webhookBaseUrl of ["http://orders.example.com", "https://localhost", "https://10.0.0.1", "https://user:secret@example.com", "https://example.com/?key=secret", "https://example.com/path"]) {
       expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, webhookBaseUrl })).statusCode).toBe(400);
     }
-    expect((await app.inject({ method: "POST", url: "/api/integrations/zomato/webhook", payload: {} })).statusCode).toBe(503);
+    const off = await app.inject({ method: "POST", url: "/api/integrations/zomato/webhook", payload: {} });
+    expect(off.statusCode).toBe(503);
+    expect(off.json().error).toBe("Zomato is turned off in the Marketplace");
+  });
+  it("reports live integration as not configured when the Marketplace is on but there is no provider or it is disabled", async () => {
+    await fixture();
+    enableIntegration(app, "zomato");
+    const missing = await app.inject({ method: "POST", url: "/api/integrations/zomato/webhook", payload: {} });
+    expect(missing.statusCode).toBe(503);
+    expect(missing.json().error).toMatch(/not configured/);
+    await app.close(); app.db.close();
+    await fixture({ async verifyAndDecode() { throw new Error("must not be called"); } });
+    enableIntegration(app, "zomato");
+    expect(app.db.prepare("SELECT enabled FROM zomato_settings").get()).toEqual({ enabled: 0 });
+    const disabled = await app.inject({ method: "POST", url: "/api/integrations/zomato/webhook", payload: {} });
+    expect(disabled.statusCode).toBe(503);
+    expect(disabled.json().error).toMatch(/not configured/);
   });
   it("enforces role and anonymous access at every data boundary", async () => {
     const f = await fixture();
@@ -155,6 +171,7 @@ describe("verified provider boundary (local fake, not a Zomato contract)", () =>
   const push = (events: unknown[], signed = true) => app.inject({ method: "POST", url: "/api/integrations/zomato/webhook", headers: signed ? { "x-test-signature": "test-only" } : {}, payload: events });
   async function enabled() {
     const f = await fixture(provider);
+    enableIntegration(app, "zomato");
     expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, enabled: true, posId: "P1", webhookBaseUrl: "https://orders.example.com" })).statusCode).toBe(200);
     return f;
   }
@@ -181,6 +198,20 @@ describe("verified provider boundary (local fake, not a Zomato contract)", () =>
     expect((await f.api("GET", "/api/zomato/settings")).json().lastEventAt).toBeTypeOf("number");
     expect((await push([event("a", "received", base, { order: { ...snapshot, totalPaise: 60000 } })])).statusCode).toBe(409);
     expect((await f.report()).rows[0]?.orderTotalPaise).toBe(50000);
+  });
+  it("rejects a batch when the Marketplace flag is turned off while the provider is verifying", async () => {
+    const racing: ZomatoProvider = { async verifyAndDecode({ rawBody }) {
+      app.db.prepare("UPDATE integration_state SET enabled=0 WHERE id='zomato'").run();
+      return { events: JSON.parse(rawBody.toString()), acknowledgement: { statusCode: 200, body: { fixtureAck: true } } };
+    } };
+    const f = await fixture(racing);
+    enableIntegration(app, "zomato");
+    expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, enabled: true, posId: "P1", webhookBaseUrl: "https://orders.example.com" })).statusCode).toBe(200);
+    const response = await push([event("a", "received", base, { order: snapshot })]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/turned off in the Marketplace/);
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM zomato_events").get()).toEqual({ n: 0 });
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM zomato_orders").get()).toEqual({ n: 0 });
   });
   it("rolls back a mixed invalid batch and returns success only after persistence", async () => {
     await enabled();

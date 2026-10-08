@@ -43,7 +43,7 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
       </div>
     </div>
     {!financial && error && <p className="alert" role="status">{error}</p>}
-    {financial && <SalesDashboard />}
+    {financial && <SalesDashboard onNavigate={onNavigate} canManage={user.role === "admin"} />}
     {!financial && <div className="stat-grid" aria-label="Live service counts">
       {[
         { label: "Open orders", value: stats?.orders },

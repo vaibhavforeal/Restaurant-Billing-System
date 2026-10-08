@@ -63,8 +63,11 @@ without discarding carts, other users' requests or real/ambiguous actions.
 
 Build the UI, then run `node --import tsx tools/e2e/sales-dashboard-server.mts`.
 It creates an in-memory restaurant with 30 days of API-issued bills, split
-payments, later collections, unpaid bills and a zero-activity date. It uses a
-fake printer and never opens the live restaurant database.
+payments, later collections, unpaid bills and a zero-activity date. Today also has
+dine-in and takeaway bills in several slots (including 00:30, which belongs to the
+last slot), an open order, a cancelled order and one open Zomato order. Zomato starts
+**off** in the Marketplace. It uses a fake printer and never opens the live
+restaurant database.
 
 Open `http://127.0.0.1:4145/` with agent-browser at **1280×720**, sign in with
 admin PIN **1234**, then run:
@@ -75,17 +78,48 @@ Get-Content -Raw -Encoding utf8 tools/e2e/sales-dashboard.js |
   npx --no-install agent-browser --session sales-dashboard eval --stdin
 ```
 
-The 26-check gate exercises the simplified dashboard graphs and report metrics
-against the API, presets/custom dates in Reports, exact
-keyboard chart values, report navigation, actual CSV downloads, day-end drill-down,
-empty/invalid ranges, failed refresh and late responses. It restores fetch and
-download instrumentation in `finally`; the result is `window.__salesDashboardResult`.
-Fixture expectations are `.e2e-scratch/sales-dashboard-expected.json`.
+The 42-check gate exercises the redesigned Home (status strip, channel cards, slot
+chart description, payment breakdown, order statistics and Alerts, each reconciled
+against `/api/reports/analytics`, `/api/reports/sales`, `/api/reports/day-end` and
+`/api/orders`), slot-chart keyboard keys, an empty and a future date, failed refresh
+and Retry, then presets/custom dates in Reports, report navigation, actual CSV
+downloads, day-end drill-down, empty/invalid ranges, failed refresh and late
+responses. At 1280×720 it requires no horizontal overflow and the key panels above
+the fold, and records `workspaceOverflowPx` (the workspace scrolls vertically to reach
+the payment breakdown). It restores fetch and download instrumentation in `finally`;
+progress is `window.__salesDashboardProgress` and the result is
+`window.__salesDashboardResult`. Fixture expectations are
+`.e2e-scratch/sales-dashboard-expected.json`.
 
 Also sign in as cashier **2345** and waiter **3456** to verify dashboard access
 versus Captain service views and a 403 reporting response. Check light/dark,
 1920×1080, 768×1024 and 390×844. Screenshots and results are saved under
-`output/sales-dashboard/`. Stop this disposable server after testing.
+`output/sales-dashboard/` and `output/dashboard-marketplace/`. Stop this disposable
+server after testing.
+
+## Marketplace
+
+Use the same sales-dashboard fixture (port 4145, Zomato off). Sign in as admin
+**1234** and run `tools/e2e/marketplace.js` the same way as above (session
+`marketplace`); require `status: passed` (28 checks). Then sign out, sign in as
+cashier **2345** and run it again (12 checks; read-only Marketplace, live enable and
+disable from a second admin session obtained through the API, the live "Zomato is
+turned off" notice without a reload). The script detects the role from `/api/me`,
+turns Zomato off again in `finally`, and keeps its result in
+`window.__marketplaceResult` (progress in `window.__marketplaceProgress`).
+
+It covers the integrations API contract, one PATCH for pending and rapid
+double-clicks (a wrapped `fetch` counts them), the disabled Swiggy switch, nav and
+Alerts gating, the Zomato webhook gate and a failed save. Real keystrokes cannot be
+sent from an in-page script: focus the Zomato switch, press **Space**, then re-focus
+and press **Enter** (agent-browser `press`, or Playwright `keyboard.press`) and expect
+each to toggle the switch. Note that focus drops to the page body after each toggle.
+Waiter **3456** lands in the Captain app and gets 403 on `GET /api/integrations`.
+There is no URL per page, so a "deep link" to the Zomato page is checked by turning
+Zomato off while that page is open. If agent-browser is unavailable, add each script
+to the page with Playwright `page.addScriptTag({ path })` and read the result global
+once it appears; avoid holding one tool call open while CSV downloads run. Stop the
+fixture afterwards.
 
 ## Captain PWA
 

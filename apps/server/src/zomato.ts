@@ -6,6 +6,7 @@ import { parseZomatoCsv, ZOMATO_STATUSES, type ZomatoImportKind, type ZomatoImpo
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { integrationEnabled } from "./integrations.js";
 import { reportRange } from "./sales-reports.js";
 
 const identifier = z.string().trim().min(1).max(160).regex(/^[^\u0000-\u001f\u007f]+$/);
@@ -243,6 +244,7 @@ export function registerZomato(app: FastifyInstance, provider?: ZomatoProvider) 
     scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
     scope.post("/api/integrations/zomato/webhook", { bodyLimit: 1_048_576 }, async (req, reply) => {
       const current = config(app.db);
+      if (!integrationEnabled(app.db, "zomato")) return reply.code(503).send({ error: "Zomato is turned off in the Marketplace" });
       if (!provider || !current.enabled) return reply.code(503).send({ error: "Zomato live integration is not configured" });
       let decoded: Awaited<ReturnType<ZomatoProvider["verifyAndDecode"]>>;
       try { decoded = await provider.verifyAndDecode({ headers: req.headers, rawBody: req.body as Buffer }); }
@@ -251,6 +253,7 @@ export function registerZomato(app: FastifyInstance, provider?: ZomatoProvider) 
       app.db.transaction(() => {
         // Settings can change while signature verification is awaiting a remote key.
         const latest = config(app.db);
+        if (!integrationEnabled(app.db, "zomato")) throw httpError(409, "Zomato was turned off in the Marketplace; retry the webhook");
         if (!latest.enabled || latest.version !== current.version) throw httpError(409, "Connection settings changed; retry the webhook");
         for (const event of events) {
           if (event.restaurantId !== latest.restaurant_id) throw httpError(403, "Webhook restaurant does not match this ledger");

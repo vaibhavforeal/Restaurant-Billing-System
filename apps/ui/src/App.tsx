@@ -13,6 +13,8 @@ import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
 import { SalesReports } from "./screens/SalesReports";
 import { Inventory } from "./screens/Inventory";
+import { IntegrationOff, Marketplace } from "./screens/Marketplace";
+import { IntegrationsProvider, useIntegrations } from "./integrations";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";
@@ -49,6 +51,14 @@ export function App() {
   }
   if (/^\/kitchen\/?$/.test(window.location.pathname)) return <KitchenApp />;
   return <StaffApp />;
+}
+
+/** The Zomato page is only reachable while the Marketplace has Zomato turned on; it flips live on the websocket event. */
+function ZomatoRoute({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
+  const { ready, isEnabled } = useIntegrations();
+  if (!ready) return <p role="status">Loading Zomato workspace…</p>;
+  if (!isEnabled("zomato")) return <IntegrationOff name="Zomato" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  return <Suspense fallback={<p role="status">Loading Zomato workspace…</p>}><Zomato user={user} /></Suspense>;
 }
 
 function StaffApp() {
@@ -112,7 +122,7 @@ function StaffApp() {
       const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
       const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
       return (
-        <NavigationGuardContext.Provider value={navigationGuard}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
+        <NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
@@ -131,12 +141,13 @@ function StaffApp() {
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <Inventory user={user} />}
-          {page.name === "zomato" && (user.role === "admin" || user.role === "cashier") && <Suspense fallback={<p role="status">Loading Zomato workspace…</p>}><Zomato user={user} /></Suspense>}
+          {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
+          {page.name === "zomato" && (user.role === "admin" || user.role === "cashier") && <ZomatoRoute user={user} onNavigate={go} />}
           </main>
           </QrNotifications>
           </LicenseGate>
           </div>
-        </div></NavigationGuardContext.Provider>
+        </div></IntegrationsProvider></NavigationGuardContext.Provider>
       );
     }
   }

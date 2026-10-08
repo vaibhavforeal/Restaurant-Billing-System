@@ -1,4 +1,4 @@
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, type IntegrationId } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -76,4 +76,12 @@ export async function wsAuth(app: FastifyInstance, token: string): Promise<impor
   });
 
   return ws;
+}
+
+/** Turn a Marketplace integration on directly in the database (the first admin is recorded as the actor). */
+export function enableIntegration(app: FastifyInstance, id: IntegrationId): void {
+  const admin = app.db.prepare("SELECT id FROM users WHERE role='admin' ORDER BY created_at, id LIMIT 1").get() as { id: string } | undefined;
+  if (!admin) throw new Error("enableIntegration needs an admin user; call setupAdmin first");
+  app.db.prepare(`INSERT INTO integration_state (id, enabled, updated_at, updated_by) VALUES (?,1,?,?)
+    ON CONFLICT(id) DO UPDATE SET enabled=1, updated_at=excluded.updated_at, updated_by=excluded.updated_by`).run(id, Date.now(), admin.id);
 }

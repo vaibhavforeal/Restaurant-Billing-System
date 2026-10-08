@@ -34,6 +34,15 @@ describe("roleFor", () => {
     expect(can(kitchen, "bills.create")).toBe(false);
   });
 
+  it("integrations: cashier reads, only admin configures, floor and kitchen roles have no access", () => {
+    expect(can(roleFor("cashier"), "integrations.read")).toBe(true);
+    expect(can(roleFor("cashier"), "integrations.configure")).toBe(false);
+    expect(can(roleFor("admin"), "integrations.read")).toBe(true);
+    expect(can(roleFor("admin"), "integrations.configure")).toBe(true);
+    expect(can(roleFor("waiter"), "integrations.read")).toBe(false);
+    expect(can(roleFor("kitchen"), "integrations.read")).toBe(false);
+  });
+
   it("unknown role fails closed", () => {
     const ghost = roleFor("ghost" as any);
     expect(can(ghost, "orders.read")).toBe(false);

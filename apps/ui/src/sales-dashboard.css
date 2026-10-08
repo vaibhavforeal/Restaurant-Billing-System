@@ -1,5 +1,5 @@
 /* Sales analytics extend the shared POS tokens. */
-:root { --sales-chart-height: 208px; --sales-metric-size: var(--text-total); --sales-number-width-factor: 1.5; --sales-bar-height: var(--space-4); --sales-chart-min: 300px; }
+:root { --sales-chart-height: 208px; --sales-metric-size: var(--text-total); --sales-number-width-factor: 1.5; --sales-bar-height: var(--space-4); }
 html[data-theme] .financial-home { display: flex; flex-direction: column; gap: var(--space-4); }
 html[data-theme] .dashboard.financial-home .page-header { margin-bottom: 0; }
 html[data-theme] .financial-home button { min-height: var(--control-touch); }
@@ -17,17 +17,11 @@ html[data-theme] .sales-period label { display: grid; gap: var(--space-1); }
 .sales-period-error { width: 100%; margin: 0; }
 .sales-range-caption { display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; color: var(--muted); font-size: var(--text-secondary); }
 html[data-theme] .sales-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
-html[data-theme] .sales-metrics-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-8); }
 html[data-theme] .sales-metric, html[data-theme] .sales-chart-panel { min-width: 0; border: var(--border) solid var(--line); border-radius: var(--radius-panel); background: var(--surface); padding: var(--space-6); }
 .sales-metric p { color: var(--muted); margin: 0 0 var(--space-2); }
 .sales-metric { container-type: inline-size; }
 .sales-metric strong { display: block; font-size: clamp(var(--text-base), calc(100cqw / var(--sales-value-length) * var(--sales-number-width-factor)), var(--sales-metric-size)); font-variant-numeric: tabular-nums; line-height: 1.3; white-space: nowrap; }
 .sales-metric small { display: block; margin-top: var(--space-2); color: var(--muted); }
-html[data-theme] .sales-metrics-overview .sales-metric { padding: var(--space-8); }
-html[data-theme] .sales-metrics-overview .sales-metric-collections { border-left: var(--space-2) solid var(--pos-success); }
-.sales-metrics-overview .sales-metric-collections strong { color: var(--pos-success); }
-.sales-metrics-overview .sales-metric strong { font-weight: 600; letter-spacing: -0.02em; }
-.sales-charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(var(--sales-chart-min), 1fr); gap: var(--space-4); }
 .sales-chart-panel header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--space-4); }
 .sales-chart-panel header small, .sales-chart-panel p { color: var(--muted); }
 .sales-chart-panel h3 { margin: 0; }
@@ -69,11 +63,8 @@ html[data-theme] .sales-report-table :is(th, td):first-child { text-align: left;
 html[data-theme] .sales-report-table .sales-date-button { min-height: var(--control-small); }
 html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; background: transparent; }
 @media (min-width: 1001px) { html[data-theme] .sales-reports { height: 100%; min-height: 0; } .sales-reports .sales-report-table { flex: 1; min-height: 0; max-height: none; } .sales-reports > .legacy-screen { overflow: auto; } }
-@media (max-width: 1000px) { .sales-charts { grid-template-columns: minmax(0, 1.7fr) minmax(240px, 1fr); } }
 @media (max-width: 760px) {
   html[data-theme] .sales-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  html[data-theme] .sales-metrics-overview { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-  .sales-charts { grid-template-columns: minmax(0, 1fr); }
   .sales-period .sales-refresh { margin-left: 0; }
   .sales-period input { width: 100%; }
   .sales-period label { flex: 1; min-width: 120px; }

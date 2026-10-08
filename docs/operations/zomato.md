@@ -1,6 +1,10 @@
 # Zomato setup and reconciliation
 
-Open **Zomato** in the sidebar. Administrators configure the connection; administrators
+Open **Zomato** in the sidebar. It appears once an administrator turns Zomato on in the
+[Marketplace](marketplace.md); until then the sidebar item is hidden and the screen shows a "Zomato is turned off"
+notice (administrators get a link to the Marketplace). Live webhook events are also
+refused while Zomato is off in the Marketplace; see [Marketplace](marketplace.md).
+Administrators configure the connection; administrators
 and cashiers can import records, review reconciliation and export the displayed rows.
 Waiters and kitchen users cannot access this ledger, including through the API.
 
