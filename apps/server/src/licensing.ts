@@ -5,6 +5,8 @@ import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fas
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 
+const FEATURE_NAMES: Record<Feature, string> = { recipes: "recipe editing", qrOrdering: "QR ordering", kds: "the Kitchen Display" };
+
 export interface LicensingOptions {
   publicKey: string;
   installationId: string;
@@ -56,12 +58,12 @@ export class Licensing {
     const base: LicenseStatus = {
       mode: this.enabled ? "commercial" : "development", state: "unactivated",
       installationId: this.options?.installationId ?? null, plan: null, maxDevices: null,
-      features: { recipes: false, qrOrdering: false }, expiresAt: null, graceUntil: null,
+      features: { recipes: false, qrOrdering: false, kds: false }, expiresAt: null, graceUntil: null,
       deviceRegistered: false, canOperate: false, message: "Activate this installation to start billing.",
       serverTime: now, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, revision: null, registeredDevices: 0,
     };
     if (!this.enabled) return { ...base, state: "development", canOperate: true, deviceRegistered: true,
-      features: { recipes: true, qrOrdering: true }, message: "Development build. Commercial license checks are not enabled." };
+      features: { recipes: true, qrOrdering: true, kds: true }, message: "Development build. Commercial license checks are not enabled." };
     const saved = this.saved();
     const devices = this.activeDevices();
     base.registeredDevices = devices.length;
@@ -205,7 +207,7 @@ export class Licensing {
   assertFeature(feature: Feature, credential: unknown) {
     const status = this.status(credential);
     if (!status.canOperate) throw httpError(403, status.message);
-    if (!status.features[feature]) throw httpError(403, `This feature requires a plan with ${feature === "recipes" ? "recipe editing" : "QR ordering"}`);
+    if (!status.features[feature]) throw httpError(403, `This feature requires a plan with ${FEATURE_NAMES[feature]}`);
   }
 }
 

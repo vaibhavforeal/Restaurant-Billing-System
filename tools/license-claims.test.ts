@@ -24,7 +24,7 @@ describe("buildClaims", () => {
   it("creates fresh ids at revision 1 for a first activation", () => {
     const claims = buildClaims(parseActivationRequest(JSON.stringify(firstRequest)), { plan: "pro", months: 12, graceDays: 7 }, now, fakeUuid());
     expect(claims).toMatchObject({ version: 1, licenseId: ids[0], organizationId: ids[1], outletId: ids[2], installationId, revision: 1, plan: "pro",
-      maxDevices: 5, features: { recipes: true, qrOrdering: true }, issuedAt: now });
+      maxDevices: 5, features: { recipes: true, qrOrdering: true, kds: true }, issuedAt: now });
     expect(claims.expiresAt).toBe(Date.UTC(2027, 9, 5, 10, 0, 0));
     expect(claims.graceUntil).toBe(claims.expiresAt + 7 * DAY);
     expect(LicenseClaims.parse(claims)).toEqual(claims);
@@ -34,7 +34,7 @@ describe("buildClaims", () => {
     const renewal = { ...firstRequest, licenseId: ids[0], organizationId: ids[1], outletId: ids[2], currentRevision: 3 };
     const claims = buildClaims(parseActivationRequest(JSON.stringify(renewal)), { plan: "basic", months: 1, graceDays: 0 }, now, () => { throw new Error("no new ids on renewal"); });
     expect(claims).toMatchObject({ licenseId: ids[0], organizationId: ids[1], outletId: ids[2], revision: 4, plan: "basic", maxDevices: 2,
-      features: { recipes: false, qrOrdering: false } });
+      features: { recipes: false, qrOrdering: false, kds: false } });
     expect(claims.expiresAt).toBe(Date.UTC(2026, 10, 5, 10, 0, 0));
     expect(claims.graceUntil).toBe(claims.expiresAt);
   });

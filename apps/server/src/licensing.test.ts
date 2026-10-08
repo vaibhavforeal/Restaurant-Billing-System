@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
-import { SETUP } from "./test-helpers.js";
+import { SETUP, freshApp } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -23,6 +23,7 @@ async function fixture() {
   const app = buildServer({ db, licensing: { publicKey, installationId, now: () => now } });
   // Exercise the same permission + entitlement guard that future paid routes use.
   app.get("/api/test-recipes", { preHandler: [app.requirePermission("stock.manage"), app.requireFeature("recipes")] }, async () => ({ allowed: true }));
+  app.get("/api/test-kds", { preHandler: [app.requirePermission("kots.read"), app.requireFeature("kds")] }, async () => ({ allowed: true }));
   apps.push(app);
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
   expect(setup.statusCode).toBe(201);
@@ -208,6 +209,31 @@ describe("commercial licensing", () => {
     const cashier = await f.login(device, "2345");
     expect((await f.app.inject({ url: "/api/test-recipes", headers: cashier })).statusCode).toBe(403);
     expect((await f.app.inject({ method: "PUT", url: "/api/license", headers: cashier, payload: { license: signed({ ...pro, revision: 3 }) } })).statusCode).toBe(403);
+  });
+
+  it("includes kds in Pro only", () => {
+    expect(PLANS.pro.features.kds).toBe(true);
+    expect(PLANS.basic.features.kds).toBe(false);
+  });
+
+  it("reports kds in development builds", async () => {
+    const app = freshApp(); apps.push(app);
+    expect(app.licensing.status().features).toEqual({ recipes: true, qrOrdering: true, kds: true });
+  });
+
+  it("reads grants issued before kds as not licensed for the kitchen display", async () => {
+    const f = await fixture();
+    const old = { ...f.claims, plan: "pro" as const, maxDevices: 5, features: { recipes: true, qrOrdering: true } };
+    expect(LicenseClaims.parse(old).features.kds).toBe(false);
+    expect((await f.activate(old as unknown as LicenseClaims)).statusCode).toBe(200);
+    expect(f.app.licensing.status().features.kds).toBe(false);
+  });
+
+  it("names the kitchen display in the missing-feature error", async () => {
+    const f = await fixture(); await f.activate(); await f.register();
+    const res = await f.app.inject({ url: "/api/test-kds", headers: f.headers });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe("This feature requires a plan with the Kitchen Display");
   });
 
   it("rejects forged, altered, wrong-installation, stale, future and cross-outlet licenses", async () => {

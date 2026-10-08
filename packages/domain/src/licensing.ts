@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const PLANS = {
-  basic: { name: "Basic", maxDevices: 2, features: { recipes: false, qrOrdering: false } },
-  pro: { name: "Pro", maxDevices: 5, features: { recipes: true, qrOrdering: true } },
+  basic: { name: "Basic", maxDevices: 2, features: { recipes: false, qrOrdering: false, kds: false } },
+  pro: { name: "Pro", maxDevices: 5, features: { recipes: true, qrOrdering: true, kds: true } },
 } as const;
 export type Plan = keyof typeof PLANS;
 export type Feature = keyof typeof PLANS.basic.features;
@@ -18,7 +18,7 @@ export const LicenseClaims = z.object({
   revision: z.number().int().positive().safe(),
   plan: z.enum(["basic", "pro"]),
   maxDevices: z.number().int().min(1).max(100),
-  features: z.object({ recipes: z.boolean(), qrOrdering: z.boolean().default(false) }).strict(),
+  features: z.object({ recipes: z.boolean(), qrOrdering: z.boolean().default(false), kds: z.boolean().default(false) }).strict(),
   issuedAt: z.number().int().nonnegative().max(8_640_000_000_000_000),
   expiresAt: z.number().int().positive().max(8_640_000_000_000_000),
   graceUntil: z.number().int().positive().max(8_640_000_000_000_000),
@@ -32,7 +32,7 @@ export interface LicenseStatus {
   installationId: string | null;
   plan: Plan | null;
   maxDevices: number | null;
-  features: { recipes: boolean; qrOrdering: boolean };
+  features: { recipes: boolean; qrOrdering: boolean; kds: boolean };
   expiresAt: number | null;
   graceUntil: number | null;
   deviceRegistered: boolean;

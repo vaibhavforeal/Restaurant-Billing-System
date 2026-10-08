@@ -109,7 +109,7 @@ describe("stock costing", () => {
     expect((await purchase(item.id, { costPaise: 340_000 })).statusCode).toBe(201);
     const real = app.licensing.status.bind(app.licensing);
     vi.spyOn(app.licensing, "status").mockImplementation((credential: unknown) =>
-      ({ ...real(credential), canOperate: true, features: { recipes: false, qrOrdering: false } }));
+      ({ ...real(credential), canOperate: true, features: { recipes: false, qrOrdering: false, kds: false } }));
     const res = await history(item.id);
     expect(res.statusCode).toBe(200);
     const body = res.json() as { movements: StockMove[]; costChanges?: unknown };
