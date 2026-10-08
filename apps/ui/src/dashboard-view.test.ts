@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { slotBars } from "./dashboard-data";
-import { DASHBOARD_MIN_DATE, alertBadge, pickedDate, slotScale, statusText, updatedLabel } from "./dashboard-view";
+import { DASHBOARD_MIN_DATE, alertBadge, perBarLabelsFit, pickedDate, slotScale, statusText, updatedLabel } from "./dashboard-view";
 
 describe("dashboard date picker", () => {
   it("ignores the partial years a browser emits while the year is being typed", () => {
@@ -28,6 +28,23 @@ describe("slot chart scale", () => {
     expect(slotScale([bar(500, -200), bar(0, 0)])).toEqual({ min: -200, max: 500 });
     expect(slotScale([bar(-300, -100)])).toEqual({ min: -300, max: 0 });
     expect(slotScale([bar(800, 50)])).toEqual({ min: 0, max: 800 });
+  });
+});
+
+describe("slot chart per-bar labels", () => {
+  it("fit when the longest label plus a 2px gap is no wider than the bar pitch", () => {
+    // "₹12.3K" is 6 characters: 6 × 6.8 + 2 = 42.8
+    expect(perBarLabelsFit(43, ["₹450", "₹12.3K"])).toBe(true);
+    expect(perBarLabelsFit(42, ["₹450", "₹12.3K"])).toBe(false);
+  });
+
+  it("measures negative values with their sign", () => {
+    expect(perBarLabelsFit(35, ["₹450"])).toBe(true);
+    expect(perBarLabelsFit(35, ["-₹450"])).toBe(false);
+  });
+
+  it("always fit when every bar is zero", () => {
+    expect(perBarLabelsFit(10, [])).toBe(true);
   });
 });
 

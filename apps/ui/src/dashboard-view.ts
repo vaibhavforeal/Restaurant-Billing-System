@@ -20,8 +20,9 @@ export const BAR_LABEL_CHAR_PX = 6.8;
  * `labels` are the compact texts that would be drawn ("₹12.3K", "-₹450"), zero bars already left out.
  */
 export function perBarLabelsFit(pitch: number, labels: readonly string[]): boolean {
-  // TODO(you): decide when per-bar labels fit. Placeholder approximates the old fixed `group >= 96` cut-off.
-  return pitch >= 36 && labels.length >= 0;
+  const longest = Math.max(0, ...labels.map((label) => label.length));
+  const widthPx = longest * BAR_LABEL_CHAR_PX;
+  return widthPx + 2 <= pitch;
 }
 
 /** Badge text for the Alerts panel; a truncated aggregator list is shown as a lower bound ("500+"). */
