@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { openDb, type Database } from "../db.js";
 import { migrate } from "../migrate.js";
 import { MIGRATIONS } from "./index.js";
+import { migration027 } from "./027-zomato-desk.js";
 
 const COUNTED = [
   "orders", "order_items", "kots", "kot_requests", "bills", "payments", "credit_notes", "refund_payments",
@@ -96,6 +97,94 @@ describe("migration 027 zomato desk", () => {
       expect(targets.filter((t) => t.endsWith("_new"))).toEqual([]);
       expect(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE sql LIKE '%orders_new%' OR sql LIKE '%payments_new%'").get()).toEqual({ n: 0 });
       expect(db.pragma("foreign_key_list(orders)")).toEqual(expect.arrayContaining([expect.objectContaining({ table: "orders", from: "merged_into" })]));
+    } finally {
+      db.close();
+    }
+  });
+
+  it("copies several thousand orders with their items, bills and payments in one pass", () => {
+    const db = seededV26();
+    try {
+      const N = 3000;
+      const order = db.prepare(`INSERT INTO orders (id, client_ref, type, table_id, status, opened_by, opened_at, closed_at, price_tier)
+        VALUES (?, ?, ?, ?, 'settled', 'u', ?, ?, ?)`);
+      const item = db.prepare(`INSERT INTO order_items (id, order_id, product_id, variant_id, name_snapshot, price_paise_snapshot, gst_rate_snapshot, qty, status)
+        VALUES (?, ?, 'p', NULL, 'Dosa', 10000, 5, ?, 'sent')`);
+      const bill = db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, status, created_by, created_at)
+        VALUES (?, ?, ?, 10000, 250, 250, 0, 10500, 'paid', 'u', ?)`);
+      const payment = db.prepare("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, NULL, ?)");
+      db.transaction(() => {
+        for (let n = 0; n < N; n++) {
+          const parcel = n % 2 === 0;
+          order.run(`bulk-${n}`, `bulk-ref-${n}`, parcel ? "parcel" : "dine_in", parcel ? null : "t2", 100 + n, 200 + n, parcel ? "takeaway" : "ac");
+          item.run(`bulk-i-${n}`, `bulk-${n}`, 1 + (n % 3));
+          bill.run(`bulk-b-${n}`, 100 + n, `bulk-${n}`, 200 + n);
+          // Every third bill is split across two payment modes.
+          if (n % 3 === 0) { payment.run(`bulk-p-${n}a`, `bulk-b-${n}`, "cash", 5000, 200 + n); payment.run(`bulk-p-${n}b`, `bulk-b-${n}`, "card", 5500, 200 + n); }
+          else payment.run(`bulk-p-${n}`, `bulk-b-${n}`, n % 3 === 1 ? "upi" : "cash", 10500, 200 + n);
+        }
+      })();
+      const before = counts(db);
+      const ordersBefore = db.prepare("SELECT * FROM orders ORDER BY id").all() as Array<Record<string, unknown>>;
+      const paymentsBefore = db.prepare("SELECT * FROM payments ORDER BY id").all();
+      expect(before.orders).toBe(3 + N);
+      expect(before.payments).toBe(1 + N + N / 3);
+
+      migrate(db, MIGRATIONS);
+
+      expect(db.pragma("user_version", { simple: true })).toBe(27);
+      expect(counts(db)).toEqual(before);
+      expect(db.prepare("SELECT * FROM orders ORDER BY id").all()).toEqual(ordersBefore.map((r) => ({ ...r, zomato_order_id: null, zomato_status: null })));
+      expect(db.prepare("SELECT * FROM payments ORDER BY id").all()).toEqual(paymentsBefore);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM orders o JOIN bills b ON b.order_id = o.id JOIN payments p ON p.bill_id = b.id WHERE o.id LIKE 'bulk-%'").get())
+        .toEqual({ n: N + N / 3 });
+      expect(db.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("starts over a broken link that predates it in an unrelated table, and leaves that row as it was", () => {
+    const db = seededV26();
+    try {
+      // An old orphan the restaurant has lived with: a variant whose product was removed while foreign keys were off.
+      db.pragma("foreign_keys = OFF");
+      db.prepare("INSERT INTO variants (id, product_id, name, price_paise) VALUES ('ghost', 'gone', 'Half', 5000)").run();
+      db.pragma("foreign_keys = ON");
+      const orphans = db.pragma("foreign_key_check");
+      expect(orphans).toEqual([expect.objectContaining({ table: "variants", parent: "products" })]);
+
+      migrate(db, MIGRATIONS);
+
+      expect(db.pragma("user_version", { simple: true })).toBe(27);
+      expect(db.pragma("foreign_key_check")).toEqual(orphans);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("still fails, changing nothing, when the rebuild itself breaks a link", () => {
+    const db = seededV26();
+    try {
+      // Simulate a faulty copy: o1 (referenced by its items, KOT, bill, reservation...) disappears during the rebuild.
+      const faulty = new Proxy(db, {
+        get(target, key) {
+          if (key === "exec") {
+            return (sql: string) => {
+              const result = target.exec(sql);
+              if (sql.includes("RENAME TO payments")) target.exec("DELETE FROM orders WHERE id = 'o1'");
+              return result;
+            };
+          }
+          const value = Reflect.get(target, key) as unknown;
+          return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+        },
+      });
+      const before = counts(db);
+      expect(() => migrate(db, [{ ...migration027, up: () => migration027.up(faulty) }])).toThrow(/foreign_key_check/);
+      expect(db.pragma("user_version", { simple: true })).toBe(26);
+      expect(counts(db)).toEqual(before);
+      expect(db.pragma("foreign_key_check")).toEqual([]);
     } finally {
       db.close();
     }

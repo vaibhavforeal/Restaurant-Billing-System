@@ -7,22 +7,30 @@ const ORDER_COLUMNS = [
 
 const PAYMENT_COLUMNS = ["id", "bill_id", "mode", "amount_paise", "ref_note", "created_at"].join(", ");
 
+interface ForeignKeyViolation { table: string; rowid: number | null; parent: string; fkid: number }
+const violationKey = (v: ForeignKeyViolation) => JSON.stringify([v.table, v.rowid, v.parent, v.fkid]);
+
 /**
  * Zomato desk: widen the `orders.type`, `orders.price_tier` and `payments.mode` CHECKs to
  * allow `zomato`, add the Zomato order ID and status, and add a Zomato price to the menu.
  *
  * SQLite can't ALTER a CHECK, so `orders` and `payments` are rebuilt with the 004 pattern.
  * Column order and defaults match the v26 tables (001 plus the columns 003/016/017/018/024 added);
- * the new columns go last. Every child FK says `REFERENCES orders(id)` and none has an ON DELETE
- * action, so the implicit DELETE inside DROP TABLE only bumps the deferred FK counter, which the
- * renamed table settles again. Nothing references `payments`, and no views or triggers sit on
- * either table.
+ * the new columns go last, and each row keeps its rowid. Every child FK says `REFERENCES orders(id)`
+ * and none has an ON DELETE action, so with deferred foreign keys the implicit DELETE inside DROP TABLE
+ * removes no child row. Nothing references `payments`, and no views or triggers sit on either table.
+ *
+ * Integrity rests on the final `foreign_key_check`, not on the deferred counter: it must find no
+ * violation that was not already there before the rebuild. Older orphans elsewhere in the database
+ * (left by a past release with foreign keys off) are not this migration's to fix and must not stop
+ * the restaurant from starting; any link the rebuild breaks fails the migration and rolls it back.
  */
 export const migration027: Migration = {
   version: 27,
   name: "zomato-desk",
   up(db) {
     const originalDefer = db.pragma("defer_foreign_keys", { simple: true }) as number;
+    const existing = new Set((db.pragma("foreign_key_check") as ForeignKeyViolation[]).map(violationKey));
     db.pragma("defer_foreign_keys = 1");
 
     try {
@@ -48,7 +56,7 @@ export const migration027: Migration = {
           zomato_status   TEXT CHECK (zomato_status IN ('preparing','ready','picked_up')),
           CHECK ((type = 'zomato') = (zomato_order_id IS NOT NULL))
         );
-        INSERT INTO orders_new (${ORDER_COLUMNS}) SELECT ${ORDER_COLUMNS} FROM orders;
+        INSERT INTO orders_new (rowid, ${ORDER_COLUMNS}) SELECT rowid, ${ORDER_COLUMNS} FROM orders;
         DROP TABLE orders;
         ALTER TABLE orders_new RENAME TO orders;
         CREATE INDEX idx_orders_status ON orders(status);
@@ -63,7 +71,7 @@ export const migration027: Migration = {
           ref_note     TEXT,
           created_at   INTEGER NOT NULL
         );
-        INSERT INTO payments_new (${PAYMENT_COLUMNS}) SELECT ${PAYMENT_COLUMNS} FROM payments;
+        INSERT INTO payments_new (rowid, ${PAYMENT_COLUMNS}) SELECT rowid, ${PAYMENT_COLUMNS} FROM payments;
         DROP TABLE payments;
         ALTER TABLE payments_new RENAME TO payments;
         CREATE INDEX idx_payments_bill ON payments(bill_id);
@@ -75,7 +83,8 @@ export const migration027: Migration = {
           CHECK (zomato_price_paise IS NULL OR (typeof(zomato_price_paise) = 'integer' AND zomato_price_paise >= 0))`);
       }
 
-      const violations = db.pragma("foreign_key_check") as unknown[];
+      // Rowids are kept by the copy, so a violation present before the rebuild has the same key after it.
+      const violations = (db.pragma("foreign_key_check") as ForeignKeyViolation[]).filter((v) => !existing.has(violationKey(v)));
       if (violations.length > 0) {
         throw new Error(`migration 027: foreign_key_check failed: ${JSON.stringify(violations.slice(0, 5))}`);
       }
