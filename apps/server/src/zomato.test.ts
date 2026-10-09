@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, uuidv7 } from "@forkflow/domain";
 import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoImportKind, type ZomatoReconciliation } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
@@ -157,6 +157,84 @@ describe("Zomato setup and reconciliation", () => {
     for (const range of ["from=2026-02-30&to=2026-03-01", "from=2026-10-03&to=2026-10-02", "from=2020-01-01&to=2026-01-01"])
       expect((await f.api("GET", `/api/zomato/reconciliation?${range}`)).statusCode).toBe(400);
     expect((await f.report("2025-01-01", "2025-01-02")).totals.needsReview).toBe(0);
+  });
+});
+
+describe("reconciliation of POS Zomato orders", () => {
+  const placed = Date.parse("2026-10-02T12:30:00+05:30");
+  /** A POS Zomato order worth Rs 580 at the Zomato price, opened on 2 Oct 2026. */
+  async function posOrder(f: Awaited<ReturnType<typeof fixture>>, zomatoOrderId: string, outcome: "picked_up" | "cancelled" | "open", pricePaise = 58000) {
+    const category = (await f.api("POST", "/api/categories", { name: `Mains ${uuidv7()}` })).json().category;
+    const product = (await f.api("POST", "/api/products", { categoryId: category.id, name: `Dal ${uuidv7()}`, pricePaise, zomatoPricePaise: pricePaise, gstRate: 5 })).json().product;
+    const created = await f.api("POST", "/api/orders", { clientRef: uuidv7(), type: "zomato", zomatoOrderId });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().order.id as string;
+    expect((await f.api("POST", `/api/orders/${id}/items`, { items: [{ productId: product.id, variantId: null, qty: 1 }] })).statusCode).toBe(200);
+    if (outcome === "cancelled") expect((await f.api("POST", `/api/orders/${id}/cancel`, {})).statusCode).toBe(200);
+    if (outcome === "picked_up") {
+      expect((await f.api("POST", `/api/orders/${id}/zomato-status`, { status: "ready", clientRef: uuidv7() })).statusCode).toBe(200);
+      const closed = await f.api("POST", `/api/orders/${id}/zomato-status`, { status: "picked_up", clientRef: uuidv7() });
+      expect(closed.statusCode, closed.body).toBe(200);
+    }
+    app.db.prepare("UPDATE orders SET opened_at = ? WHERE id = ?").run(placed, id);
+    return id;
+  }
+  async function posFixture() {
+    const f = await fixture();
+    enableIntegration(app, "zomato");
+    return f;
+  }
+
+  it("matches a picked-up POS order to its settlement using the bill total", async () => {
+    const f = await posFixture();
+    await posOrder(f, "5821", "picked_up");
+    await f.commit("settlements", [settlement("5821", "P1", "580.00", "100.00", "480.00")]);
+    const row = (await f.report()).rows.find(r => r.orderId === "5821");
+    expect(row).toMatchObject({ state: "matched", orderTotalPaise: 58000, orderStatus: "delivered", placedAt: placed, orderDifferencePaise: 0, entries: 1 });
+  });
+  it("sends a POS-cancelled order with a settlement to cancellation review", async () => {
+    const f = await posFixture();
+    await posOrder(f, "5822", "cancelled");
+    await f.commit("settlements", [settlement("5822", "P2", "580.00", "100.00", "480.00")]);
+    const row = (await f.report()).rows.find(r => r.orderId === "5822");
+    expect(row).toMatchObject({ state: "review_cancellation", orderTotalPaise: 0, orderStatus: "cancelled" });
+  });
+  it("still lists imported orders that have no POS order", async () => {
+    const f = await posFixture();
+    await posOrder(f, "5821", "picked_up");
+    await f.commit("orders", [order("4000", "250.00")]);
+    const r = await f.report();
+    expect(r.rows.map(row => row.orderId).sort()).toEqual(["4000", "5821"]);
+    expect(r.rows.find(row => row.orderId === "4000")).toMatchObject({ state: "awaiting_statement", orderTotalPaise: 25000, orderStatus: "delivered" });
+  });
+  it("prefers the POS order over an imported order with the same ID", async () => {
+    const f = await posFixture();
+    await posOrder(f, "5821", "picked_up");
+    await f.commit("orders", [order("5821", "999.00")]);
+    await f.commit("settlements", [settlement("5821", "P1", "580.00", "100.00", "480.00")]);
+    const r = await f.report();
+    expect(r.rows.filter(row => row.orderId === "5821")).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ state: "matched", orderTotalPaise: 58000 });
+    expect(r.totals.orderTotalPaise).toBe(58000);
+  });
+  it("marks a POS order with no settlement as awaiting its statement", async () => {
+    const f = await posFixture();
+    await posOrder(f, "5821", "picked_up");
+    const r = await f.report();
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ orderId: "5821", state: "awaiting_statement", orderTotalPaise: 58000, entries: 0, orderDifferencePaise: null });
+    expect(r.totals).toMatchObject({ orderTotalPaise: 58000, matched: 0, needsReview: 1 });
+  });
+  it("reports a POS order opened outside the range only through its settlement, and skips orders still open", async () => {
+    const f = await posFixture();
+    await posOrder(f, "5821", "picked_up");
+    await posOrder(f, "5823", "open");
+    expect((await f.report("2026-10-02", "2026-10-02")).rows.map(r => r.orderId)).toEqual(["5821"]);
+    expect((await f.report("2026-09-01", "2026-09-02")).rows).toHaveLength(0);
+    await f.commit("settlements", [settlement("5821", "P1", "580.00", "100.00", "480.00", "2026-10-20")]);
+    const later = (await f.report("2026-10-20", "2026-10-20")).rows;
+    expect(later).toHaveLength(1);
+    expect(later[0]).toMatchObject({ orderId: "5821", state: "matched", orderTotalPaise: 58000 });
   });
 });
 

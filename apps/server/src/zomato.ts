@@ -135,23 +135,41 @@ function preview(db: Database, kind: ZomatoImportKind, rows: ImportRow[]): Zomat
   return { kind, revision: digest({ kind, rows, existing, version: config(db).version }), added, skipped: rows.length - added, rows: actions };
 }
 
+/** The order side of one reconciliation row, whether it came from the POS or from an import. */
+interface ReconOrder { placedAt: number; status: ZomatoOrder["status"]; totalPaise: number }
+const POS_ZOMATO_ORDER = `SELECT o.status AS pos_status, o.opened_at, COALESCE(b.total_paise,0) AS total_paise FROM orders o
+  LEFT JOIN bills b ON b.order_id=o.id WHERE o.type='zomato' AND o.zomato_order_id=?`;
+/** A closed POS Zomato order: picked up is delivered at the bill total; cancelled is worth nothing. A still-open one is not an order yet. */
+function posOrder(db: Database, orderId: string): { found: boolean; order: ReconOrder | null } {
+  const row = db.prepare(POS_ZOMATO_ORDER).get(orderId) as { pos_status: string; opened_at: number; total_paise: number } | undefined;
+  if (!row) return { found: false, order: null };
+  if (row.pos_status === "cancelled") return { found: true, order: { placedAt: row.opened_at, status: "cancelled", totalPaise: 0 } };
+  if (row.pos_status === "settled") return { found: true, order: { placedAt: row.opened_at, status: "delivered", totalPaise: row.total_paise } };
+  return { found: true, order: null };
+}
+
 function reconciliation(db: Database, query: unknown): ZomatoReconciliation {
   const { from, to, bounds } = reportRange(query), restaurantId = config(db).restaurant_id;
-  // A cohort of orders placed OR settled in the range. Aggregate ALL statement entries
-  // for each included order so split settlements across periods cannot create false mismatches.
-  const ids = db.prepare(`SELECT order_id FROM zomato_orders WHERE restaurant_id=? AND placed_at>=? AND placed_at<?
+  // A cohort of orders placed OR settled in the range: POS Zomato orders first, then imported orders
+  // whose ID has no POS order. Aggregate ALL statement entries for each included order so split
+  // settlements across periods cannot create false mismatches.
+  const ids = db.prepare(`SELECT zomato_order_id AS order_id FROM orders WHERE type='zomato' AND status IN ('settled','cancelled') AND opened_at>=? AND opened_at<?
+    UNION SELECT order_id FROM zomato_orders WHERE restaurant_id=? AND placed_at>=? AND placed_at<?
+      AND order_id NOT IN (SELECT zomato_order_id FROM orders WHERE type='zomato' AND zomato_order_id IS NOT NULL)
     UNION SELECT order_id FROM zomato_settlements WHERE restaurant_id=? AND settlement_date>=? AND settlement_date<=? LIMIT 2001`)
-    .all(restaurantId, ...bounds, restaurantId, from, to) as { order_id: string }[];
+    .all(...bounds, restaurantId, ...bounds, restaurantId, from, to) as { order_id: string }[];
   if (ids.length > 2000) throw httpError(400, "More than 2,000 orders in this period. Choose a shorter date range.");
   const rows: ZomatoReconciliationRow[] = ids.map(({ order_id }) => {
-    const order = findOrder(db, restaurantId, order_id);
+    const pos = posOrder(db, order_id);
+    const imported = pos.found ? undefined : findOrder(db, restaurantId, order_id);
+    const order: ReconOrder | null = pos.order ?? (imported ? { placedAt: imported.placed_at, status: imported.status, totalPaise: imported.total_paise } : null);
     const s = db.prepare(`SELECT COUNT(*) AS entries, COALESCE(SUM(gross_paise),0) AS gross, COALESCE(SUM(deductions_paise),0) AS deductions,
       COALESCE(SUM(additions_paise),0) AS additions, COALESCE(SUM(paid_paise),0) AS paid FROM zomato_settlements WHERE restaurant_id=? AND order_id=?`).get(restaurantId, order_id) as { entries: number; gross: number; deductions: number; additions: number; paid: number };
     const references = (db.prepare("SELECT DISTINCT reference FROM zomato_settlements WHERE restaurant_id=? AND order_id=? ORDER BY reference").all(restaurantId, order_id) as { reference: string }[]).map(r => r.reference);
-    const expected = s.gross - s.deductions + s.additions, orderDifference = order && s.entries ? s.gross - order.total_paise : null;
+    const expected = s.gross - s.deductions + s.additions, orderDifference = order && s.entries ? s.gross - order.totalPaise : null;
     const state = !order ? "missing_order" : !s.entries ? "awaiting_statement" : order.status === "cancelled" || order.status === "rejected" ? "review_cancellation"
       : orderDifference !== 0 || s.paid !== expected ? "mismatch" : "matched";
-    return { orderId: order_id, placedAt: order?.placed_at ?? null, orderStatus: order?.status ?? null, orderTotalPaise: order?.total_paise ?? null,
+    return { orderId: order_id, placedAt: order?.placedAt ?? null, orderStatus: order?.status ?? null, orderTotalPaise: order?.totalPaise ?? null,
       statementGrossPaise: s.gross, deductionsPaise: s.deductions, additionsPaise: s.additions, expectedNetPaise: expected, paidPaise: s.paid,
       orderDifferencePaise: orderDifference, payoutDifferencePaise: s.paid - expected, entries: s.entries, references, state };
   });
