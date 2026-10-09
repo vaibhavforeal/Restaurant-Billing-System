@@ -167,8 +167,8 @@
         await wait(() => pill('Kitchen Display (KDS)') === 'Pro plan', 'KDS locked after a licence change');
         check(sw('Kitchen Display (KDS)').disabled && card('Kitchen Display (KDS)').textContent.includes('Upgrade to Pro to use the Kitchen Display'), 'A licence change refreshes the Marketplace live: KDS is locked without the plan');
         [...card('Kitchen Display (KDS)').querySelectorAll('button')].find(b => b.textContent === 'View licence').click();
-        const plan = () => [...document.querySelectorAll('details')].find(d => d.querySelector('summary')?.textContent === 'Plan & devices');
-        await wait(() => plan()?.open && plan().getBoundingClientRect().top < innerHeight && plan().getBoundingClientRect().bottom > 0, 'Plan & devices open and in view');
+        const plan = () => document.querySelector('.settings-detail-head h3')?.textContent === 'Plan & devices' ? document.querySelector('.settings-detail .license-settings') : null;
+        await wait(() => plan() && plan().getBoundingClientRect().top < innerHeight && plan().getBoundingClientRect().bottom > 0, 'Plan & devices open and in view');
         check(true, 'View licence opens Plan & devices');
       } finally { unlicensed = false; window.fetch = countingFetch; }
       window.dispatchEvent(new Event('forkflow:license-changed'));

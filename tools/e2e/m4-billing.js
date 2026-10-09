@@ -34,7 +34,7 @@
   const productName = `Gate meal ${suffix}`;
   await api('/products', 'POST', { categoryId: category.id, name: productName, pricePaise: 10500, gstRate: 5, kotStationId: null });
   async function mode(value) {
-    await nav('settings'); await fill('GST', value); await click('Save');
+    await nav('settings'); (await waitFor(() => document.querySelector('[data-section="profile"]'), 'profile card')).click(); await fill('GST', value); await click('Save');
     await waitFor(() => document.body.innerText.includes('Saved'), 'saved settings');
     check((await api('/settings')).settings.gstMode === value, `${value} GST mode persisted`);
   }

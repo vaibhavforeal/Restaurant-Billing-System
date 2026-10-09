@@ -1,0 +1,12 @@
+.settings-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-6); }
+html[data-theme] .settings-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: var(--space-3); width: 100%; height: 100%; min-height: 132px; padding: var(--space-6); text-align: left; border: var(--border) solid var(--line); border-radius: var(--radius-panel); background: var(--surface); color: var(--ink); cursor: pointer; }
+html[data-theme] .settings-card:hover { border-color: var(--pos-accent); }
+.settings-card:focus-visible { outline: var(--focus-width) solid var(--pos-accent); outline-offset: 2px; }
+.settings-card-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: var(--radius); background: var(--pos-accent-soft); color: var(--pos-accent); }
+.settings-card-title { font-size: var(--text-base); font-weight: 600; overflow-wrap: anywhere; }
+.settings-card-blurb { color: var(--muted); font-size: var(--text-secondary); font-weight: 400; overflow-wrap: anywhere; }
+.settings-detail-head { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.settings-detail-head h3 { margin: 0; font-size: var(--text-heading); }
+.settings-detail-head h3:focus { outline: none; }
+.settings-screen .settings-detail > .panel { border-top: 0; }
+@media (max-width: 640px) { .settings-cards { grid-template-columns: 1fr; } }

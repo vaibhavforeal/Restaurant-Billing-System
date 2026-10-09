@@ -16,7 +16,7 @@
     const data = await res.json(); if (!res.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
   };
   await waitFor(() => localStorage.getItem("forkflow.generation"), "server generation checked");
-  await click("settings"); await waitFor(() => button("Back up now"), "backup controls");
+  await click("settings"); (await waitFor(() => document.querySelector('[data-section="backups"]'), "backups card")).click(); await waitFor(() => button("Back up now"), "backup controls");
   const count = (await api("/system/backups")).backups.length;
   await click("Back up now"); await waitFor(() => document.body.innerText.includes("Verified local backup saved"), "manual backup");
   const backups = await api("/system/backups");

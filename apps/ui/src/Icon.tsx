@@ -20,6 +20,10 @@ const paths = {
   marketplace: "M4 9 5.5 4h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6",
   refresh: "M20 11a8 8 0 0 0-14.6-4.5M4 4v4h4m-4 5a8 8 0 0 0 14.6 4.5M20 20v-4h-4",
   alert: "M12 8v5m0 3.5v.5M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z",
+  keyboard: "M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10",
+  printer: "M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z",
+  cloud: "M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9.5 4 4 0 0 1 17 18H7Z",
+  badge: "m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z",
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({ name, size = 20, style }: { name: IconName; size?: number; style?: CSSProperties }) {

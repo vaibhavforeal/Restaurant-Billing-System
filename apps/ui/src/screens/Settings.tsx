@@ -7,7 +7,10 @@ import { SystemSettings } from "./SystemSettings";
 import { LicenseSettings } from "./LicenseSettings";
 import { KeyboardSettings } from "./KeyboardSettings";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
+import { Icon } from "../Icon";
+import { initialSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId } from "../settings-sections";
 import "../printer-settings.css";
+import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
 const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5 };
@@ -23,9 +26,11 @@ const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "recei
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
 
-/** `section: "plan"` opens and scrolls to Plan & devices, e.g. from a Marketplace card that needs a different plan. */
+/** Opens on a grid of section cards; `section: "plan"` opens Plan & devices directly, e.g. from a Marketplace card that needs a different plan. */
 export function Settings({ section }: { section?: "plan" | undefined } = {}) {
-  const planSection = useRef<HTMLDetailsElement>(null);
+  const [active, setActive] = useState<SettingsSectionId | null>(() => initialSettingsSection(section));
+  const sectionHeading = useRef<HTMLHeadingElement>(null);
+  const returnToCard = useRef<SettingsSectionId | null>(null);
   // Profile section
   const [form, setForm] = useState<SettingsData>(EMPTY_SETTINGS);
   const [profileStatus, setProfileStatus] = useState<"" | "saved" | "error">("");
@@ -50,10 +55,10 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    if (section !== "plan" || !planSection.current) return;
-    planSection.current.open = true;
-    planSection.current.scrollIntoView({ block: "start" });
-  }, [section, loaded]); // the sections render only after the settings load
+    if (!loaded) return; // the sections render only after the settings load
+    if (active) sectionHeading.current?.focus();
+    else if (returnToCard.current) document.querySelector<HTMLElement>(`[data-section="${returnToCard.current}"]`)?.focus();
+  }, [active, loaded]);
 
   // Load all data on mount
   useEffect(() => {
@@ -298,9 +303,27 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   return (
     <div className="screen settings-screen">
       <div className="page-header"><div><h2>Settings</h2></div></div>
-      <details className="pos-section"><summary>Keyboard shortcuts</summary><KeyboardSettings /></details>
+      {active === null ? (
+        <ul className="settings-cards">
+          {SETTINGS_SECTIONS.map(({ id, title, blurb, icon }) => (
+            <li key={id}>
+              <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setActive(id); }}>
+                <span className="settings-card-icon"><Icon name={icon} size={22} /></span>
+                <span className="settings-card-title">{title}</span>
+                <span className="settings-card-blurb">{blurb}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : <>
+      <div className="settings-detail-head">
+        <button type="button" onClick={() => setActive(null)}>← Settings</button>
+        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title}</h3>
+      </div>
+      <div className="pos-section settings-detail">
+      {active === "shortcuts" && <KeyboardSettings />}
       {/* Profile section */}
-      <details className="pos-section" open><summary>Restaurant profile</summary><div className="panel">
+      {active === "profile" && <div className="panel">
 
         <div className="settings-form">
           {SETTINGS_FIELDS.map(({ key, label }) => (
@@ -355,10 +378,10 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             {profileStatus === "error" && profileError}
           </div>
         </div>
-      </div></details>
+      </div>}
 
       {/* Printers section */}
-      <details className="pos-section"><summary>Printers</summary><div className="panel">
+      {active === "printers" && <div className="panel">
 
       <div role="alert" style={{ color: "var(--danger-text, crimson)", minHeight: 20 }}>{error}</div>
         <div className="printer-table-scroll" role="region" aria-label="Configured printers" tabIndex={0}>
@@ -493,10 +516,10 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             <button onClick={() => void addPrinter()} disabled={busy}>Add printer</button>
           </div>
         </div>
-      </div></details>
+      </div>}
 
       {/* KOT stations section */}
-      <details className="pos-section"><summary>KOT stations</summary><div className="panel">
+      {active === "stations" && <div className="panel">
 
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
@@ -544,10 +567,10 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
           />
           <button onClick={() => void addStation()} disabled={busy}>Add station</button>
         </div>
-      </div></details>
+      </div>}
 
       {/* Print jobs section */}
-      <details className="pos-section"><summary>Print jobs</summary><div className="panel">
+      {active === "jobs" && <div className="panel">
         <p>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</p>
         {error && <p role="alert">{error}</p>}
 
@@ -591,9 +614,11 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             ))}
           </div>
         )}
-      </div></details>
-      <details className="pos-section"><summary>Backups & connections</summary><SystemSettings /></details>
-      <details ref={planSection} className="pos-section"><summary>Plan & devices</summary><LicenseSettings /></details>
+      </div>}
+      {active === "backups" && <SystemSettings />}
+      {active === "plan" && <LicenseSettings />}
+      </div>
+      </>}
     </div>
   );
 }

@@ -17,8 +17,7 @@
     return { status: response.status, ...await response.json() };
   };
   button("settings").click();
-  const details = await wait(() => [...document.querySelectorAll("details")].find(d => d.querySelector("summary")?.textContent === "Backups & connections"), "backup section");
-  if (!details.open) details.querySelector("summary").click();
+  (await wait(() => document.querySelector('[data-section="backups"]'), "backup section card")).click();
   await wait(() => button("Save cloud preferences"), "cloud settings loaded");
   check(document.querySelector(".cloud-backup-state").textContent === "Not configured", "Cloud state reports not configured");
   check(button("Connect Google Drive").disabled && button("Back up to Drive now").disabled && button("Retry uploads").disabled, "Unconfigured cloud actions are disabled");
@@ -46,8 +45,7 @@
   button("home").click();
   await wait(() => button("settings") && !button("settings").disabled, "home loaded");
   button("settings").click();
-  const reopened = await wait(() => [...document.querySelectorAll("details")].find(d => d.querySelector("summary")?.textContent === "Backups & connections"), "reopened settings");
-  if (!reopened.open) reopened.querySelector("summary").click();
+  (await wait(() => document.querySelector('[data-section="backups"]'), "reopened settings")).click();
   await wait(() => document.querySelector('.cloud-backups input[maxlength="100"]')?.value === "Cafe Cloud Backups", "preferences reloaded");
   check(document.querySelector('.cloud-backups input[type="number"]').value === "45" && !document.querySelector('.cloud-backups input[type="checkbox"]').checked, "Saved preferences survive remount");
   window.__cloudBackupResult = { status: "passed", checks }; return window.__cloudBackupResult;

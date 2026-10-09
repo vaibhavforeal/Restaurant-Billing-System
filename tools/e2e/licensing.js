@@ -62,7 +62,7 @@
     await set(input('Device name'), 'Main counter'); await click('Register this device');
     await wait(() => document.body.innerText.includes('Dashboard'));
     check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
-    document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
+    document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     await registerOther('b'.repeat(64), 'Kitchen'); const phoneHeaders = await registerOther('c'.repeat(64), 'Waiter phone');
     await click('Refresh plan'); await wait(() => panel().innerText.includes('Waiter phone'));
     check(panel().innerText.includes('3 / 5'), 'Plan summary uses the registered device count');
