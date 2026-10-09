@@ -153,3 +153,33 @@ describe("CSV parsing", () => {
     ['category,name,price,gst_rate\nA,"B"x,1,0', "closing quote"],
   ])("reports malformed input", (source, error) => { expect(() => parseCatalogCsv(source)).toThrow(error); });
 });
+
+describe("Zomato price CSV columns", () => {
+  it("stores a null Zomato price when the file has no zomato columns", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    expect((await apply(token, csv(["Mains", "Dal", "200", "5"]))).statusCode).toBe(200);
+    const [dal] = await products(token);
+    expect(dal.zomatoPricePaise).toBeNull();
+  });
+
+  it("round-trips item and variant Zomato prices through export and import", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    const source = catalogCsv([
+      ["category", "name", "price", "gst_rate", "variant_name", "variant_price", "zomato_price", "variant_zomato_price"],
+      ["Mains", "Dal", "200", "5", "", "", "290.00", ""],
+      ["Mains", "Biryani", "300", "5", "Half", "180", "", "0"],
+    ]);
+    expect((await apply(token, source)).statusCode).toBe(200);
+    const byName = async () => Object.fromEntries((await products(token)).map((p: { name: string }) => [p.name, p]));
+    expect((await byName()).Dal.zomatoPricePaise).toBe(29000);
+    expect((await byName()).Biryani.zomatoPricePaise).toBeNull();
+    expect((await byName()).Biryani.variants[0].zomatoPricePaise).toBe(0);
+    const before = await products(token);
+    const exported = (await app.inject({ method: "GET", url: "/api/catalog/export", headers: auth(token) })).json().csv as string;
+    const rows = parseCatalogCsv(exported);
+    expect(rows.find((r) => r.values.name === "Dal")?.values.zomato_price).toBe("290.00");
+    expect(rows.find((r) => r.values.variant_name === "Half")?.values.variant_zomato_price).toBe("0.00");
+    expect((await apply(token, exported)).statusCode).toBe(200);
+    expect(await products(token)).toEqual(before);
+  });
+});

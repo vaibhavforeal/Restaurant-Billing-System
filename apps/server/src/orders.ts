@@ -12,6 +12,7 @@ import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
+import { integrationEnabled } from "./integrations.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -33,11 +34,27 @@ export function registerOrders(app: FastifyInstance): void {
     return loadOrderJson(app.db, id);
   }
 
+  const ZOMATO_STATUS_LABEL = { preparing: "preparing", ready: "ready", picked_up: "picked up" } as const;
+  const zomatoDuplicate = (zomatoOrderId: string) => {
+    const row = app.db.prepare("SELECT status, zomato_status FROM orders WHERE zomato_order_id = ? AND type = 'zomato'").get(zomatoOrderId) as
+      { status: string; zomato_status: keyof typeof ZOMATO_STATUS_LABEL | null } | undefined;
+    const state = row?.status === "cancelled" ? "cancelled" : row?.zomato_status ? ZOMATO_STATUS_LABEL[row.zomato_status] : "new";
+    return httpError(409, `Zomato order ${zomatoOrderId} is already on the desk (${state}).`, "zomato_duplicate");
+  };
+
   app.post("/api/orders", { preHandler: create }, async (req, reply) => {
     const body = OrderCreate.parse(req.body);
+    // Zomato orders are quick-billing work: admin and cashier only (same rule as canQuickBill in the UI).
+    if (body.type === "zomato" && req.user.role !== "admin" && req.user.role !== "cashier") throw httpError(403, "Not allowed to create Zomato orders");
     const existing = app.db.prepare("SELECT id FROM orders WHERE client_ref = ?").get(body.clientRef) as { id: string } | undefined;
     if (existing) {
       return reply.status(200).send({ order: orderWithDetails(existing.id) });
+    }
+
+    if (body.type === "zomato") {
+      // Only creating is gated: Ready and Picked up keep working for open orders when Zomato is turned off.
+      if (!integrationEnabled(app.db, "zomato")) throw httpError(409, "Zomato is turned off in the Marketplace.");
+      if (app.db.prepare("SELECT id FROM orders WHERE zomato_order_id = ? AND type = 'zomato'").get(body.zomatoOrderId!)) throw zomatoDuplicate(body.zomatoOrderId!);
     }
 
     if (body.type === "dine_in") {
@@ -65,6 +82,16 @@ export function registerOrders(app: FastifyInstance): void {
           .run(id, body.clientRef, body.type, body.tableId, label, req.user.id, now, tablePriceTier(app.db, body.tableId!), body.captainId ?? null, chosenCaptainName);
       });
       write();
+    } else if (body.type === "zomato") {
+      try {
+        app.db
+          .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier, zomato_order_id) VALUES (?, ?, 'zomato', NULL, NULL, ?, ?, 'zomato', ?)")
+          .run(id, body.clientRef, req.user.id, now, body.zomatoOrderId!);
+      } catch (err) {
+        // A concurrent writer won the race: the partial unique index is the source of truth.
+        if (err instanceof Error && "code" in err && err.code === "SQLITE_CONSTRAINT_UNIQUE") throw zomatoDuplicate(body.zomatoOrderId!);
+        throw err;
+      }
     } else {
       // Parcel: split_label is NULL
       app.db

@@ -116,7 +116,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       app.log.error(err);
       return reply.status(status).send({ error: "internal error" });
     }
-    const code = typeof err === "object" && err !== null && "code" in err && (err.code === "menu_changed" || err.code === "kds_off") ? err.code : undefined;
+    const code = typeof err === "object" && err !== null && "code" in err && (err.code === "menu_changed" || err.code === "kds_off" || err.code === "zomato_duplicate" || err.code === "zomato_status" || err.code === "zomato_order") ? err.code : undefined;
     return reply.status(status).send({ error: message, ...(code ? { code } : {}) });
   });
 

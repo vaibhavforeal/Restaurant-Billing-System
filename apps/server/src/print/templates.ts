@@ -5,7 +5,7 @@ import type { PrintProfileInput } from "@forkflow/domain";
 export interface KotSlipCtx {
   kotNo: number;
   stationName: string;
-  orderType: "dine_in" | "parcel";
+  orderType: "dine_in" | "parcel" | "zomato";
   tableName: string | null;
   splitLabel: string | null;
   items: Array<{ qty: number; name: string; note: string | null; cancelled: boolean }>;
@@ -15,7 +15,7 @@ export interface KotSlipCtx {
 export interface CancelSlipCtx {
   kotNo: number;
   stationName: string;
-  orderType: "dine_in" | "parcel";
+  orderType: "dine_in" | "parcel" | "zomato";
   tableName: string | null;
   splitLabel: string | null;
   item: { qty: number; name: string };
