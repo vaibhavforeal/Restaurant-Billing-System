@@ -1,4 +1,5 @@
 // Disposable in-memory restaurant for tools/e2e/zomato-desk.js. No real POS data or printers are used.
+// Also exposes POST /__e2e/age-order (fixture only) for the card-colour gate zomato-desk-age.js.
 // Zomato and the Kitchen Display are ON, with a restaurant ID saved. "Paneer tikka" costs 300 base, 260 Takeaway and 240 Zomato, on a kitchen station.
 import { freshAppWithFakeSink, setupAdmin, createUser, auth } from "../../apps/server/src/test-helpers.js";
 import fastifyStatic from "@fastify/static";
@@ -7,6 +8,12 @@ import { resolve } from "node:path";
 const { app } = freshAppWithFakeSink();
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist") });
 app.setNotFoundHandler((req, reply) => req.method === "GET" && !req.url.startsWith("/api/") ? reply.sendFile("index.html") : reply.code(404).send({ error: "not found" }));
+// Test-only hook for zomato-desk-age.js: back-dates an open order's opened_at so a card can be made "old" without waiting. Fixture only, never app code.
+app.post("/__e2e/age-order", async (req) => {
+  const { orderId, minutes } = req.body as { orderId: string; minutes: number };
+  const changed = app.db.prepare("UPDATE orders SET opened_at = ? WHERE id = ? AND status = 'open' AND type = 'zomato'").run(Date.now() - minutes * 60000, orderId).changes;
+  return { changed };
+});
 const admin = await setupAdmin(app);
 await createUser(app, admin.token, { name: "Counter", pin: "2345", role: "cashier" });
 await createUser(app, admin.token, { name: "Ravi", pin: "3456", role: "waiter" });

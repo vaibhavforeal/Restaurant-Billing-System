@@ -41,6 +41,17 @@ The temporary order is cancelled in `finally`, so the roles gate leaves no open 
 order, but its cancelled ID stays reserved. Run it before or after `zomato-desk.js`; a
 fresh fixture is only needed for the main gate's reserved `E2E-1`. Stop the fixture afterwards.
 
+**Card colour gate.** `tools/e2e/zomato-desk-age.js` (16 checks; result `window.__zomatoDeskAgeResult`,
+progress `window.__zomatoDeskAgeProgress`) runs on the same fixture, signed in as admin, from any screen,
+before or after `zomato-desk.js`. It punches in a temporary `AGE-<timestamp>` order through the API and
+checks the card class: `zomato-age-ok` at 0 minutes with the default 15/25. It then back-dates the order
+30 minutes through the fixture-only hook `POST /__e2e/age-order` (in `zomato-desk-server.mts`, not app
+code) so no waiting is needed: `zomato-age-late` with 15/25, `zomato-age-warn` after amber 20 / red 40
+saved through the real Marketplace, Zomato card, **Settings** dialog, then `zomato-age-ok` (35/50) and
+`zomato-age-late` (5/10) live from `zomato.changed` without leaving Tables. The server refuses red equal
+to or earlier than amber with 400 "Red must be later than amber". `finally` restores 15/25 and cancels the
+order, leaving no open Zomato order (the cancelled ID stays reserved).
+
 ## Zomato setup and reconciliation
 
 Build the UI and start `node --import tsx tools/e2e/zomato-server.mts`.
