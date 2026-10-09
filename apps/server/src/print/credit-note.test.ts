@@ -57,6 +57,21 @@ describe("credit note slip", () => {
     }
   });
 
+  it("prints no GST rows on a credit note against a composition bill of supply", async () => {
+    const { bill } = await refunded();
+    const supply: Bill = { ...bill, receipt: { ...bill.receipt, gstScheme: "composition" } };
+    const note: CreditNoteView = { ...bill.creditNotes[0]!, taxablePaise: 3333, cgstPaise: 0, sgstPaise: 0, totalPaise: 3333,
+      taxes: [{ gstRate: 5, taxablePaise: 3333, cgstPaise: 0, sgstPaise: 0 }] };
+    const html = creditNoteHtml(note, supply);
+    expect(html).not.toMatch(/GST breakdown|CGST|SGST|Taxable/);
+    expect(html).toContain("<td>Item value</td>"); expect(html).toContain("₹33.33");
+    for (const width of [58, 80] as const) {
+      const rendered = renderBytes(creditNoteSlip(note, supply, width));
+      expect(rendered).not.toMatch(/CGST|SGST|Taxable/);
+      expect(rendered).toContain("TOTAL REFUNDED"); expect(rendered).toContain("33.33");
+    }
+  });
+
   it("says BILL VOIDED for the void of an unpaid bill", async () => {
     const { bill } = await refunded();
     const note = { ...view(bill.creditNotes[0]!), kind: "void" as const, refunds: [] };

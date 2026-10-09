@@ -21,8 +21,7 @@ The bill design is available in both existing print paths:
 - **A4 / PDF:** open **View receipt**, then **Print / save PDF**. Choose A4 paper
   and disable the browser's own headers/footers in its print dialog.
 
-Classic follows the counter-bill reference in
-`Screenshots/Screenshot 2026-10-09 101725.png`: centered restaurant details,
+Classic follows a conventional counter bill: centered restaurant details,
 compact rows, dotted separators, and a bold total. Restaurant-specific details
 include FSSAI, service type, table/group, GST breakdown, and payment status.
 
@@ -58,22 +57,24 @@ There are three automatic receipt formats, using the bill's saved tax mode:
   subtotal, discount (if any), rounding (if any), total and payment details. GST
   is stored as zero; the menu price less any discount is the bill amount.
   Select **Settings > Menu price tax mode > Composition scheme - no GST charged**.
-  Zomato orders keep the "GST paid by Zomato" note.
+  Zomato orders keep the "GST paid by Zomato" note. A credit note against a
+  composition bill shows the item value with no GST rows, and the QR menu tells
+  guests that no tax is added to menu prices.
 
 For new inclusive bills select **Settings > Menu price tax mode > Menu prices
 include GST**. This controls how menu prices are interpreted, so use it when the
 menu rates already include tax. Calculated GST and taxable amounts remain stored
 for reports and are not added again to inclusive prices. Historical bills use
-their saved mode, irrespective of the current setting. Credit notes retain their
-existing breakdown.
+their saved mode, irrespective of the current setting. Credit notes on regular
+bills retain their existing GST breakdown.
 
 Configured UPI QR codes remain available on unpaid bills. Cash tendered, customer
 details and phone numbers are not invented when absent from the saved bill.
 No totals, payment records or historical bill data are changed by the layout.
 
 Generate sample layouts with `node --import tsx tools/preview-bills.ts`. It writes
-A4, unpaid, void, takeaway, inclusive/mixed-GST, UPI, large-value, long-bill,
-and thermal previews under `.e2e-scratch/bill-design` using the production
+A4, unpaid, void, takeaway, inclusive/mixed-GST, composition, UPI, large-value,
+long-bill, and thermal previews under `.e2e-scratch/bill-design` using the production
 renderers. The thermal HTML previews visualize the actual
 ESC/POS bytes and do not replace a physical printer check. The existing thermal
 text encoding supports ASCII; non-ASCII characters use the existing fallback.
@@ -81,7 +82,9 @@ text encoding supports ASCII; non-ASCII characters use the existing fallback.
 The sample image is saved in `docs/screenshots/restaurant-bill.png`.
 The inclusive example is `docs/screenshots/restaurant-bill-inclusive.png`;
 generated previews are `bill-inclusive.html`, `bill-inclusive-58mm.html`, and
-`bill-inclusive-80mm.html` under `.e2e-scratch/bill-design`.
+`bill-inclusive-80mm.html` under `.e2e-scratch/bill-design`. The composition
+bill of supply is `docs/screenshots/restaurant-bill-composition.png`
+(`bill-composition.html`, `bill-composition-58mm.html`, `bill-composition-80mm.html`).
 Open `bill-styles.html` in that directory to compare all four styles. Its controls
 switch the tax sample and preview/80 mm/58 mm format. Each style also links to an
 unpaid bill with a sample UPI QR. The comparison image is

@@ -74,6 +74,8 @@ export const RESTAURANT_RECEIPT_CSS = `
   .bill--heritage .bill-meta dt{font-style:italic}.bill--heritage .status{font:700 10px/1.8 Arial,sans-serif}
   .bill--heritage .items th{font-size:13px;font-style:italic;border-block:1px solid #111}
   .bill--heritage .items td{font-size:14px;padding:7px 0}
+  /* Georgia only has old-style figures; amounts, quantities and dates use lining figures so they read cleanly. */
+  .bill--heritage .items td:not(:first-child),.bill--heritage .totals td,.bill--heritage .bill-meta dd,.bill--heritage .upi-amount{font-family:"Times New Roman",Times,serif;font-variant-numeric:lining-nums tabular-nums}
   .bill--heritage .totals .subtotal td{border-top:1px solid #111}
   .bill--heritage .totals .grand-total td{border-block:4px double #111;font-size:23px;font-weight:400;padding:9px 0}
   .bill--heritage .totals .grand-total td:first-child{font-size:15px;letter-spacing:1px}

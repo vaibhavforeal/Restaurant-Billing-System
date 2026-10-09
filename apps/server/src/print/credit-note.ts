@@ -40,7 +40,8 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
     pair(`Qty ${item.qty}`, money(item.totalPaise));
   });
   pos.hr(width);
-  for (const t of note.taxes) {
+  // A composition bill of supply charged no GST, so its credit note shows none either.
+  if (r.gstScheme !== "composition") for (const t of note.taxes) {
     pair(`Taxable @ ${t.gstRate}%`, money(t.taxablePaise));
     pair(`CGST @ ${t.gstRate / 2}%`, money(t.cgstPaise));
     pair(`SGST @ ${t.gstRate / 2}%`, money(t.sgstPaise));
@@ -73,6 +74,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   const label = cnLabel(note);
   const unpaidVoid = isUnpaidVoid(note);
   const rounding = roundingOf(note);
+  const supply = r.gstScheme === "composition";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Credit note ${label}</title><style>${RECEIPT_CSS}
   .items th:nth-child(3),.items td:nth-child(3){width:14%}.items th:last-child,.items td:last-child{width:37%}
@@ -87,14 +89,14 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   <table class="items" aria-label="Credited items"><thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Amount ₹</th></tr></thead><tbody>
     ${note.lines.length ? note.lines.map((i, index) => `<tr><td>${index + 1}</td><td><span class="item-name">${e(i.name)}</span></td><td>${i.qty}</td><td class="amount"><strong>${money(i.totalPaise)}</strong></td></tr>`).join("") : `<tr><td></td><td><span class="item-name">All items on the bill</span></td><td></td><td class="amount"><strong>${money(note.totalPaise)}</strong></td></tr>`}
   </tbody></table><div class="item-count"><span>${note.lines.reduce((sum, l) => sum + l.qty, 0)} total quantity credited</span><span>All amounts in INR</span></div>
-  <div class="summary"><section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
+  <div class="summary">${supply ? `<section aria-label="GST"><p class="tax-note">Composition scheme: no GST was charged on this bill.</p></section>` : `<section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
     <table class="taxes"><thead><tr><th scope="col">GST</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead><tbody>
     ${note.taxes.map((t) => `<tr><td>${t.gstRate}%</td><td>${money(t.taxablePaise)}</td><td>${money(t.cgstPaise)}<br><small>@ ${t.gstRate / 2}%</small></td><td>${money(t.sgstPaise)}<br><small>@ ${t.gstRate / 2}%</small></td></tr>`).join("")}
     </tbody></table>
-  </section><section aria-label="Credit note totals"><table class="totals"><tbody>
-    <tr><td>Taxable value</td><td class="amount">₹${money(note.taxablePaise)}</td></tr>
+  </section>`}<section aria-label="Credit note totals"><table class="totals"><tbody>
+    ${supply ? `<tr><td>Item value</td><td class="amount">₹${money(note.taxablePaise)}</td></tr>` : `<tr><td>Taxable value</td><td class="amount">₹${money(note.taxablePaise)}</td></tr>
     <tr><td>CGST</td><td class="amount">₹${money(note.cgstPaise)}</td></tr>
-    <tr><td>SGST</td><td class="amount">₹${money(note.sgstPaise)}</td></tr>
+    <tr><td>SGST</td><td class="amount">₹${money(note.sgstPaise)}</td></tr>`}
     ${rounding ? `<tr><td>Round off</td><td class="amount">₹${money(rounding)}</td></tr>` : ""}
     <tr class="grand-total"><td>${unpaidVoid ? "Bill value" : "Total refunded"}</td><td class="amount">₹${money(note.totalPaise)}</td></tr>
   </tbody></table></section></div>

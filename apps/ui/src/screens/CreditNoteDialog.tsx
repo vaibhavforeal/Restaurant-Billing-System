@@ -252,9 +252,11 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
       {preview && preview.key === key && <>
         <ul>{preview.lines.map((line) => <li key={line.orderItemId}><span>{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}</ul>
         <dl className="pos-totals">
-          <dt>Taxable value</dt><dd>{money(preview.totals.taxablePaise)}</dd>
-          <dt>CGST</dt><dd>{money(preview.totals.cgstPaise)}</dd>
-          <dt>SGST</dt><dd>{money(preview.totals.sgstPaise)}</dd>
+          {bill.receipt.gstScheme === "composition" ? <><dt>Item value</dt><dd>{money(preview.totals.taxablePaise)}</dd></> : <>
+            <dt>Taxable value</dt><dd>{money(preview.totals.taxablePaise)}</dd>
+            <dt>CGST</dt><dd>{money(preview.totals.cgstPaise)}</dd>
+            <dt>SGST</dt><dd>{money(preview.totals.sgstPaise)}</dd>
+          </>}
           <dt>Round off</dt><dd>{money(preview.totals.roundingPaise)}</dd>
           <dt>Credit total</dt><dd><strong>{money(preview.totals.totalPaise)}</strong></dd>
         </dl>
