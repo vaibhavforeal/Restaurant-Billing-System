@@ -60,8 +60,13 @@ ID, its age in minutes, the item total, a status pill and one button.
   Preparing.
 - **Picked up** asks "Close Zomato #<id>?". It creates the bill and records the payment
   in one step. Pressing it twice, or from two counters, closes the order once.
-- To cancel an order use **Cancel order** on the order screen. Stock already used by sent
-  KOTs stays used, and the order still appears in reconciliation.
+- To cancel an order that has not sent anything to the kitchen, use **Cancel order** on
+  the order screen.
+- Once a KOT has gone out, **Cancel order** is hidden. Cancel each sent item first (an
+  admin or cashier gives a reason); the kitchen gets a cancel slip labelled with the
+  Zomato order ID, and the stock those items used is returned. When no sent item is
+  left, **Cancel order** appears again. The cancelled order still appears in
+  reconciliation, with value 0.
 
 The same status pill and next-step button are on the order screen, where the bill,
 discount and payment controls are replaced by them. Zomato orders cannot be billed,
@@ -93,17 +98,25 @@ are refused: **Zomato handles refunds for Zomato orders**.
 - **Home:** a **Zomato** card next to Dine In and Takeaway, a Zomato series in the
   sales-by-slot chart, and the open Zomato orders in **Alerts** (oldest first) while
   Zomato is on. Zomato sales are part of Total Sales.
-- **Day-end:** a line **Zomato receivable (outstanding)** with the value of Zomato bills
-  not yet paid out. It is not part of expected drawer cash or of the cash, UPI and card
-  totals, so the drawer and GST payable are unaffected.
+- **Day-end:** a line **Zomato receivable (outstanding)** with the total of the Zomato
+  bills closed (picked up) that day. It is the amount Zomato owes for that day's orders;
+  it is not reduced when Zomato pays out, so check payouts in **Zomato reconciliation**.
+  It is not part of expected drawer cash or of the cash, UPI and card totals.
+- **Day-end GST:** Zomato bills are left out of the GST breakdown and the net taxable
+  value, so GST payable is unaffected. Their value is shown on one line, **Supplies under
+  section 9(5) (GST paid by Zomato)**. The day-end CSV export has both Zomato lines.
+- **Reports → Sales:** when Zomato bills closed in the period, a **Zomato receivable
+  (outstanding)** card sits beside **Collections received**. Zomato bills count in sales
+  but never in collections, so for bills paid on the day they are issued, sales =
+  collections + Zomato receivable + still unpaid (before refunds).
 - **Reports → Item / category sales:** a table **Aggregator supplies — GST paid by Zomato
   (section 9(5))** lists the Zomato bills and their values for the period, for your accountant.
 - **Reports → Order analytics** reports Zomato orders as their own order type.
 
 ## Reconciliation
 
-Open **Reports → Zomato reconciliation** (admins and cashiers, while Zomato is on). It
-compares the POS Zomato orders with Zomato's payout sheet:
+Open **Reports → Zomato reconciliation** (admins and cashiers, whether or not Zomato is
+turned on in the Marketplace). It compares the POS Zomato orders with Zomato's payout sheet:
 
 - The order side is the POS Zomato orders in the period, closed or cancelled. A cancelled
   order has value 0 and is flagged **Review cancellation** if the sheet still pays it.

@@ -10,15 +10,17 @@ cashier **2345**, waiter **3456**. It uses a fake printer and never opens the li
 
 Sign in as admin, then add `tools/e2e/zomato-desk.js` to the page (agent-browser
 `eval --stdin`, or Playwright `page.addScriptTag({ path })`) and require
-`window.__zomatoDeskResult.status === "passed"` (25 checks; progress is
+`window.__zomatoDeskResult.status === "passed"` (27 checks; progress is
 `window.__zomatoDeskProgress`). It punches in order `E2E-1` and covers: the Zomato
 section and the server refusing a waiter's create request (403), the Zomato price on the menu, no
 bill/discount/pay controls, Send KOT to Preparing, Ready and Picked up from the card
-(with the confirm), one paid bill with GST 0 and "GST paid by Zomato (section 9(5))",
-no Print/Reprint/Credit note/Refund/Void on that bill and a refused print request, a
-refused duplicate ID (message and `409 zomato_duplicate`), the dashboard Zomato card,
-day-end "Zomato receivable (outstanding)" outside cash/UPI/card, and the row in Reports,
-Zomato reconciliation. `E2E-1` stays reserved, so restart the fixture before each run.
+(with the confirm), one paid bill with GST 0, "GST paid by Zomato (section 9(5))" and no
+per-rate GST rows, an on-screen receipt labelled "Zomato" / "Zomato #E2E-1" with the 9(5)
+note and no GST lines, no Print/Reprint/Credit note/Refund/Void on that bill and a refused
+print request, a refused duplicate ID (message and `409 zomato_duplicate`), the dashboard
+Zomato card, day-end "Zomato receivable (outstanding)" outside cash/UPI/card and the bill
+kept out of the GST breakdown as a section 9(5) supply, and the row in Reports, Zomato
+reconciliation. `E2E-1` stays reserved, so restart the fixture before each run.
 
 **Roles gate.** `tools/e2e/zomato-desk-roles.js` proves who sees the Zomato section
 (result `window.__zomatoDeskRolesResult`, progress `window.__zomatoDeskRolesProgress`). It
@@ -130,8 +132,8 @@ Use the same sales-dashboard fixture (port 4145, Zomato off). Sign in as admin
 **1234** and run `tools/e2e/marketplace.js` the same way as above (session
 `marketplace`); require `status: passed` (36 checks). Then sign out, sign in as
 cashier **2345** and run it again (13 checks; read-only Marketplace, live enable and
-disable from a second admin session obtained through the API, the Zomato
-reconciliation tab disappearing live without a reload). The Alerts checks expect that order as "New" at ₹280.00. The script detects the role from `/api/me`,
+disable from a second admin session obtained through the API, and the Zomato
+reconciliation tab staying available, without a reload, after Zomato is turned off). The Alerts checks expect that order as "New" at ₹280.00. The script detects the role from `/api/me`,
 turns Zomato off again in `finally`, and keeps its result in
 `window.__marketplaceResult` (progress in `window.__marketplaceProgress`).
 

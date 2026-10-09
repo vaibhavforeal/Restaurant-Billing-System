@@ -12,9 +12,11 @@ refused. Only live events are refused: CSV imports are still accepted.
 
 Each integration is a card with its name, a **Delivery** or **Kitchen** tag, a short
 description, a status (**Enabled**, **Disabled**, **Coming soon** or **Pro plan**) and an
-on/off switch. An enabled
-card also has a **Set up** button that opens the integration's own screen (for Zomato,
-the existing Zomato workspace).
+on/off switch. When Zomato is on, administrators also get a **Settings** button on the
+Zomato card, which opens the Zomato connection settings in a dialog. There is no
+separate Zomato page in the sidebar: Zomato orders are handled in the Zomato section of
+**Tables & orders** (see [Zomato desk](zomato-desk.md)) and reconciled in
+**Reports → Zomato reconciliation**.
 
 - **Administrators** can use the switch. It is disabled while a change is being saved,
   so a double-click sends only one request. If saving fails, the card shows the error
@@ -29,13 +31,13 @@ the existing Zomato workspace).
 
 | | Zomato off | Zomato on |
 | --- | --- | --- |
-| Sidebar | No **Zomato** item | **Zomato** item (admin and cashier) |
-| Zomato screen | Shows "Zomato is turned off". Admins get an **Open Marketplace** button; cashiers are told to ask an admin | The existing Zomato workspace |
-| Home Alerts | "Turn on Zomato or Swiggy in the Marketplace" (cashiers see "Ask an admin to turn on Zomato or Swiggy in the Marketplace.") and no Zomato requests | Open Zomato orders as rows, plus "Swiggy not connected" |
+| Marketplace card | No **Settings** button | **Settings** (administrators) opens the connection settings |
+| Tables & orders | No Zomato section, unless Zomato orders are still open (they can still be moved to Ready and Picked up) | Zomato section with **+ New** (admin and cashier) |
+| Reports → Zomato reconciliation | Available to admins and cashiers, so orders closed earlier can still be matched against payouts | Available to admins and cashiers |
+| Home Alerts | "Turn on Zomato or Swiggy in the Marketplace" (cashiers see "Ask an admin to turn on Zomato or Swiggy in the Marketplace.") and no Zomato rows | Open POS Zomato orders as rows (a row opens **Tables & orders**), plus "Swiggy not connected" |
 | Zomato webhook | Answers 503 "Zomato is turned off in the Marketplace" | Gate lifted; the existing checks still apply |
 
-If an administrator turns Zomato off while someone is on the Zomato screen, that
-screen switches to the "turned off" notice at once, without a reload. While the
+Changes made on another counter apply at once, without a reload. While the
 Marketplace list is still loading, or if it cannot be loaded, gated items stay hidden;
 the Marketplace page itself stays reachable.
 
@@ -86,12 +88,13 @@ An integration is one registry entry plus the screen and data source behind it.
 
 1. **Registry.** Add an entry to `INTEGRATIONS` in `packages/domain/src/integrations.ts`
    and its id to `IntegrationId`: `id`, `name`, `description`, `category`, `status`
-   (`available` or `coming_soon`), `setupPage` (the page opened by **Set up**, or
-   `null`) and, for a paid add-on, `feature` (the licence feature it needs). Only on/off state is stored, in the `integration_state` table (no migration
-   is needed for a new id).
+   (`available` or `coming_soon`), `setupPage` (`null` for anything new; the Zomato card
+   opens its settings dialog from `apps/ui/src/screens/Marketplace.tsx` instead) and, for a
+   paid add-on, `feature` (the licence feature it needs). Only on/off state is stored, in the
+   `integration_state` table (no migration is needed for a new id).
 2. **Screen.** Add the page, make it reachable only when
    `useIntegrations().isEnabled("<id>")` is true, and show `IntegrationOff` otherwise,
-   as `ZomatoRoute` does in `apps/ui/src/App.tsx`. Hide its sidebar item by adding
+   as the kitchen board does in `apps/ui/src/App.tsx`. Hide its sidebar item by adding
    the page to `TAB_INTEGRATION` in `apps/ui/src/integrations-model.ts`.
 3. **Data source.** Server routes for the integration should check
    `integrationEnabled(app.db, "<id>")` (`apps/server/src/integrations.ts`) wherever it
@@ -119,16 +122,18 @@ Turn the integration off in the Marketplace. Nothing else needs to be undone.
 ## Verification
 
 `tools/e2e/marketplace.js` runs in the browser against the disposable sales-dashboard
-fixture, once signed in as admin and once as cashier. The admin run (27 checks) covered:
-the API contract (no-store list, 400/404/409 and unchanged state, webhook 503 off and
-on); the Marketplace cards and statuses; Swiggy's disabled switch; a single PATCH for
-clicks while a save is pending and for a rapid double-click; the nav item and **Set up**
-appearing; Alerts showing the open Zomato order with badge, Swiggy hint and Marketplace
-link; a row opening the Zomato screen; the live "Zomato is turned off" notice
-without a reload; a failed save keeping the old state; and the hint returning when off.
-The cashier run (12 checks) covered the 403 on PATCH, every switch disabled with the
-admin-only note, live enable and disable from another counter, the Alerts row without
-an Open Marketplace link, and the live notice on the Zomato screen without a reload.
+fixture, once signed in as admin and once as cashier (check counts are listed in
+`tools/e2e/README.md`). The admin run covers: the API contract (no-store list,
+400/404/409 and unchanged state, webhook 503 off and on); the Marketplace cards and
+statuses; Swiggy's disabled switch; a single PATCH for clicks while a save is pending and
+for a rapid double-click; the **Settings** button opening the connection dialog; Alerts
+showing the open POS Zomato order with badge, Swiggy hint and Marketplace link; a row
+opening **Tables & orders**; Reports → Zomato reconciliation staying open, live and
+without a reload, when Zomato is turned off on another counter; a failed save keeping
+the old state; the hint returning when off; and the Kitchen Display switch and licence
+lock. The cashier run covers the 403 on PATCH, every switch disabled with the admin-only
+note, live enable and disable from another counter, the Alerts row without an Open
+Marketplace link, and Zomato reconciliation staying available after Zomato is turned off.
 Real Space and Enter keystrokes toggled the switch (checked with the browser tool, not
 in the script, because an in-page script cannot send trusted key presses). A waiter
 login gets the Captain app and a 403 on the integrations list.
@@ -138,7 +143,7 @@ Known behaviours and limits:
 - After a switch is toggled by keyboard, keyboard focus moves to the page body (the
   switch is disabled while the save is in flight), so Tab has to be used again to
   return to it.
-- There is no URL for individual pages, so "a link to the Zomato page while it is off"
-  is checked by turning Zomato off while the Zomato screen is open.
+- There is no URL for individual pages, so "Zomato turned off while reconciling" is
+  checked by turning Zomato off while Reports → Zomato reconciliation is open.
 - Not exercised: a real Zomato account or webhook, and any Swiggy behaviour beyond the
   disabled switch.

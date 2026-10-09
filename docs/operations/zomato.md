@@ -1,17 +1,18 @@
 # Zomato setup and reconciliation
 
-> The **Zomato** sidebar page described below has moved: reconciliation and imports are
-> now **Reports → Zomato reconciliation**, and the connection form is **Settings** on the
-> Zomato card in the [Marketplace](marketplace.md). Day-to-day Zomato orders are handled
-> on the counter; see [Zomato desk](zomato-desk.md).
+There is no Zomato page in the sidebar. Day-to-day Zomato orders are punched in on the
+counter (see [Zomato desk](zomato-desk.md)); reconciliation, imports and import history
+are under **Reports → Zomato reconciliation**; and the connection form opens from
+**Settings** on the Zomato card in the [Marketplace](marketplace.md).
 
-Open **Zomato** in the sidebar. It appears once an administrator turns Zomato on in the
-[Marketplace](marketplace.md); until then the sidebar item is hidden and the screen shows a "Zomato is turned off"
-notice (administrators get a link to the Marketplace). Live webhook events are also
-refused while Zomato is off in the Marketplace; see [Marketplace](marketplace.md).
-Administrators configure the connection; administrators
-and cashiers can import records, review reconciliation and export the displayed rows.
-Waiters and kitchen users cannot access this ledger, including through the API.
+Administrators and cashiers see **Zomato reconciliation** in Reports whether or not
+Zomato is turned on, so orders closed before Zomato was turned off can still be matched
+against payouts. The **Settings** button appears on the Zomato card for administrators
+once Zomato is on. Live webhook events are refused while Zomato is off in the
+Marketplace; see [Marketplace](marketplace.md). Administrators configure the connection;
+administrators and cashiers can import records, review reconciliation and export the
+displayed rows. Waiters and kitchen users cannot access this ledger, including through
+the API.
 
 This release implements **setup and reconciliation first**, as requested. Live receiving
 and accept/reject/ready actions are **not activated**. Continue managing live orders in
@@ -20,9 +21,11 @@ with Zomato, or establish a connection.
 
 ## Set up the restaurant
 
-1. Open **Zomato → Connection** and save the Zomato restaurant ID and restaurant name.
+1. In the [Marketplace](marketplace.md), turn Zomato on and press **Settings** on the
+   Zomato card. Save the Zomato restaurant ID and restaurant name.
 2. Add the POS vendor ID and public HTTPS service origin when Zomato assigns/approves them.
-3. Import orders and settlements under **Reconciliation**.
+3. Import settlements (and, for dates before the Zomato desk, order history) under
+   **Reports → Zomato reconciliation**.
 
 The ledger supports one restaurant. Once it contains orders, settlements or events, its
 restaurant ID cannot be reassigned. No API keys are requested or saved in this settings
@@ -88,7 +91,7 @@ The report accepts at most 366 days and 2,000 orders; narrow the dates for large
   was reported paid than the statement components imply.
 - **Matched** means both differences are exactly zero.
 - **Awaiting statement** means the order exists without settlement entries.
-- **Missing order** means settlement entries exist without an imported or received order.
+- **Missing order** means settlement entries exist without a closed POS Zomato order or an imported order.
 - **Review cancellation** always flags cancelled/rejected orders with statements, because
   their actual contractual entitlement cannot be inferred from the order total.
 
@@ -99,8 +102,10 @@ commercial charges. Search/status filters affect the table and CSV export; summa
 cover the whole selected cohort. CSV exports neutralize spreadsheet formulas in text IDs
 and references. Export is disabled during a refresh or after a failed refresh.
 
-Zomato records do not create local bills, cash/UPI/card payments, KOTs or inventory
-movements. They do not inflate existing sales reports. Migration 21 adds dedicated
+The order side of reconciliation is the Zomato orders punched in on the POS (closed or
+cancelled); imported order history only fills in order IDs the POS does not have.
+Imported Zomato records do not create local bills, cash/UPI/card payments, KOTs or
+inventory movements, and do not inflate existing sales reports. Migration 21 adds dedicated
 SQLite tables without changing existing restaurant records. Ordinary full-database
 backups include this ledger.
 

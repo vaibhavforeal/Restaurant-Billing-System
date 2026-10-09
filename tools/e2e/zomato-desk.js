@@ -99,9 +99,11 @@
     button(`Open bill #${bill.billNo}`, row).click();
     await clickButton('View bill', await wait(() => document.querySelector('.billing-panel'), 'billing panel'));
     const dialog = await wait(() => document.querySelector('dialog[open]')?.textContent.includes('Tax details') ? document.querySelector('dialog[open]') : null, 'bill dialog');
-    check(dialog.textContent.includes('GST paid by Zomato (section 9(5))') && dialog.textContent.includes('Paid: Zomato ' + money(PRICE)) && dialog.textContent.includes('CGST₹0.00') && dialog.textContent.includes('SGST₹0.00'), 'The bill shows "GST paid by Zomato (section 9(5))", no GST and the Zomato payment');
+    check(dialog.textContent.includes('GST paid by Zomato (section 9(5))') && dialog.textContent.includes('Paid: Zomato ' + money(PRICE)) && dialog.textContent.includes('CGST₹0.00') && dialog.textContent.includes('SGST₹0.00') && !dialog.querySelector('.bill-tax-details table'), 'The bill shows "GST paid by Zomato (section 9(5))", no GST, no per-rate GST rows and the Zomato payment');
     await clickButton('View receipt', dialog);
-    await wait(() => document.querySelector('dialog[open] iframe'), 'receipt frame');
+    const receiptFrame = await wait(() => document.querySelector('dialog[open] iframe'), 'receipt frame');
+    const receiptHtml = receiptFrame.getAttribute('srcdoc') ?? '';
+    check(receiptHtml.includes('<dd>Zomato</dd>') && receiptHtml.includes('Zomato #E2E-1') && receiptHtml.includes('GST paid by Zomato (section 9(5))') && !/Dine-in|Prices include GST|GST added to menu prices|CGST/.test(receiptHtml), 'The on-screen receipt names the service Zomato and the order Zomato #E2E-1, with the 9(5) note and no GST lines');
     const labels = [...document.querySelectorAll('button')].map(b => b.textContent.trim());
     check(!labels.some(t => /print|reprint|credit note|refund|void/i.test(t)), 'The Zomato bill has no Print, Reprint, Credit note, Refund or Void button');
     check((await call('POST', `/api/bills/${bill.id}/print`, ownToken, {})).status === 409, 'The server refuses to print a Zomato bill');
@@ -124,10 +126,14 @@
     await wait(() => { const e = document.querySelector('.dash-channel-zomato .dash-channel-amount'); return e && e.textContent !== '—'; }, 'dashboard Zomato card');
     check(document.querySelector('.dash-channel-zomato .dash-channel-amount').textContent === money(PRICE) && document.querySelector('.dash-channel-zomato small').textContent === '1 Order' && document.querySelector('.dash-channel-total .dash-channel-amount').textContent === money(PRICE), 'The dashboard Zomato card shows the sale and is part of Total Sales');
     await goto('Reports & Analytics'); await wait(() => presetTab('Day-end / GST'), 'Day-end tab'); presetTab('Day-end / GST').click();
-    const receivable = await wait(() => [...document.querySelectorAll('p')].find(p => p.textContent.startsWith('Zomato receivable (outstanding)')), 'day-end receivable');
+    // Scoped to the Day-end screen: the Sales metrics also have a "Zomato receivable (outstanding)" card.
+    const receivable = await wait(() => [...document.querySelectorAll('.sales-reports .legacy-screen p')].find(p => p.textContent.startsWith('Zomato receivable (outstanding)')), 'day-end receivable');
     check(receivable.textContent.includes(money(PRICE)), 'Day-end shows "Zomato receivable (outstanding)" with the bill value');
     const dayEnd = (await call('GET', '/api/reports/day-end', ownToken)).json.report;
     check(dayEnd.zomatoReceivablePaise === PRICE && dayEnd.payments.every(p => !['cash', 'upi', 'card'].includes(p.mode)), 'The receivable is not counted as cash, UPI or card collections');
+    // The fixture issues no other bill, so the restaurant's own GST breakdown is empty.
+    const supplies = [...document.querySelectorAll('.sales-reports .legacy-screen p')].find(p => p.textContent.startsWith('Supplies under section 9(5) (GST paid by Zomato)'));
+    check(!!supplies && supplies.textContent.includes(money(PRICE)) && dayEnd.zomatoSuppliesPaise === PRICE && dayEnd.taxes.length === 0 && dayEnd.net.taxablePaise === 0, 'Day-end keeps the Zomato bill out of the GST breakdown and shows it as a section 9(5) supply');
     await wait(() => presetTab('Zomato reconciliation'), 'Zomato reconciliation tab'); presetTab('Zomato reconciliation').click();
     const reconRow = await wait(() => [...document.querySelectorAll('.zomato-table tbody tr')].find(r => r.textContent.includes('E2E-1')), 'reconciliation row');
     check(reconRow.textContent.includes(money(PRICE)) && /Awaiting statement/.test(reconRow.textContent), 'Reports, Zomato reconciliation lists E2E-1 awaiting its payout statement');

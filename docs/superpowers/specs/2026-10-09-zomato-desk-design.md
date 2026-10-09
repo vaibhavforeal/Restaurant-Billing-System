@@ -31,7 +31,7 @@ Success means:
 | Printing | Only KOTs print. Zomato bills are never printed, automatically or on request; the server refuses `POST /api/bills/:id/print` for them |
 | Closing | Picked up = bill + settle as `zomato` in one transaction, idempotent, no discount, no payment screen |
 | Credit notes | Refused on Zomato bills; Zomato handles refunds |
-| Cancellation | Uses the existing cancel-with-reason flow. Stock already consumed by sent KOTs stays consumed |
+| Cancellation | Uses the existing flows. Before any KOT, **Cancel order**. After a KOT, each sent item is cancelled with a reason (cancel slip to the kitchen, its stock returned), then **Cancel order** |
 | Reconciliation | POS Zomato orders are the order side. Imported order history fills in only order IDs that are not in the POS. Moves to Reports |
 | Old Zomato page | Removed, with its nav link. Connection settings move into the Marketplace Zomato card |
 | Who | Cashiers and admins (the quick-billing roles). Waiters and captains do not see the Zomato section |
@@ -127,6 +127,7 @@ A POS-cancelled order with payout entries is `review_cancellation` (already a st
 - Analytics accepts `type=zomato`, and the comparison includes it.
 - Sales reports keep their existing tables (Zomato bills carry GST 0). A new table, "Aggregator supplies — GST paid by Zomato (section 9(5))", lists Zomato bills and their values for the period.
 - Day-end adds a "Zomato receivable (outstanding)" line from `zomato` payments. It is excluded from expected drawer cash and from the cash, UPI and card totals.
+- Day-end keeps Zomato bills out of the GST breakdown and net taxable value, and shows their value on one line, "Supplies under section 9(5) (GST paid by Zomato)". The day-end CSV carries both lines. The sales report shows the Zomato receivable beside collections.
 
 ## 5. Frontend
 
@@ -178,7 +179,7 @@ Zomato bills show "Zomato #id" and "GST paid by Zomato". Print, Reprint and Cred
 - **Zomato turned off with orders open:** no new orders. The panel stays until they close, and status and Picked up still work.
 - **Two counters press Picked up together:** the second gets the replayed result for the same `clientRef`, or `409 zomato_status`. Only one bill is created.
 - **Items added after Ready:** they must be sent before Ready again. Sending moves the order back to Preparing.
-- **Cancelled after KOT:** existing cancel flow. Consumed stock stays consumed, and the order still appears in reconciliation.
+- **Cancelled after KOT:** existing flow. **Cancel order** is hidden while sent items remain, so the cashier cancels each sent item with a reason (the kitchen gets a cancel slip and the stock is returned), then cancels the order. The order still appears in reconciliation, with value 0.
 - **Zomato order ID typo:** cancel the order and punch it again. The cancelled ID stays reserved, so the new order needs the correct ID.
 - **Licence downgrade or Marketplace off at day-end:** receivables from closed Zomato orders still show on day-end and in reconciliation.
 - **Migration on a large database:** the copy is a single INSERT … SELECT per table. The test uses several thousand orders.
