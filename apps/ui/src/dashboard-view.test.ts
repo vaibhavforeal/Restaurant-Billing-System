@@ -16,7 +16,7 @@ describe("dashboard date picker", () => {
   });
 });
 
-const bar = (dineInPaise: number, takeawayPaise: number) => ({ label: "x", dineInPaise, takeawayPaise, totalPaise: dineInPaise + takeawayPaise });
+const bar = (dineInPaise: number, takeawayPaise: number, zomatoPaise = 0) => ({ label: "x", dineInPaise, takeawayPaise, zomatoPaise, totalPaise: dineInPaise + takeawayPaise + zomatoPaise });
 
 describe("slot chart scale", () => {
   it("gives an all-zero day a finite positive range with zero at the bottom", () => {
@@ -28,6 +28,11 @@ describe("slot chart scale", () => {
     expect(slotScale([bar(500, -200), bar(0, 0)])).toEqual({ min: -200, max: 500 });
     expect(slotScale([bar(-300, -100)])).toEqual({ min: -300, max: 0 });
     expect(slotScale([bar(800, 50)])).toEqual({ min: 0, max: 800 });
+  });
+
+  it("includes Zomato values", () => {
+    expect(slotScale([bar(100, 50, 900), bar(0, 0, 0)])).toEqual({ min: 0, max: 900 });
+    expect(slotScale([bar(100, 50, -400)])).toEqual({ min: -400, max: 100 });
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AnalyticsHour, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
-import type { ZomatoOrder } from "@forkflow/domain/zomato";
+import type { AnalyticsHour, OrderAnalyticsReport, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
+import type { Order } from "./types";
 import { SLOTS, ageLabel, aggregatorAlerts, channelCards, orderStats, slotBars, slotIndex } from "./dashboard-data";
 
 const hours = (fill: (hour: number) => number): AnalyticsHour[] =>
@@ -32,6 +32,18 @@ describe("dashboard slots", () => {
     expect(bars[5]).toMatchObject({ label: "09:00pm - 01:00am", dineInPaise: 400, takeawayPaise: 7, totalPaise: 407 });
   });
 
+  it("adds a third Zomato series and keeps the total across all three", () => {
+    const bars = slotBars(hours(hour => (hour === 13 ? 100 : 0)), hours(hour => (hour === 13 ? 30 : 0)), { hourly: hours(hour => (hour === 13 ? 20 : hour === 0 ? 5 : 0)) } as OrderAnalyticsReport);
+    expect(bars[3]).toMatchObject({ dineInPaise: 100, takeawayPaise: 30, zomatoPaise: 20, totalPaise: 150 });
+    expect(bars[5]).toMatchObject({ dineInPaise: 0, takeawayPaise: 0, zomatoPaise: 5, totalPaise: 5 });
+  });
+
+  it("leaves zomatoPaise at zero when the Zomato report is omitted or null", () => {
+    for (const bars of [slotBars(hours(() => 1), hours(() => 1)), slotBars(hours(() => 1), hours(() => 1), null)]) {
+      for (const bar of bars) expect(bar.zomatoPaise).toBe(0);
+    }
+  });
+
   it("returns six zero bars for empty input", () => {
     for (const bars of [slotBars(hours(() => 0), hours(() => 0)), slotBars([], [])]) {
       expect(bars).toHaveLength(6);
@@ -51,6 +63,26 @@ describe("channelCards", () => {
       dineIn: { amountPaise: 4000, orderCount: 3 },
       takeaway: { amountPaise: 1000, orderCount: 2 },
     });
+  });
+
+  it("adds a Zomato card, counted in the total, when the comparison has Zomato sales", () => {
+    const comparison: OrderTypeAnalytics[] = [
+      { type: "parcel", orderCount: 2, qty: 5, totalPaise: 1000 },
+      { type: "dine_in", orderCount: 3, qty: 9, totalPaise: 4000 },
+      { type: "zomato", orderCount: 1, qty: 2, totalPaise: 580 },
+    ];
+    expect(channelCards(comparison)).toEqual({
+      total: { amountPaise: 5580, orderCount: 6 },
+      dineIn: { amountPaise: 4000, orderCount: 3 },
+      takeaway: { amountPaise: 1000, orderCount: 2 },
+      zomato: { amountPaise: 580, orderCount: 1 },
+    });
+  });
+
+  it("shows a zero Zomato card while Zomato is on, and none when it is off and unused", () => {
+    const zero: OrderTypeAnalytics[] = [{ type: "zomato", orderCount: 0, qty: 0, totalPaise: 0 }];
+    expect(channelCards(zero)).not.toHaveProperty("zomato");
+    expect(channelCards(zero, true).zomato).toEqual({ amountPaise: 0, orderCount: 0 });
   });
 
   it("gives zeros for an empty comparison", () => {
@@ -73,26 +105,41 @@ describe("orderStats", () => {
 });
 
 describe("aggregatorAlerts", () => {
-  const order = (orderId: string, placedAt: number, extra: Partial<ZomatoOrder> = {}): ZomatoOrder => ({
-    restaurantId: "r1", orderId, placedAt, status: "received", totalPaise: 25000, paymentMode: "prepaid", items: [],
-    source: "webhook", updatedAt: placedAt, ...extra,
-  });
+  const now = 1_790_000_000_000;
+  const min = (n: number) => n * 60_000;
+  const order = (zomatoOrderId: string | null, openedAt: number, extra: Partial<Order> = {}): Order => ({
+    id: `o-${zomatoOrderId}`, type: "zomato", zomatoOrderId, zomatoStatus: null, status: "open", openedAt,
+    items: [{ id: "i1", pricePaise: 25000, qty: 1, status: "pending" }],
+    ...extra,
+  } as Order);
 
-  it("maps zomato orders to rows, oldest first", () => {
-    const rows = aggregatorAlerts([order("b", 2000), order("a", 1000, { status: "preparing", paymentMode: "cod", totalPaise: 9900 })]);
+  it("lists open Zomato orders oldest first with status and age text", () => {
+    const rows = aggregatorAlerts([
+      order("b", now - min(5)),
+      order("a", now - min(25), { zomatoStatus: "preparing", items: [{ pricePaise: 9900, qty: 2, status: "sent" }, { pricePaise: 5000, qty: 1, status: "cancelled" }] } as Partial<Order>),
+    ], now);
     expect(rows).toEqual([
-      { channel: "zomato", orderId: "a", status: "preparing", amountPaise: 9900, placedAt: 1000, paymentMode: "cod" },
-      { channel: "zomato", orderId: "b", status: "received", amountPaise: 25000, placedAt: 2000, paymentMode: "prepaid" },
+      { channel: "zomato", orderId: "a", status: "preparing", statusText: "Preparing · 25m", amountPaise: 19800, placedAt: now - min(25) },
+      { channel: "zomato", orderId: "b", status: "new", statusText: "New · 5m", amountPaise: 25000, placedAt: now - min(5) },
     ]);
   });
 
-  it("keeps an order with no items and an unknown payment mode, without mutating the input", () => {
-    const input = [order("b", 2000), order("a", 1000, { paymentMode: "unknown" })];
-    const rows = aggregatorAlerts(input);
-    expect(rows.map(row => row.orderId)).toEqual(["a", "b"]);
-    expect(rows[0]!.paymentMode).toBe("unknown");
-    expect(input.map(o => o.orderId)).toEqual(["b", "a"]);
-    expect(aggregatorAlerts([])).toEqual([]);
+  it("skips other order types and orders that are no longer open, and does not mutate the input", () => {
+    const input = [
+      order("b", now - min(2), { zomatoStatus: "ready" }),
+      order("x", now - min(9), { type: "dine_in" }),
+      order("y", now - min(9), { status: "settled", zomatoStatus: "picked_up" }),
+      order("z", now - min(9), { status: "cancelled" }),
+      order("a", now - min(40), { zomatoStatus: "ready" }),
+    ];
+    const rows = aggregatorAlerts(input, now);
+    expect(rows.map(row => [row.orderId, row.statusText])).toEqual([["a", "Ready · 40m"], ["b", "Ready · 2m"]]);
+    expect(input.map(o => o.zomatoOrderId)).toEqual(["b", "x", "y", "z", "a"]);
+    expect(aggregatorAlerts([], now)).toEqual([]);
+  });
+
+  it("says just now for a brand-new order", () => {
+    expect(aggregatorAlerts([order("n", now - 10_000)], now)[0]!.statusText).toBe("New · just now");
   });
 });
 

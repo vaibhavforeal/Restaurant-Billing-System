@@ -79,7 +79,7 @@
     // Alerts with Zomato switched off in the Marketplace
     const alerts = document.querySelector('.dash-alerts');
     check(alerts.textContent.includes('Turn on Zomato or Swiggy in the Marketplace') && !alerts.querySelector('.dash-alert-row')
-      && !performance.getEntriesByType('resource').some(e => e.name.includes('/api/zomato/orders')), 'Alerts explain how to enable Zomato and request no Zomato orders while it is off');
+      && !performance.getEntriesByType('resource').some(e => e.name.includes('type=zomato')) && !document.querySelector('.dash-channel-zomato, .dash-swatch.zomato'), 'Alerts explain how to enable Zomato, and no Zomato sales are requested or drawn while it is off');
     check(billed >= 1 && alerts.querySelector('.dash-operational').textContent.includes(`${billed} billed ${billed === 1 ? 'order' : 'orders'} awaiting payment`) && alerts.querySelector('.dash-badge').textContent.trim() === String(alerts.querySelectorAll('.dash-alert-row').length + (billed > 0 ? 1 : 0)),
       'Billed-but-unpaid orders appear as an operational alert and the badge counts them');
     const navLabels = [...document.querySelectorAll('.nav-item')].map(e => e.getAttribute('aria-label'));

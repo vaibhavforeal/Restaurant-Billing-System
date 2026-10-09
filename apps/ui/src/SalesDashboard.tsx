@@ -24,13 +24,13 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
     const previous = shownToday.current; shownToday.current = today;
     setDate((current) => current === previous ? today : current);
   }, [today]);
-  const { analytics, dayEnd, sales, orders, error, loading, updatedAt, refresh } = useDashboard(date);
   const { ready, isEnabled } = useIntegrations();
   const zomatoEnabled = isEnabled("zomato");
+  const { analytics, dayEnd, sales, orders, error, loading, updatedAt, refresh } = useDashboard(date, zomatoEnabled);
   const aggregator = useAggregatorOrders(zomatoEnabled);
 
-  const cards = useMemo(() => analytics ? channelCards(analytics.dineIn.comparison) : null, [analytics]);
-  const bars = useMemo(() => slotBars(analytics?.dineIn.hourly ?? [], analytics?.takeaway.hourly ?? []), [analytics]);
+  const cards = useMemo(() => analytics ? channelCards(analytics.dineIn.comparison, zomatoEnabled) : null, [analytics, zomatoEnabled]);
+  const bars = useMemo(() => slotBars(analytics?.dineIn.hourly ?? [], analytics?.takeaway.hourly ?? [], analytics?.zomato), [analytics]);
   const counts = useMemo(() => orderStats({ billCount: dayEnd?.sales.billCount ?? 0, cancelledCount: dayEnd?.cancellations.orderCount ?? 0, orders }), [dayEnd, orders]);
   const awaiting = counts.awaitingPayment;
   const operational: OperationalAlert[] = awaiting > 0
@@ -47,8 +47,8 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
             <p className="sales-report-empty" role="status">{loading ? "Loading sales by time slot…" : "Sales by time slot are unavailable. Use Retry to try again."}</p></section>}
       </div>
       <aside className="dash-side" aria-label="Alerts and statistics">
-        <AlertsPanel rows={aggregator.rows} truncated={aggregator.truncated} operational={operational} ready={ready} loaded={aggregator.loaded} zomatoEnabled={zomatoEnabled}
-          canManage={canManage} error={aggregator.error} onOpenZomato={() => onNavigate({ name: "tables" })} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />
+        <AlertsPanel rows={aggregator.rows} operational={operational} ready={ready} loaded={aggregator.loaded} zomatoEnabled={zomatoEnabled}
+          canManage={canManage} error={aggregator.error} onOpenTables={() => onNavigate({ name: "tables" })} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />
         <OrderStatistics stats={dayEnd ? counts : null} />
         {sales && <PaymentBreakdown report={sales} />}
       </aside>

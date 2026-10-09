@@ -8,7 +8,7 @@ import { connectWs } from "./ws";
 export interface DashboardDayEnd { sales: { billCount: number }; cancellations: { orderCount: number } }
 interface DashboardData {
   date: string;
-  analytics: { dineIn: OrderAnalyticsReport; takeaway: OrderAnalyticsReport } | null;
+  analytics: { dineIn: OrderAnalyticsReport; takeaway: OrderAnalyticsReport; zomato: OrderAnalyticsReport | null } | null;
   dayEnd: DashboardDayEnd | null;
   sales: SalesReport | null;
   orders: Order[];
@@ -30,9 +30,10 @@ export function useNow(intervalMs: number): number {
 
 /**
  * Everything the Home dashboard shows for one bill date. A refresh of the same date keeps the previous figures on
- * screen until the new ones arrive; a failed request sets `error` and keeps whatever else loaded.
+ * screen until the new ones arrive; a failed request sets `error` and keeps whatever else loaded. The Zomato sales
+ * series is requested only while `zomatoEnabled`.
  */
-export function useDashboard(date: string) {
+export function useDashboard(date: string, zomatoEnabled = false) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -50,12 +51,13 @@ export function useDashboard(date: string) {
     void Promise.allSettled([
       get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=dine_in`),
       get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=parcel`),
+      zomatoEnabled ? get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=zomato`) : Promise.resolve(null),
       get<{ report: DashboardDayEnd }>(`/api/reports/day-end?date=${day}`),
       get<{ report: SalesReport }>(`/api/reports/sales?from=${day}&to=${day}`),
       get<{ orders: Order[] }>("/api/orders"),
-    ]).then(([dineIn, takeaway, dayEnd, sales, orders]) => {
+    ]).then(([dineIn, takeaway, zomato, dayEnd, sales, orders]) => {
       if (controller.signal.aborted || request !== revision.current) return;
-      const results = [dineIn, takeaway, dayEnd, sales, orders] as PromiseSettledResult<unknown>[];
+      const results = [dineIn, takeaway, zomato, dayEnd, sales, orders] as PromiseSettledResult<unknown>[];
       const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
       setData((previous) => {
         // Keep the last good value for this date when one request fails; never show another date's figures.
@@ -63,7 +65,10 @@ export function useDashboard(date: string) {
         return {
           date,
           analytics: dineIn.status === "fulfilled" && takeaway.status === "fulfilled"
-            ? { dineIn: dineIn.value.report, takeaway: takeaway.value.report } : kept?.analytics ?? null,
+            ? {
+              dineIn: dineIn.value.report, takeaway: takeaway.value.report,
+              zomato: zomato.status === "fulfilled" ? zomato.value?.report ?? null : zomatoEnabled ? kept?.analytics?.zomato ?? null : null,
+            } : kept?.analytics ?? null,
           dayEnd: dayEnd.status === "fulfilled" ? dayEnd.value.report : kept?.dayEnd ?? null,
           sales: sales.status === "fulfilled" ? sales.value.report : kept?.sales ?? null,
           orders: orders.status === "fulfilled" ? orders.value.orders : kept?.orders ?? [],
@@ -74,7 +79,7 @@ export function useDashboard(date: string) {
       setLoading(false);
     });
     return () => { revision.current++; controller.abort(); };
-  }, [date, version]);
+  }, [date, version, zomatoEnabled]);
 
   useEffect(() => {
     let scheduled: ReturnType<typeof setTimeout> | undefined;

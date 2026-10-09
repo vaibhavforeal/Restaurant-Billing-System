@@ -5,7 +5,7 @@ import type { SlotBar } from "./dashboard-data";
  * range always includes zero; an all-zero day gets a small positive range so nothing divides by zero.
  */
 export function slotScale(bars: readonly SlotBar[]): { min: number; max: number } {
-  const values = bars.flatMap((bar) => [bar.dineInPaise, bar.takeawayPaise]).filter(Number.isFinite);
+  const values = bars.flatMap((bar) => [bar.dineInPaise, bar.takeawayPaise, bar.zomatoPaise]).filter(Number.isFinite);
   const min = Math.min(0, ...values);
   const max = Math.max(0, ...values);
   return max === min ? { min: 0, max: 100 } : { min, max };
@@ -15,8 +15,8 @@ export function slotScale(bars: readonly SlotBar[]): { min: number; max: number 
 export const BAR_LABEL_CHAR_PX = 6.8;
 
 /**
- * Whether every slot can carry a value label above each of its two bars without the labels overlapping, or the chart
- * should fall back to one total label per slot. `pitch` is the distance between the centres of a slot's two bars;
+ * Whether every slot can carry a value label above each of its bars without the labels overlapping, or the chart
+ * should fall back to one total label per slot. `pitch` is the distance between the centres of neighbouring bars in a slot;
  * `labels` are the compact texts that would be drawn ("₹12.3K", "-₹450"), zero bars already left out.
  */
 export function perBarLabelsFit(pitch: number, labels: readonly string[]): boolean {
