@@ -6,11 +6,11 @@ import { join } from "node:path";
 /** @param {import("app-builder-lib").PackContext} context */
 export default function verifyDesktopPackage({ packager }) {
   const appDir = packager.info.appDir;
-  const edition = { "in.forkflow.pos": "commercial", "in.forkflow.demo": "demo" }[packager.config.appId];
+  const edition = { "in.forkflow.pos": "commercial", "in.forkflow.demo": "demo", "in.forkflow.dev": "development" }[packager.config.appId];
   if (!edition) throw new Error("Unknown POS installer identity");
   let info;
   try { info = JSON.parse(readFileSync(join(appDir, "build-info.json"), "utf8")); }
-  catch { throw new Error(`Missing build identity. Run npm run build:${edition} before packaging`); }
+  catch { throw new Error(`Missing build identity. Run ${edition === "development" ? "npm run build:desktop" : `npm run build:${edition}`} before packaging`); }
   const manifest = JSON.parse(readFileSync(join(appDir, "package.json"), "utf8"));
   if (info.edition !== edition || info.version !== manifest.version ||
       manifest.name !== (edition === "demo" ? "forkflow-demo" : "forkflow-desktop")) {
@@ -21,5 +21,8 @@ export default function verifyDesktopPackage({ packager }) {
   }
   if (edition === "demo" && info.verificationKeyFingerprint !== null) {
     throw new Error("Demo installers must not use customer licensing");
+  }
+  if (edition === "development" && info.verificationKeyFingerprint !== null) {
+    throw new Error("Development installers must not carry a customer licensing key");
   }
 }

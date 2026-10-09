@@ -24,6 +24,7 @@
     "package:kitchen": "npm run build:kitchen && electron-builder --config electron-builder.kitchen.yml --win --x64",
     "build:commercial": "node tools/build-desktop.mjs --commercial --check && npm run build -w @forkflow/ui && node tools/build-desktop.mjs --commercial",
     "package:commercial": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64",
+    "package:dev": "npm run build:desktop && electron-builder --config electron-builder.dev.yml --win --x64",
     "package:win": "npm run package:commercial",
     "package:dir": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --dir"
   },

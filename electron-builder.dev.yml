@@ -1,0 +1,10 @@
+extends: ./electron-builder.yml
+appId: in.forkflow.dev
+productName: ForkFlow Dev
+directories:
+  app: build/desktop/app
+  output: dist/dev
+win:
+  artifactName: "ForkFlow-Dev-Setup-${version}.${ext}"
+nsis:
+  include: tools/installer-dev.nsh
