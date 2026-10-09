@@ -4,11 +4,14 @@ import { PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
 import { apiFetch } from "../api";
 import { COSTING_PRO_NOTE, formatTierPrice, sortDishes } from "../dish-costing";
 import { formatMovementCost } from "../stock-costs";
+import { useIntegrations } from "../integrations";
 
-const TIERS = ["non_ac", "ac", "takeaway"] as const;
+const TIERS = ["non_ac", "ac", "takeaway", "zomato"] as const;
 const cell = { padding: "6px 10px", verticalAlign: "top" } as const;
 
 export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refresh: number }) {
+  const { isEnabled } = useIntegrations();
+  const tiers = TIERS.filter((tier) => tier !== "zomato" || isEnabled("zomato"));
   const [data, setData] = useState<{ dishes: DishCost[]; taxInclusive: boolean } | null>(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("all");
@@ -46,13 +49,13 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
         <table aria-label="Dish costing" style={{ width: "100%", textAlign: "left", borderSpacing: 0 }}>
           <thead><tr>
             <th scope="col" style={cell}>Dish</th><th scope="col" style={cell}>Recipe cost</th>
-            {TIERS.map((tier) => <th key={tier} scope="col" style={cell}>{PRICE_TIER_LABELS[tier]} <small>(price · cost % · margin)</small></th>)}
+            {tiers.map((tier) => <th key={tier} scope="col" style={cell}>{PRICE_TIER_LABELS[tier]} <small>(price · cost % · margin)</small></th>)}
             <th scope="col" style={cell}>Status</th>
           </tr></thead>
           <tbody>{costed.map((dish) => <tr key={`${dish.productId}:${dish.variantId ?? ""}`}>
             <th scope="row" style={cell}>{dish.name}<br /><small className="muted">{dish.categoryName}</small></th>
             <td style={cell}>{dish.costPaise === null ? "Cost unknown" : formatMovementCost(dish.costPaise)}</td>
-            {TIERS.map((tier) => <td key={tier} style={cell}>{formatTierPrice(dish.prices.find((price) => price.tier === tier))}</td>)}
+            {tiers.map((tier) => <td key={tier} style={cell}>{formatTierPrice(dish.prices.find((price) => price.tier === tier))}</td>)}
             <td style={cell}>{dish.status === "incomplete" ? `Incomplete — missing cost for ${dish.missing.join(", ")}` : "Complete"}</td>
           </tr>)}</tbody>
         </table>

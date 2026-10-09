@@ -226,10 +226,35 @@ describe("stock costing", () => {
           { tier: "non_ac", preGstPaise: 10_000, costPercent: 48 },
           { tier: "ac", preGstPaise: 12_000, costPercent: 40 },
           { tier: "takeaway", preGstPaise: 10_000, costPercent: 48 },
+          { tier: "zomato", preGstPaise: 10_500, costPercent: 45.7 },
         ],
       });
-      expect(body.dishes[0]!.prices.map((x) => x.marginPaise)).toEqual([5_200, 7_200, 5_200]);
+      expect(body.dishes[0]!.prices.map((x) => x.marginPaise)).toEqual([5_200, 7_200, 5_200, 5_700]);
       expect(body.dishes[0]!.prices[0]!.pricePaise).toBe(10_500);
+    });
+
+    it("costs a Zomato price on its own, with no GST backed out because Zomato bills carry none", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const p = await product(cat, { zomatoPricePaise: 12_000 });
+      await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", taxInclusive: true })).statusCode).toBe(200);
+      const dish = (await dishes()).dishes[0]!;
+      expect(dish.prices.map((x) => x.tier)).toEqual(["non_ac", "ac", "takeaway", "zomato"]);
+      expect(dish.prices[3]).toMatchObject({ tier: "zomato", pricePaise: 12_000, preGstPaise: 12_000, costPercent: 40, marginPaise: 7_200 });
+      expect(dish.prices[2]).toMatchObject({ tier: "takeaway", pricePaise: 10_500, preGstPaise: 10_000, marginPaise: 5_200 });
+    });
+
+    it("prices a blank Zomato tier at Takeaway and a Zomato price of zero at zero", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const viaTakeaway = await product(cat, { name: "Tikka", takeawayPricePaise: 9_600 });
+      const free = await product(cat, { name: "Sample", takeawayPricePaise: 9_600, zomatoPricePaise: 0 });
+      await recipe(viaTakeaway.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      await recipe(free.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      const body = await dishes();
+      expect(body.dishes.find((d) => d.productId === viaTakeaway.id)!.prices[3]).toMatchObject({ tier: "zomato", pricePaise: 9_600, marginPaise: 4_800 });
+      expect(body.dishes.find((d) => d.productId === free.id)!.prices[3]).toMatchObject({ tier: "zomato", pricePaise: 0, preGstPaise: 0, costPercent: null, marginPaise: null });
     });
 
     it("costs each active variant on its own prices and leaves inactive ones out", async () => {
@@ -247,8 +272,8 @@ describe("stock costing", () => {
       expect(half.variantId).toBe(p.variants.find((v) => v.name === "Half")!.id);
       expect(half.productId).toBe(p.id);
       expect(half.costPaise).toBe(4_800);
-      expect(half.prices.map((x) => [x.preGstPaise, x.costPercent])).toEqual([[6_000, 80], [6_000, 80], [6_000, 80]]);
-      expect(full.prices.map((x) => [x.pricePaise, x.costPercent, x.marginPaise])).toEqual([[10_000, 48, 5_200], [10_000, 48, 5_200], [9_600, 50, 4_800]]);
+      expect(half.prices.map((x) => [x.preGstPaise, x.costPercent])).toEqual([[6_000, 80], [6_000, 80], [6_000, 80], [6_000, 80]]);
+      expect(full.prices.map((x) => [x.pricePaise, x.costPercent, x.marginPaise])).toEqual([[10_000, 48, 5_200], [10_000, 48, 5_200], [9_600, 50, 4_800], [9_600, 50, 4_800]]);
     });
 
     it("flags incomplete and unlinked dishes", async () => {

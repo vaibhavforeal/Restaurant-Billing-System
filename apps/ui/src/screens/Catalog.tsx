@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
+import { priceForTier } from "@forkflow/domain/pricing";
 import { paiseToRupees } from "../money";
+import { useIntegrations } from "../integrations";
 import type { Category, Product, Station, StationInfo } from "../types";
 import { ProductEditor } from "./ProductEditor";
 import { CatalogTransfer } from "./CatalogTransfer";
@@ -23,6 +25,8 @@ function CatalogWriteGuard({ busy }: { busy: boolean }) {
 }
 
 export function Catalog() {
+  const { isEnabled } = useIntegrations();
+  const zomato = isEnabled("zomato");
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
@@ -162,6 +166,7 @@ export function Catalog() {
               <th>Non-AC</th>
               <th>AC</th>
               <th>Takeaway</th>
+              {zomato && <th>Zomato</th>}
               <th>GST</th>
               <th>Veg</th>
               <th>Variants</th>
@@ -176,6 +181,7 @@ export function Catalog() {
                 <td className="pos-money">₹{paiseToRupees(p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.acPricePaise ?? p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.takeawayPricePaise ?? p.pricePaise)}</td>
+                {zomato && <td className="pos-money">₹{paiseToRupees(priceForTier(p, "zomato"))}</td>}
                 <td>{p.gstRate}%</td>
                 <td>{p.isVeg ? "🟢" : "🔴"}</td>
                 <td>{p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
@@ -187,7 +193,7 @@ export function Catalog() {
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ padding: 12, color: "var(--muted)" }}>
+                <td colSpan={zomato ? 10 : 9} style={{ padding: 12, color: "var(--muted)" }}>
                   No products in this category yet.
                 </td>
               </tr>

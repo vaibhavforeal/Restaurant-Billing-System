@@ -4,7 +4,7 @@ import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { publishStock, versionCheck } from "./stock.js";
 
-const PRICE_TIERS: PriceTier[] = ["non_ac", "ac", "takeaway"];
+const PRICE_TIERS: PriceTier[] = ["non_ac", "ac", "takeaway", "zomato"];
 
 /** Every costing route needs the admin-only `costs.read` permission and the `recipes` plan. */
 export function costGuards(app: FastifyInstance) {
@@ -53,13 +53,13 @@ export function registerCosting(app: FastifyInstance): void {
 
   app.get("/api/costing/dishes", { preHandler: costs }, async (_req, reply) => {
     const taxInclusive = (db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number }).tax_inclusive === 1;
-    const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, c.name AS category_name
+    const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, p.zomato_price_paise, c.name AS category_name
       FROM products p JOIN categories c ON c.id = p.category_id WHERE p.is_active = 1
       ORDER BY c.sort_order, c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id`).all() as Array<{
-      id: string; name: string; price_paise: number; gst_rate: number; ac_price_paise: number | null; takeaway_price_paise: number | null; category_name: string;
+      id: string; name: string; price_paise: number; gst_rate: number; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; category_name: string;
     }>;
-    const variantRows = db.prepare("SELECT id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, is_active FROM variants ORDER BY name COLLATE NOCASE, id").all() as Array<{
-      id: string; product_id: string; name: string; price_paise: number; ac_price_paise: number | null; takeaway_price_paise: number | null; is_active: number;
+    const variantRows = db.prepare("SELECT id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise, is_active FROM variants ORDER BY name COLLATE NOCASE, id").all() as Array<{
+      id: string; product_id: string; name: string; price_paise: number; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; is_active: number;
     }>;
     const variantsByProduct = new Map<string, typeof variantRows>();
     for (const v of variantRows) variantsByProduct.set(v.product_id, [...(variantsByProduct.get(v.product_id) ?? []), v]);
@@ -77,13 +77,14 @@ export function registerCosting(app: FastifyInstance): void {
     const dishes: DishCost[] = [];
     for (const p of products) {
       const cost = dishCost(linksByProduct.get(p.id) ?? []);
-      const row = (variantId: string | null, name: string, prices: { price_paise: number; ac_price_paise: number | null; takeaway_price_paise: number | null }) => {
-        const item = { pricePaise: prices.price_paise, acPricePaise: prices.ac_price_paise, takeawayPricePaise: prices.takeaway_price_paise };
+      const row = (variantId: string | null, name: string, prices: { price_paise: number; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null }) => {
+        const item = { pricePaise: prices.price_paise, acPricePaise: prices.ac_price_paise, takeawayPricePaise: prices.takeaway_price_paise, zomatoPricePaise: prices.zomato_price_paise };
         dishes.push({
           productId: p.id, variantId, name, categoryName: p.category_name, ...cost,
           prices: PRICE_TIERS.map((tier): DishPrice => {
             const pricePaise = priceForTier(item, tier);
-            const preGst = preGstPaise(pricePaise, p.gst_rate, taxInclusive);
+            // Zomato bills carry no GST (Zomato pays it under section 9(5)), so nothing is backed out of that price.
+            const preGst = tier === "zomato" ? pricePaise : preGstPaise(pricePaise, p.gst_rate, taxInclusive);
             const known = cost.costPaise !== null && preGst !== 0;
             return {
               tier, pricePaise, preGstPaise: preGst,

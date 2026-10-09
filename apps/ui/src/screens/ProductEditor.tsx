@@ -7,7 +7,7 @@ import type { Category, Product, Station, Variant } from "../types";
 import "../product-editor.css";
 
 const optionalPrice = (value: number | null | undefined) => value == null ? "" : paiseToRupees(value);
-const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "" };
+const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zomatoPrice: "" };
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
@@ -17,7 +17,7 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
 }) {
   const initial = useRef({ name: product?.name ?? "", description: product?.description ?? "",
     categoryId: product?.categoryId ?? defaultCategoryId ?? "", price: product ? paiseToRupees(product.pricePaise) : "",
-    acPrice: optionalPrice(product?.acPricePaise), takeawayPrice: optionalPrice(product?.takeawayPricePaise),
+    acPrice: optionalPrice(product?.acPricePaise), takeawayPrice: optionalPrice(product?.takeawayPricePaise), zomatoPrice: optionalPrice(product?.zomatoPricePaise),
     gstRate: product?.gstRate ?? 5, isVeg: product?.isVeg ?? true, stationId: product?.kotStationId ?? "",
     isActive: product?.isActive ?? true, isSoldOut: product?.isSoldOut ?? false }).current;
   const [name, setName] = useState(initial.name);
@@ -26,6 +26,7 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
   const [price, setPrice] = useState(initial.price);
   const [acPrice, setAcPrice] = useState(initial.acPrice);
   const [takeawayPrice, setTakeawayPrice] = useState(initial.takeawayPrice);
+  const [zomatoPrice, setZomatoPrice] = useState(initial.zomatoPrice);
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
   const [gstRate, setGstRate] = useState(initial.gstRate);
   const [isVeg, setIsVeg] = useState(initial.isVeg);
@@ -47,9 +48,9 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
   const localId = useRef(0);
   const preview = photoChange === undefined ? currentPhoto : photoChange;
   const dirty = name !== initial.name || description !== initial.description || categoryId !== initial.categoryId ||
-    acPrice !== initial.acPrice || takeawayPrice !== initial.takeawayPrice || price !== initial.price || gstRate !== initial.gstRate || isVeg !== initial.isVeg || stationId !== initial.stationId ||
+    acPrice !== initial.acPrice || takeawayPrice !== initial.takeawayPrice || zomatoPrice !== initial.zomatoPrice || price !== initial.price || gstRate !== initial.gstRate || isVeg !== initial.isVeg || stationId !== initial.stationId ||
     isActive !== initial.isActive || isSoldOut !== initial.isSoldOut || photoChange !== undefined ||
-    (!product && variants.length > 0) || newVariant.name !== "" || newVariant.price !== "" || newVariant.acPrice !== "" || newVariant.takeawayPrice !== "";
+    (!product && variants.length > 0) || newVariant.name !== "" || newVariant.price !== "" || newVariant.acPrice !== "" || newVariant.takeawayPrice !== "" || newVariant.zomatoPrice !== "";
 
   function canLeave() {
     if (lock.current) { window.alert("Wait for the photo or product changes to finish saving before leaving."); return false; }
@@ -82,22 +83,23 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
     finally { lock.current = false; setBusy(null); }
   }
 
-  function servicePrices(ac: string, takeaway: string) {
+  function servicePrices(ac: string, takeaway: string, zomato: string) {
     const acPricePaise = ac.trim() ? rupeesToPaise(ac) : null;
     const takeawayPricePaise = takeaway.trim() ? rupeesToPaise(takeaway) : null;
-    if ((ac.trim() && acPricePaise === null) || (takeaway.trim() && takeawayPricePaise === null)) throw new Error("AC and takeaway prices must be valid amounts or blank.");
-    return { acPricePaise, takeawayPricePaise };
+    const zomatoPricePaise = zomato.trim() ? rupeesToPaise(zomato) : null;
+    if ((ac.trim() && acPricePaise === null) || (takeaway.trim() && takeawayPricePaise === null) || (zomato.trim() && zomatoPricePaise === null)) throw new Error("AC, takeaway and Zomato prices must be valid amounts or blank.");
+    return { acPricePaise, takeawayPricePaise, zomatoPricePaise };
   }
 
   function save() {
     const pricePaise = rupeesToPaise(price);
     if (!name.trim() || pricePaise === null || !categoryId) { setError("Name, category, and a valid price are required."); return; }
-    if (editingVariantId || newVariant.name.trim() || newVariant.price.trim() || newVariant.acPrice.trim() || newVariant.takeawayPrice.trim()) { setError("Add the draft variant or clear its name and price before saving the product."); return; }
+    if (editingVariantId || newVariant.name.trim() || newVariant.price.trim() || newVariant.acPrice.trim() || newVariant.takeawayPrice.trim() || newVariant.zomatoPrice.trim()) { setError("Add the draft variant or clear its name and price before saving the product."); return; }
     void run("product", async () => {
-      const base = { ...servicePrices(acPrice, takeawayPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate, isVeg,
+      const base = { ...servicePrices(acPrice, takeawayPrice, zomatoPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate, isVeg,
         kotStationId: stationId || null, isSoldOut, ...(photoChange === undefined ? {} : { photo: photoChange }) };
       if (product) await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ ...base, isActive }) });
-      else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise })) }) });
+      else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise, zomatoPricePaise: variant.zomatoPricePaise ?? null })) }) });
       lock.current = false; onDone();
     });
   }
@@ -106,7 +108,7 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
     const vPrice = rupeesToPaise(newVariant.price), vName = newVariant.name.trim();
     if (!vName || vPrice === null) { setError("Variant needs a name and a valid price."); return; }
     void run("variant", async () => {
-      const prices = servicePrices(newVariant.acPrice, newVariant.takeawayPrice);
+      const prices = servicePrices(newVariant.acPrice, newVariant.takeawayPrice, newVariant.zomatoPrice);
       if (editingVariantId) {
         const value = { name: vName, pricePaise: vPrice, ...prices };
         const variant = product ? (await apiFetch<{ variant: Variant }>(`/api/variants/${editingVariantId}`, { method: "PATCH", body: JSON.stringify(value) })).variant : { ...variants.find((v) => v.id === editingVariantId)!, ...value };
@@ -146,7 +148,8 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
         <label>Non-AC price (₹)<input required inputMode="decimal" value={price} disabled={busy !== null} onChange={(event) => setPrice(event.target.value)} /></label>
         <label>AC price (₹)<input inputMode="decimal" value={acPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setAcPrice(event.target.value)} /></label>
         <label>Takeaway price (₹)<input inputMode="decimal" value={takeawayPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setTakeawayPrice(event.target.value)} /></label>
-        <p className="product-field-wide product-editor-help">Leave AC or takeaway blank to use the Non-AC price. Portion prices are set separately below.</p>
+        <label>Zomato price (₹)<input inputMode="decimal" value={zomatoPrice} placeholder="Same as Takeaway" disabled={busy !== null} onChange={(event) => setZomatoPrice(event.target.value)} /><small>blank = Takeaway price</small></label>
+        <p className="product-field-wide product-editor-help">Leave AC or takeaway blank to use the Non-AC price; a blank Zomato price uses the Takeaway price. Portion prices are set separately below.</p>
         <label>GST rate<select value={gstRate} disabled={busy !== null} onChange={(event) => setGstRate(Number(event.target.value))}>{GST_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}</select></label>
         <label>Kitchen station<select value={stationId} disabled={busy !== null} onChange={(event) => setStationId(event.target.value)}><option value="">No KOT station</option>{stationId && !stations.some((station) => station.id === stationId) && <option value={stationId}>Current inactive station</option>}{stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}</select></label>
         <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" checked={isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(event.target.checked)} /> Sold out</label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
@@ -164,8 +167,8 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
 
       <details className="product-variants" aria-label="Product variants"><summary>Variants (portions)</summary><div className="pos-section-body">
         <p className="product-editor-help">{product ? "Changes to variants are saved immediately. Other product details use Save product below." : "Variants will be saved with the new product."}</p>
-        {variants.map((variant) => <div className="product-variant-row" key={variant.id}><span>{variant.name} · Non-AC ₹{paiseToRupees(variant.pricePaise)} · AC ₹{paiseToRupees(variant.acPricePaise ?? variant.pricePaise)} · Takeaway ₹{paiseToRupees(variant.takeawayPricePaise ?? variant.pricePaise)}{!variant.isActive && <small>Inactive</small>}</span><button type="button" disabled={busy !== null || editingVariantId !== null || Object.values(newVariant).some(Boolean)} onClick={() => { setEditingVariantId(variant.id); setNewVariant({ name: variant.name, price: paiseToRupees(variant.pricePaise), acPrice: optionalPrice(variant.acPricePaise), takeawayPrice: optionalPrice(variant.takeawayPricePaise) }); }}>Edit prices</button><button type="button" disabled={busy !== null || editingVariantId === variant.id} onClick={() => toggleVariant(variant)}>{product ? variant.isActive ? "Deactivate" : "Activate" : "Remove"}</button></div>)}
-        <div className="product-variant-inputs"><label>Variant name<input value={newVariant.name} disabled={busy !== null} placeholder="e.g. Half" onChange={(event) => setNewVariant({ ...newVariant, name: event.target.value })} /></label><label>Variant Non-AC price (₹)<input value={newVariant.price} disabled={busy !== null} inputMode="decimal" onChange={(event) => setNewVariant({ ...newVariant, price: event.target.value })} /></label><label>Variant AC price (₹)<input inputMode="decimal" value={newVariant.acPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, acPrice: event.target.value })} /></label><label>Variant takeaway price (₹)<input inputMode="decimal" value={newVariant.takeawayPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, takeawayPrice: event.target.value })} /></label><button type="button" disabled={busy !== null} onClick={addVariant}>{editingVariantId ? "Save variant" : "Add variant"}</button>{editingVariantId && <button type="button" disabled={busy !== null} onClick={() => { setEditingVariantId(null); setNewVariant(emptyVariant); }}>Cancel variant edit</button>}</div>
+        {variants.map((variant) => <div className="product-variant-row" key={variant.id}><span>{variant.name} · Non-AC ₹{paiseToRupees(variant.pricePaise)} · AC ₹{paiseToRupees(variant.acPricePaise ?? variant.pricePaise)} · Takeaway ₹{paiseToRupees(variant.takeawayPricePaise ?? variant.pricePaise)} · Zomato ₹{paiseToRupees(variant.zomatoPricePaise ?? variant.takeawayPricePaise ?? variant.pricePaise)}{!variant.isActive && <small>Inactive</small>}</span><button type="button" disabled={busy !== null || editingVariantId !== null || Object.values(newVariant).some(Boolean)} onClick={() => { setEditingVariantId(variant.id); setNewVariant({ name: variant.name, price: paiseToRupees(variant.pricePaise), acPrice: optionalPrice(variant.acPricePaise), takeawayPrice: optionalPrice(variant.takeawayPricePaise), zomatoPrice: optionalPrice(variant.zomatoPricePaise) }); }}>Edit prices</button><button type="button" disabled={busy !== null || editingVariantId === variant.id} onClick={() => toggleVariant(variant)}>{product ? variant.isActive ? "Deactivate" : "Activate" : "Remove"}</button></div>)}
+        <div className="product-variant-inputs"><label>Variant name<input value={newVariant.name} disabled={busy !== null} placeholder="e.g. Half" onChange={(event) => setNewVariant({ ...newVariant, name: event.target.value })} /></label><label>Variant Non-AC price (₹)<input value={newVariant.price} disabled={busy !== null} inputMode="decimal" onChange={(event) => setNewVariant({ ...newVariant, price: event.target.value })} /></label><label>Variant AC price (₹)<input inputMode="decimal" value={newVariant.acPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, acPrice: event.target.value })} /></label><label>Variant takeaway price (₹)<input inputMode="decimal" value={newVariant.takeawayPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, takeawayPrice: event.target.value })} /></label><label>Variant Zomato price (₹)<input inputMode="decimal" value={newVariant.zomatoPrice} placeholder="Same as Takeaway" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, zomatoPrice: event.target.value })} /><small>blank = Takeaway price</small></label><button type="button" disabled={busy !== null} onClick={addVariant}>{editingVariantId ? "Save variant" : "Add variant"}</button>{editingVariantId && <button type="button" disabled={busy !== null} onClick={() => { setEditingVariantId(null); setNewVariant(emptyVariant); }}>Cancel variant edit</button>}</div>
       </div></details>
       {error && <p className="error-message" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
       <div className="product-editor-actions"><button className="primary" disabled={busy !== null}>{busy === "product" ? "Saving product…" : "Save product"}</button><button type="button" disabled={busy !== null} onClick={() => { if (canLeave()) onDone(); }}>{product ? "Close" : "Cancel"}</button></div>
