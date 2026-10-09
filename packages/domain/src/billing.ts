@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GstMode } from "./gst.js";
 import type { ReceiptStyle } from "./receipt-styles.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
@@ -32,15 +33,9 @@ export type BillSettleInput = z.infer<typeof BillSettle>;
  * Distinct from credit-notes' `PayMode`, which is the refund mode (cash, upi, card only).
  */
 export type PaymentMode = "cash" | "upi" | "card" | "zomato";
-/**
- * "operator": an e-commerce operator collects and pays the GST, so the bill carries no CGST/SGST.
- * "composition": the restaurant is under the composition scheme and may not collect GST; it issues a bill of supply.
- */
-export type TaxMode = "restaurant" | "operator" | "composition";
 
 export interface TaxLine { gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }
 export interface BillTotals {
-  taxInclusive: boolean;
   subtotalPaise: number; discountPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];
 }
@@ -49,14 +44,16 @@ export interface ReceiptSnapshot {
   receiptStyle?: ReceiptStyle;
   /** Absent on bills issued before UPI configuration was supported. */
   upiId?: string;
-  taxInclusive: boolean;
+  gstMode: GstMode;
+  /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
+  taxInclusive?: boolean;
   restaurantName: string; address: string; gstin: string; fssai: string; receiptFooter: string;
   orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null;
   /** Set on Zomato orders. */
   zomatoOrderId?: string;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
-  /** Set when the restaurant was under the composition scheme: the bill is a bill of supply with no GST. */
+  /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
   gstScheme?: "composition";
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number }>;
 }
@@ -80,7 +77,7 @@ export interface Bill extends BillTotals {
 }
 
 /** All financial arithmetic uses integer paise / BigInt. */
-export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, taxInclusive = false, taxMode: TaxMode = "restaurant"): BillTotals {
+export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included"): BillTotals {
   if (!items.length) throw new Error("Bill must contain at least one item");
   const groups = new Map<number, number>();
   let subtotalPaise = 0;
@@ -101,24 +98,19 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   let remaining = discountPaise - allocation.reduce((sum, row) => sum + row.discount, 0);
   const byRemainder = [...allocation].sort((a, b) => a.remainder === b.remainder ? a.rate - b.rate : a.remainder > b.remainder ? -1 : 1);
   for (const row of byRemainder) { if (remaining-- > 0) row.discount++; }
-  const noGst = taxMode !== "restaurant";
   const taxes = allocation.map(({ rate, amount, discount }) => {
-    if (noGst) return { gstRate: rate, taxablePaise: amount - discount, cgstPaise: 0, sgstPaise: 0 };
-    if (taxInclusive) {
-      const gross = amount - discount;
-      const divisor = BigInt(100 + rate);
-      const taxablePaise = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
-      const tax = gross - taxablePaise;
-      const cgstPaise = Math.ceil(tax / 2);
-      return { gstRate: rate, taxablePaise, cgstPaise, sgstPaise: tax - cgstPaise };
-    }
-    const taxablePaise = amount - discount;
-    const halfTax = Number((BigInt(taxablePaise) * BigInt(rate) + 100n) / 200n);
-    return { gstRate: rate, taxablePaise, cgstPaise: halfTax, sgstPaise: halfTax };
+    const gross = amount - discount;
+    if (mode === "none") return { gstRate: rate, taxablePaise: gross, cgstPaise: 0, sgstPaise: 0 };
+    // Included: the discounted gross already contains the GST, so split it out.
+    const divisor = BigInt(100 + rate);
+    const taxablePaise = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
+    const tax = gross - taxablePaise;
+    const cgstPaise = Math.ceil(tax / 2);
+    return { gstRate: rate, taxablePaise, cgstPaise, sgstPaise: tax - cgstPaise };
   });
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
-  const unrounded = subtotalPaise - discountPaise + (taxInclusive || noGst ? 0 : cgstPaise + sgstPaise);
+  const unrounded = subtotalPaise - discountPaise;
   const totalPaise = Math.floor((unrounded + 50) / 100) * 100;
-  return { taxInclusive, subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
+  return { subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
 }

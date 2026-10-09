@@ -13,7 +13,8 @@ export { PLANS, LicenseClaims, type Plan, type Feature, type LicenseStatus, type
 export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, UnitCostSet, type StockUnit, type StockItem, type StockWarning, type StockLink, type StockMove } from "./stock-schemas.js";
 export { stockJson, appendStockMove, consumeStock, reverseStock, orderStockWarnings, type StockRow } from "./stock.js";
 export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";
-export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type TaxMode, type PaymentMode, type BillTotals, type ReceiptSnapshot, type Bill, type BillCreditNote } from "./billing.js";
+export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type PaymentMode, type BillTotals, type ReceiptSnapshot, type Bill, type BillCreditNote } from "./billing.js";
+export { GST_MODES, DEFAULT_GST_RATES, effectiveGstRate, receiptGstMode, type GstMode, type DefaultGstRate } from "./gst.js";
 export { openDb, type Database } from "./db.js";
 export { migrate, type Migration } from "./migrate.js";
 export { MIGRATIONS } from "./migrations/index.js";
