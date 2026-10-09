@@ -26,8 +26,12 @@ export function registerReports(app: FastifyInstance) {
       const taxes = db.prepare(`SELECT t.gst_rate AS gstRate, SUM(t.taxable_paise) AS taxablePaise,
         SUM(t.cgst_paise) AS cgstPaise, SUM(t.sgst_paise) AS sgstPaise FROM bill_taxes t JOIN bills b ON b.id = t.bill_id
         WHERE b.created_at >= ? AND b.created_at < ? GROUP BY t.gst_rate ORDER BY t.gst_rate`).all(...bounds) as Array<{ taxablePaise: number }>;
+      // A `zomato` payment is a receivable from Zomato, not money in the drawer: it is reported on its own line and
+      // kept out of every cash, UPI and card figure.
       const payments = db.prepare(`SELECT mode, SUM(amount_paise) AS amountPaise FROM payments
-        WHERE created_at >= ? AND created_at < ? GROUP BY mode ORDER BY mode`).all(...bounds) as ModeAmount[];
+        WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato' GROUP BY mode ORDER BY mode`).all(...bounds) as ModeAmount[];
+      const zomatoReceivablePaise = (db.prepare("SELECT COALESCE(SUM(amount_paise),0) AS amountPaise FROM payments WHERE mode = 'zomato' AND created_at >= ? AND created_at < ?")
+        .get(...bounds) as { amountPaise: number }).amountPaise;
       const credit = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(taxable_paise),0) AS taxablePaise, COALESCE(SUM(cgst_paise),0) AS cgstPaise,
         COALESCE(SUM(sgst_paise),0) AS sgstPaise, COALESCE(SUM(total_paise),0) AS totalPaise
         FROM credit_notes WHERE created_at >= ? AND created_at < ?`).get(...bounds) as { count: number; taxablePaise: number; cgstPaise: number; sgstPaise: number; totalPaise: number };
@@ -45,7 +49,7 @@ export function registerReports(app: FastifyInstance) {
       for (const r of refunds) netByMode.set(r.mode, (netByMode.get(r.mode) ?? 0) - r.amountPaise);
       const netPayments = [...netByMode].sort(([a], [b]) => a.localeCompare(b)).map(([mode, amountPaise]) => ({ mode, amountPaise }));
       return { report: { date, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, sales, taxes, payments, cancellations,
-        creditNotes: { ...credit, taxes: creditTaxes }, refunds, net, netPayments } };
+        creditNotes: { ...credit, taxes: creditTaxes }, refunds, net, netPayments, zomatoReceivablePaise } };
     })();
   });
 }

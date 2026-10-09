@@ -47,7 +47,10 @@ describe("operational reports", () => {
     await request("PATCH", `/api/products/${productId}`, { name: "Changed", categoryId: otherCategory, pricePaise: 99999 });
     const result = await report("items");
     // A void bill stays in its issue date's sales; only a credit note (none here) subtracts it, on its own date.
-    for (const table of result.tables) {
+    // The item and category tables reconcile to the bills; the section 9(5) table after them is empty (no Zomato bills).
+    expect(result.tables.map((t) => t.title)).toEqual(["Item sales", "Category sales", "Aggregator supplies — GST paid by Zomato (section 9(5))"]);
+    expect(result.tables[2]!.rows).toEqual([]);
+    for (const table of result.tables.slice(0, 2)) {
       expect(table.totals).toMatchObject({ bills: 3, qty: 8, subtotal: bill.subtotalPaise + free.subtotalPaise + voided.subtotalPaise, discount: bill.discountPaise + free.discountPaise,
         gst: bill.cgstPaise + bill.sgstPaise + voided.cgstPaise + voided.sgstPaise, rounding: bill.roundingPaise + voided.roundingPaise, total: bill.totalPaise + voided.totalPaise });
       expect(table.rows.reduce((sum, r) => sum + Number(r.total), 0)).toBe(bill.totalPaise + voided.totalPaise);

@@ -46,13 +46,18 @@ export function registerOperationalReports(app: FastifyInstance) {
           column("netQty", "Net quantity", "quantity"), column("netTotal", "Net sales", "money")];
         tables.push({ title: "Item sales", columns: [column("name", "Item / variant"), column("category", "Category"), ...columns], rows: items, totals: { name: "Total", ...totals } },
           { title: "Category sales", columns: [column("category", "Category"), ...columns], rows: categories, totals: { category: "Total", ...totals } });
+        // Zomato collects and pays the GST on these supplies, so the bills carry none; they are listed for the accountant.
+        const supplies = query(`SELECT b.bill_no AS billNo, o.zomato_order_id AS zomatoOrderId, b.created_at AS date, b.total_paise AS value
+          FROM bills b JOIN orders o ON o.id = b.order_id WHERE o.type = 'zomato' AND b.created_at >= ? AND b.created_at < ? ORDER BY b.created_at, b.bill_no`, start, end);
+        tables.push({ title: "Aggregator supplies — GST paid by Zomato (section 9(5))", columns: [column("billNo", "Bill no."), column("zomatoOrderId", "Zomato order"), column("date", "Date", "time"), column("value", "Value", "money")],
+          rows: supplies, totals: { billNo: "Total", ...sum(supplies, ["value"]) } });
       }
       if (kind === "cashiers") {
         notes.push("Collections by payment date, including payments for older bills. Cashier means the person who settled the bill, not the person who issued it. Split payments count as one bill. Legacy receipts without a settlement actor are shown as Unknown.",
           "Refunds paid out are subtracted by refund date and method from the cashier who requested them.");
         const rows = query(`WITH entries AS (
             SELECT s.created_by AS userId, p.bill_id, p.mode, p.amount_paise AS amount, 0 AS refund
-            FROM payments p LEFT JOIN bill_settlements s ON s.bill_id = p.bill_id WHERE p.created_at >= ? AND p.created_at < ?
+            FROM payments p LEFT JOIN bill_settlements s ON s.bill_id = p.bill_id WHERE p.created_at >= ? AND p.created_at < ? AND p.mode <> 'zomato'
             UNION ALL
             SELECT c.requested_by, NULL, r.mode, -r.amount_paise, r.amount_paise
             FROM refund_payments r JOIN credit_notes c ON c.id = r.credit_note_id WHERE r.created_at >= ? AND r.created_at < ?)

@@ -16,7 +16,7 @@ function report(): DayEndReport {
       taxes: [{ gstRate: 5, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25 }] },
     refunds: [{ mode: "cash", amountPaise: 1050 }],
     net: { totalPaise: 19350, taxablePaise: 18000, cgstPaise: 700, sgstPaise: 700 },
-    netPayments: [{ mode: "cash", amountPaise: 8950 }, { mode: "upi", amountPaise: 5555 }],
+    netPayments: [{ mode: "cash", amountPaise: 8950 }, { mode: "upi", amountPaise: 5555 }], zomatoReceivablePaise: 0,
   };
 }
 

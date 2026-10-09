@@ -43,7 +43,8 @@ describe("order analytics", () => {
     const before = app.db.prepare("SELECT * FROM bills ORDER BY id").all();
     const result = await report();
     expect(result.totals).toEqual({ orderCount: 2, qty: 8, totalPaise: parcel.totalPaise + table.totalPaise });
-    expect(result.comparison).toEqual([{ type: "parcel", orderCount: 1, qty: 6, totalPaise: parcel.totalPaise }, { type: "dine_in", orderCount: 1, qty: 2, totalPaise: table.totalPaise }]);
+    expect(result.comparison).toEqual([{ type: "parcel", orderCount: 1, qty: 6, totalPaise: parcel.totalPaise }, { type: "dine_in", orderCount: 1, qty: 2, totalPaise: table.totalPaise },
+      { type: "zomato", orderCount: 0, qty: 0, totalPaise: 0 }]);
     expect(result.items[0]).toMatchObject({ name: "Meal", qty: 5, orderCount: 1, takeawayQty: 5, tableQty: 0 });
     expect(result.items[1]).toMatchObject({ name: "Juice", qty: 3, orderCount: 2, takeawayQty: 1, tableQty: 2 });
     expect(result.items.reduce((sum, row) => sum + row.totalPaise, 0)).toBe(result.totals.totalPaise);
@@ -118,7 +119,7 @@ describe("order analytics", () => {
     }
     const result = await report();
     expect(result.totals).toEqual({ orderCount: 0, totalPaise: 0, qty: 0 });
-    expect(result.comparison).toHaveLength(2); expect(result.items).toEqual([]); expect(result.categories).toEqual([]);
+    expect(result.comparison).toHaveLength(3); expect(result.items).toEqual([]); expect(result.categories).toEqual([]);
     expect(result.daily).toHaveLength(3); expect(result.hourly).toHaveLength(24);
   });
 });

@@ -16,6 +16,8 @@ export interface DayEndReport {
   refunds: Array<{ mode: string; amountPaise: number }>;
   net: { totalPaise: number; taxablePaise: number; cgstPaise: number; sgstPaise: number };
   netPayments: Array<{ mode: string; amountPaise: number }>;
+  /** Zomato payments received this day: money Zomato still owes, not cash in the drawer. */
+  zomatoReceivablePaise: number;
 }
 
 /** GST per rate after credit notes (the server does not return it): gross minus credited, for every rate on either side. */

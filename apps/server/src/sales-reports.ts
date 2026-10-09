@@ -53,14 +53,14 @@ export function registerSalesReports(app: FastifyInstance) {
         SUM(CASE WHEN mode = 'cash' THEN amount_paise ELSE 0 END) AS cashPaise,
         SUM(CASE WHEN mode = 'upi' THEN amount_paise ELSE 0 END) AS upiPaise,
         SUM(CASE WHEN mode = 'card' THEN amount_paise ELSE 0 END) AS cardPaise, SUM(amount_paise) AS totalPaise
-        FROM payments WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<Omit<Collections, "refundPaise"> & { date: string }>,
+        FROM payments WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato' GROUP BY date`).all(...bounds) as Array<Omit<Collections, "refundPaise"> & { date: string }>,
       refunds: db.prepare(`SELECT ${localDate("created_at")} AS date,
         SUM(CASE WHEN mode = 'cash' THEN amount_paise ELSE 0 END) AS cashPaise,
         SUM(CASE WHEN mode = 'upi' THEN amount_paise ELSE 0 END) AS upiPaise,
         SUM(CASE WHEN mode = 'card' THEN amount_paise ELSE 0 END) AS cardPaise, SUM(amount_paise) AS totalPaise
         FROM refund_payments WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<{ date: string; cashPaise: number; upiPaise: number; cardPaise: number; totalPaise: number }>,
       // A bill appearing on multiple collection dates must count only once in the range.
-      collectedBills: (db.prepare("SELECT COUNT(DISTINCT bill_id) AS count FROM payments WHERE created_at >= ? AND created_at < ?").get(...bounds) as { count: number }).count,
+      collectedBills: (db.prepare("SELECT COUNT(DISTINCT bill_id) AS count FROM payments WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato'").get(...bounds) as { count: number }).count,
     }))();
     const salesByDate = new Map(sales.map(({ date, ...values }) => [date, values]));
     const creditByDate = new Map(credits.map((row) => [row.date, row.totalPaise]));

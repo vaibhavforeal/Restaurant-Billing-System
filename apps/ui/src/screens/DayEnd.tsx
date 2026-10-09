@@ -82,7 +82,8 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
       <h4>Net payments received</h4>
       <p>Payments received minus refunds paid on this date.</p>
       <dl className="pos-totals">{(["cash", "upi", "card"] as const).map((mode) => <Fragment key={mode}><dt>{mode.toUpperCase()}</dt><dd>{money(report.netPayments.find((p) => p.mode === mode)?.amountPaise ?? 0)}</dd></Fragment>)}</dl>
-      <strong>Net received: {money(report.netPayments.reduce((sum, p) => sum + p.amountPaise, 0))}</strong></section></div>
+      <strong>Net received: {money(report.netPayments.reduce((sum, p) => sum + p.amountPaise, 0))}</strong>
+      <p>Zomato receivable (outstanding): <strong>{money(report.zomatoReceivablePaise)}</strong></p></section></div>
     </>}
   </section>;
 }

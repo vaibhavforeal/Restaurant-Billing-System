@@ -11,7 +11,7 @@ import { reportRange } from "./sales-reports.js";
 export function registerOrderAnalytics(app: FastifyInstance) {
   app.get("/api/reports/analytics", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
     const { from, to, dates, bounds } = reportRange(req.query);
-    const { type: orderType } = z.object({ type: z.enum(["all", "parcel", "dine_in"]).default("all") }).parse(req.query);
+    const { type: orderType } = z.object({ type: z.enum(["all", "parcel", "dine_in", "zomato"]).default("all") }).parse(req.query);
     const db = app.db;
     const report = db.transaction((): OrderAnalyticsReport => {
       // Credit rows carry no order id, so order counts come from issued bills only.
@@ -36,7 +36,7 @@ export function registerOrderAnalytics(app: FastifyInstance) {
       const counts = db.prepare(`SELECT type, COUNT(DISTINCT orderId) AS orderCount, SUM(total) AS totalPaise
         FROM (${billEntries}) GROUP BY type`).all(...both) as Omit<OrderTypeAnalytics, "qty">[];
       const quantities = db.prepare(`SELECT type, SUM(qty) AS qty FROM (${lineEntries}) GROUP BY type`).all(...both) as { type: string; qty: number }[];
-      const comparison = (["parcel", "dine_in"] as const).map((type) => ({ type,
+      const comparison = (["parcel", "dine_in", "zomato"] as const).map((type) => ({ type,
         orderCount: counts.find((row) => row.type === type)?.orderCount ?? 0,
         totalPaise: counts.find((row) => row.type === type)?.totalPaise ?? 0,
         qty: quantities.find((row) => row.type === type)?.qty ?? 0 }));
