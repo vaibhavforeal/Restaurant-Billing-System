@@ -76,3 +76,5 @@
 .billing-footer-actions > .zomato-desk-pill { flex: 0 0 auto; align-self: center; font-size: 12px; padding: 3px 9px; }
 .billing-zomato-hint { margin: 6px 0 0; font-size: 11px; color: var(--muted); }
 @media (pointer: coarse) { .zomato-desk-action, .zomato-desk .zomato-desk-new { min-height: 40px; } }
+.zomato-connection-dialog { width: min(920px, 94vw); }
+.zomato-connection-dialog .zomato-connection { grid-template-columns: minmax(0,1fr); }

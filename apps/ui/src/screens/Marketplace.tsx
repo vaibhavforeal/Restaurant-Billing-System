@@ -4,6 +4,7 @@ import type { User } from "../api";
 import { canToggle, statusLabel } from "../integrations-model";
 import { useIntegrations } from "../integrations";
 import type { Page } from "../NavBar";
+import { ZomatoSettingsDialog } from "./ZomatoConnection";
 import "../marketplace.css";
 
 const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen" };
@@ -12,6 +13,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
   const { integrations, ready, setEnabled, refresh } = useIntegrations();
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [zomatoSettings, setZomatoSettings] = useState(false);
   const inFlight = useRef(new Set<string>());
 
   async function toggle(info: IntegrationInfo) {
@@ -50,7 +52,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
           {error && <p role="alert" className="marketplace-error">{error}</p>}
           <div className="marketplace-card-foot">
             {!info.licensed && user.role === "admin" ? <button onClick={() => onNavigate({ name: "settings", section: "plan" })}>View licence</button>
-              : info.enabled && info.status === "available" && info.setupPage ? <button onClick={() => onNavigate({ name: info.setupPage! })}>Set up</button> : <span />}
+              : info.id === "zomato" && info.enabled && info.status === "available" && user.role === "admin" ? <button onClick={() => setZomatoSettings(true)}>Settings</button> : <span />}
             <button
               type="button" role="switch" className="marketplace-switch"
               aria-checked={info.status === "available" && info.enabled}
@@ -63,6 +65,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
         </li>;
       })}
     </ul>
+    {user.role === "admin" && <ZomatoSettingsDialog open={zomatoSettings} canEdit onClose={() => setZomatoSettings(false)} />}
   </section>;
 }
 

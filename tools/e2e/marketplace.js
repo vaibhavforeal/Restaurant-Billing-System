@@ -30,6 +30,9 @@
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const goto = async label => { await wait(() => navItem(label) && (!navItem(label).disabled || navItem(label).classList.contains('active')), 'nav ' + label); if (!navItem(label).disabled) navItem(label).click(); await sleep(60); };
   const heading = () => document.querySelector('.workspace h2')?.textContent;
+  // The Zomato page is gone: reconciliation is a Reports tab and connection settings live on the Marketplace card (Settings).
+  const zomatoTab = () => [...document.querySelectorAll('.sales-presets button')].find(b => b.textContent === 'Zomato reconciliation');
+  const settingsButton = () => [...(card('Zomato')?.querySelectorAll('button') ?? [])].find(b => b.textContent === 'Settings');
   const card = name => [...document.querySelectorAll('.marketplace-card')].find(e => e.querySelector('h3').textContent === name);
   const sw = name => card(name)?.querySelector('[role="switch"]');
   const pill = name => card(name)?.querySelector('.marketplace-pill').textContent;
@@ -51,7 +54,6 @@
 
   try {
     await setZomato(false);
-    await wait(() => !navItem('zomato'), 'Zomato nav hidden at start');
 
     // ---------- Shared: the API contract as this role sees it ----------
     const list = await call('GET', '/api/integrations', ownToken);
@@ -73,7 +75,7 @@
       check(heading() === 'Marketplace' && pill('Zomato') === 'Disabled' && pill('Swiggy') === 'Coming soon', 'Marketplace shows Zomato Disabled and Swiggy Coming soon');
       const z = sw('Zomato'), s = sw('Swiggy');
       check(z.getAttribute('aria-label') === 'Zomato integration' && z.getAttribute('aria-checked') === 'false' && !z.disabled && z.tagName === 'BUTTON' && z.type === 'button' && z.tabIndex >= 0, 'Zomato switch is an enabled, focusable role=switch button');
-      check(s.disabled && s.getAttribute('aria-checked') === 'false' && !card('Zomato').textContent.includes('Set up'), 'Swiggy switch is disabled and an off Zomato offers no Set up');
+      check(s.disabled && s.getAttribute('aria-checked') === 'false' && !settingsButton(), 'Swiggy switch is disabled and an off Zomato offers no Settings button');
       z.focus(); check(document.activeElement === z, 'Zomato switch can take keyboard focus');
 
       // ---------- Turn Zomato on: a slow save marks the switch aria-disabled (keeping focus), and a second click cannot send a second PATCH ----------
@@ -83,16 +85,18 @@
       await wait(() => pill('Zomato') === 'Enabled', 'Zomato Enabled'); slowMs = 0;
       check(patches === 1 && sw('Zomato').getAttribute('aria-checked') === 'true' && !sw('Zomato').disabled && !sw('Zomato').hasAttribute('aria-disabled'), 'Clicks while pending send one PATCH; the switch ends on and re-enabled');
       check(document.activeElement === sw('Zomato'), 'Keyboard focus stays on the switch after the save');
-      await wait(() => !!navItem('zomato'), 'Zomato nav');
-      check(!!navItem('zomato') && [...card('Zomato').querySelectorAll('button')].some(b => b.textContent === 'Set up'), 'Zomato nav item and the Set up button appear');
+      await wait(() => !!settingsButton(), 'Zomato Settings button');
+      check(!navItem('zomato') && !!settingsButton(), 'The Settings button appears on the Zomato card (there is no Zomato nav item)');
       const stored = (await call('GET', '/api/integrations', ownToken)).json.integrations[0];
       check(stored.enabled === true && typeof stored.updatedAt === 'number', 'The new state is stored on the server');
       const enabledHook = await call('POST', '/api/integrations/zomato/webhook', ownToken, undefined, '{}');
       check(enabledHook.status === 503 && /not configured/.test(enabledHook.json?.error ?? ''), 'With Zomato on the Marketplace gate is lifted (the existing adapter check still answers)');
 
-      // ---------- Set up opens the Zomato screen ----------
-      [...card('Zomato').querySelectorAll('button')].find(b => b.textContent === 'Set up').click();
-      await wait(() => heading() === 'Zomato', 'Zomato page'); check(true, 'Set up opens the Zomato screen');
+      // ---------- Settings opens the Zomato connection form in a dialog ----------
+      settingsButton().click();
+      await wait(() => document.querySelector('dialog[open] .zomato-connection'), 'Zomato settings dialog'); check(true, 'Settings opens the Zomato connection form in a dialog');
+      document.querySelector('dialog[open] [aria-label="Close Zomato settings"]').click();
+      await wait(() => !document.querySelector('dialog[open]'), 'Zomato settings dialog closed');
 
       // ---------- Dashboard Alerts show the Zomato order ----------
       await goto('home'); await wait(() => homeReady() && rows().length === 1, 'Alerts row');
@@ -101,14 +105,16 @@
       const billed = (await call('GET', '/api/orders', ownToken)).json.orders.filter(o => o.status === 'billed').length;
       check(document.querySelector('.dash-badge').textContent.trim() === String(rows().length + (billed > 0 ? 1 : 0)), 'Alerts badge counts the Zomato rows plus one counter alert when orders are billed');
       check(alertsText().includes('Swiggy not connected.') && [...document.querySelectorAll('.dash-alerts .dash-link')].some(b => b.textContent === 'Open Marketplace') && !alertsText().includes('Turn on Zomato'), 'Alerts says Swiggy is not connected and links admins to the Marketplace');
-      row.click(); await wait(() => heading() === 'Zomato', 'row opens Zomato'); check(true, 'Clicking an Alerts row opens the Zomato screen');
+      row.click(); await wait(() => heading() === 'Tables & orders' && document.querySelector('.tables-zomato'), 'row opens Tables'); check(true, 'Clicking an Alerts row opens the Tables page with its Zomato panel');
 
-      // ---------- Another counter turns Zomato off while this admin is on the Zomato page: live notice, no reload ----------
+      // ---------- Another counter turns Zomato off while this admin is on Reports, Zomato reconciliation: the tab goes live, no reload ----------
+      await goto('Reports & Analytics'); await wait(() => zomatoTab(), 'Zomato reconciliation tab'); zomatoTab().click();
+      await wait(() => document.querySelector('.zomato-screen'), 'reconciliation tab');
       await setZomato(false);
-      await wait(() => document.body.textContent.includes('Zomato is turned off'), 'turned-off notice');
-      check(window.__marketplaceNoReload === true && !!document.querySelector('[role="status"] h3') && !navItem('zomato') && [...document.querySelectorAll('.marketplace-empty button')].some(b => b.textContent === 'Open Marketplace') && document.body.textContent.includes('Turn Zomato on in the Marketplace'), 'Admin on the Zomato page sees "Zomato is turned off" with an Open Marketplace button, live and without a reload');
-      [...document.querySelectorAll('.marketplace-empty button')].find(b => b.textContent === 'Open Marketplace').click();
-      await wait(() => heading() === 'Marketplace' && card('Zomato'), 'Marketplace after notice'); check(pill('Zomato') === 'Disabled', 'Open Marketplace from the notice shows Zomato disabled');
+      await wait(() => !zomatoTab() && document.body.textContent.includes('Zomato reconciliation is available while Zomato is turned on in the Marketplace.'), 'tab gone');
+      check(window.__marketplaceNoReload === true && !navItem('zomato') && !document.querySelector('.zomato-screen'), 'Admin on Zomato reconciliation sees the tab go with a notice, live and without a reload');
+      await goto('marketplace');
+      await wait(() => heading() === 'Marketplace' && card('Zomato'), 'Marketplace after notice'); check(pill('Zomato') === 'Disabled', 'The Marketplace shows Zomato disabled after it was turned off');
 
       // ---------- Failed save leaves the previous state and shows an alert ----------
       failNext = true; sw('Zomato').click();
@@ -121,7 +127,7 @@
       await wait(() => pill('Zomato') === 'Disabled' && !sw('Zomato').disabled, 'off again');
       await sleep(250);
       check(patches === 1 && sw('Zomato').getAttribute('aria-checked') === 'false' && (await call('GET', '/api/integrations', ownToken)).json.integrations[0].enabled === false, 'A rapid double-click sends exactly one PATCH');
-      await wait(() => !navItem('zomato'), 'nav hidden again');
+      await goto('Reports & Analytics'); await wait(() => document.querySelector('.sales-presets') && !zomatoTab(), 'Zomato reconciliation tab hidden again');
       await goto('home'); await wait(homeReady, 'home');
       check(rows().length === 0 && alertsText().includes('Turn on Zomato or Swiggy in the Marketplace') && !!navItem('marketplace') && !navItem('zomato'), 'Turned off: Zomato nav item and Alerts rows are gone and the hint returns');
       check(((await call('GET', '/api/zomato/orders', ownToken)).json.orders ?? []).length === 1, 'Turning Zomato off leaves its orders untouched');
@@ -176,19 +182,20 @@
       sw('Zomato').click(); await sleep(250);
       check(patches === 0 && pill('Zomato') === 'Disabled', 'Clicking a disabled cashier switch sends no request');
 
-      // ---------- Admin turns Zomato on from another counter: nav, Set up and Alerts appear live ----------
+      // ---------- Admin turns Zomato on from another counter: the Reports tab, Settings and Alerts appear live ----------
       await setZomato(true);
-      await wait(() => !!navItem('zomato') && pill('Zomato') === 'Enabled', 'live enable');
-      check([...card('Zomato').querySelectorAll('button')].some(b => b.textContent === 'Set up') && sw('Zomato').disabled, 'Cashier sees Zomato enabled live, with Set up but still no working switch');
+      await wait(() => pill('Zomato') === 'Enabled', 'live enable');
+      check(!settingsButton() && sw('Zomato').disabled, 'Cashier sees Zomato enabled live, with no Settings button (admin only) and no working switch');
       await goto('home'); await wait(() => homeReady() && rows().length === 1, 'Alerts row');
       check(rows()[0].textContent.includes('#000201') && rows()[0].textContent.includes('Zomato') && alertsText().includes('Swiggy not connected.') && ![...document.querySelectorAll('.dash-alerts .dash-link')].some(b => b.textContent === 'Open Marketplace'), 'Cashier Alerts shows the Zomato order and no Open Marketplace link');
 
-      // ---------- Cashier on the Zomato page when an admin turns it off: live notice, no reload ----------
-      rows()[0].click(); await wait(() => heading() === 'Zomato', 'Zomato page');
-      check(heading() === 'Zomato' && !document.body.textContent.includes('turned off'), 'Cashier opens the Zomato screen while it is enabled');
+      // ---------- Cashier on Reports, Zomato reconciliation when an admin turns it off: the tab goes live, no reload ----------
+      await goto('Reports & Analytics'); await wait(() => zomatoTab(), 'Zomato reconciliation tab'); zomatoTab().click();
+      await wait(() => document.querySelector('.zomato-screen'), 'reconciliation tab');
+      check(!!document.querySelector('.zomato-screen') && !document.body.textContent.includes('turned on in the Marketplace'), 'Cashier opens Zomato reconciliation from Reports while it is enabled');
       await setZomato(false);
-      await wait(() => document.body.textContent.includes('Zomato is turned off'), 'turned-off notice');
-      check(window.__marketplaceNoReload === true && document.body.textContent.includes('Ask an admin to turn Zomato on in the Marketplace.') && ![...document.querySelectorAll('.marketplace-empty button')].some(b => b.textContent === 'Open Marketplace') && !navItem('zomato'), 'Cashier sees "Zomato is turned off" live, without a reload, and no Open Marketplace button');
+      await wait(() => !zomatoTab() && document.body.textContent.includes('Zomato reconciliation is available while Zomato is turned on in the Marketplace.'), 'tab gone');
+      check(window.__marketplaceNoReload === true && !navItem('zomato') && !document.querySelector('.zomato-screen') && ![...document.querySelectorAll('.marketplace-empty button')].some(b => b.textContent === 'Open Marketplace'), 'Cashier sees the Zomato reconciliation tab go live, without a reload, and no Open Marketplace button');
       await goto('home'); await wait(homeReady, 'home');
       check(rows().length === 0 && alertsText().includes('Ask an admin to turn on Zomato or Swiggy in the Marketplace.') && !alertsText().includes('Turn on Zomato'), 'Cashier Alerts hides Zomato rows again and asks an admin to turn it on');
 

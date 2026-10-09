@@ -42,12 +42,10 @@ describe("integrations model", () => {
     expect(canToggle(kds, "admin")).toBe(true);
   });
 
-  it("navTabVisible gates Zomato and Kitchen tabs but never the kitchen role's own tab", () => {
+  it("navTabVisible gates the Kitchen tab but never the kitchen role's own tab", () => {
     expect(navTabVisible("kitchen", "admin", () => false)).toBe(false);
     expect(navTabVisible("kitchen", "kitchen", () => false)).toBe(true);
     expect(navTabVisible("kitchen", "cashier", (id) => id === "kds")).toBe(true);
-    expect(navTabVisible("zomato", "admin", () => false)).toBe(false);
-    expect(navTabVisible("zomato", "admin", (id) => id === "zomato")).toBe(true);
     expect(navTabVisible("tables", "admin", () => false)).toBe(true);
   });
 

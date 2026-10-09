@@ -5,8 +5,10 @@
 Build the UI and start `node --import tsx tools/e2e/zomato-server.mts`.
 Open `http://127.0.0.1:4177/`, sign in as admin (1234), and run `tools/e2e/zomato.js`
 through agent-browser with UTF-8 stdin. Require `status: passed`. The disposable
-in-memory fixture covers all reconciliation states, UI imports, duplicate handling,
-adjustments, connection settings, filtered CSV and refresh recovery. Check desktop
+in-memory fixture (Zomato switched on in the Marketplace) covers all reconciliation
+states, UI imports, duplicate handling, adjustments, filtered CSV and refresh recovery.
+Reconciliation is reached through Reports, **Zomato reconciliation** tab; connection
+settings through the Marketplace Zomato card, **Settings** (admin only). Check desktop
 and mobile in both themes, then cashier (2345) and waiter (3456) access. There are no
 Zomato API calls. Restart the fixture before repeating the complete gate.
 
@@ -89,8 +91,8 @@ Use the same sales-dashboard fixture (port 4145, Zomato off). Sign in as admin
 **1234** and run `tools/e2e/marketplace.js` the same way as above (session
 `marketplace`); require `status: passed` (36 checks). Then sign out, sign in as
 cashier **2345** and run it again (13 checks; read-only Marketplace, live enable and
-disable from a second admin session obtained through the API, the live "Zomato is
-turned off" notice without a reload). The script detects the role from `/api/me`,
+disable from a second admin session obtained through the API, the Zomato
+reconciliation tab disappearing live without a reload). The script detects the role from `/api/me`,
 turns Zomato off again in `finally`, and keeps its result in
 `window.__marketplaceResult` (progress in `window.__marketplaceProgress`).
 
@@ -107,8 +109,8 @@ sent from an in-page script: focus the Zomato switch, press **Space**, then re-f
 and press **Enter** (agent-browser `press`, or Playwright `keyboard.press`) and expect
 each to toggle the switch. Note that focus drops to the page body after each toggle.
 Waiter **3456** lands in the Captain app and gets 403 on `GET /api/integrations`.
-There is no URL per page, so a "deep link" to the Zomato page is checked by turning
-Zomato off while that page is open. If agent-browser is unavailable, add each script
+There is no URL per page, so a "deep link" to Zomato reconciliation is checked by
+turning Zomato off while Reports, Zomato reconciliation is open (the tab goes live). If agent-browser is unavailable, add each script
 to the page with Playwright `page.addScriptTag({ path })` and read the result global
 once it appears; avoid holding one tool call open while CSV downloads run. Stop the
 fixture afterwards.

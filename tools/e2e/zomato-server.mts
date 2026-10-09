@@ -14,6 +14,7 @@ const admin = await setupAdmin(app);
 await createUser(app, admin.token, { name: "Counter", pin: "2345", role: "cashier" });
 await createUser(app, admin.token, { name: "Captain", pin: "3456", role: "waiter" });
 const headers = { authorization: `Bearer ${admin.token}` };
+await app.inject({ method: "PATCH", url: "/api/integrations/zomato", headers, payload: { enabled: true } }); // the Zomato tab and Settings only show while Zomato is on in the Marketplace
 await app.inject({ method: "PATCH", url: "/api/zomato/settings", headers, payload: { restaurantId: "123456", restaurantName: "Demo restaurant", posId: "", webhookBaseUrl: "", enabled: false, version: 1 } });
 const today = new Date();
 const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;

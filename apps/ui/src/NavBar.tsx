@@ -15,9 +15,8 @@ export type Page =
   | { name: "users" }
   | { name: "settings"; section?: "plan" }
   | { name: "bills" }
-  | { name: "zomato" }
   | { name: "marketplace" }
-  | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "analytics" | "bills"; period?: { from: string; to: string } }
+  | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "analytics" | "bills" | "zomato"; period?: { from: string; to: string } }
   | { name: "inventory" };
 // Billing and reports use the existing cashier/admin permissions.
 
@@ -55,7 +54,6 @@ export function NavBar({
           { page: { name: "home" }, label: "home" },
           { page: { name: "tables" }, label: "tables" },
           { page: { name: "reports" }, label: "reports" },
-          { page: { name: "zomato" }, label: "zomato" },
           { page: { name: "inventory" }, label: "inventory" },
           { page: { name: "kitchen" }, label: "kitchen" },
           { page: { name: "catalog" }, label: "catalog" },
@@ -68,7 +66,6 @@ export function NavBar({
             { page: { name: "home" }, label: "home" },
             { page: { name: "tables" }, label: "tables" },
             { page: { name: "reports" }, label: "reports" },
-            { page: { name: "zomato" }, label: "zomato" },
             { page: { name: "inventory" }, label: "inventory" },
             { page: { name: "kitchen" }, label: "kitchen" },
             { page: { name: "marketplace" }, label: "marketplace" },
@@ -101,7 +98,7 @@ export function NavBar({
           {...(t.page.name === "tables" ? shortcutProps("tables") : {})}
           title={t.page.name === "tables" ? shortcut("tables", "Tables") : t.page.name === "reports" ? "Reports & Analytics" : t.label}
         >
-          <Icon name={t.label === "zomato" ? "bag" : t.label as IconName} /><span>{t.page.name === "reports" ? "Reports & Analytics" : t.label}</span>
+          <Icon name={t.label as IconName} /><span>{t.page.name === "reports" ? "Reports & Analytics" : t.label}</span>
         </button>
       ))}
       </div>

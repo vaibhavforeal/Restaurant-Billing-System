@@ -19,8 +19,14 @@
     if (!response.ok) throw new Error(`API ${response.status}`);
     return response.json();
   };
-  if (!document.querySelector(".zomato-screen")) button("zomato").click();
-  await wait(() => button("Reconciliation"), "workspace tabs"); button("Reconciliation").click();
+  const nav = label => document.querySelector(`.nav-item[aria-label="${label}"]`);
+  const openReconciliation = async () => {
+    if (document.querySelector(".zomato-screen")) return;
+    await wait(() => nav("Reports & Analytics"), "reports nav"); if (!nav("Reports & Analytics").disabled) nav("Reports & Analytics").click();
+    await wait(() => button("Zomato reconciliation"), "Zomato reconciliation tab"); button("Zomato reconciliation").click();
+    await wait(() => document.querySelector(".zomato-screen"), "reconciliation screen");
+  };
+  await openReconciliation();
   await wait(() => document.querySelectorAll(".zomato-table tbody tr").length === 6 && !button("Refresh").disabled, "seeded reconciliation");
   check(document.querySelector(".zomato-status").textContent.includes("Live activation pending"), "Unconfigured live status is explicit");
   check(document.querySelector(".zomato-metrics").textContent.includes("₹1144.01"), "Exact statement net is shown");
@@ -39,18 +45,18 @@
   set(show, "awaiting_statement");
   await wait(() => document.querySelectorAll(".zomato-table tbody tr").length === 2, "status filter");
   check(true, "Status filter isolates awaiting statements"); set(show, "all");
-  button("Connection").click();
-  await wait(() => document.querySelector(".zomato-connection"), "connection form");
+  nav("marketplace").click();
+  await wait(() => [...document.querySelectorAll(".marketplace-card")].some(card => card.querySelector("h3").textContent === "Zomato" && [...card.querySelectorAll("button")].some(b => b.textContent === "Settings")), "Zomato card Settings");
+  [...document.querySelectorAll(".marketplace-card")].find(card => card.querySelector("h3").textContent === "Zomato").querySelectorAll("button").forEach(b => { if (b.textContent === "Settings") b.click(); });
+  await wait(() => document.querySelector("dialog[open] .zomato-connection"), "connection form");
   const name = [...document.querySelectorAll("label")].find(label => label.textContent === "Restaurant name").querySelector("input");
   set(name, "QA Zomato restaurant"); await wait(() => !button("Save connection").disabled, "connection edit"); button("Save connection").click();
   await wait(() => document.body.textContent.includes("Connection details saved"), "connection save");
   check((await api("/api/zomato/settings")).restaurantName === "QA Zomato restaurant", "Connection settings persist through the API");
   check(!document.querySelector('.zomato-connection input[type="checkbox"]'), "Live activation cannot be toggled without a provider");
-  button("Live orders (1)").click();
-  await wait(() => document.querySelector(".zomato-order"), "live screen");
-  check(document.querySelector(".zomato-order").textContent.includes("Imported record"), "Imported open order is labelled accurately");
-  check(document.body.textContent.includes("not active in this build"), "Live screen explains the activation requirement");
-  button("Reconciliation").click();
+  document.querySelector('dialog[open] [aria-label="Close Zomato settings"]').click();
+  await wait(() => !document.querySelector("dialog[open]"), "settings dialog closed");
+  await openReconciliation();
   await wait(() => document.querySelector(".zomato-import"), "import form");
   const inputCsv = async (kind, csv) => {
     const root = document.querySelector(".zomato-import");

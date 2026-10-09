@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch, session, type User } from "./api";
 import { NavBar, type Page } from "./NavBar";
 import { Catalog } from "./screens/Catalog";
@@ -28,7 +28,6 @@ import { isCaptainPath } from "./captain-pwa";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
-const Zomato = lazy(() => import("./screens/Zomato").then(module => ({ default: module.Zomato })));
 import "./compact-workspace.css";
 
 type State =
@@ -51,14 +50,6 @@ export function App() {
   }
   if (/^\/kitchen\/?$/.test(window.location.pathname)) return <KitchenApp />;
   return <StaffApp />;
-}
-
-/** The Zomato page is only reachable while the Marketplace has Zomato turned on; it flips live on the websocket event. */
-function ZomatoRoute({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
-  const { ready, isEnabled } = useIntegrations();
-  if (!ready) return <p role="status">Loading Zomato workspace…</p>;
-  if (!isEnabled("zomato")) return <IntegrationOff name="Zomato" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
-  return <Suspense fallback={<p role="status">Loading Zomato workspace…</p>}><Zomato user={user} /></Suspense>;
 }
 
 /** Admins and cashiers reach the kitchen board only while the Kitchen Display is on. Kitchen staff cannot read the Marketplace, so their board explains a turned-off KDS itself. */
@@ -148,10 +139,9 @@ function StaffApp() {
           {page.name === "users" && <Users />}
           {page.name === "settings" && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
-          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} onOpenOrder={onOpenOrder} />}
+          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={user.role === "admin" || user.role === "cashier"} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <Inventory user={user} />}
           {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
-          {page.name === "zomato" && (user.role === "admin" || user.role === "cashier") && <ZomatoRoute user={user} onNavigate={go} />}
           </main>
           </QrNotifications>
           </LicenseGate>

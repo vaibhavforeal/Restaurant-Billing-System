@@ -48,7 +48,7 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
       </div>
       <aside className="dash-side" aria-label="Alerts and statistics">
         <AlertsPanel rows={aggregator.rows} truncated={aggregator.truncated} operational={operational} ready={ready} loaded={aggregator.loaded} zomatoEnabled={zomatoEnabled}
-          canManage={canManage} error={aggregator.error} onOpenZomato={() => onNavigate({ name: "zomato" })} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />
+          canManage={canManage} error={aggregator.error} onOpenZomato={() => onNavigate({ name: "tables" })} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />
         <OrderStatistics stats={dayEnd ? counts : null} />
         {sales && <PaymentBreakdown report={sales} />}
       </aside>

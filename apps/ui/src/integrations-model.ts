@@ -17,9 +17,9 @@ export function canToggle(info: IntegrationInfo, role: User["role"]): boolean {
   return role === "admin" && info.status === "available" && (info.licensed || info.enabled);
 }
 
-const TAB_INTEGRATION: Partial<Record<Page["name"], IntegrationId>> = { zomato: "zomato", kitchen: "kds" };
+const TAB_INTEGRATION: Partial<Record<Page["name"], IntegrationId>> = { kitchen: "kds" };
 
-/** Pages that belong to an integration show only while it is on. The kitchen role cannot read integrations, so its only tab always shows and the board explains when the Kitchen Display is off. */
+/** Pages that belong to an integration show only while it is on (today only the kitchen board). The kitchen role cannot read integrations, so its only tab always shows and the board explains when the Kitchen Display is off. */
 export function navTabVisible(page: Page["name"], role: User["role"], isEnabled: (id: IntegrationId) => boolean): boolean {
   const integration = TAB_INTEGRATION[page];
   if (!integration || (page === "kitchen" && role === "kitchen")) return true;
