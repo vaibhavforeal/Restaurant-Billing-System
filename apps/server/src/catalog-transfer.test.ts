@@ -110,7 +110,7 @@ describe("item CSV transfer", () => {
     await apply(token, csv(["A", "Tea", "10", "0"], ["A", "Coffee", "20", "0"]));
     const [coffee, tea] = await products(token);
     const variant = (await app.inject({ method: "POST", url: `/api/products/${tea.id}/variants`, headers: auth(token), payload: { name: "Large", pricePaise: 2000 } })).json().variant;
-    const wrongOwner = catalogCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", ""]]);
+    const wrongOwner = catalogCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", ""]]);
     expect((await preview(token, wrongOwner)).json().error).toContain("belongs to another item");
     await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { categoryId: tea.categoryId, name: "Tea", pricePaise: 500, gstRate: 0 } });
     expect((await preview(token, csv(["A", "Tea", "10", "0"]))).json().error).toContain("ambiguous item name");

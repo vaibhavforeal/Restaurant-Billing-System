@@ -37,8 +37,8 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
         String(!!p.is_veg), String(!!p.is_active), String(!!p.is_sold_out), p.description,
         p.kot_station_id ? stations.get(p.kot_station_id)! : ""];
       const service = [p.ac_price_paise === null ? "" : rupees(p.ac_price_paise), p.takeaway_price_paise === null ? "" : rupees(p.takeaway_price_paise)];
-      rows.push([...base, "", "", "", "", ...service, "", ""]);
-      for (const v of variants.get(p.id) ?? []) rows.push([...base, v.id, v.name, rupees(v.price_paise), String(!!v.is_active), ...service, v.ac_price_paise === null ? "" : rupees(v.ac_price_paise), v.takeaway_price_paise === null ? "" : rupees(v.takeaway_price_paise)]);
+      rows.push([...base, "", "", "", "", ...service, "", "", "", ""]); // trailing zomato_price, variant_zomato_price: exported in Task 3
+      for (const v of variants.get(p.id) ?? []) rows.push([...base, v.id, v.name, rupees(v.price_paise), String(!!v.is_active), ...service, v.ac_price_paise === null ? "" : rupees(v.ac_price_paise), v.takeaway_price_paise === null ? "" : rupees(v.takeaway_price_paise), "", ""]);
     }
     reply.header("Cache-Control", "no-store");
     return { filename: `forkflow-items-${new Date().toISOString().slice(0, 10)}.csv`, csv: catalogCsv(rows) };

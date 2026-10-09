@@ -12,7 +12,7 @@ export { PLANS, LicenseClaims, type Plan, type Feature, type LicenseStatus, type
 export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, UnitCostSet, type StockUnit, type StockItem, type StockWarning, type StockLink, type StockMove } from "./stock-schemas.js";
 export { stockJson, appendStockMove, consumeStock, reverseStock, orderStockWarnings, type StockRow } from "./stock.js";
 export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";
-export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type BillTotals, type ReceiptSnapshot, type Bill, type BillCreditNote } from "./billing.js";
+export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type TaxMode, type PaymentMode, type BillTotals, type ReceiptSnapshot, type Bill, type BillCreditNote } from "./billing.js";
 export { openDb, type Database } from "./db.js";
 export { migrate, type Migration } from "./migrate.js";
 export { MIGRATIONS } from "./migrations/index.js";
@@ -33,9 +33,9 @@ export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {
   TableCreate, TableUpdate,
-  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel,
+  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, ZOMATO_ORDER_ID,
   type TableCreateInput, type TableUpdateInput,
-  type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput,
+  type OrderType, type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput,
 } from "./order-schemas.js";
 export { creditFor, voidRemainder, refundState, refundableByMode, CreditPreview, VoidBill, RefundBill, type Money, type BillLine, type Credited, type CreditDraft, type PayMode, type CreditPreviewInput, type VoidBillInput, type RefundBillInput } from "./credit-notes.js";
 export { OrderMove, OrderMerge, type OrderMoveInput, type OrderMergeInput } from "./table-transfer-schemas.js";

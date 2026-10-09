@@ -36,7 +36,7 @@ function formatTime(ms: number): string {
  * - parcel → "Parcel"
  * - dine-in → tableName when splitLabel is null or 'A', else "tableName / splitLabel"
  */
-export function contextLine(orderType: "dine_in" | "parcel", tableName: string | null, splitLabel: string | null): string {
+export function contextLine(orderType: "dine_in" | "parcel" | "zomato", tableName: string | null, splitLabel: string | null): string {
   if (orderType === "parcel") return "Parcel";
   if (!splitLabel || splitLabel === "A") return tableName ?? "Table";
   return `${tableName ?? "Table"} / ${splitLabel}`;

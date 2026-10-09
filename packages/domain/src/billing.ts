@@ -26,6 +26,14 @@ export const BillPrint = z.object({ printerId: z.string().min(1) });
 export type BillCreateInput = z.infer<typeof BillCreate>;
 export type BillSettleInput = z.infer<typeof BillSettle>;
 
+/**
+ * Modes a bill payment can be recorded in; "zomato" is the platform receivable, never accepted by BillSettle.
+ * Distinct from credit-notes' `PayMode`, which is the refund mode (cash, upi, card only).
+ */
+export type PaymentMode = "cash" | "upi" | "card" | "zomato";
+/** "operator": an e-commerce operator collects and pays the GST, so the bill carries no CGST/SGST. */
+export type TaxMode = "restaurant" | "operator";
+
 export interface TaxLine { gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }
 export interface BillTotals {
   taxInclusive: boolean;
@@ -37,7 +45,11 @@ export interface ReceiptSnapshot {
   upiId?: string;
   taxInclusive: boolean;
   restaurantName: string; address: string; gstin: string; fssai: string; receiptFooter: string;
-  orderType: "dine_in" | "parcel"; tableName: string | null; splitLabel: string | null;
+  orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null;
+  /** Set on Zomato orders. */
+  zomatoOrderId?: string;
+  /** Set when the platform collects and pays the GST (section 9(5)). */
+  gstPaidBy?: "zomato";
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number }>;
 }
 /** A void or refund as shown on its bill. */
@@ -51,7 +63,7 @@ export interface BillCreditNote {
 export interface Bill extends BillTotals {
   id: string; billNo: number; orderId: string; status: "unpaid" | "paid" | "void";
   discountNote: string | null; createdAt: number; receipt: ReceiptSnapshot;
-  payments: Array<{ mode: "cash" | "upi" | "card"; amountPaise: number; refNote: string | null; createdAt: number }>;
+  payments: Array<{ mode: PaymentMode; amountPaise: number; refNote: string | null; createdAt: number }>;
   /** Derived from credit notes; the stored status is unchanged by a refund. */
   refundState: "none" | "partly_refunded" | "refunded";
   creditNotes: BillCreditNote[];
@@ -60,7 +72,7 @@ export interface Bill extends BillTotals {
 }
 
 /** All financial arithmetic uses integer paise / BigInt. */
-export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, taxInclusive = false): BillTotals {
+export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, taxInclusive = false, taxMode: TaxMode = "restaurant"): BillTotals {
   if (!items.length) throw new Error("Bill must contain at least one item");
   const groups = new Map<number, number>();
   let subtotalPaise = 0;
@@ -81,7 +93,9 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   let remaining = discountPaise - allocation.reduce((sum, row) => sum + row.discount, 0);
   const byRemainder = [...allocation].sort((a, b) => a.remainder === b.remainder ? a.rate - b.rate : a.remainder > b.remainder ? -1 : 1);
   for (const row of byRemainder) { if (remaining-- > 0) row.discount++; }
+  const operator = taxMode === "operator";
   const taxes = allocation.map(({ rate, amount, discount }) => {
+    if (operator) return { gstRate: rate, taxablePaise: amount - discount, cgstPaise: 0, sgstPaise: 0 };
     if (taxInclusive) {
       const gross = amount - discount;
       const divisor = BigInt(100 + rate);
@@ -96,7 +110,7 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   });
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
-  const unrounded = subtotalPaise - discountPaise + (taxInclusive ? 0 : cgstPaise + sgstPaise);
+  const unrounded = subtotalPaise - discountPaise + (taxInclusive || operator ? 0 : cgstPaise + sgstPaise);
   const totalPaise = Math.floor((unrounded + 50) / 100) * 100;
   return { taxInclusive, subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
 }

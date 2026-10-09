@@ -26,6 +26,7 @@ export const VariantCreate = z.object({
   pricePaise: Paise,
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
+  zomatoPricePaise: Paise.nullable().optional(),
 });
 export type VariantCreateInput = z.infer<typeof VariantCreate>;
 
@@ -34,6 +35,7 @@ export const VariantUpdate = z.object({
   pricePaise: Paise.optional(),
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
+  zomatoPricePaise: Paise.nullable().optional(),
   isActive: z.boolean().optional(),
 });
 export type VariantUpdateInput = z.infer<typeof VariantUpdate>;
@@ -44,6 +46,7 @@ export const ProductCreate = z.object({
   pricePaise: Paise,
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
+  zomatoPricePaise: Paise.nullable().optional(),
   gstRate: GstRate,
   isVeg: z.boolean().default(true),
   kotStationId: z.string().min(1).nullable().default(null),
@@ -60,6 +63,7 @@ export const ProductUpdate = z.object({
   pricePaise: Paise.optional(),
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
+  zomatoPricePaise: Paise.nullable().optional(),
   gstRate: GstRate.optional(),
   isVeg: z.boolean().optional(),
   kotStationId: z.string().min(1).nullable().optional(),

@@ -16,7 +16,7 @@ export interface OperationalReport {
   notes: string[]; tables: ReportTable[];
 }
 
-export type AnalyticsOrderType = "all" | "parcel" | "dine_in";
+export type AnalyticsOrderType = "all" | "parcel" | "dine_in" | "zomato";
 export interface OrderAnalyticsTotals { orderCount: number; totalPaise: number; qty: number }
 export interface OrderTypeAnalytics extends OrderAnalyticsTotals { type: "parcel" | "dine_in" }
 export interface ItemAnalytics extends OrderAnalyticsTotals {

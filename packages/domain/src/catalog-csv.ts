@@ -4,6 +4,7 @@ export const CATALOG_CSV_COLUMNS = [
   "item_id", "category", "name", "price", "gst_rate", "is_veg", "is_active",
   "is_sold_out", "description", "kot_station", "variant_id", "variant_name",
   "variant_price", "variant_active", "ac_price", "takeaway_price", "variant_ac_price", "variant_takeaway_price",
+  "zomato_price", "variant_zomato_price",
 ] as const;
 export type CatalogCsvColumn = typeof CATALOG_CSV_COLUMNS[number];
 export interface CatalogImportPreview {

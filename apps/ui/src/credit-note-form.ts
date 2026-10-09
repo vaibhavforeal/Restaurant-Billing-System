@@ -1,4 +1,4 @@
-import type { PayMode } from "@forkflow/domain";
+import type { PayMode, PaymentMode } from "@forkflow/domain";
 
 export type { PayMode };
 export interface RefundRow { mode: PayMode; amountPaise: number }
@@ -9,7 +9,7 @@ export const REFUND_REASONS = ["Wrong item", "Quality complaint", "Long wait", "
  * Where a refund goes by default: split across the guest's payment methods in proportion to what each still holds.
  * The rounding remainder goes to the largest holder, no method is asked for more than it holds, and zero rows are omitted.
  */
-export function defaultRefundRows(paid: Array<{ mode: PayMode; amountPaise: number }>, refundable: Record<PayMode, number>, totalPaise: number): RefundRow[] {
+export function defaultRefundRows(paid: Array<{ mode: PaymentMode; amountPaise: number }>, refundable: Record<PayMode, number>, totalPaise: number): RefundRow[] {
   const modes = PAY_MODES.filter((mode) => paid.some((p) => p.mode === mode) && refundable[mode] > 0);
   const held = modes.reduce((sum, mode) => sum + refundable[mode], 0);
   const target = Math.min(Math.max(0, totalPaise), held);

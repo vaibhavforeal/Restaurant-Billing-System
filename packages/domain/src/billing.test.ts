@@ -49,3 +49,35 @@ describe("GST billing", () => {
     expect(BillSettle.safeParse({ clientRef: "test-ref-1", payments: [{ mode: "cash", amountPaise: 0 }] }).success).toBe(false);
   });
 });
+
+describe("operator-collected GST (Zomato, section 9(5))", () => {
+  const items = [{ pricePaise: 29000, qty: 2, gstRate: 5 }];
+  it("charges no CGST/SGST and totals the item value when tax inclusive", () => {
+    const bill = calculateBill(items, 0, true, "operator");
+    expect(bill).toMatchObject({ subtotalPaise: 58000, cgstPaise: 0, sgstPaise: 0, totalPaise: 58000, roundingPaise: 0 });
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 58000, cgstPaise: 0, sgstPaise: 0 }]);
+  });
+  it("charges no CGST/SGST and totals the item value when tax exclusive", () => {
+    const bill = calculateBill(items, 0, false, "operator");
+    expect(bill).toMatchObject({ cgstPaise: 0, sgstPaise: 0, totalPaise: 58000 });
+    expect(bill.taxes[0]?.taxablePaise).toBe(58000);
+  });
+  it("keeps one tax line per rate and the existing rounding rule", () => {
+    const bill = calculateBill([{ pricePaise: 10050, qty: 1, gstRate: 5 }, { pricePaise: 10000, qty: 1, gstRate: 18 }], 0, false, "operator");
+    expect(bill.taxes.map((t) => [t.gstRate, t.taxablePaise])).toEqual([[5, 10050], [18, 10000]]);
+    expect(bill.totalPaise).toBe(20100);
+    expect(bill.roundingPaise).toBe(50);
+  });
+  it("shares a discount across lines when one is passed", () => {
+    const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 5 }, { pricePaise: 10000, qty: 1, gstRate: 18 }], 1000, true, "operator");
+    expect(bill.taxes.map((t) => t.taxablePaise)).toEqual([9500, 9500]);
+    expect(bill.totalPaise).toBe(19000);
+  });
+  it("defaults to the restaurant mode", () => {
+    expect(calculateBill(items, 0, false)).toEqual(calculateBill(items, 0, false, "restaurant"));
+    expect(calculateBill(items, 0, false).cgstPaise).toBeGreaterThan(0);
+  });
+  it("still settles only cash, UPI or card", () => {
+    expect(BillSettle.safeParse({ clientRef: "test-ref-1", payments: [{ mode: "zomato", amountPaise: 100 }] }).success).toBe(false);
+  });
+});

@@ -2,7 +2,7 @@ import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports"
 import { operationalCsv } from "./operational-report";
 import { reportMoney } from "./sales-report";
 
-export const orderTypeLabel = (type: "parcel" | "dine_in") => type === "parcel" ? "Quick takeaway" : "Table orders";
+export const orderTypeLabel = (type: "parcel" | "dine_in" | "zomato") => type === "parcel" ? "Quick takeaway" : type === "zomato" ? "Zomato" : "Table orders";
 export const averageOrder = (totalPaise: number, count: number) => count ? Math.round(totalPaise / count) : 0;
 /** The headline cards. Sales come from the server net of credit notes (voids and refunds). */
 export function analyticsMetrics(report: OrderAnalyticsReport): Array<{ label: string; value: string; note: string }> {

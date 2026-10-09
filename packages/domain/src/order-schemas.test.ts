@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TableCreate, TableUpdate,
-  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel,
+  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, ZOMATO_ORDER_ID,
 } from "./index.js";
 
 describe("table schemas", () => {
@@ -88,5 +88,34 @@ describe("order schemas", () => {
     expect(ItemCancel.parse({})).toEqual({});
     expect(ItemCancel.parse({ reason: "  Customer changed mind " })).toEqual({ reason: "Customer changed mind" });
     expect(() => ItemCancel.parse({ reason: "x".repeat(201) })).toThrow();
+  });
+});
+
+describe("zomato orders", () => {
+  const base = { clientRef: "abcd1234", type: "zomato" as const };
+  it("accepts and trims a Zomato order id", () => {
+    expect(OrderCreate.parse({ ...base, zomatoOrderId: " 5821 " }).zomatoOrderId).toBe("5821");
+    expect(OrderCreate.parse({ ...base, zomatoOrderId: "AB-5821" }).zomatoOrderId).toBe("AB-5821");
+    expect(OrderCreate.parse({ ...base, zomatoOrderId: "x".repeat(40) }).tableId).toBeNull();
+  });
+  it("rejects a Zomato order without an id", () => {
+    expect(() => OrderCreate.parse(base)).toThrow();
+    expect(() => OrderCreate.parse({ ...base, zomatoOrderId: "   " })).toThrow();
+  });
+  it("rejects a table or captain on a Zomato order", () => {
+    expect(() => OrderCreate.parse({ ...base, zomatoOrderId: "5821", tableId: "t1" })).toThrow();
+    expect(() => OrderCreate.parse({ ...base, zomatoOrderId: "5821", captainId: "c1" })).toThrow();
+  });
+  it("rejects a Zomato id on other order types", () => {
+    expect(() => OrderCreate.parse({ clientRef: "abcd1234", type: "parcel", zomatoOrderId: "5821" })).toThrow();
+    expect(() => OrderCreate.parse({ clientRef: "abcd1234", type: "dine_in", tableId: "t1", zomatoOrderId: "5821" })).toThrow();
+  });
+  it("rejects malformed ids", () => {
+    expect(() => OrderCreate.parse({ ...base, zomatoOrderId: "58 21" })).toThrow();
+    expect(() => OrderCreate.parse({ ...base, zomatoOrderId: "x".repeat(41) })).toThrow();
+    expect(() => OrderCreate.parse({ ...base, zomatoOrderId: "58_21" })).toThrow();
+  });
+  it("exports the id schema", () => {
+    expect(ZOMATO_ORDER_ID.parse(" 77 ")).toBe("77");
   });
 });
