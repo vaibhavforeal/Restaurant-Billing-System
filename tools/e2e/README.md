@@ -12,7 +12,7 @@ Sign in as admin, then add `tools/e2e/zomato-desk.js` to the page (agent-browser
 `eval --stdin`, or Playwright `page.addScriptTag({ path })`) and require
 `window.__zomatoDeskResult.status === "passed"` (25 checks; progress is
 `window.__zomatoDeskProgress`). It punches in order `E2E-1` and covers: the Zomato
-section and the server refusing a waiter (403), the Zomato price on the menu, no
+section and the server refusing a waiter's create request (403), the Zomato price on the menu, no
 bill/discount/pay controls, Send KOT to Preparing, Ready and Picked up from the card
 (with the confirm), one paid bill with GST 0 and "GST paid by Zomato (section 9(5))",
 no Print/Reprint/Credit note/Refund/Void on that bill and a refused print request, a
@@ -20,9 +20,24 @@ refused duplicate ID (message and `409 zomato_duplicate`), the dashboard Zomato 
 day-end "Zomato receivable (outstanding)" outside cash/UPI/card, and the row in Reports,
 Zomato reconciliation. `E2E-1` stays reserved, so restart the fixture before each run.
 
-The waiter's view is checked by hand: sign out, sign in with **3456**, and expect the
-Captain app with no Zomato section; sign in with **2345** and expect the Zomato section
-on Tables & orders. Stop the fixture afterwards.
+**Roles gate.** `tools/e2e/zomato-desk-roles.js` proves who sees the Zomato section
+(result `window.__zomatoDeskRolesResult`, progress `window.__zomatoDeskRolesProgress`). It
+never signs in itself: sign in through the app, then add the script, once per role.
+
+1. Fresh fixture. Sign in as the **waiter (3456)**, which lands in the Captain app
+   (`/captain/`), and run the script (8 checks). It punches in a temporary Zomato order
+   through the API as admin so the section cannot be absent just because it is empty,
+   then asserts that the waiter can still read it from `GET /api/orders` (the hiding is
+   in the UI) and that neither the Captain tables screen, after a refresh, nor the page
+   has a `.tables-zomato` element, a Zomato heading, a **+ New** button, a Zomato card or
+   any "Zomato" text.
+2. Sign out with **Ravi, Sign out** in the Captain app, open `http://127.0.0.1:4150/`, sign
+   in as the **cashier (2345)** and run the script again (6 checks): the Zomato section
+   with an enabled **+ New** and the open order's card (status, total, next-step button).
+
+The temporary order is cancelled in `finally`, so the roles gate leaves no open Zomato
+order, but its cancelled ID stays reserved. Run it before or after `zomato-desk.js`; a
+fresh fixture is only needed for the main gate's reserved `E2E-1`. Stop the fixture afterwards.
 
 ## Zomato setup and reconciliation
 

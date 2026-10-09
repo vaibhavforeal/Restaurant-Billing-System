@@ -1,7 +1,7 @@
 // Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150), signed in as admin (1234).
 // Zomato and the Kitchen Display are ON in the fixture; "Paneer tikka" costs 300 base, 260 Takeaway and 240 Zomato on a kitchen station.
 // Punches in Zomato order E2E-1, runs it Preparing, Ready, Picked up, then checks the bill, the duplicate refusal, the
-// dashboard card, the day-end receivable and the reconciliation row. The result is window.__zomatoDeskResult
+// dashboard card, the day-end receivable and the reconciliation row. Who sees the section is zomato-desk-roles.js. The result is window.__zomatoDeskResult
 // (progress in window.__zomatoDeskProgress). Restart the fixture before repeating the gate (E2E-1 stays reserved).
 // Never run this against a restaurant database.
 (async () => {
