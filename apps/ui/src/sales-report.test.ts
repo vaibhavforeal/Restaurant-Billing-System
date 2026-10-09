@@ -3,7 +3,7 @@ import { salesMetrics, salesReportCsv, recentPeriod, type SalesReport } from "./
 
 const sales = { billCount: 2, subtotalPaise: 10001, discountPaise: 0, cgstPaise: 250, sgstPaise: 250, roundingPaise: -1, totalPaise: 10500, outstandingPaise: 10500 };
 const collections = { billCount: 1, cashPaise: 5000, upiPaise: 5500, cardPaise: 0, refundPaise: 500, totalPaise: 10000 };
-const report: SalesReport = { from: "2026-09-27", to: "2026-09-27", today: "2026-09-30", generatedAt: 0, timezone: "Asia/Calcutta", sales, collections, creditNotePaise: 500, netTotalPaise: 10000, daily: [{ date: "2026-09-27", sales, creditNotePaise: 500, netTotalPaise: 10000, collections }] };
+const report: SalesReport = { from: "2026-09-27", to: "2026-09-27", today: "2026-09-30", generatedAt: 0, timezone: "Asia/Calcutta", sales, collections, creditNotePaise: 500, netTotalPaise: 10000, zomatoReceivablePaise: 0, daily: [{ date: "2026-09-27", sales, creditNotePaise: 500, netTotalPaise: 10000, collections, zomatoReceivablePaise: 0 }] };
 describe("sales and collections CSV", () => {
   it("keeps exact decimal rupees, negative rounding and displayed range totals", () => {
     const csv = salesReportCsv(report, "sales");
@@ -27,6 +27,13 @@ describe("sales and collections CSV", () => {
     const noCredit = salesMetrics({ ...report, creditNotePaise: 0, netTotalPaise: 10500 });
     expect(noCredit[0]).toMatchObject({ label: "Net sales", value: "₹105.00" });
     expect(noCredit[0]!.note).toMatch(/no credit notes/i);
+  });
+  it("shows the Zomato receivable beside collections only when there is one, so sales less collections adds up", () => {
+    expect(salesMetrics({ ...report, zomatoReceivablePaise: 0 }).map((m) => m.label)).toEqual(["Net sales", "Collections received", "Bills issued", "Still unpaid"]);
+    const metrics = salesMetrics({ ...report, zomatoReceivablePaise: 58000 });
+    expect(metrics.map((m) => m.label)).toEqual(["Net sales", "Collections received", "Zomato receivable (outstanding)", "Bills issued", "Still unpaid"]);
+    expect(metrics[2]).toMatchObject({ value: "₹580.00" });
+    expect(metrics[2]!.note).toMatch(/not in collections/i);
   });
   it("builds calendar ranges across months and leap years", () => {
     expect(recentPeriod(7, "2026-10-03")).toEqual({ from: "2026-09-27", to: "2026-10-03" });

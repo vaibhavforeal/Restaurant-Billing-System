@@ -110,9 +110,9 @@ describe("reports net of credit notes", () => {
     const range = await sales(yesterday, today);
     expect(range.daily).toEqual([
       { date: yesterday, sales: expect.objectContaining({ billCount: 1, totalPaise: 10500 }), creditNotePaise: 0, netTotalPaise: 10500,
-        collections: { billCount: 1, cashPaise: 10500, upiPaise: 0, cardPaise: 0, refundPaise: 0, totalPaise: 10500 } },
+        collections: { billCount: 1, cashPaise: 10500, upiPaise: 0, cardPaise: 0, refundPaise: 0, totalPaise: 10500 }, zomatoReceivablePaise: 0 },
       { date: today, sales: expect.objectContaining({ billCount: 0, totalPaise: 0 }), creditNotePaise: 10500, netTotalPaise: -10500,
-        collections: { billCount: 0, cashPaise: -10500, upiPaise: 0, cardPaise: 0, refundPaise: 10500, totalPaise: -10500 } },
+        collections: { billCount: 0, cashPaise: -10500, upiPaise: 0, cardPaise: 0, refundPaise: 10500, totalPaise: -10500 }, zomatoReceivablePaise: 0 },
     ]);
     expect(range).toMatchObject({ creditNotePaise: 10500, netTotalPaise: 0, collections: { billCount: 1, cashPaise: 0, refundPaise: 10500, totalPaise: 0 } });
 

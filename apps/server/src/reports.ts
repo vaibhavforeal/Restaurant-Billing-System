@@ -23,9 +23,14 @@ export function registerReports(app: FastifyInstance) {
         COALESCE(SUM(total_paise),0) AS totalPaise,
         COALESCE(SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END),0) AS outstandingPaise
         FROM bills WHERE created_at >= ? AND created_at < ?`).get(...bounds) as { cgstPaise: number; sgstPaise: number; totalPaise: number };
+      // Zomato bills are supplies under section 9(5): Zomato pays their GST, so they are not the restaurant's own
+      // taxable value. They stay out of the GST breakdown (and so net taxable) and are reported as one figure.
       const taxes = db.prepare(`SELECT t.gst_rate AS gstRate, SUM(t.taxable_paise) AS taxablePaise,
         SUM(t.cgst_paise) AS cgstPaise, SUM(t.sgst_paise) AS sgstPaise FROM bill_taxes t JOIN bills b ON b.id = t.bill_id
-        WHERE b.created_at >= ? AND b.created_at < ? GROUP BY t.gst_rate ORDER BY t.gst_rate`).all(...bounds) as Array<{ taxablePaise: number }>;
+        JOIN orders o ON o.id = b.order_id
+        WHERE b.created_at >= ? AND b.created_at < ? AND o.type <> 'zomato' GROUP BY t.gst_rate ORDER BY t.gst_rate`).all(...bounds) as Array<{ taxablePaise: number }>;
+      const zomatoSuppliesPaise = (db.prepare(`SELECT COALESCE(SUM(b.total_paise),0) AS valuePaise FROM bills b JOIN orders o ON o.id = b.order_id
+        WHERE o.type = 'zomato' AND b.created_at >= ? AND b.created_at < ?`).get(...bounds) as { valuePaise: number }).valuePaise;
       // A `zomato` payment is a receivable from Zomato, not money in the drawer: it is reported on its own line and
       // kept out of every cash, UPI and card figure.
       const payments = db.prepare(`SELECT mode, SUM(amount_paise) AS amountPaise FROM payments
@@ -49,7 +54,7 @@ export function registerReports(app: FastifyInstance) {
       for (const r of refunds) netByMode.set(r.mode, (netByMode.get(r.mode) ?? 0) - r.amountPaise);
       const netPayments = [...netByMode].sort(([a], [b]) => a.localeCompare(b)).map(([mode, amountPaise]) => ({ mode, amountPaise }));
       return { report: { date, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, sales, taxes, payments, cancellations,
-        creditNotes: { ...credit, taxes: creditTaxes }, refunds, net, netPayments, zomatoReceivablePaise } };
+        creditNotes: { ...credit, taxes: creditTaxes }, refunds, net, netPayments, zomatoReceivablePaise, zomatoSuppliesPaise } };
     })();
   });
 }

@@ -1,6 +1,9 @@
 import type { TaxLine } from "@forkflow/domain";
 import { paiseToRupees } from "./money";
 
+/** The day-end line for Zomato bills, whose GST Zomato pays under section 9(5). */
+export const ZOMATO_SUPPLIES_LABEL = "Supplies under section 9(5) (GST paid by Zomato)";
+
 export interface DayEndReport {
   date: string;
   timezone: string;
@@ -18,6 +21,8 @@ export interface DayEndReport {
   netPayments: Array<{ mode: string; amountPaise: number }>;
   /** Zomato payments received this day: money Zomato still owes, not cash in the drawer. */
   zomatoReceivablePaise: number;
+  /** Zomato bills issued this day: supplies under section 9(5), whose GST Zomato pays. Kept out of `taxes` and `net.taxablePaise`. */
+  zomatoSuppliesPaise: number;
 }
 
 /** GST per rate after credit notes (the server does not return it): gross minus credited, for every rate on either side. */
@@ -88,6 +93,9 @@ export function dayEndCsv(report: DayEndReport): string {
   const netPay = "Net payments received (after refunds)";
   for (const mode of ["cash", "upi", "card"]) amount(netPay, mode.toUpperCase(), report.netPayments.find((p) => p.mode === mode)?.amountPaise ?? 0);
   amount(netPay, "Total received", report.netPayments.reduce((sum, payment) => sum + payment.amountPaise, 0));
+  // Never money received, and not the restaurant's own taxable value: always on their own two rows.
+  amount("Zomato", ZOMATO_SUPPLIES_LABEL, report.zomatoSuppliesPaise);
+  amount("Zomato", "Zomato receivable (outstanding)", report.zomatoReceivablePaise);
   return "\uFEFF" + rows.map((cells) => cells.map((cell, column) => {
     // Numeric cells stay numeric, including negative rounding. Text cannot execute
     // spreadsheet formulas. INR values use two decimals; counts/rates are integers.

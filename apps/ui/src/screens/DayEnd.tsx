@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import { paiseToRupees } from "../money";
-import { dayEndCsv, netTaxes, type DayEndReport } from "../report-export";
+import { dayEndCsv, netTaxes, ZOMATO_SUPPLIES_LABEL, type DayEndReport } from "../report-export";
 import { downloadText } from "../download";
 import { OverflowMenu } from "../PosControls";
 function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
@@ -48,10 +48,11 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
         <dt>Orders cancelled on this date</dt><dd>{report.cancellations.orderCount}</dd>
       </dl>
       </section><section><h3>GST breakdown</h3>
-      <p>Before credit notes.</p>
+      <p>Before credit notes. Zomato bills are not included: Zomato pays their GST.</p>
       <table style={{ width: "100%", textAlign: "right", borderSpacing: 8 }}><thead><tr><th>Rate</th><th>Taxable</th><th>CGST</th><th>SGST</th></tr></thead><tbody>
         {report.taxes.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)}</td><td>{money(t.sgstPaise)}</td></tr>)}
       </tbody></table>
+      <p>{ZOMATO_SUPPLIES_LABEL}: <strong>{money(report.zomatoSuppliesPaise)}</strong></p>
       </section><section><h3>Payments received on this date</h3>
       <p>Includes payments for older bills. This can differ from today's issued sales.</p>
       <dl className="pos-totals">{(["cash", "upi", "card"] as const).map((mode) => <Fragment key={mode}><dt>{mode.toUpperCase()}</dt><dd>{money(report.payments.find((p) => p.mode === mode)?.amountPaise ?? 0)}</dd></Fragment>)}</dl>

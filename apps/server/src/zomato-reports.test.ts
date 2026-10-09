@@ -57,12 +57,27 @@ describe("Zomato in reports", () => {
     const admin = await setupAdmin(app);
     const { report } = await get(admin.token, "/api/reports/day-end");
     expect(report.zomatoReceivablePaise).toBe(0);
+    expect(report.zomatoSuppliesPaise).toBe(0);
+  });
+
+  it("keeps section 9(5) supplies out of the day-end GST breakdown and net taxable value, on a line of their own", async () => {
+    const { admin, takeaway, zomatoBill } = await seed();
+    const { report } = await get(admin.token, "/api/reports/day-end");
+    // Only the takeaway is the restaurant's own taxable supply.
+    expect(report.taxes).toEqual(takeaway.taxes);
+    expect(report.net.taxablePaise).toBe(takeaway.taxes.reduce((sum: number, t: { taxablePaise: number }) => sum + t.taxablePaise, 0));
+    expect(report.net).toMatchObject({ cgstPaise: takeaway.cgstPaise, sgstPaise: takeaway.sgstPaise, totalPaise: takeaway.totalPaise + zomatoBill.totalPaise });
+    expect(report.zomatoSuppliesPaise).toBe(58000);
   });
 
   it("excludes Zomato receivables from the sales and cashier collections", async () => {
     const { admin, takeaway } = await seed();
     const { report: sales } = await get(admin.token, "/api/reports/sales");
     expect(sales.collections).toMatchObject({ cashPaise: takeaway.totalPaise, totalPaise: takeaway.totalPaise });
+    // Sales = collections + Zomato receivable + still unpaid, so the gap is explained.
+    expect(sales.zomatoReceivablePaise).toBe(58000);
+    expect(sales.daily.at(-1).zomatoReceivablePaise).toBe(58000);
+    expect(sales.sales.totalPaise).toBe(sales.collections.totalPaise + sales.zomatoReceivablePaise + sales.sales.outstandingPaise);
     const { report: cashiers } = await get(admin.token, "/api/reports/operations/cashiers");
     expect(cashiers.tables[0].totals.total).toBe(takeaway.totalPaise);
   });

@@ -6,10 +6,11 @@ export interface SalesTotals {
 }
 /** Collections are already net of refunds paid out (per method and in total); `refundPaise` is what was refunded. */
 export interface CollectionTotals { billCount: number; cashPaise: number; upiPaise: number; cardPaise: number; refundPaise: number; totalPaise: number }
-export interface SalesDay { date: string; sales: SalesTotals; creditNotePaise: number; netTotalPaise: number; collections: CollectionTotals }
+/** `zomatoReceivablePaise`: Zomato bills closed that day, owed by Zomato and never part of collections. */
+export interface SalesDay { date: string; sales: SalesTotals; creditNotePaise: number; netTotalPaise: number; collections: CollectionTotals; zomatoReceivablePaise: number }
 export interface SalesReport {
   from: string; to: string; today: string; timezone: string; generatedAt: number;
-  sales: SalesTotals; creditNotePaise: number; netTotalPaise: number; collections: CollectionTotals; daily: SalesDay[];
+  sales: SalesTotals; creditNotePaise: number; netTotalPaise: number; collections: CollectionTotals; zomatoReceivablePaise: number; daily: SalesDay[];
 }
 export type SalesReportKind = "sales" | "collections";
 export interface ReportPeriod { from: string; to: string }
@@ -21,13 +22,17 @@ export function recentPeriod(days: number, end = localDay()): ReportPeriod {
 }
 
 export interface SalesMetric { label: string; value: string; note: string }
-/** The headline cards: net sales (issued bills less credit notes) leads, with the gross and credit notes in its note. */
+/**
+ * The headline cards: net sales (issued bills less credit notes) leads, with the gross and credit notes in its note.
+ * When Zomato bills closed in the period, their receivable sits beside collections, so sales less collections adds up.
+ */
 export function salesMetrics(report: SalesReport): SalesMetric[] {
   return [
     { label: "Net sales", value: reportMoney(report.netTotalPaise), note: report.creditNotePaise
       ? `Gross ${reportMoney(report.sales.totalPaise)} − credit notes ${reportMoney(report.creditNotePaise)}`
       : "Includes GST and rounding · no credit notes" },
     { label: "Collections received", value: reportMoney(report.collections.totalPaise), note: "By payment date · after refunds paid out" },
+    ...(report.zomatoReceivablePaise ? [{ label: "Zomato receivable (outstanding)", value: reportMoney(report.zomatoReceivablePaise), note: "Zomato bills closed in this period · not in collections" }] : []),
     { label: "Bills issued", value: String(report.sales.billCount), note: "On the selected bill dates" },
     { label: "Still unpaid", value: reportMoney(report.sales.outstandingPaise), note: "Selected-period bills · current balance" },
   ];
