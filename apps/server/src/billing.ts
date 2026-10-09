@@ -140,7 +140,13 @@ export function registerBilling(app: FastifyInstance): void {
     for (const tableId of linkedTables) if (tableId !== order.tableId) app.broadcast("table.changed", { tableId });
     return order;
   }
+  /** Zomato orders close only through Picked up (zomato-desk.ts), which calls issueBill and settleBill itself. */
+  function refuseZomato(type: string | undefined) {
+    if (type === "zomato") throw httpError(409, "Zomato orders are billed and closed with Picked up on the Zomato desk", "zomato_order");
+  }
+  const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
   function preview(orderId: string, body: z.infer<typeof BillPreview>, role: Parameters<typeof roleFor>[0]) {
+    refuseZomato(orderType(orderId));
     const { items, totals, receipt } = priceOrder(db, orderId, body.discountPaise, role, "restaurant");
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
     return { ...totals, receipt, previewKey };
@@ -166,6 +172,7 @@ export function registerBilling(app: FastifyInstance): void {
         if (existing.request_json !== requestJson) throw httpError(409, "Billing reference already used for a different request");
         return { billId: existing.id, created: false, job: null, printError: null, linkedTables: [] as string[] };
       }
+      refuseZomato(orderType(orderId));
       if (db.prepare("SELECT id FROM bills WHERE order_id = ?").get(orderId)) throw httpError(409, "Order already billed; reload to view its bill");
       const value = preview(orderId, body, req.user.role);
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
@@ -192,6 +199,7 @@ export function registerBilling(app: FastifyInstance): void {
         if (replay.bill_id !== id || replay.request_json !== requestJson) throw httpError(409, "Settlement reference already used for a different request");
         return null;
       }
+      refuseZomato((db.prepare("SELECT o.type FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.id = ?").get(id) as { type: string } | undefined)?.type);
       return settleBill(db, id, { payments: body.payments, clientRef: body.clientRef, requestJson, actorId: req.user.id });
     })();
     const bill = getBill(id);
@@ -218,6 +226,8 @@ export function registerBilling(app: FastifyInstance): void {
   }));
   app.post("/api/bills/:id/print", { preHandler: app.requirePermission("bills.print") }, async (req, reply) => {
     const bill = getBill((req.params as { id: string }).id);
+    // Zomato bills are never printed: Zomato issues the customer's invoice.
+    if (bill.receipt.orderType === "zomato") throw httpError(409, "Zomato bills are not printed", "zomato_order");
     const body = BillPrint.parse(req.body);
     return reply.status(202).send({ job: printBill(bill, printer(body.printerId)) });
   });

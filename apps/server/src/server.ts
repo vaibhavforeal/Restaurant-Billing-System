@@ -14,6 +14,7 @@ import { registerTableTransfer } from "./table-transfer.js";
 import { registerPrinters } from "./printers.js";
 import { registerBilling } from "./billing.js";
 import { registerCreditNotes } from "./credit-notes.js";
+import { registerZomatoDesk } from "./zomato-desk.js";
 import { registerReports } from "./reports.js";
 import { registerSalesReports } from "./sales-reports.js";
 import { registerOperationalReports } from "./operational-reports.js";
@@ -136,6 +137,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerPrinters(app, opts.discoverPrinters ?? discoverWindowsPrinters);
   registerBilling(app);
   registerCreditNotes(app);
+  registerZomatoDesk(app);
   registerReports(app);
   registerSalesReports(app);
   registerOperationalReports(app);

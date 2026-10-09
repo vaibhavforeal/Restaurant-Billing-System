@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { uuidv7 } from "@forkflow/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { nextZomatoStatus } from "./zomato-desk.js";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => { await app?.close(); });
@@ -153,5 +154,240 @@ describe("Zomato price on the catalog", () => {
     expect(v.json().variant.zomatoPricePaise).toBeNull();
     const created = await app.inject({ method: "POST", url: `/api/products/${p.id}/variants`, headers: auth(admin.token), payload: { name: "Full", pricePaise: 30000, zomatoPricePaise: 35000 } });
     expect(created.json().variant.zomatoPricePaise).toBe(35000);
+  });
+});
+
+describe("nextZomatoStatus", () => {
+  it("allows Ready from Preparing, or from new when nothing station-bound is pending", () => {
+    expect(nextZomatoStatus("preparing", "ready", false, true)).toBe(true);
+    expect(nextZomatoStatus(null, "ready", false, true)).toBe(true);
+    expect(nextZomatoStatus("preparing", "ready", true, true)).toBe(false);
+    expect(nextZomatoStatus(null, "ready", true, true)).toBe(false);
+    expect(nextZomatoStatus(null, "ready", false, false)).toBe(false);
+    expect(nextZomatoStatus("ready", "ready", false, true)).toBe(false);
+    expect(nextZomatoStatus("picked_up", "ready", false, true)).toBe(false);
+  });
+
+  it("allows Picked up only from Ready with nothing station-bound pending", () => {
+    expect(nextZomatoStatus("ready", "picked_up", false, true)).toBe(true);
+    expect(nextZomatoStatus("ready", "picked_up", true, true)).toBe(false);
+    expect(nextZomatoStatus("preparing", "picked_up", false, true)).toBe(false);
+    expect(nextZomatoStatus(null, "picked_up", false, true)).toBe(false);
+    expect(nextZomatoStatus("picked_up", "picked_up", false, true)).toBe(false);
+  });
+});
+
+describe("Zomato status and Picked up", () => {
+  async function kitchenStationId(token: string): Promise<string> {
+    return (await app.inject({ method: "GET", url: "/api/kot-stations", headers: auth(token) })).json().stations[0].id;
+  }
+  /** A Zomato order with one item; `station` puts the item on the seeded Kitchen station (left pending). */
+  async function zomatoOrder(token: string, opts: { station?: boolean; zomatoPricePaise?: number } = {}) {
+    const kotStationId = opts.station ? await kitchenStationId(token) : null;
+    const p = await product(token, { name: `Item ${uuidv7()}`, pricePaise: 20000, zomatoPricePaise: opts.zomatoPricePaise ?? 25000, kotStationId });
+    const order = (await createOrder(token, `Z-${Math.floor(Math.random() * 1e9)}`)).json().order as { id: string; zomatoOrderId: string };
+    await addItem(token, order.id, p.id);
+    return order;
+  }
+  const setStatus = (token: string, orderId: string, status: string, clientRef = uuidv7()) =>
+    app.inject({ method: "POST", url: `/api/orders/${orderId}/zomato-status`, headers: auth(token), payload: { status, clientRef } });
+  const setDbStatus = (orderId: string, status: string | null) =>
+    app.db.prepare("UPDATE orders SET zomato_status = ? WHERE id = ?").run(status, orderId);
+  const count = (sql: string, ...args: unknown[]) => (app.db.prepare(sql).get(...args) as { n: number }).n;
+  const markSent = (orderId: string) => app.db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ?").run(orderId);
+
+  it("moves Preparing to Ready when nothing is pending", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token, { station: true });
+    markSent(order.id);
+    setDbStatus(order.id, "preparing");
+    const res = await setStatus(admin.token, order.id, "ready");
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().order).toMatchObject({ id: order.id, zomatoStatus: "ready", status: "open" });
+    expect(res.json().bill).toBeUndefined();
+  });
+
+  it("refuses Ready while a station item is still pending", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token, { station: true });
+    setDbStatus(order.id, "preparing");
+    const res = await setStatus(admin.token, order.id, "ready");
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("zomato_status");
+    const fresh = await zomatoOrder(admin.token, { station: true });
+    const fromNew = await setStatus(admin.token, fresh.id, "ready");
+    expect(fromNew.statusCode).toBe(409);
+    expect(fromNew.json().code).toBe("zomato_status");
+  });
+
+  it("moves a new order with only stationless items straight to Ready", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token);
+    const res = await setStatus(admin.token, order.id, "ready");
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().order.zomatoStatus).toBe("ready");
+  });
+
+  it("refuses Ready on a new order with no items", async () => {
+    const admin = await setup();
+    const order = (await createOrder(admin.token, "5821")).json().order;
+    const res = await setStatus(admin.token, order.id, "ready");
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("zomato_status");
+  });
+
+  it("refuses Picked up before Ready", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token);
+    expect((await setStatus(admin.token, order.id, "picked_up")).json().code).toBe("zomato_status");
+    setDbStatus(order.id, "preparing");
+    const res = await setStatus(admin.token, order.id, "picked_up");
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe("zomato_status");
+    expect(count("SELECT COUNT(*) n FROM bills")).toBe(0);
+  });
+
+  for (const taxInclusive of [0, 1]) {
+    it(`Picked up issues and settles one GST-free bill at the item value (tax_inclusive = ${taxInclusive})`, async () => {
+      const admin = await setup();
+      app.db.prepare("UPDATE settings SET tax_inclusive = ? WHERE id = 1").run(taxInclusive);
+      const order = await zomatoOrder(admin.token, { station: true });
+      markSent(order.id);
+      setDbStatus(order.id, "ready");
+      const res = await setStatus(admin.token, order.id, "picked_up");
+      expect(res.statusCode, res.body).toBe(200);
+      const { bill, order: closed } = res.json();
+      expect(bill).toMatchObject({ orderId: order.id, status: "paid", subtotalPaise: 25000, discountPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 25000 });
+      expect(bill.taxes.every((t: { cgstPaise: number; sgstPaise: number }) => t.cgstPaise === 0 && t.sgstPaise === 0)).toBe(true);
+      expect(bill.receipt).toMatchObject({ orderType: "zomato", zomatoOrderId: order.zomatoOrderId, gstPaidBy: "zomato" });
+      expect(bill.payments).toEqual([expect.objectContaining({ mode: "zomato", amountPaise: 25000 })]);
+      expect(closed).toMatchObject({ status: "settled", zomatoStatus: "picked_up" });
+      expect(count("SELECT COUNT(*) n FROM bills")).toBe(1);
+      expect(count("SELECT COUNT(*) n FROM payments")).toBe(1);
+      expect(count("SELECT COUNT(*) n FROM print_jobs")).toBe(0);
+      expect(count("SELECT COUNT(*) n FROM bill_report_lines WHERE cgst_paise != 0 OR sgst_paise != 0")).toBe(0);
+    });
+  }
+
+  it("Picked up bills stationless items still pending and settles a zero-value order without a payment row", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token, { zomatoPricePaise: 0 });
+    expect((await setStatus(admin.token, order.id, "ready")).statusCode).toBe(200);
+    const res = await setStatus(admin.token, order.id, "picked_up");
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().bill).toMatchObject({ totalPaise: 0, status: "paid", payments: [] });
+    expect(res.json().order).toMatchObject({ status: "settled", zomatoStatus: "picked_up" });
+    expect(count("SELECT COUNT(*) n FROM order_items WHERE order_id = ? AND status = 'pending'", order.id)).toBe(0);
+  });
+
+  it("replays the same clientRef and refuses a second Picked up, leaving one bill and one payment", async () => {
+    const admin = await setup();
+    const cashier = await createUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
+    const order = await zomatoOrder(admin.token);
+    setDbStatus(order.id, "ready");
+    const clientRef = uuidv7();
+    const first = await setStatus(cashier.token, order.id, "picked_up", clientRef);
+    expect(first.statusCode, first.body).toBe(200);
+    const again = await setStatus(cashier.token, order.id, "picked_up", clientRef);
+    expect(again.statusCode, again.body).toBe(200);
+    expect(again.json().bill.id).toBe(first.json().bill.id);
+    const other = await setStatus(admin.token, order.id, "picked_up");
+    expect(other.statusCode).toBe(409);
+    expect(other.json().code).toBe("zomato_status");
+    expect(count("SELECT COUNT(*) n FROM bills")).toBe(1);
+    expect(count("SELECT COUNT(*) n FROM payments")).toBe(1);
+    // A reference reused for another order is refused, not replayed.
+    const second = await zomatoOrder(admin.token);
+    setDbStatus(second.id, "ready");
+    expect((await setStatus(admin.token, second.id, "picked_up", clientRef)).statusCode).toBe(409);
+    expect(count("SELECT COUNT(*) n FROM bills")).toBe(1);
+  });
+
+  it("keeps Ready and Picked up working after Zomato is turned off in the Marketplace", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token);
+    app.db.prepare("UPDATE integration_state SET enabled = 0 WHERE id = 'zomato'").run();
+    expect((await setStatus(admin.token, order.id, "ready")).statusCode).toBe(200);
+    const res = await setStatus(admin.token, order.id, "picked_up");
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().order).toMatchObject({ status: "settled", zomatoStatus: "picked_up" });
+  });
+
+  it("keeps the status route away from waiters and kitchen staff", async () => {
+    const admin = await setup();
+    const waiter = await createUser(app, admin.token, { name: "Wai", pin: "3333", role: "waiter" });
+    const kitchen = await createUser(app, admin.token, { name: "Kit", pin: "4444", role: "kitchen" });
+    const order = await zomatoOrder(admin.token);
+    expect((await setStatus(waiter.token, order.id, "ready")).statusCode).toBe(403);
+    expect((await setStatus(kitchen.token, order.id, "ready")).statusCode).toBe(403);
+    setDbStatus(order.id, "ready");
+    expect((await setStatus(waiter.token, order.id, "picked_up")).statusCode).toBe(403);
+    expect(count("SELECT COUNT(*) n FROM bills")).toBe(0);
+  });
+
+  it("refuses the status route on a non-Zomato or unknown order", async () => {
+    const admin = await setup();
+    const parcel = (await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel" } })).json().order;
+    expect((await setStatus(admin.token, parcel.id, "ready")).statusCode).toBe(409);
+    expect((await setStatus(admin.token, uuidv7(), "ready")).statusCode).toBe(404);
+  });
+});
+
+describe("billing guards on Zomato orders", () => {
+  async function colaOrder(token: string) {
+    const p = await product(token, { name: `Cola ${uuidv7()}`, pricePaise: 5000 });
+    const order = (await createOrder(token, `Z-${Math.floor(Math.random() * 1e9)}`)).json().order as { id: string };
+    await addItem(token, order.id, p.id);
+    return order;
+  }
+
+  it("refuses bill preview and bill on a Zomato order with zomato_order", async () => {
+    const admin = await setup();
+    const order = await colaOrder(admin.token);
+    const preview = await app.inject({ method: "POST", url: `/api/orders/${order.id}/bill-preview`, headers: auth(admin.token), payload: {} });
+    expect(preview.statusCode).toBe(409);
+    expect(preview.json().code).toBe("zomato_order");
+    const bill = await app.inject({ method: "POST", url: `/api/orders/${order.id}/bill`, headers: auth(admin.token), payload: { clientRef: uuidv7(), previewKey: "x".repeat(64) } });
+    expect(bill.statusCode).toBe(409);
+    expect(bill.json().code).toBe("zomato_order");
+    expect(app.db.prepare("SELECT COUNT(*) n FROM bills").get()).toEqual({ n: 0 });
+  });
+
+  it("refuses settle, print and credit notes on a Zomato bill", async () => {
+    const admin = await setup();
+    const order = await colaOrder(admin.token);
+    expect((await app.inject({ method: "POST", url: `/api/orders/${order.id}/zomato-status`, headers: auth(admin.token), payload: { status: "ready", clientRef: uuidv7() } })).statusCode).toBe(200);
+    const closed = await app.inject({ method: "POST", url: `/api/orders/${order.id}/zomato-status`, headers: auth(admin.token), payload: { status: "picked_up", clientRef: uuidv7() } });
+    expect(closed.statusCode, closed.body).toBe(200);
+    const bill = closed.json().bill as { id: string; totalPaise: number };
+
+    const settle = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/settle`, headers: auth(admin.token), payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: bill.totalPaise }] } });
+    expect(settle.statusCode).toBe(409);
+    expect(settle.json().code).toBe("zomato_order");
+
+    const printer = (await app.inject({ method: "POST", url: "/api/printers", headers: auth(admin.token), payload: { name: "Receipt", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } })).json().printer;
+    const print = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/print`, headers: auth(admin.token), payload: { printerId: printer.id } });
+    expect(print.statusCode).toBe(409);
+    expect(print.json().code).toBe("zomato_order");
+    expect(app.db.prepare("SELECT COUNT(*) n FROM print_jobs").get()).toEqual({ n: 0 });
+
+    const itemId = (app.db.prepare("SELECT id FROM order_items WHERE order_id = ?").get(order.id) as { id: string }).id;
+    const attempts = [
+      { url: `/api/bills/${bill.id}/credit-preview`, payload: { kind: "void" } },
+      { url: `/api/bills/${bill.id}/void`, payload: { clientRef: uuidv7(), reason: "Wrong", refunds: [{ mode: "cash", amountPaise: bill.totalPaise }] } },
+      { url: `/api/bills/${bill.id}/refund`, payload: { clientRef: uuidv7(), reason: "Cold", lines: [{ orderItemId: itemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: bill.totalPaise }] } },
+    ];
+    for (const attempt of attempts) {
+      const res = await app.inject({ method: "POST", headers: auth(admin.token), ...attempt });
+      expect(res.statusCode, res.body).toBe(409);
+      expect(res.json().error).toBe("Zomato handles refunds for Zomato orders");
+    }
+    // A cashier is told before being asked for an admin PIN.
+    const cashier = await createUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
+    const cashierVoid = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(cashier.token), payload: { clientRef: uuidv7(), reason: "Wrong" } });
+    expect(cashierVoid.statusCode).toBe(409);
+    expect(cashierVoid.json()).toMatchObject({ error: "Zomato handles refunds for Zomato orders", code: "zomato_order" });
+    expect(app.db.prepare("SELECT COUNT(*) n FROM credit_notes").get()).toEqual({ n: 0 });
+    expect(app.db.prepare("SELECT status FROM bills WHERE id = ?").get(bill.id)).toEqual({ status: "paid" });
   });
 });

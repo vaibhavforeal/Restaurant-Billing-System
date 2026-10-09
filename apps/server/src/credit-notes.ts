@@ -74,6 +74,12 @@ export function refundableOf(credit: BillCredit): Record<PayMode, number> & { to
   return { ...refundableByMode(credit.paid, credit.refunded), total: sum(credit.paid) - sum(credit.refunded) };
 }
 
+/** Zomato bills take no credit notes: the platform refunds its customers. */
+function refuseZomatoBill(db: Database, billId: string): void {
+  const row = db.prepare("SELECT o.type FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.id = ?").get(billId) as { type: string } | undefined;
+  if (row?.type === "zomato") throw httpError(409, "Zomato handles refunds for Zomato orders", "zomato_order");
+}
+
 interface CreditBillRow { id: string; order_id: string; status: "unpaid" | "paid" | "void"; total_paise: number }
 
 /**
@@ -83,6 +89,7 @@ interface CreditBillRow { id: string; order_id: string; status: "unpaid" | "paid
 export function draftCredit(db: Database, billId: string, kind: "void" | "refund", requested: Array<{ orderItemId: string; qty: number }> = []): { bill: CreditBillRow; credit: BillCredit; draft: CreditDraft } {
   const bill = db.prepare("SELECT id, order_id, status, total_paise FROM bills WHERE id = ?").get(billId) as CreditBillRow | undefined;
   if (!bill) throw httpError(404, "bill not found");
+  refuseZomatoBill(db, billId);
   if (bill.status === "void") throw httpError(409, kind === "void" ? "This bill is already void" : "Nothing left to refund on this bill");
   const credit = loadBillCredit(db, billId);
   if (kind === "refund") {
@@ -221,6 +228,7 @@ async function issueCredit(app: FastifyInstance, req: FastifyRequest, reply: Fas
     const replayed = billWithNote(db, earlier.billId, earlier.id);
     return reply.status(200).send({ ...replayed, order: loadOrderJson(db, replayed.bill.orderId) });
   }
+  refuseZomatoBill(db, id); // before asking for an admin PIN that could not help
   const approver = await resolveApprover(app, req, input.approverPin);
 
   const result = db.transaction(() => {
