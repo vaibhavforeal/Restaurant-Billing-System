@@ -54,7 +54,7 @@
   const paid = (await api(`/bills/${inclusive.id}`)).bill;
   check(paid.status === 'paid' && paid.payments.length === 2 && paid.payments[0].mode === 'cash' && paid.payments[1].mode === 'upi', 'Split payment persisted once');
   await click('View receipt');
-  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('Prices include GST'), 'HTML receipt');
+  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('All prices include tax'), 'HTML receipt');
   await waitFor(() => button('Print / save PDF') && !button('Print / save PDF').disabled, 'receipt print readiness');
   check(!button('Print / save PDF').disabled, 'Browser receipt is ready to print');
   await mode('exclusive');
@@ -64,7 +64,7 @@
   await waitFor(() => document.body.innerText.includes('Paid:'), 'card settlement');
   await click('bills'); await fill('Show', 'paid');
   await click(`Open bill #${inclusive.billNo}`); await click('View receipt');
-  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('Prices include GST'), 'old receipt');
+  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('All prices include tax'), 'old receipt');
   check((await api(`/bills/${inclusive.id}`)).bill.taxInclusive, 'Old inclusive bill unchanged after mode switch');
   await click('Reports & Analytics');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');

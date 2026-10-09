@@ -98,7 +98,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     return row;
   }
   function menu(table: TableRow, orderingAvailable: boolean): GuestMenu {
-    const settings = app.db.prepare("SELECT restaurant_name, tax_inclusive FROM settings WHERE id = 1").get() as { restaurant_name: string; tax_inclusive: number };
+    const settings = app.db.prepare("SELECT restaurant_name, tax_inclusive, gst_scheme FROM settings WHERE id = 1").get() as { restaurant_name: string; tax_inclusive: number; gst_scheme: string };
     const categories = app.db.prepare("SELECT id, name FROM categories WHERE is_active = 1 ORDER BY sort_order, name, id").all() as GuestMenu["categories"];
     const products = app.db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, CASE WHEN ? = 'ac' THEN COALESCE(p.ac_price_paise, p.price_paise) ELSE p.price_paise END AS pricePaise,
       p.gst_rate AS gstRate, p.is_veg, p.description, p.is_sold_out, p.photo_hash FROM products p JOIN categories c ON c.id = p.category_id
@@ -107,7 +107,8 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     const byProduct = new Map<string, GuestMenu["products"][number]["variants"]>();
     for (const v of variants) { const list = byProduct.get(v.product_id) ?? []; list.push({ id: v.id, name: v.name, pricePaise: v.pricePaise }); byProduct.set(v.product_id, list); }
     const visible = products.map(({ is_veg, is_sold_out, photo_hash, ...p }) => ({ ...p, isVeg: is_veg === 1, isSoldOut: is_sold_out === 1, photoUrl: menuPhotoUrl(p.id, photo_hash), variants: byProduct.get(p.id) ?? [] }));
-    const snapshot = { taxInclusive: settings.tax_inclusive === 1, categories, products: visible };
+    // Guests see whether tax is added on top; a composition restaurant adds none, like an inclusive one.
+    const snapshot = { taxInclusive: settings.tax_inclusive === 1 || settings.gst_scheme === "composition", categories, products: visible };
     const pricing = { ...snapshot, products: visible.map(({ description: _description, photoUrl: _photoUrl, ...p }) => p) };
     return { restaurantName: settings.restaurant_name, table: { id: table.id, name: table.name, area: table.area },
       orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot };

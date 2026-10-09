@@ -81,3 +81,15 @@ describe("operator-collected GST (Zomato, section 9(5))", () => {
     expect(BillSettle.safeParse({ clientRef: "test-ref-1", payments: [{ mode: "zomato", amountPaise: 100 }] }).success).toBe(false);
   });
 });
+
+describe("composition scheme (bill of supply)", () => {
+  it("charges no GST: the menu price less any discount is the bill, whatever the inclusive flag", () => {
+    const items = [{ pricePaise: 10050, qty: 1, gstRate: 5 }, { pricePaise: 10000, qty: 2, gstRate: 18 }];
+    for (const inclusive of [false, true]) {
+      const bill = calculateBill(items, 1000, inclusive, "composition");
+      expect(bill).toMatchObject({ subtotalPaise: 30050, discountPaise: 1000, cgstPaise: 0, sgstPaise: 0, totalPaise: 29100, roundingPaise: 50 });
+      expect(bill.taxes.every((t) => t.cgstPaise === 0 && t.sgstPaise === 0)).toBe(true);
+      expect(bill.taxes.reduce((sum, t) => sum + t.taxablePaise, 0)).toBe(29050);
+    }
+  });
+});

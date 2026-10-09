@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ReceiptStyle } from "./receipt-styles.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
 const Ref = z.string().min(8).max(64);
@@ -31,8 +32,11 @@ export type BillSettleInput = z.infer<typeof BillSettle>;
  * Distinct from credit-notes' `PayMode`, which is the refund mode (cash, upi, card only).
  */
 export type PaymentMode = "cash" | "upi" | "card" | "zomato";
-/** "operator": an e-commerce operator collects and pays the GST, so the bill carries no CGST/SGST. */
-export type TaxMode = "restaurant" | "operator";
+/**
+ * "operator": an e-commerce operator collects and pays the GST, so the bill carries no CGST/SGST.
+ * "composition": the restaurant is under the composition scheme and may not collect GST; it issues a bill of supply.
+ */
+export type TaxMode = "restaurant" | "operator" | "composition";
 
 export interface TaxLine { gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }
 export interface BillTotals {
@@ -41,6 +45,8 @@ export interface BillTotals {
   sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];
 }
 export interface ReceiptSnapshot {
+  /** Missing on older bills, which continue to use the Classic layout. */
+  receiptStyle?: ReceiptStyle;
   /** Absent on bills issued before UPI configuration was supported. */
   upiId?: string;
   taxInclusive: boolean;
@@ -50,6 +56,8 @@ export interface ReceiptSnapshot {
   zomatoOrderId?: string;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
+  /** Set when the restaurant was under the composition scheme: the bill is a bill of supply with no GST. */
+  gstScheme?: "composition";
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number }>;
 }
 /** A void or refund as shown on its bill. */
@@ -93,9 +101,9 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   let remaining = discountPaise - allocation.reduce((sum, row) => sum + row.discount, 0);
   const byRemainder = [...allocation].sort((a, b) => a.remainder === b.remainder ? a.rate - b.rate : a.remainder > b.remainder ? -1 : 1);
   for (const row of byRemainder) { if (remaining-- > 0) row.discount++; }
-  const operator = taxMode === "operator";
+  const noGst = taxMode !== "restaurant";
   const taxes = allocation.map(({ rate, amount, discount }) => {
-    if (operator) return { gstRate: rate, taxablePaise: amount - discount, cgstPaise: 0, sgstPaise: 0 };
+    if (noGst) return { gstRate: rate, taxablePaise: amount - discount, cgstPaise: 0, sgstPaise: 0 };
     if (taxInclusive) {
       const gross = amount - discount;
       const divisor = BigInt(100 + rate);
@@ -110,7 +118,7 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   });
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
-  const unrounded = subtotalPaise - discountPaise + (taxInclusive || operator ? 0 : cgstPaise + sgstPaise);
+  const unrounded = subtotalPaise - discountPaise + (taxInclusive || noGst ? 0 : cgstPaise + sgstPaise);
   const totalPaise = Math.floor((unrounded + 50) / 100) * 100;
   return { taxInclusive, subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
 }

@@ -1,4 +1,5 @@
 export { uuidv7 } from "./id.js";
+export { RECEIPT_STYLES, resolveReceiptStyle, type ReceiptStyle } from "./receipt-styles.js";
 export * from "./zomato.js";
 export { INTEGRATIONS, IntegrationToggle, isIntegrationId, type IntegrationId, type IntegrationStatus, type IntegrationDef, type IntegrationInfo, type IntegrationToggleInput } from "./integrations.js";
 export { saveReportLines, allocatePaise } from "./report-lines.js";
@@ -28,7 +29,7 @@ export {
   type VariantCreateInput, type VariantUpdateInput,
 } from "./catalog-schemas.js";
 export { RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
-export { SettingsUpdate, UpiId, type SettingsUpdateInput } from "./settings-schemas.js";
+export { SettingsUpdate, UpiId, GST_SCHEMES, type GstScheme, type SettingsUpdateInput } from "./settings-schemas.js";
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {

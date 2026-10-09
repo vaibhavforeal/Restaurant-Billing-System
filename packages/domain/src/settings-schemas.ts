@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RECEIPT_STYLES } from "./receipt-styles.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
 export const UpiId = z.string().trim().max(255).refine(
@@ -6,8 +7,13 @@ export const UpiId = z.string().trim().max(255).refine(
   "Enter a valid UPI ID, such as restaurant@bank, or leave it blank",
 );
 
+export const GST_SCHEMES = ["regular", "composition"] as const;
+export type GstScheme = typeof GST_SCHEMES[number];
+
 /** Full-replace shape for the settings singleton (PUT). GSTIN is 15 chars, FSSAI 14 — light caps, empty allowed (unregistered restaurants). */
 export const SettingsUpdate = z.object({
+  receiptStyle: z.enum(RECEIPT_STYLES).optional(),
+  gstScheme: z.enum(GST_SCHEMES).optional(),
   upiId: UpiId.optional(),
   taxInclusive: z.boolean().optional(),
   restaurantName: z.string().trim().min(1),

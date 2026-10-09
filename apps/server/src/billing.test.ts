@@ -133,20 +133,38 @@ describe("billing and day-end", () => {
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM payments").get()).toEqual({ n: 0 });
   });
   it("saves inclusive mode and receipt snapshots despite later settings/catalog edits", async () => {
-    const profile = { restaurantName: "Original", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", taxInclusive: true };
+    const profile = { restaurantName: "Original", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", taxInclusive: true, receiptStyle: "modern" };
     await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: profile });
     await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Original", gstin: profile.gstin, fssai: profile.fssai } });
     expect((await app.inject({ url: "/api/settings", headers: auth(token) })).json().settings.taxInclusive).toBe(true);
     app.db.prepare("UPDATE products SET price_paise = 10500 WHERE id = ?").run(productId);
     const bill = await issue(await order());
     expect(bill.taxInclusive).toBe(true); expect(bill.totalPaise).toBe(10500); expect(bill.cgstPaise).toBe(250);
-    await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Changed", taxInclusive: false } });
+    expect(bill.receipt.receiptStyle).toBe("modern");
+    await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Changed", taxInclusive: false, receiptStyle: "compact" } });
     app.db.prepare("UPDATE products SET name = 'Changed', price_paise = 20000 WHERE id = ?").run(productId);
     const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill;
     expect(stored).toEqual(bill);
     const receipt = await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) });
-    expect(receipt.body).toContain("Original"); expect(receipt.body).toContain("Prices include GST"); expect(receipt.body).not.toContain("Changed");
+    expect(receipt.body).toContain("Original"); expect(receipt.body).toContain("All prices include tax"); expect(receipt.body).not.toContain("Changed");
+    expect(receipt.body).toContain("CGST (included)");
+    expect(receipt.body).toContain('class="bill bill--modern"');
     expect((await issue(await order())).taxInclusive).toBe(false);
+  });
+  it("issues a GST-free bill of supply under the composition scheme, whatever the inclusive setting", async () => {
+    const save = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", ...fields } });
+    expect((await save({ gstScheme: "composition", taxInclusive: true })).json().settings.gstScheme).toBe("composition");
+    const bill = await issue(await order());
+    expect(bill).toMatchObject({ subtotalPaise: 10000, cgstPaise: 0, sgstPaise: 0, totalPaise: 10000, taxInclusive: false });
+    expect(bill.receipt.gstScheme).toBe("composition");
+    expect(app.db.prepare("SELECT taxable_paise AS t, cgst_paise + sgst_paise AS tax FROM bill_report_lines WHERE bill_id = ?").get(bill.id)).toEqual({ t: 10000, tax: 0 });
+    const receipt = (await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) })).body;
+    expect(receipt).toContain("Bill of supply"); expect(receipt).toContain("GSTIN: 29ABCDE1234F1Z5");
+    expect(receipt).not.toMatch(/CGST|SGST|Taxable @|include tax|GST added/);
+    await save({ gstScheme: "regular" });
+    const regular = await issue(await order());
+    expect(regular.receipt.gstScheme).toBeUndefined(); expect(regular.cgstPaise).toBe(238);
+    expect((await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill).toEqual(bill);
   });
   it("freezes UPI destination per bill, rejects a stale destination preview, and removes paid QR", async () => {
     const save = (upiId: string) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", upiId } });

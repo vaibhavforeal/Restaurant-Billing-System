@@ -245,6 +245,17 @@ describe("stock costing", () => {
       expect(dish.prices[2]).toMatchObject({ tier: "takeaway", pricePaise: 10_500, preGstPaise: 10_000, marginPaise: 5_200 });
     });
 
+    it("backs no GST out of any price under the composition scheme", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const p = await product(cat, {});
+      await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", taxInclusive: true, gstScheme: "composition" })).statusCode).toBe(200);
+      const body = await dishes();
+      expect(body.taxInclusive).toBe(false);
+      expect(body.dishes[0]!.prices.every((x) => x.preGstPaise === x.pricePaise)).toBe(true);
+    });
+
     it("prices a blank Zomato tier at Takeaway and a Zomato price of zero at zero", async () => {
       const paneer = await costed("Paneer", 10, 32_000_000);
       const cat = await category();

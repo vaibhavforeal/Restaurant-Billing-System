@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "",
+      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "", receiptStyle: "classic", gstScheme: "regular",
     });
 
     const put = await app.inject({
@@ -70,5 +70,27 @@ describe("settings", () => {
     }
     expect((await save({ address: "New address" })).json().settings.upiId).toBe("cafe.123@okbank");
     expect((await save({ upiId: " " })).json().settings.upiId).toBe("");
+  });
+  it("saves supported receipt styles, preserves omitted choices, and rejects unknown styles", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const save = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", ...fields } });
+    for (const receiptStyle of ["modern", "heritage", "compact", "classic"]) {
+      expect((await save({ receiptStyle })).json().settings.receiptStyle).toBe(receiptStyle);
+      expect((await save({ address: "New address" })).json().settings.receiptStyle).toBe(receiptStyle);
+    }
+    for (const receiptStyle of ["other", "", null, '<style>body{display:none}</style>']) {
+      expect((await save({ receiptStyle })).statusCode).toBe(400);
+    }
+  });
+  it("saves the GST scheme, preserves it when omitted, and rejects unknown schemes", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const save = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", ...fields } });
+    for (const gstScheme of ["composition", "regular"]) {
+      expect((await save({ gstScheme })).json().settings.gstScheme).toBe(gstScheme);
+      expect((await save({ address: "New address" })).json().settings.gstScheme).toBe(gstScheme);
+    }
+    for (const gstScheme of ["unregistered", "", null]) expect((await save({ gstScheme })).statusCode).toBe(400);
   });
 });

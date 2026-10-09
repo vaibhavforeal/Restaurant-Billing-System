@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./pricing": "./src/pricing.ts",
+    "./receipt-styles": "./src/receipt-styles.ts",
     "./operational-reports": "./src/operational-reports.ts",
     "./catalog-csv": "./src/catalog-csv.ts",
     "./zomato": "./src/zomato.ts",

@@ -12,7 +12,7 @@ import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { billPaymentLabel, billTaxRates, taxModeNote, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
+import { billPaymentLabel, billTaxRates, taxModeNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
 
@@ -23,18 +23,19 @@ function preferredPayment(): "cash" | "card" | "upi" { const value = readPrefere
 
 type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string; refNote: string };
 
-export function BillSummary({ value, compact = false, gstPaidBy }: { value: BillTotals; compact?: boolean; gstPaidBy?: "zomato" | undefined }) {
-  const rates = billTaxRates(value, gstPaidBy);
+export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
+  const rates = billTaxRates(value, gst);
+  const noGst = gst?.gstPaidBy === "zomato" || gst?.gstScheme === "composition";
   const breakdown = <>
-    <p>{taxModeNote({ taxInclusive: value.taxInclusive, gstPaidBy })}</p>
+    <p>{taxModeNote({ taxInclusive: value.taxInclusive, ...gst })}</p>
     <p>Subtotal: {money(value.subtotalPaise)} · Discount: {money(value.discountPaise)}</p>
-    {gstPaidBy !== "zomato" && <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "right", borderSpacing: "8px" }}>
+    {!noGst && <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "right", borderSpacing: "8px" }}>
       <thead><tr><th scope="col">GST rate</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead>
       <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
     </table></div>}
     <p>Round off: {money(value.roundingPaise)}</p>
   </>;
-  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd><dt>CGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.cgstPaise, 0))}</dd><dt>SGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.sgstPaise, 0))}</dd><dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
+  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{!noGst && <><dt>CGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.cgstPaise, 0))}</dd><dt>SGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.sgstPaise, 0))}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
     {compact ? <>{amounts}{payable}<details className="bill-tax-details"><summary>Tax details</summary>{breakdown}</details></> : <>{breakdown}{payable}</>}
@@ -285,7 +286,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
         {message && <p className="billing-message" role="status">{message}</p>}
         <div className={`billing-dialog-grid${totals ? "" : " billing-awaiting-preview"}`}>
           <div className="billing-review">
-            {totals && <BillSummary value={totals} compact gstPaidBy={bill?.receipt.gstPaidBy} />}
+            {totals && <BillSummary value={totals} compact gst={totals.receipt} />}
             {bill?.discountNote && <p className="billing-note">Discount reason: {bill.discountNote}</p>}
             {bill && <BillItemLines items={order.items} refundedQty={bill.refundedQty} showRefunded={bill.creditNotes.length > 0} />}
             {!zomatoBill && <details ref={options} className="billing-options" open={!totals}>

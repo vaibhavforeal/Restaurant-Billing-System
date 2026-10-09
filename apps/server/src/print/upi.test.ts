@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
-import { calculateBill, type Bill } from "@forkflow/domain";
+import { calculateBill, RECEIPT_STYLES, type Bill } from "@forkflow/domain";
 import { billUpiPayment } from "./upi.js";
 import { receiptHtml, receiptSlip } from "./receipt.js";
 
@@ -26,9 +26,9 @@ describe("bill UPI QR", () => {
     expect(billUpiPayment({ ...bill, ...calculateBill(items, 1234, true) })!.amountPaise).toBe(23500);
   });
 
-  it.each([58, 80] as const)("independently decodes the actual %imm ESC/POS bitmap to the payment request", (paperWidth) => {
+  it.each(RECEIPT_STYLES.flatMap((style) => ([58, 80] as const).map((width) => [style, width] as const)))("independently decodes the %s %imm ESC/POS bitmap to the payment request", (receiptStyle, paperWidth) => {
     // Parse the printer output, not the QR encoder's internal matrix.
-    const bytes = receiptSlip(bill, paperWidth);
+    const bytes = receiptSlip({ ...bill, receipt: { ...bill.receipt, receiptStyle } }, paperWidth);
     const offset = bytes.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0x00]));
     expect(offset).toBeGreaterThan(0);
     const widthBytes = bytes.readUInt16LE(offset + 4), height = bytes.readUInt16LE(offset + 6);

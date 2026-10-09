@@ -1,4 +1,5 @@
 import type { ItemPrices, PriceTier } from "@forkflow/domain/pricing";
+import type { ReceiptStyle } from "@forkflow/domain/receipt-styles";
 export interface Category {
   id: string;
   name: string;
@@ -77,6 +78,8 @@ export interface AdminUser {
 }
 
 export interface SettingsData {
+  gstScheme: "regular" | "composition";
+  receiptStyle: ReceiptStyle;
   upiId: string;
   taxInclusive: boolean;
   restaurantName: string;

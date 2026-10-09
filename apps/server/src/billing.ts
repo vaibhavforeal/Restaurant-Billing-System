@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  type Bill, type Database, type PaymentMode, type ReceiptSnapshot, type TaxLine, type TaxMode } from "@forkflow/domain";
+  type Bill, type Database, type GstScheme, type PaymentMode, type ReceiptSnapshot, type TaxLine, type TaxMode } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
@@ -48,13 +48,16 @@ function priceOrder(db: Database, orderId: string, discountPaise: number, role: 
   const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
   if (unsent) throw httpError(409, "Send kitchen items before billing");
   let totals;
-  const { tax_inclusive } = db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number };
-  try { totals = calculateBill(items, discountPaise, tax_inclusive === 1, taxMode); }
+  const { tax_inclusive, gst_scheme } = db.prepare("SELECT tax_inclusive, gst_scheme FROM settings WHERE id = 1").get() as { tax_inclusive: number; gst_scheme: GstScheme };
+  // A composition restaurant collects no GST; an operator-paid (Zomato) bill keeps its own mode and receipt fields.
+  const composition = gst_scheme === "composition" && taxMode === "restaurant";
+  const taxInclusive = tax_inclusive === 1 && !composition;
+  try { totals = calculateBill(items, discountPaise, taxInclusive, composition ? "composition" : taxMode); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message : "Invalid bill"); }
   const limit = roleFor(role).limits?.["max_discount_percent"];
   if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
-  const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId">;
-  const receipt: ReceiptSnapshot = { ...profile, taxInclusive: tax_inclusive === 1, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
+  const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle">;
+  const receipt: ReceiptSnapshot = { ...profile, taxInclusive, ...(composition ? { gstScheme: "composition" as const } : {}), orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })), ...receiptExtra };
   return { items, totals, receipt };
 }

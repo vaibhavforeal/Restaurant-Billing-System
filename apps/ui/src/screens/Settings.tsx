@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { resolveReceiptStyle } from "@forkflow/domain/receipt-styles";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
 import { SystemSettings } from "./SystemSettings";
@@ -8,9 +9,9 @@ import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } fro
 import "../printer-settings.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "" };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "", receiptStyle: "classic", gstScheme: "regular" };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "taxInclusive" | "upiId">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "taxInclusive" | "upiId" | "receiptStyle" | "gstScheme">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -308,13 +309,25 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             </label>
           ))}
           <label style={{ display: "grid", gap: 4 }}>
-            Menu price tax mode
-            <select value={form.taxInclusive ? "inclusive" : "exclusive"} onChange={(e) => setForm({ ...form, taxInclusive: e.target.value === "inclusive" })} disabled={busy}>
-              <option value="exclusive">Add GST at checkout</option>
-              <option value="inclusive">Menu prices include GST</option>
+            Bill style
+            <select value={form.receiptStyle ?? "classic"} onChange={(e) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(e.target.value) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">
+              <option value="classic">Classic - Receipt mono</option>
+              <option value="modern">Modern - Bold sans serif</option>
+              <option value="heritage">Heritage - Traditional serif</option>
+              <option value="compact">Compact - Space-saving sans serif</option>
             </select>
           </label>
-          <small>Applies to new bills. Existing bills keep their original tax calculation.</small>
+          <small id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</small>
+          <label style={{ display: "grid", gap: 4 }}>
+            Menu price tax mode
+            <select value={form.gstScheme === "composition" ? "composition" : form.taxInclusive ? "inclusive" : "exclusive"} disabled={busy}
+              onChange={(e) => setForm({ ...form, gstScheme: e.target.value === "composition" ? "composition" : "regular", taxInclusive: e.target.value === "inclusive" })}>
+              <option value="exclusive">Add GST at checkout</option>
+              <option value="inclusive">Menu prices include GST</option>
+              <option value="composition">Composition scheme - no GST charged</option>
+            </select>
+          </label>
+          <small>Applies to new bills. Inclusive receipts show “All prices include tax” with the included CGST/SGST. Composition bills are printed as a bill of supply with no GST. Existing bills keep their original tax calculation.</small>
           <label style={{ display: "grid", gap: 4 }}>
             UPI ID for bill payments
             <input value={form.upiId} placeholder="restaurant@bank" maxLength={255}

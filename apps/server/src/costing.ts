@@ -52,7 +52,9 @@ export function registerCosting(app: FastifyInstance): void {
   });
 
   app.get("/api/costing/dishes", { preHandler: costs }, async (_req, reply) => {
-    const taxInclusive = (db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number }).tax_inclusive === 1;
+    // A composition restaurant charges no GST, so its menu prices are the whole selling price: nothing is backed out.
+    const settings = db.prepare("SELECT tax_inclusive, gst_scheme FROM settings WHERE id = 1").get() as { tax_inclusive: number; gst_scheme: string };
+    const taxInclusive = settings.tax_inclusive === 1 && settings.gst_scheme !== "composition";
     const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, p.zomato_price_paise, c.name AS category_name
       FROM products p JOIN categories c ON c.id = p.category_id WHERE p.is_active = 1
       ORDER BY c.sort_order, c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id`).all() as Array<{
