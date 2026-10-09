@@ -7,12 +7,14 @@ import { billStyleGallery } from "./bill-style-gallery.js";
 
 const output = resolve(".e2e-scratch/bill-design");
 mkdirSync(output, { recursive: true });
+// Prices include GST. The default bill is a mixed-rate tax invoice: food at 5% and a packaged drink at 18%.
 const items = [
   { name: "Paneer Tikka", qty: 1, pricePaise: 24000, gstRate: 5 },
   { name: "Dal Makhani", qty: 1, pricePaise: 22000, gstRate: 5 },
   { name: "Butter Naan", qty: 4, pricePaise: 4500, gstRate: 5 },
   { name: "Vegetable Biryani - Family portion", qty: 1, pricePaise: 36000, gstRate: 5 },
   { name: "Fresh Lime Soda", qty: 2, pricePaise: 6500, gstRate: 5 },
+  { name: "Packaged soft drink", qty: 1, pricePaise: 6000, gstRate: 18 },
 ];
 const totals = calculateBill(items, 5000);
 const bill: Bill = {
@@ -20,7 +22,7 @@ const bill: Bill = {
   createdAt: new Date(2026, 9, 9, 13, 42).getTime(), discountNote: "Loyalty discount",
   refundState: "none", creditNotes: [], refundedQty: {},
   receipt: { restaurantName: "ForkFlow Kitchen", address: "12 Market Road, Indiranagar\nBengaluru, Karnataka 560038",
-    gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", taxInclusive: false,
+    gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", gstMode: "included",
     receiptFooter: "Thank you for dining with us. See you again!\nSample bill - for layout preview only.",
     orderType: "dine_in", tableName: "T04", splitLabel: "B", items },
   payments: [{ mode: "cash", amountPaise: 50000, refNote: null, createdAt: 1 },
@@ -35,10 +37,17 @@ writeFileSync(join(output, "bill-unpaid.html"), receiptHtml({ ...bill, status: "
 writeFileSync(join(output, "bill-void.html"), receiptHtml({ ...bill, status: "void", payments: [] }));
 writeFileSync(join(output, "bill-parcel.html"), receiptHtml({ ...bill,
   receipt: { ...bill.receipt, orderType: "parcel", tableName: null, splitLabel: null } }));
-const inclusiveItems = [...items, { name: "Packaged soft drink", qty: 1, pricePaise: 6000, gstRate: 28 }];
-const inclusiveBill: Bill = { ...bill, ...calculateBill(inclusiveItems, 5000, true),
-  status: "unpaid", payments: [], receipt: { ...bill.receipt, taxInclusive: true, items: inclusiveItems } };
-writeFileSync(join(output, "bill-inclusive.html"), receiptHtml(inclusiveBill));
+// A restaurant that charges no GST: a bill of supply with the declaration when it has a GSTIN, a plain bill when it has none.
+const noGst = calculateBill(items, 5000, "none");
+const supplyBill: Bill = { ...bill, ...noGst, status: "unpaid", payments: [], receipt: { ...bill.receipt, gstMode: "none" } };
+const plainBill: Bill = { ...supplyBill, receipt: { ...supplyBill.receipt, gstin: "" } };
+// Zomato collects and pays the GST (section 9(5)): a plain restaurant bill with the note.
+const zomatoBill: Bill = { ...supplyBill, ...calculateBill(items, 0, "none"), discountNote: null,
+  payments: [{ mode: "zomato", amountPaise: calculateBill(items, 0, "none").totalPaise, refNote: null, createdAt: 1 }], status: "paid",
+  receipt: { ...supplyBill.receipt, orderType: "zomato", tableName: null, splitLabel: null, zomatoOrderId: "5821", gstPaidBy: "zomato" } };
+writeFileSync(join(output, "bill-supply.html"), receiptHtml(supplyBill));
+writeFileSync(join(output, "bill-plain.html"), receiptHtml(plainBill));
+writeFileSync(join(output, "bill-zomato.html"), receiptHtml(zomatoBill));
 writeFileSync(join(output, "bill-upi.html"), receiptHtml({ ...bill, status: "unpaid", payments: [],
   receipt: { ...bill.receipt, upiId: "layout-preview@upi" } }));
 const largeItems = [{ name: "Special celebration catering menu with seasonal vegetables and accompaniments", qty: 100, pricePaise: 9999999, gstRate: 0 }];
@@ -47,18 +56,15 @@ writeFileSync(join(output, "bill-large.html"), receiptHtml({ ...bill, ...calcula
 
 // Visualize actual ESC/POS text/alignment/emphasis; this does not replace a hardware test.
 const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-const compositionBill: Bill = { ...bill, ...calculateBill(items, 5000, false, "composition"), status: "unpaid", payments: [],
-  receipt: { ...bill.receipt, gstScheme: "composition" } };
-writeFileSync(join(output, "bill-composition.html"), receiptHtml(compositionBill));
-const samples: [string, Bill][] = [["bill", bill], ["bill-inclusive", inclusiveBill], ["bill-composition", compositionBill]];
+const samples: [string, Bill][] = [["bill", bill], ["bill-supply", supplyBill], ["bill-plain", plainBill], ["bill-zomato", zomatoBill]];
 for (const receiptStyle of RECEIPT_STYLES) {
-  for (const [mode, sample] of [["exclusive", bill], ["inclusive", inclusiveBill], ["long", longBill]] as const) {
+  for (const [mode, sample] of [["gst", bill], ["supply", supplyBill], ["plain", plainBill], ["long", longBill]] as const) {
     const styled = { ...sample, receipt: { ...sample.receipt, receiptStyle } };
     writeFileSync(join(output, `bill-${receiptStyle}-${mode}.html`), receiptHtml(styled));
     if (mode !== "long") samples.push([`bill-${receiptStyle}-${mode}`, styled]);
   }
-  writeFileSync(join(output, `bill-${receiptStyle}-upi.html`), receiptHtml({ ...inclusiveBill,
-    receipt: { ...inclusiveBill.receipt, receiptStyle, upiId: "layout-preview@upi" } }));
+  writeFileSync(join(output, `bill-${receiptStyle}-upi.html`), receiptHtml({ ...bill, status: "unpaid", payments: [],
+    receipt: { ...bill.receipt, receiptStyle, upiId: "layout-preview@upi" } }));
 }
 writeFileSync(join(output, "bill-styles.html"), billStyleGallery());
 for (const [prefix, sample] of samples) {
@@ -87,7 +93,7 @@ for (const [prefix, sample] of samples) {
       }
     }
     const chars = width === 58 ? 32 : 48;
-    writeFileSync(join(output, `${prefix}-${width}mm.html`), `<!doctype html><html><head><meta charset="utf-8"><title>${sample.taxInclusive ? "Tax-inclusive " : ""}${width} mm receipt sample</title>
+    writeFileSync(join(output, `${prefix}-${width}mm.html`), `<!doctype html><html><head><meta charset="utf-8"><title>${prefix} ${width} mm receipt sample</title>
       <style>body{margin:0;padding:12px;background:#eee}.receipt{width:${chars}ch;padding:22px 12px;background:white;margin:auto;font:clamp(8px,${width === 80 ? 2.6 : 3.8}vw,14px)/1.45 'Courier New',monospace;box-sizing:content-box;box-shadow:0 2px 16px #0001}.line{white-space:pre;min-height:1.45em}.tall{line-height:2.2}.tall span{display:inline-block;transform:scaleY(1.5)}</style>
       </head><body><main class="receipt">${rows.join("")}</main></body></html>`);
   }

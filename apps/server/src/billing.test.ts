@@ -13,7 +13,7 @@ describe("billing and day-end", () => {
     ({ app, fake } = freshAppWithFakeSink());
     ({ token } = await setupAdmin(app));
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
-    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Meal", categoryId: category.json().category.id, pricePaise: 10000, gstRate: 5, kotStationId: null } });
+    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Meal", categoryId: category.json().category.id, pricePaise: 10500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201); productId = product.json().product.id;
   });
   afterEach(async () => { await app.close(); app.db.close(); });
@@ -127,44 +127,54 @@ describe("billing and day-end", () => {
     const b = await issue(await order());
     for (const amountPaise of [10499, 10501]) expect((await app.inject({ method: "POST", url: `/api/bills/${b.id}/settle`, headers: auth(token), payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise }] } })).statusCode).toBe(400);
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM payments").get()).toEqual({ n: 0 });
-    const id = await order(); const payload = await billRequest(id, { discountPaise: 10000, discountNote: "Complimentary" });
+    const id = await order(); const payload = await billRequest(id, { discountPaise: 10500, discountNote: "Complimentary" });
     const free = (await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload })).json().bill as Bill;
     expect(free.totalPaise).toBe(0); expect((await pay(free)).statusCode).toBe(200);
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM payments").get()).toEqual({ n: 0 });
   });
-  it("saves inclusive mode and receipt snapshots despite later settings/catalog edits", async () => {
-    const profile = { restaurantName: "Original", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", taxInclusive: true, receiptStyle: "modern" };
-    await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: profile });
-    await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Original", gstin: profile.gstin, fssai: profile.fssai } });
-    expect((await app.inject({ url: "/api/settings", headers: auth(token) })).json().settings.taxInclusive).toBe(true);
-    app.db.prepare("UPDATE products SET price_paise = 10500 WHERE id = ?").run(productId);
+  const putSettings = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", ...fields } });
+  it("issues a tax invoice in included mode and keeps the receipt snapshot despite later settings and catalog edits", async () => {
+    const profile = { restaurantName: "Original", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", gstMode: "included", receiptStyle: "modern" };
+    expect((await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: profile })).statusCode).toBe(200);
     const bill = await issue(await order());
-    expect(bill.taxInclusive).toBe(true); expect(bill.totalPaise).toBe(10500); expect(bill.cgstPaise).toBe(250);
+    expect(bill.receipt.gstMode).toBe("included");
+    expect(bill).toMatchObject({ subtotalPaise: 10500, totalPaise: 10500, cgstPaise: 250, sgstPaise: 250 });
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
     expect(bill.receipt.receiptStyle).toBe("modern");
-    await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Changed", taxInclusive: false, receiptStyle: "compact" } });
+    await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Changed", gstMode: "none", receiptStyle: "compact" } });
     app.db.prepare("UPDATE products SET name = 'Changed', price_paise = 20000 WHERE id = ?").run(productId);
     const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill;
     expect(stored).toEqual(bill);
     const receipt = await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) });
-    expect(receipt.body).toContain("Original"); expect(receipt.body).toContain("All prices include tax"); expect(receipt.body).not.toContain("Changed");
-    expect(receipt.body).toContain("CGST (included)");
+    expect(receipt.body).toContain("Original"); expect(receipt.body).not.toContain("Changed");
+    expect(receipt.body).toContain("<h2>Tax invoice</h2>"); expect(receipt.body).toContain("Includes GST");
     expect(receipt.body).toContain('class="bill bill--modern"');
-    expect((await issue(await order())).taxInclusive).toBe(false);
+    const later = await issue(await order());
+    expect(later.receipt.gstMode).toBe("none"); expect(later.cgstPaise).toBe(0);
   });
-  it("issues a GST-free bill of supply under the composition scheme, whatever the inclusive setting", async () => {
-    const save = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", ...fields } });
-    expect((await save({ gstScheme: "composition", taxInclusive: true })).json().settings.gstScheme).toBe("composition");
+  it("issues a GST-free bill in none mode, whatever the GSTIN, and leaves earlier bills alone", async () => {
+    const before = await issue(await order());
+    expect(before.receipt.gstMode).toBe("included");
+    expect((await putSettings({ gstMode: "none" })).json().settings.gstMode).toBe("none");
     const bill = await issue(await order());
-    expect(bill).toMatchObject({ subtotalPaise: 10000, cgstPaise: 0, sgstPaise: 0, totalPaise: 10000, taxInclusive: false });
-    expect(bill.receipt.gstScheme).toBe("composition");
-    expect(app.db.prepare("SELECT taxable_paise AS t, cgst_paise + sgst_paise AS tax FROM bill_report_lines WHERE bill_id = ?").get(bill.id)).toEqual({ t: 10000, tax: 0 });
+    expect(bill).toMatchObject({ subtotalPaise: 10500, cgstPaise: 0, sgstPaise: 0, totalPaise: 10500 });
+    expect(bill.receipt.gstMode).toBe("none");
+    expect(app.db.prepare("SELECT taxable_paise AS t, cgst_paise + sgst_paise AS tax FROM bill_report_lines WHERE bill_id = ?").get(bill.id)).toEqual({ t: 10500, tax: 0 });
     const receipt = (await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) })).body;
     expect(receipt).toContain("Bill of supply"); expect(receipt).toContain("GSTIN: 29ABCDE1234F1Z5");
-    expect(receipt).not.toMatch(/CGST|SGST|Taxable @|include tax|GST added/);
-    await save({ gstScheme: "regular" });
-    const regular = await issue(await order());
-    expect(regular.receipt.gstScheme).toBeUndefined(); expect(regular.cgstPaise).toBe(238);
-    expect((await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill).toEqual(bill);
+    expect(receipt).not.toMatch(/CGST|SGST|Taxable @|Includes GST/);
+    await putSettings({ gstMode: "included" });
+    expect((await issue(await order())).cgstPaise).toBe(250);
+    expect((await app.inject({ url: `/api/bills/${before.id}`, headers: auth(token) })).json().bill).toEqual(before);
+  });
+  it("refuses to issue a bill from a preview taken before the GST mode changed", async () => {
+    const id = await order(); const body = await billRequest(id);
+    expect((await putSettings({ gstMode: "none" })).statusCode).toBe(200);
+    const res = await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: body });
+    expect(res.statusCode).toBe(409);
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM bills").get()).toEqual({ n: 0 });
+    const fresh = await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: await billRequest(id) });
+    expect(fresh.statusCode).toBe(201); expect(fresh.json().bill.receipt.gstMode).toBe("none");
   });
   it("freezes UPI destination per bill, rejects a stale destination preview, and removes paid QR", async () => {
     const save = (upiId: string) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", upiId } });
@@ -203,10 +213,10 @@ describe("billing and day-end", () => {
     const cashier = await createUser(app, token, { name: "Cashier", pin: "3333", role: "cashier" });
     const id = await order();
     expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(waiter.token), payload: {} })).statusCode).toBe(403);
-    expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(cashier.token), payload: { discountPaise: 1001, discountNote: "Test" } })).statusCode).toBe(403);
-    const prev = await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(cashier.token), payload: { discountPaise: 1000, discountNote: "Test" } });
+    expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(cashier.token), payload: { discountPaise: 1051, discountNote: "Test" } })).statusCode).toBe(403);
+    const prev = await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(cashier.token), payload: { discountPaise: 1050, discountNote: "Test" } });
     expect(prev.statusCode).toBe(200);
-    const issued = await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(cashier.token), payload: { clientRef: uuidv7(), previewKey: prev.json().preview.previewKey, discountPaise: 1000, discountNote: "Test" } });
+    const issued = await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(cashier.token), payload: { clientRef: uuidv7(), previewKey: prev.json().preview.previewKey, discountPaise: 1050, discountNote: "Test" } });
     expect(issued.statusCode).toBe(201);
     for (const url of ["/api/bills", "/api/billing-printers", "/api/reports/day-end", `/api/bills/${issued.json().bill.id}/receipt`, `/api/bills/${issued.json().bill.id}/upi-qr`]) {
       expect((await app.inject({ url, headers: auth(waiter.token) })).statusCode).toBe(403);

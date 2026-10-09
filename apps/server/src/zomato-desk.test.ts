@@ -272,10 +272,10 @@ describe("Zomato status and Picked up", () => {
     expect(count("SELECT COUNT(*) n FROM bills")).toBe(0);
   });
 
-  for (const taxInclusive of [0, 1]) {
-    it(`Picked up issues and settles one GST-free bill at the item value (tax_inclusive = ${taxInclusive})`, async () => {
+  for (const gstMode of ["included", "none"]) {
+    it(`Picked up issues and settles one GST-free bill at the item value (restaurant GST mode ${gstMode})`, async () => {
       const admin = await setup();
-      app.db.prepare("UPDATE settings SET tax_inclusive = ? WHERE id = 1").run(taxInclusive);
+      app.db.prepare("UPDATE settings SET gst_mode = ? WHERE id = 1").run(gstMode);
       const order = await zomatoOrder(admin.token, { station: true });
       markSent(order.id);
       setDbStatus(order.id, "ready");
@@ -285,15 +285,14 @@ describe("Zomato status and Picked up", () => {
       expect(bill).toMatchObject({ orderId: order.id, status: "paid", subtotalPaise: 25000, discountPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 25000 });
       expect(bill.taxes.every((t: { cgstPaise: number; sgstPaise: number }) => t.cgstPaise === 0 && t.sgstPaise === 0)).toBe(true);
       // No GST is backed out or added, whatever the restaurant's setting: the snapshot says so too.
-      expect(bill.receipt).toMatchObject({ orderType: "zomato", zomatoOrderId: order.zomatoOrderId, gstPaidBy: "zomato", taxInclusive: false });
-      expect(bill.taxInclusive).toBe(false);
+      expect(bill.receipt).toMatchObject({ orderType: "zomato", zomatoOrderId: order.zomatoOrderId, gstPaidBy: "zomato", gstMode: "none" });
       expect(bill.payments).toEqual([expect.objectContaining({ mode: "zomato", amountPaise: 25000 })]);
       // The receipt can still be viewed on screen; it names the Zomato order and carries the 9(5) note.
       const receipt = await app.inject({ method: "GET", url: `/api/bills/${bill.id}/receipt`, headers: auth(admin.token) });
       expect(receipt.statusCode).toBe(200);
       expect(receipt.body).toContain(`Zomato #${order.zomatoOrderId}`);
       expect(receipt.body).toContain("GST paid by Zomato (section 9(5))");
-      expect(receipt.body).not.toMatch(/Prices include GST|GST added to menu prices|CGST/);
+      expect(receipt.body).not.toMatch(/All prices include tax|GST added to menu prices|Includes GST|CGST/);
       expect(closed).toMatchObject({ status: "settled", zomatoStatus: "picked_up" });
       expect(count("SELECT COUNT(*) n FROM bills")).toBe(1);
       expect(count("SELECT COUNT(*) n FROM payments")).toBe(1);

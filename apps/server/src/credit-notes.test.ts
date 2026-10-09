@@ -17,13 +17,13 @@ describe("credit preview, approval and bill credit data", () => {
     cashier = await createUser(app, admin.token, { name: "Cara", pin: "5678", role: "cashier" });
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(admin.token), payload: { name: "Food" } });
     categoryId = category.json().category.id;
-    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token), payload: { name: "Thali", categoryId, pricePaise: 3333, gstRate: 5, kotStationId: null } });
+    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token), payload: { name: "Thali", categoryId, pricePaise: 3500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201);
     productId = product.json().product.id;
   });
   afterEach(async () => { await app.close(); app.db.close(); });
 
-  /** An order of `qty` thalis, billed and optionally settled (in cash, or by `settle`'s mode) (3 x 3333 -> 10500 with 1 paise of rounding). */
+  /** An order of `qty` thalis, billed and optionally settled (in cash, or by `settle`'s mode) (3 x 3500 = 10500 including GST). */
   async function bill(qty = 3, settle: boolean | PayMode = true, tableId: string | null = null): Promise<Bill> {
     const created = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: tableId ? "dine_in" : "parcel", tableId } });
     expect(created.statusCode, created.body).toBe(201);
@@ -53,7 +53,7 @@ describe("credit preview, approval and bill credit data", () => {
     const orderId = created.json().order.id as string;
     const id = uuidv7();
     const receiptJson = receipt ? JSON.stringify({ restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "",
-      taxInclusive: false, orderType: "parcel", tableName: null, splitLabel: null, items: [{ name: "Thali", qty: 3, pricePaise: 3333, gstRate: 5 }] }) : null;
+      gstMode: "included", orderType: "parcel", tableName: null, splitLabel: null, items: [{ name: "Thali", qty: 3, pricePaise: 3500, gstRate: 5 }] }) : null;
     app.db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, status, created_at, created_by, receipt_json)
       VALUES (?, 900, ?, 10000, 0, 250, 250, ?, 10500, 'paid', ?, ?, ?)`).run(id, orderId, roundingPaise, Date.now(), admin.user.id, receiptJson);
     for (const [rate, taxable, cgst, sgst] of taxes) {
@@ -93,7 +93,7 @@ describe("credit preview, approval and bill credit data", () => {
       const b = await bill();
       const res = await preview(b.id, { kind: "void" });
       expect(res.statusCode, res.body).toBe(200);
-      expect(res.json().preview.totals).toEqual({ taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250, roundingPaise: 1, totalPaise: 10500 });
+      expect(res.json().preview.totals).toEqual({ taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 });
     });
 
     it("takes earlier credit notes into account", async () => {
@@ -108,7 +108,7 @@ describe("credit preview, approval and bill credit data", () => {
 
       const res = await preview(b.id, { kind: "void" });
       expect(res.statusCode, res.body).toBe(200);
-      expect(res.json().preview.totals).toEqual({ taxablePaise: 6666, cgstPaise: 167, sgstPaise: 167, roundingPaise: 1, totalPaise: 7001 });
+      expect(res.json().preview.totals).toEqual({ taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167, roundingPaise: 0, totalPaise: 7001 });
       expect(res.json().preview.refundable).toEqual({ cash: 7001, upi: 0, card: 0, total: 7001 });
 
       const tooMany = await preview(b.id, { kind: "refund", lines: [{ orderItemId, qty: 3 }] });
@@ -150,7 +150,7 @@ describe("credit preview, approval and bill credit data", () => {
 
     it("says nothing is left to refund once the bill is fully credited", async () => {
       const b = await bill();
-      priorCredit(b.id, 3, [9999, 250, 250, 1, 10500], [["cash", 10500]]);
+      priorCredit(b.id, 3, [10000, 250, 250, 0, 10500], [["cash", 10500]]);
       const orderItemId = orderItemOf(b.id);
       for (const payload of [{ kind: "refund", lines: [{ orderItemId, qty: 1 }] }, { kind: "void" }]) {
         const res = await preview(b.id, payload);
@@ -214,7 +214,7 @@ describe("credit preview, approval and bill credit data", () => {
       const res = await voidBill(b.id, { reason: "Wrong table" });
       expect(res.statusCode, res.body).toBe(201);
       const { bill: voided, creditNote, order } = res.json() as { bill: Bill; creditNote: BillCreditNote; order: { id: string; status: string; closedAt: number | null } };
-      expect(creditNote).toMatchObject({ cnNo: 1, kind: "void", reason: "Wrong table", totalPaise: 10500, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250,
+      expect(creditNote).toMatchObject({ cnNo: 1, kind: "void", reason: "Wrong table", totalPaise: 10500, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250,
         requestedByName: "Cara", approvedByName: "Asha", refunds: [], lines: [{ orderItemId: orderItemOf(b.id), name: "Thali", qty: 3, totalPaise: 10500 }] });
       expect(voided).toMatchObject({ id: b.id, status: "void", totalPaise: 10500, refundState: "refunded", refundedQty: { [orderItemOf(b.id)]: 3 } });
       expect(voided.creditNotes).toEqual([creditNote]);
@@ -222,14 +222,14 @@ describe("credit preview, approval and bill credit data", () => {
       expect(order.closedAt).toEqual(expect.any(Number));
 
       const row = app.db.prepare("SELECT kind, rounding_paise, requested_by, approved_by, request_json FROM credit_notes WHERE id = ?").get(creditNote.id) as Record<string, unknown>;
-      expect(row).toMatchObject({ kind: "void", rounding_paise: 1, requested_by: cashier.id, approved_by: admin.user.id });
+      expect(row).toMatchObject({ kind: "void", rounding_paise: 0, requested_by: cashier.id, approved_by: admin.user.id });
       expect(row.request_json).not.toContain("1234");
       expect(app.db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM credit_note_taxes WHERE credit_note_id = ?").all(creditNote.id))
-        .toEqual([{ gst_rate: 5, taxable_paise: 9999, cgst_paise: 250, sgst_paise: 250 }]);
+        .toEqual([{ gst_rate: 5, taxable_paise: 10000, cgst_paise: 250, sgst_paise: 250 }]);
       expect(count("SELECT COUNT(*) AS n FROM refund_payments")).toBe(0);
       expect(app.db.prepare("SELECT status, cancel_reason, cancelled_by FROM orders WHERE id = ?").get(b.orderId)).toEqual({ status: "cancelled", cancel_reason: "Wrong table", cancelled_by: cashier.id });
       // the bill's own money is never edited
-      expect(app.db.prepare("SELECT total_paise, rounding_paise FROM bills WHERE id = ?").get(b.id)).toEqual({ total_paise: 10500, rounding_paise: 1 });
+      expect(app.db.prepare("SELECT total_paise, rounding_paise FROM bills WHERE id = ?").get(b.id)).toEqual({ total_paise: 10500, rounding_paise: 0 });
       expect(count("SELECT COUNT(*) AS n FROM stock_moves")).toBe(stockMovesBefore);
 
       expect(await tableStatus(t1)).toBe("free");
@@ -320,7 +320,7 @@ describe("credit preview, approval and bill credit data", () => {
       const res = await voidBill(b.id, { refunds: [{ mode: "cash", amountPaise: 7001 }] });
       expect(res.statusCode, res.body).toBe(201);
       const { bill: voided, creditNote } = res.json() as { bill: Bill; creditNote: BillCreditNote };
-      expect(creditNote).toMatchObject({ cnNo: 2, kind: "void", totalPaise: 7001, taxablePaise: 6666, cgstPaise: 167, sgstPaise: 167,
+      expect(creditNote).toMatchObject({ cnNo: 2, kind: "void", totalPaise: 7001, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167,
         lines: [{ qty: 2, totalPaise: 7001 }], refunds: [{ mode: "cash", amountPaise: 7001, refNote: null }] });
       expect(voided.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(voided.totalPaise);
       expect(voided.refundedQty).toEqual({ [orderItemOf(b.id)]: 3 });
@@ -393,7 +393,7 @@ describe("credit preview, approval and bill credit data", () => {
       expect(twice.json().error).toBe("This bill is already void");
 
       const refunded = await bill();
-      priorCredit(refunded.id, 3, [9999, 250, 250, 1, 10500], [["cash", 10500]]);
+      priorCredit(refunded.id, 3, [10000, 250, 250, 0, 10500], [["cash", 10500]]);
       const nothing = await voidBill(refunded.id, { refunds: [] });
       expect(nothing.statusCode).toBe(409);
       expect(nothing.json().error).toBe("Nothing left to refund on this bill");
@@ -459,7 +459,7 @@ describe("credit preview, approval and bill credit data", () => {
       expect((await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(201);
       const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
       expect(res.statusCode, res.body).toBe(201);
-      expect(res.json().creditNote).toMatchObject({ cnNo: 2, kind: "refund", totalPaise: 7001, taxablePaise: 6666, cgstPaise: 167, sgstPaise: 167 });
+      expect(res.json().creditNote).toMatchObject({ cnNo: 2, kind: "refund", totalPaise: 7001, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167 });
       const after = res.json().bill as Bill;
       expect(after).toMatchObject({ status: "paid", refundState: "refunded", refundedQty: { [orderItemId]: 3 } });
       expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(after.totalPaise);
@@ -471,7 +471,7 @@ describe("credit preview, approval and bill credit data", () => {
       const tooMany = await refundBill(b.id, { lines: [{ orderItemId, qty: 4 }], refunds: [{ mode: "cash", amountPaise: 10500 }] });
       expect(tooMany.statusCode).toBe(409);
       expect(tooMany.json().error).toBe("This bill changed — review again");
-      priorCredit(b.id, 2, [6666, 167, 167, 1, 7001], [["cash", 7001]]);
+      priorCredit(b.id, 2, [6667, 167, 167, 0, 7001], [["cash", 7001]]);
       const stale = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
       expect(stale.statusCode).toBe(409);
       expect(stale.json().error).toBe("This bill changed — review again");
@@ -556,7 +556,7 @@ describe("credit preview, approval and bill credit data", () => {
       expect(onVoid.json().error).toBe("Nothing left to refund on this bill");
 
       const done = await bill();
-      priorCredit(done.id, 3, [9999, 250, 250, 1, 10500], [["cash", 10500]]);
+      priorCredit(done.id, 3, [10000, 250, 250, 0, 10500], [["cash", 10500]]);
       const onDone = await refundBill(done.id, { lines: lines(done.id), refunds: [{ mode: "cash", amountPaise: 3499 }] });
       expect(onDone.statusCode).toBe(409);
       expect(onDone.json().error).toBe("Nothing left to refund on this bill");
@@ -718,7 +718,7 @@ describe("credit preview, approval and bill credit data", () => {
         lines: [{ orderItemId, name: "Thali", qty: 1, totalPaise: 3499 }],
       }]);
 
-      insert("cn-2", 2, 2, [6666, 167, 167, 1, 7001], "void");
+      insert("cn-2", 2, 2, [6667, 167, 167, 0, 7001], "void");
       json = (await app.inject({ url: `/api/bills/${b.id}`, headers: auth(admin.token) })).json().bill as Bill;
       expect(json.refundState).toBe("refunded");
       expect(json.refundedQty).toEqual({ [orderItemId]: 3 });
@@ -729,7 +729,7 @@ describe("credit preview, approval and bill credit data", () => {
       const b = await bill();
       const credit = loadBillCredit(app.db, b.id);
       expect(credit.lines).toHaveLength(1);
-      expect(credit.lines[0]).toMatchObject({ qty: 3, name: "Thali", categoryName: "Food", gstRate: 5, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250, roundingPaise: 1, totalPaise: 10500 });
+      expect(credit.lines[0]).toMatchObject({ qty: 3, name: "Thali", categoryName: "Food", gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 });
       expect(credit.lines[0]!.categoryId).toBe(categoryId);
       expect(credit.credited).toEqual({});
       expect(credit.paid).toEqual([{ mode: "cash", amountPaise: 10500 }]);

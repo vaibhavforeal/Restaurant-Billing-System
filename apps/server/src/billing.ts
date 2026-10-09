@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  type Bill, type Database, type GstScheme, type PaymentMode, type ReceiptSnapshot, type TaxLine, type TaxMode } from "@forkflow/domain";
+  type Bill, type Database, type GstMode, type PaymentMode, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
+import { readGstSettings } from "./gst-settings.js";
 import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
@@ -33,13 +34,13 @@ export function loadBill(db: Database, id: string): Bill {
   return { id, billNo: r.bill_no, orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
     discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
     roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
-    receipt, taxInclusive: receipt.taxInclusive, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise) };
+    receipt, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise) };
 }
 
 type IssueRole = Parameters<typeof roleFor>[0];
 
 /** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
-function priceOrder(db: Database, orderId: string, discountPaise: number, role: IssueRole, taxMode: TaxMode, receiptExtra?: Partial<ReceiptSnapshot>) {
+function priceOrder(db: Database, orderId: string, discountPaise: number, role: IssueRole, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>) {
   const order = loadOrderJson(db, orderId);
   if (!order) throw httpError(404, "order not found");
   if (order.status !== "open") throw httpError(409, "order is not open");
@@ -48,16 +49,14 @@ function priceOrder(db: Database, orderId: string, discountPaise: number, role: 
   const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
   if (unsent) throw httpError(409, "Send kitchen items before billing");
   let totals;
-  const { tax_inclusive, gst_scheme } = db.prepare("SELECT tax_inclusive, gst_scheme FROM settings WHERE id = 1").get() as { tax_inclusive: number; gst_scheme: GstScheme };
-  // A composition restaurant collects no GST; an operator-paid (Zomato) bill keeps its own mode and receipt fields.
-  const composition = gst_scheme === "composition" && taxMode === "restaurant";
-  const taxInclusive = tax_inclusive === 1 && !composition;
-  try { totals = calculateBill(items, discountPaise, taxInclusive, composition ? "composition" : taxMode); }
+  // The restaurant's setting, unless the caller overrides it (Zomato bills charge no GST).
+  const mode = gstMode ?? readGstSettings(db).gstMode;
+  try { totals = calculateBill(items, discountPaise, mode); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message : "Invalid bill"); }
   const limit = roleFor(role).limits?.["max_discount_percent"];
   if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
   const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle">;
-  const receipt: ReceiptSnapshot = { ...profile, taxInclusive, ...(composition ? { gstScheme: "composition" as const } : {}), orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
+  const receipt: ReceiptSnapshot = { ...profile, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })), ...receiptExtra };
   return { items, totals, receipt };
 }
@@ -68,9 +67,9 @@ function priceOrder(db: Database, orderId: string, discountPaise: number, role: 
  */
 export function issueBill(db: Database, orderId: string, opts: {
   discountPaise: number; discountNote: string | null; clientRef: string; requestJson: string; actorId: string; role: IssueRole;
-  taxMode?: TaxMode; receiptExtra?: Partial<ReceiptSnapshot>;
+  gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>;
 }): { billId: string; changedStockIds: string[] } {
-  const { totals, receipt } = priceOrder(db, orderId, opts.discountPaise, opts.role, opts.taxMode ?? "restaurant", opts.receiptExtra);
+  const { totals, receipt } = priceOrder(db, orderId, opts.discountPaise, opts.role, opts.gstMode, opts.receiptExtra);
   const id = uuidv7();
   const billNo = nextSequence(db, "bill_no");
   db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
@@ -150,7 +149,7 @@ export function registerBilling(app: FastifyInstance): void {
   const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
   function preview(orderId: string, body: z.infer<typeof BillPreview>, role: Parameters<typeof roleFor>[0]) {
     refuseZomato(orderType(orderId));
-    const { items, totals, receipt } = priceOrder(db, orderId, body.discountPaise, role, "restaurant");
+    const { items, totals, receipt } = priceOrder(db, orderId, body.discountPaise, role, undefined);
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
     return { ...totals, receipt, previewKey };
   }

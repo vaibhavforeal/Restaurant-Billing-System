@@ -20,13 +20,13 @@ describe("reports net of credit notes", () => {
     admin = await setupAdmin(app);
     cashier = await createUser(app, admin.token, { name: "Cara", pin: "5678", role: "cashier" });
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(admin.token), payload: { name: "Food" } });
-    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token), payload: { name: "Thali", categoryId: category.json().category.id, pricePaise: 3333, gstRate: 5, kotStationId: null } });
+    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token), payload: { name: "Thali", categoryId: category.json().category.id, pricePaise: 3500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201);
     productId = product.json().product.id;
   });
   afterEach(async () => { await app.close(); app.db.close(); });
 
-  /** 3 thalis (3 x 3333 -> 10500: taxable 9999, CGST 250, SGST 250, round-off 1), settled by `settle` in full by `settler`. */
+  /** 3 thalis (3 x 3500 = 10500 including GST: taxable 10000, CGST 250, SGST 250), settled by `settle` in full by `settler`. */
   async function bill(settle: PayMode | false = "cash", settler = admin.token): Promise<Bill> {
     const created = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } });
     const orderId = created.json().order.id as string;
@@ -85,11 +85,11 @@ describe("reports net of credit notes", () => {
     const after = await dayEnd(yesterday);
     expect(after).toEqual(before.dayEnd);
     expect(after.sales).toMatchObject({ billCount: 1, totalPaise: 10500, cgstPaise: 250, sgstPaise: 250 });
-    expect(after.taxes).toEqual([{ gstRate: 5, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250 }]);
+    expect(after.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
     expect(after.payments).toEqual([{ mode: "cash", amountPaise: 10500 }]);
     expect(after.netPayments).toEqual([{ mode: "cash", amountPaise: 10500 }]);
     expect(after.creditNotes).toEqual({ count: 0, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, totalPaise: 0, taxes: [] });
-    expect(after.net).toEqual({ totalPaise: 10500, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250 });
+    expect(after.net).toEqual({ totalPaise: 10500, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 });
     expect((await sales(yesterday, yesterday)).daily).toEqual(before.sales);
     expect((await operations("items", yesterday, yesterday)).tables).toEqual(before.items);
     expect((await operations("cashiers", yesterday, yesterday)).tables).toEqual(before.cashiers);
@@ -100,12 +100,12 @@ describe("reports net of credit notes", () => {
     // Today carries the credit note, the cash paid back and the net figures.
     const todayReport = await dayEnd(today);
     expect(todayReport.sales).toMatchObject({ billCount: 0, totalPaise: 0 });
-    expect(todayReport.creditNotes).toEqual({ count: 1, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250, totalPaise: 10500,
-      taxes: [{ gstRate: 5, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250 }] });
+    expect(todayReport.creditNotes).toEqual({ count: 1, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, totalPaise: 10500,
+      taxes: [{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }] });
     expect(todayReport.refunds).toEqual([{ mode: "cash", amountPaise: 10500 }]);
     expect(todayReport.payments).toEqual([]);
     expect(todayReport.netPayments).toEqual([{ mode: "cash", amountPaise: -10500 }]);
-    expect(todayReport.net).toEqual({ totalPaise: -10500, taxablePaise: -9999, cgstPaise: -250, sgstPaise: -250 });
+    expect(todayReport.net).toEqual({ totalPaise: -10500, taxablePaise: -10000, cgstPaise: -250, sgstPaise: -250 });
 
     const range = await sales(yesterday, today);
     expect(range.daily).toEqual([
@@ -128,10 +128,10 @@ describe("reports net of credit notes", () => {
     await refund(b.id, 1, [{ mode: "upi", amountPaise: 3499 }]);
     const report = await dayEnd(today);
     expect(report.sales).toMatchObject({ billCount: 1, totalPaise: 10500 });
-    expect(report.taxes).toEqual([{ gstRate: 5, taxablePaise: 9999, cgstPaise: 250, sgstPaise: 250 }]);
+    expect(report.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
     expect(report.creditNotes).toEqual({ count: 1, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83, totalPaise: 3499,
       taxes: [{ gstRate: 5, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83 }] });
-    expect(report.net).toEqual({ totalPaise: 7001, taxablePaise: 6666, cgstPaise: 167, sgstPaise: 167 });
+    expect(report.net).toEqual({ totalPaise: 7001, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167 });
     expect(report.payments).toEqual([{ mode: "upi", amountPaise: 10500 }]);
     expect(report.refunds).toEqual([{ mode: "upi", amountPaise: 3499 }]);
     expect(report.netPayments).toEqual([{ mode: "upi", amountPaise: 7001 }]);
@@ -190,9 +190,9 @@ describe("reports net of credit notes", () => {
     expect(table.columns.map((c) => c.key)).toEqual(["cnNo", "date", "billNo", "kind", "reason", "requestedBy", "approvedBy", "refundModes", "taxable", "gst", "total"]);
     expect(table.rows).toEqual([
       { cnNo: "CN-1", date: expect.any(Number), billNo: b.billNo, kind: "Refund", reason: "Cold food", requestedBy: "Cara", approvedBy: "Asha", refundModes: "Cash", taxable: 3333, gst: 166, total: 3499 },
-      { cnNo: "CN-2", date: expect.any(Number), billNo: unpaid.billNo, kind: "Void", reason: "Wrong bill", requestedBy: "Asha", approvedBy: "Asha", refundModes: "None", taxable: 9999, gst: 500, total: 10500 },
+      { cnNo: "CN-2", date: expect.any(Number), billNo: unpaid.billNo, kind: "Void", reason: "Wrong bill", requestedBy: "Asha", approvedBy: "Asha", refundModes: "None", taxable: 10000, gst: 500, total: 10500 },
     ]);
-    expect(table.totals).toMatchObject({ cnNo: "Total", taxable: 13332, gst: 666, total: 13999 });
+    expect(table.totals).toMatchObject({ cnNo: "Total", taxable: 13333, gst: 666, total: 13999 });
     expect((await operations("credit-notes", yesterday, yesterday)).tables[0]!.rows).toEqual([]);
   });
 });

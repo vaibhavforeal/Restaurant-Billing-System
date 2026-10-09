@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type LicenseClaims, type ReceiptSnapshot } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot } from "@forkflow/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP } from "./test-helpers.js";
@@ -21,7 +21,7 @@ afterEach(async () => {
 
 // Every fixture uses a signed Basic license, proving core takeaway billing is
 // available without the recipe or QR ordering entitlements.
-async function fixture(taxInclusive = false) {
+async function fixture(gstMode: GstMode = "included") {
   const now = Date.now(), installationId = randomUUID(), db = openDb(":memory:"); migrate(db, MIGRATIONS);
   const fake = makeFakeSink();
   const app = buildServer({ db, sinkSend: fake.send, licensing: { publicKey, installationId } }); apps.push(app);
@@ -38,7 +38,7 @@ async function fixture(taxInclusive = false) {
   const activated = await api("PUT", "/api/license", { license: `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}` });
   expect(activated.statusCode, activated.body).toBe(200);
   expect((await api("POST", "/api/license/devices", { name: "Main counter" })).statusCode).toBe(200);
-  expect((await api("PUT", "/api/settings", { restaurantName: SETUP.restaurantName, taxInclusive })).statusCode).toBe(200);
+  expect((await api("PUT", "/api/settings", { restaurantName: SETUP.restaurantName, gstMode })).statusCode).toBe(200);
   const category = await api("POST", "/api/categories", { name: "Takeaway" });
   const stationId = (db.prepare("SELECT id FROM kot_stations LIMIT 1").get() as { id: string }).id;
   async function product(name: string, pricePaise: number, gstRate: number, kotStationId: string | null) {
@@ -46,8 +46,8 @@ async function fixture(taxInclusive = false) {
     expect(response.statusCode, response.body).toBe(201);
     return response.json().product as { id: string };
   }
-  const meal = await product("Meal", taxInclusive ? 10500 : 10000, 5, stationId);
-  const drink = await product("Bottled drink", taxInclusive ? 5900 : 5000, 18, null);
+  const meal = await product("Meal", 10500, 5, stationId);
+  const drink = await product("Bottled drink", 5900, 18, null);
   async function stock(name: string, unit: "kg" | "pcs", openingQty: number, productId: string, qtyPerSale: number) {
     const response = await api("POST", "/api/stock-items", { clientRef: randomUUID(), name, unit, openingQty });
     expect(response.statusCode, response.body).toBe(201);
@@ -120,7 +120,7 @@ describe("quick takeaway orchestration", () => {
     expect(f.balances()).toEqual([4.75, 20]);
     expect(sent.order.items.find((item) => item.productId === f.drink.id)?.status).toBe("pending");
     const preview = await f.preview(punched.order.id);
-    expect(preview).toMatchObject({ subtotalPaise: 25000, cgstPaise: 950, sgstPaise: 950, totalPaise: 26900,
+    expect(preview).toMatchObject({ subtotalPaise: 26900, cgstPaise: 950, sgstPaise: 950, totalPaise: 26900,
       receipt: { orderType: "parcel", tableName: null, splitLabel: null } });
     const { bill, issueBody } = await f.issue(punched.order.id, preview, f.headers, printerId);
     expect(bill.receipt).toEqual(preview.receipt);
@@ -159,16 +159,19 @@ describe("quick takeaway orchestration", () => {
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM kots").get()).toEqual({ n: 0 });
   });
 
-  it.each([false, true])("uses the confirmed price and GST preview when taxInclusive=%s", async (inclusive) => {
-    const f = await fixture(inclusive); const punched = await f.punch(); await f.send(punched.order);
+  it.each(["included", "none"] as const)("uses the confirmed price and GST preview in %s mode", async (gstMode) => {
+    const f = await fixture(gstMode); const punched = await f.punch(); await f.send(punched.order);
     const preview = await f.preview(punched.order.id);
-    expect(preview).toMatchObject({ taxInclusive: inclusive, subtotalPaise: inclusive ? 26900 : 25000,
-      cgstPaise: 950, sgstPaise: 950, roundingPaise: 0, totalPaise: 26900,
-      taxes: [{ gstRate: 5, taxablePaise: 20000, cgstPaise: 500, sgstPaise: 500 }, { gstRate: 18, taxablePaise: 5000, cgstPaise: 450, sgstPaise: 450 }] });
+    // The prices already include any GST, so both modes charge the same total; only included mode itemises it.
+    const included = gstMode === "included";
+    expect(preview).toMatchObject({ subtotalPaise: 26900, cgstPaise: included ? 950 : 0, sgstPaise: included ? 950 : 0, roundingPaise: 0, totalPaise: 26900,
+      receipt: { gstMode },
+      taxes: included ? [{ gstRate: 5, taxablePaise: 20000, cgstPaise: 500, sgstPaise: 500 }, { gstRate: 18, taxablePaise: 5000, cgstPaise: 450, sgstPaise: 450 }]
+        : [{ gstRate: 5, taxablePaise: 21000, cgstPaise: 0, sgstPaise: 0 }, { gstRate: 18, taxablePaise: 5900, cgstPaise: 0, sgstPaise: 0 }] });
     // Catalog edits affect later punches, while the confirmed order prices stay frozen.
     expect((await f.api("PATCH", `/api/products/${f.meal.id}`, { pricePaise: 50000, name: "Renamed meal", gstRate: 18 })).statusCode).toBe(200);
     const { bill } = await f.issue(punched.order.id, preview);
-    expect(bill).toMatchObject({ taxInclusive: preview.taxInclusive, subtotalPaise: preview.subtotalPaise, totalPaise: preview.totalPaise,
+    expect(bill).toMatchObject({ subtotalPaise: preview.subtotalPaise, totalPaise: preview.totalPaise,
       cgstPaise: preview.cgstPaise, sgstPaise: preview.sgstPaise, receipt: preview.receipt, taxes: preview.taxes });
     const settled = await f.api("POST", `/api/bills/${bill.id}/settle`, { clientRef: randomUUID(), payments: [{ mode: "upi", amountPaise: preview.totalPaise }] });
     expect(settled.statusCode, settled.body).toBe(200);
@@ -227,13 +230,13 @@ describe("quick takeaway orchestration", () => {
   it("requires a fresh confirmation if GST settings change after the displayed preview", async () => {
     const f = await fixture(); const punched = await f.punch(); await f.send(punched.order);
     const preview = await f.preview(punched.order.id);
-    expect((await f.api("PUT", "/api/settings", { restaurantName: SETUP.restaurantName, taxInclusive: true })).statusCode).toBe(200);
+    expect((await f.api("PUT", "/api/settings", { restaurantName: SETUP.restaurantName, gstMode: "none" })).statusCode).toBe(200);
     const rejected = await f.api("POST", `/api/orders/${punched.order.id}/bill`, { clientRef: randomUUID(), previewKey: preview.previewKey });
     expect(rejected.statusCode, rejected.body).toBe(409);
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM bills").get()).toEqual({ n: 0 });
     const next = await f.preview(punched.order.id);
-    expect(next.taxInclusive).toBe(true);
-    expect(next.totalPaise).toBe(25000);
+    expect(next.receipt.gstMode).toBe("none");
+    expect(next.totalPaise).toBe(26900);
     expect(next.previewKey).not.toBe(preview.previewKey);
   });
 

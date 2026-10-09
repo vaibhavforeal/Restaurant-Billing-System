@@ -36,7 +36,7 @@ describe("service pricing", () => {
     expect((await add(o.id, p.id, null, ref)).order.items).toHaveLength(1);
     const preview = (await ok("POST", `/api/orders/${o.id}/bill-preview`, {})).preview;
     expect(preview.subtotalPaise).toBe(expected * 2);
-    expect(preview.totalPaise).toBe(expected * 2 * 1.05);
+    expect(preview.totalPaise).toBe(expected * 2);
     const bill = await ok("POST", `/api/orders/${o.id}/bill`, { clientRef: randomUUID(), previewKey: preview.previewKey });
     expect(bill.bill.subtotalPaise).toBe(expected * 2);
     expect((await ok("GET", `/api/orders/${o.id}`)).order.items[0].pricePaise).toBe(expected);

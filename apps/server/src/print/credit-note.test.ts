@@ -15,7 +15,7 @@ describe("credit note slip", () => {
     ({ app, fake } = freshAppWithFakeSink());
     ({ token } = await setupAdmin(app));
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
-    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: category.json().category.id, pricePaise: 3333, gstRate: 5, kotStationId: null } });
+    const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: category.json().category.id, pricePaise: 3500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201);
     productId = product.json().product.id;
   });
@@ -57,9 +57,9 @@ describe("credit note slip", () => {
     }
   });
 
-  it("prints no GST rows on a credit note against a composition bill of supply", async () => {
+  it("prints no GST rows on a credit note against a bill that charged no GST", async () => {
     const { bill } = await refunded();
-    const supply: Bill = { ...bill, receipt: { ...bill.receipt, gstScheme: "composition" } };
+    const supply: Bill = { ...bill, receipt: { ...bill.receipt, gstMode: "none" as const } };
     const note: CreditNoteView = { ...bill.creditNotes[0]!, taxablePaise: 3333, cgstPaise: 0, sgstPaise: 0, totalPaise: 3333,
       taxes: [{ gstRate: 5, taxablePaise: 3333, cgstPaise: 0, sgstPaise: 0 }] };
     const html = creditNoteHtml(note, supply);

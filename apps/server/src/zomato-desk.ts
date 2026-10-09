@@ -76,11 +76,11 @@ export function registerZomatoDesk(app: FastifyInstance): void {
         db.prepare("UPDATE orders SET zomato_status = 'ready' WHERE id = ?").run(id);
         return { billId: null, changed: true };
       }
-      // Zomato collects and pays the GST (section 9(5)): operator tax mode, no discount, whatever tax_inclusive says.
-      // The snapshot says so too (taxInclusive false), so no screen or receipt reads the bill as GST-inclusive.
+      // Zomato collects and pays the GST (section 9(5)): no GST mode, no discount, whatever the restaurant's GST setting says.
+      // The snapshot records gstMode "none" too, so no screen or receipt reads the bill as GST-inclusive.
       const issued = issueBill(db, id, {
         discountPaise: 0, discountNote: null, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role,
-        taxMode: "operator", receiptExtra: { orderType: "zomato", zomatoOrderId, gstPaidBy: "zomato", taxInclusive: false },
+        gstMode: "none", receiptExtra: { orderType: "zomato", zomatoOrderId, gstPaidBy: "zomato" },
       });
       changedStockIds.push(...issued.changedStockIds);
       const { total_paise: total } = db.prepare("SELECT total_paise FROM bills WHERE id = ?").get(issued.billId) as { total_paise: number };
