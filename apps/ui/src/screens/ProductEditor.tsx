@@ -11,14 +11,14 @@ const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zoma
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
-export function ProductEditor({ product, defaultCategoryId, categories, stations, onDone }: {
+export function ProductEditor({ product, defaultCategoryId, categories, stations, defaultGstRate, onDone }: {
   product: Product | null; defaultCategoryId: string | null; categories: Category[];
-  stations: Station[]; onDone: () => void;
+  stations: Station[]; /** The restaurant's default GST rate, which an item without its own rate uses. */ defaultGstRate: number; onDone: () => void;
 }) {
   const initial = useRef({ name: product?.name ?? "", description: product?.description ?? "",
     categoryId: product?.categoryId ?? defaultCategoryId ?? "", price: product ? paiseToRupees(product.pricePaise) : "",
     acPrice: optionalPrice(product?.acPricePaise), takeawayPrice: optionalPrice(product?.takeawayPricePaise), zomatoPrice: optionalPrice(product?.zomatoPricePaise),
-    gstRate: product?.gstRate ?? 5, isVeg: product?.isVeg ?? true, stationId: product?.kotStationId ?? "",
+    gstRate: product?.gstRate == null ? "" : String(product.gstRate), isVeg: product?.isVeg ?? true, stationId: product?.kotStationId ?? "",
     isActive: product?.isActive ?? true, isSoldOut: product?.isSoldOut ?? false }).current;
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -96,7 +96,7 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
     if (!name.trim() || pricePaise === null || !categoryId) { setError("Name, category, and a valid price are required."); return; }
     if (editingVariantId || newVariant.name.trim() || newVariant.price.trim() || newVariant.acPrice.trim() || newVariant.takeawayPrice.trim() || newVariant.zomatoPrice.trim()) { setError("Add the draft variant or clear its name and price before saving the product."); return; }
     void run("product", async () => {
-      const base = { ...servicePrices(acPrice, takeawayPrice, zomatoPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate, isVeg,
+      const base = { ...servicePrices(acPrice, takeawayPrice, zomatoPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate: gstRate === "" ? null : Number(gstRate), isVeg,
         kotStationId: stationId || null, isSoldOut, ...(photoChange === undefined ? {} : { photo: photoChange }) };
       if (product) await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ ...base, isActive }) });
       else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise, zomatoPricePaise: variant.zomatoPricePaise ?? null })) }) });
@@ -150,7 +150,7 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
         <label>Takeaway price (₹)<input inputMode="decimal" value={takeawayPrice} placeholder="Same as Non-AC" disabled={busy !== null} onChange={(event) => setTakeawayPrice(event.target.value)} /></label>
         <label>Zomato price (₹)<input inputMode="decimal" value={zomatoPrice} placeholder="Same as Takeaway" disabled={busy !== null} onChange={(event) => setZomatoPrice(event.target.value)} /><small>blank = Takeaway price</small></label>
         <p className="product-field-wide product-editor-help">Leave AC or takeaway blank to use the Non-AC price; a blank Zomato price uses the Takeaway price. Portion prices are set separately below.</p>
-        <label>GST rate<select value={gstRate} disabled={busy !== null} onChange={(event) => setGstRate(Number(event.target.value))}>{GST_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}</select></label>
+        <label>GST rate<select value={gstRate} disabled={busy !== null} onChange={(event) => setGstRate(event.target.value)}><option value="">Restaurant default ({defaultGstRate}%)</option>{GST_RATES.map((rate) => <option key={rate} value={String(rate)}>{rate}%</option>)}</select></label>
         <label>Kitchen station<select value={stationId} disabled={busy !== null} onChange={(event) => setStationId(event.target.value)}><option value="">No KOT station</option>{stationId && !stations.some((station) => station.id === stationId) && <option value={stationId}>Current inactive station</option>}{stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}</select></label>
         <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" checked={isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(event.target.checked)} /> Sold out</label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
         <p className="product-field-wide product-editor-help">Sold-out items stay visible but cannot be added to new orders. Existing order items stay unchanged. Deactivating hides the product from the menu.</p>

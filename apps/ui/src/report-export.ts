@@ -4,6 +4,9 @@ import { paiseToRupees } from "./money";
 /** The day-end line for Zomato bills, whose GST Zomato pays under section 9(5). */
 export const ZOMATO_SUPPLIES_LABEL = "Supplies under section 9(5) (GST paid by Zomato)";
 
+/** The day-end line for bills issued without GST (restaurant in "No GST charged" mode): gross value, before credit notes. */
+export const NO_GST_SALES_LABEL = "Sales without GST";
+
 export interface DayEndReport {
   date: string;
   timezone: string;
@@ -21,6 +24,8 @@ export interface DayEndReport {
   netPayments: Array<{ mode: string; amountPaise: number }>;
   /** Zomato payments received this day: money Zomato still owes, not cash in the drawer. */
   zomatoReceivablePaise: number;
+  /** Gross value of the restaurant's own bills issued this day without GST: Zomato bills are not counted, and credit notes are not subtracted. */
+  noGstSalesPaise: number;
   /** Zomato bills issued this day: supplies under section 9(5), whose GST Zomato pays. Kept out of `taxes` and `net.taxablePaise`. */
   zomatoSuppliesPaise: number;
 }
@@ -93,6 +98,7 @@ export function dayEndCsv(report: DayEndReport): string {
   const netPay = "Net payments received (after refunds)";
   for (const mode of ["cash", "upi", "card"]) amount(netPay, mode.toUpperCase(), report.netPayments.find((p) => p.mode === mode)?.amountPaise ?? 0);
   amount(netPay, "Total received", report.netPayments.reduce((sum, payment) => sum + payment.amountPaise, 0));
+  amount("Bills issued without GST", NO_GST_SALES_LABEL, report.noGstSalesPaise);
   // Never money received, and not the restaurant's own taxable value: always on their own two rows.
   amount("Zomato", ZOMATO_SUPPLIES_LABEL, report.zomatoSuppliesPaise);
   amount("Zomato", "Zomato receivable (outstanding)", report.zomatoReceivablePaise);

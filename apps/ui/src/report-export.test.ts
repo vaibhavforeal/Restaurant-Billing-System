@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayEndCsv, netTaxes, type DayEndReport } from "./report-export";
+import { dayEndCsv, netTaxes, NO_GST_SALES_LABEL, type DayEndReport } from "./report-export";
 
 function report(): DayEndReport {
   return {
@@ -16,7 +16,7 @@ function report(): DayEndReport {
       taxes: [{ gstRate: 5, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25 }] },
     refunds: [{ mode: "cash", amountPaise: 1050 }],
     net: { totalPaise: 19350, taxablePaise: 18000, cgstPaise: 700, sgstPaise: 700 },
-    netPayments: [{ mode: "cash", amountPaise: 8950 }, { mode: "upi", amountPaise: 5555 }], zomatoReceivablePaise: 58000, zomatoSuppliesPaise: 58000,
+    netPayments: [{ mode: "cash", amountPaise: 8950 }, { mode: "upi", amountPaise: 5555 }], zomatoReceivablePaise: 58000, zomatoSuppliesPaise: 58000, noGstSalesPaise: 12500,
   };
 }
 
@@ -28,8 +28,8 @@ describe("day-end CSV export", () => {
     const prefix = '"2026-09-29","Asia/Calcutta",';
     const rows = result.split("\r\n").slice(1, -1);
     expect(rows.every((row) => row.startsWith(prefix))).toBe(true);
-    // 45 rows before the two Zomato lines (section 9(5) supplies and the receivable) were added.
-    expect(rows).toHaveLength(47);
+    // 45 rows before the Sales without GST line and the two Zomato lines (section 9(5) supplies and the receivable) were added.
+    expect(rows).toHaveLength(48);
     expect(result).toContain('"Number of bills","","2","count"');
     expect(result).toContain('"Subtotal before discount","","200.00","INR"');
     expect(result).toContain('"Discounts","","10.00","INR"');
@@ -67,6 +67,10 @@ describe("day-end CSV export", () => {
     expect(result).toContain('"Zomato","Supplies under section 9(5) (GST paid by Zomato)","","580.00","INR"');
     expect(result).toContain('"Zomato","Zomato receivable (outstanding)","","580.00","INR"');
     expect(result).toContain('"Net payments received (after refunds)","Total received","","145.05","INR"');
+  });
+
+  it("exports the gross sales without GST on their own row", () => {
+    expect(dayEndCsv(report())).toContain('"Bills issued without GST","' + NO_GST_SALES_LABEL + '","","125.00","INR"');
   });
 
   it("computes net GST per rate as gross minus credit notes, including rates only credited", () => {

@@ -340,14 +340,14 @@ function GuestMenuContent({ token }: { token: string }) {
                 <div className="guest-menu-quantity"><button aria-label={`Decrease ${item.name}`} disabled={locked} onClick={() => editItem(item.key, { qty: item.qty - 1 })}>−</button><span aria-label={`Quantity for ${item.name}`}>{item.qty}</span><button aria-label={`Increase ${item.name}`} disabled={locked || item.qty >= 20} onClick={() => editItem(item.key, { qty: item.qty + 1 })}>+</button><button className="guest-menu-remove" disabled={locked} onClick={() => editItem(item.key, { qty: 0 })} aria-label={`Remove ${item.name}`}>Remove</button></div>
                 <label className="guest-menu-item-note">Instructions for {item.name}<textarea rows={2} maxLength={200} placeholder="Optional: less spicy, no onions…" value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
               </li>)}</ul>
-              <div className="guest-menu-cart-total"><div><span>Menu subtotal</span><strong>{money(subtotal)}</strong></div><p>{menu.taxInclusive ? "No tax is added to menu prices." : "Tax is added to the final bill."} Your final bill is prepared at the restaurant.</p></div>
+              <div className="guest-menu-cart-total"><div><span>Menu subtotal</span><strong>{money(subtotal)}</strong></div><p>No tax is added to menu prices. Your final bill is prepared at the restaurant.</p></div>
               {saved.reviewRequired && !needsRefresh && <label className="guest-menu-review"><input type="checkbox" disabled={locked} checked={false} onChange={() => save({ ...savedRef.current, reviewRequired: false })} /> I have reviewed the updated items and prices.</label>}
               <div className="guest-menu-cart-actions"><button className="guest-menu-primary" disabled={locked || saved.reviewRequired || loading} onClick={() => void submit()}>{sending ? "Sending…" : "Submit to staff"}</button><p>Staff must accept your request first. Pay at the restaurant.</p></div>
             </>}
           </aside>}
         </div>
       </>}
-      <footer className="guest-menu-footer">{menu?.taxInclusive ? "No tax is added to menu prices. " : ""}For allergies or special requirements, please speak with our team.</footer>
+      <footer className="guest-menu-footer">No tax is added to menu prices. For allergies or special requirements, please speak with our team.</footer>
     </div>
     {menu?.orderingAvailable && saved.cart.length > 0 && !receipt && <button className="guest-menu-cart-shortcut" onClick={() => { cartRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); cartRef.current?.focus({ preventScroll: true }); }}><span>View request · {count} item{count === 1 ? "" : "s"}</span><strong>{money(subtotal)}</strong></button>}
   </main>;
@@ -392,7 +392,7 @@ function ReceiptCard({ receipt, error, onNew, orderingAvailable }: { receipt: Gu
       <ul>{preparation.items.map((item, index) => <li key={`${index}:${item.name}`}><span>{item.qty} × {item.name}</span><span className={`guest-menu-preparation-state guest-menu-preparation-${item.state}`}>{PREPARATION_LABELS[item.state]}</span></li>)}</ul>
       {preparation.hasChanges && <p className="guest-menu-small">Our team updated some items or quantities. Please check with staff for details and your final bill.</p>}
     </div>}
-    <details><summary>View request · {money(receipt.subtotalPaise)}</summary><ul className="guest-menu-receipt-items">{receipt.items.map((item, index) => <li key={`${item.productId}:${item.variantId}:${index}`}><span><strong>{item.qty} × {item.name}</strong>{item.note && <small>{item.note}</small>}</span><span>{money(item.qty * item.pricePaise)}</span></li>)}</ul><p className="guest-menu-small">Menu subtotal · {receipt.taxInclusive ? "No tax added." : "Tax is added to the final bill."} Pay at the restaurant.</p></details>
+    <details><summary>View request · {money(receipt.subtotalPaise)}</summary><ul className="guest-menu-receipt-items">{receipt.items.map((item, index) => <li key={`${item.productId}:${item.variantId}:${index}`}><span><strong>{item.qty} × {item.name}</strong>{item.note && <small>{item.note}</small>}</span><span>{money(item.qty * item.pricePaise)}</span></li>)}</ul><p className="guest-menu-small">Menu subtotal · No tax is added to menu prices. Pay at the restaurant.</p></details>
     {receipt.status !== "pending" && orderingAvailable && <button onClick={onNew}>{receipt.status === "accepted" ? "Order more" : "Start a new request"}</button>}
   </section>;
 }

@@ -1,8 +1,14 @@
 import type { DishCost, DishPrice } from "@forkflow/domain";
+import type { GstMode } from "@forkflow/domain/gst";
 import { formatMovementCost } from "./stock-costs";
 
 /** Upgrade note shown wherever costing is unavailable on Basic. All costing, whatever the recipe size, is Pro. */
 export const COSTING_PRO_NOTE = "Ingredient costing and profit reports are part of the Pro plan.";
+
+/** What the selling prices on the Dish costing tab are measured against, which depends on whether the restaurant charges GST. */
+export function costingPriceNote(gstMode: GstMode): string {
+  return gstMode === "included" ? "each selling price before GST (menu prices include GST)" : "each selling price (no GST is charged)";
+}
 
 /** One service-price cell on the Dish costing tab: "price · cost % · margin", or why it cannot be costed. */
 export function formatTierPrice(price: DishPrice | undefined): string {

@@ -29,6 +29,7 @@ export function Catalog() {
   const zomato = isEnabled("zomato");
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [defaultGstRate, setDefaultGstRate] = useState(5);
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [editing, setEditing] = useState<Product | "new" | null>(null);
@@ -41,11 +42,12 @@ export function Catalog() {
   async function reload() {
     const [c, p, s] = await Promise.all([
       apiFetch<{ categories: Category[] }>("/api/categories"),
-      apiFetch<{ products: Product[] }>("/api/products"),
+      apiFetch<{ products: Product[]; defaultGstRate: number }>("/api/products"),
       apiFetch<{ stations: StationInfo[] }>("/api/kot-stations"),
     ]);
     setCategories(c.categories);
     setProducts(p.products);
+    setDefaultGstRate(p.defaultGstRate);
     setStations(s.stations.filter((st) => st.isActive));
     setSelectedCat((cur) => cur ?? c.categories[0]?.id ?? null);
   }
@@ -108,6 +110,7 @@ export function Catalog() {
         product={editing === "new" ? null : editing}
         defaultCategoryId={selectedCat}
         categories={categories}
+        defaultGstRate={defaultGstRate}
         stations={stations}
         onDone={() => {
           setEditing(null);
@@ -182,7 +185,7 @@ export function Catalog() {
                 <td className="pos-money">₹{paiseToRupees(p.acPricePaise ?? p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.takeawayPricePaise ?? p.pricePaise)}</td>
                 {zomato && <td className="pos-money">₹{paiseToRupees(priceForTier(p, "zomato"))}</td>}
-                <td>{p.gstRate}%</td>
+                <td>{p.gstRate === null ? "Default" : `${p.gstRate}%`}</td>
                 <td>{p.isVeg ? "🟢" : "🔴"}</td>
                 <td>{p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
                 <td className="catalog-availability"><span className={p.isSoldOut ? "sold-out" : ""}>{p.isSoldOut ? "Sold out" : "Available"}</span><button disabled={busy !== null} aria-label={`Mark ${p.name} ${p.isSoldOut ? "available" : "sold out"}`} onClick={() => toggleSoldOut(p)}>{busy === p.id ? "Saving…" : p.isSoldOut ? "Mark available" : "Mark sold out"}</button></td>

@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { PaymentMode } from "@forkflow/domain";
+import { receiptGstMode } from "@forkflow/domain/gst";
 import { ApiError, apiFetch } from "./api";
 import type { Order } from "./types";
 import { uuid } from "./uuid";
@@ -29,19 +30,18 @@ export function billContextLabel(receipt: { orderType: "dine_in" | "parcel" | "z
   return `${receipt.tableName} · ${receipt.splitLabel ?? "A"}`;
 }
 
-/** Who, if anyone, charges GST on a bill: from its receipt snapshot. */
-export type BillGst = { gstPaidBy?: "zomato" | undefined; gstScheme?: "composition" | undefined };
+/** The receipt fields that say who charges GST on a bill. Older snapshots carry only the legacy flags, which `receiptGstMode` reads. */
+export type BillGst = Parameters<typeof receiptGstMode>[0];
 
-/** The GST line of a bill. A Zomato snapshot still copies the restaurant's tax-inclusive setting, so Zomato wins. */
-export function taxModeNote(bill: { taxInclusive: boolean } & BillGst): string {
-  if (bill.gstPaidBy === "zomato") return "GST paid by Zomato (section 9(5))";
-  if (bill.gstScheme === "composition") return "Composition scheme: no GST charged";
-  return bill.taxInclusive ? "Menu prices include GST" : "GST added to menu prices";
+/** The GST line of a bill. Zomato wins: its snapshot also carries the restaurant's mode, but Zomato pays the GST. */
+export function gstNote(receipt: BillGst): string {
+  if (receipt.gstPaidBy === "zomato") return "GST paid by Zomato (section 9(5))";
+  return receiptGstMode(receipt) === "none" ? "No GST charged" : "Includes GST";
 }
 
-/** The per-rate GST rows a bill shows: none when Zomato pays the GST or the restaurant is under composition. */
-export function billTaxRates<T>(bill: { taxes: T[] }, gst: BillGst | undefined): T[] {
-  return gst?.gstPaidBy === "zomato" || gst?.gstScheme === "composition" ? [] : bill.taxes;
+/** The per-rate GST rows a bill shows: none when Zomato pays the GST or the bill was issued without GST. */
+export function billTaxRates<T>(bill: { taxes: T[] }, receipt: BillGst | undefined): T[] {
+  return !receipt || (receipt.gstPaidBy !== "zomato" && receiptGstMode(receipt) === "included") ? bill.taxes : [];
 }
 
 /**

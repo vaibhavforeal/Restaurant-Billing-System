@@ -1,4 +1,5 @@
 import type { ItemPrices, PriceTier } from "@forkflow/domain/pricing";
+import type { DefaultGstRate, GstMode } from "@forkflow/domain/gst";
 import type { ReceiptStyle } from "@forkflow/domain/receipt-styles";
 export interface Category {
   id: string;
@@ -23,7 +24,8 @@ export interface Product extends ItemPrices {
   photoVersion: string | null;
   photoUrl: string | null;
   pricePaise: number;
-  gstRate: number;
+  /** null: the item uses the restaurant's default GST rate. */
+  gstRate: number | null;
   isVeg: boolean;
   kotStationId: string | null;
   isActive: boolean;
@@ -78,10 +80,11 @@ export interface AdminUser {
 }
 
 export interface SettingsData {
-  gstScheme: "regular" | "composition";
+  gstMode: GstMode;
+  /** The restaurant's default GST rate, used by items without their own rate. Only meaningful when `gstMode` is "included". */
+  gstRate: DefaultGstRate;
   receiptStyle: ReceiptStyle;
   upiId: string;
-  taxInclusive: boolean;
   restaurantName: string;
   address: string;
   gstin: string;

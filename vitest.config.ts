@@ -6,10 +6,12 @@ const pkg = (name: string) =>
 
 export default defineConfig({
   resolve: {
-    alias: {
-      "@forkflow/domain": pkg("domain"),
-      "@forkflow/core": pkg("core"),
-    },
+    alias: [
+      // Subpath exports (e.g. "@forkflow/domain/gst") resolve to their own source file, not under the index.
+      { find: /^@forkflow\/domain\/(.+)$/, replacement: fileURLToPath(new URL("./packages/domain/src/$1.ts", import.meta.url)) },
+      { find: "@forkflow/domain", replacement: pkg("domain") },
+      { find: "@forkflow/core", replacement: pkg("core") },
+    ],
   },
   test: {
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "tools/*.test.ts"],

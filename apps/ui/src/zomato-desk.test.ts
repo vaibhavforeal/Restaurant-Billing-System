@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, validateAgeThresholds, zomatoAgeTone, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
+import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, gstNote, validateAgeThresholds, zomatoAgeTone, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -141,19 +141,23 @@ describe("billContextLabel", () => {
   });
 });
 
-describe("taxModeNote", () => {
-  it("says GST is paid by Zomato even when the snapshot copied tax-inclusive pricing", () => {
-    expect(taxModeNote({ taxInclusive: true, gstPaidBy: "zomato" })).toBe("GST paid by Zomato (section 9(5))");
-    expect(taxModeNote({ taxInclusive: false, gstPaidBy: "zomato" })).toBe("GST paid by Zomato (section 9(5))");
+describe("gstNote", () => {
+  it("says GST is paid by Zomato even when the snapshot also carries the restaurant's mode", () => {
+    expect(gstNote({ gstMode: "included", gstPaidBy: "zomato" })).toBe("GST paid by Zomato (section 9(5))");
+    expect(gstNote({ gstMode: "none", gstPaidBy: "zomato" })).toBe("GST paid by Zomato (section 9(5))");
   });
 
-  it("keeps the restaurant wording otherwise", () => {
-    expect(taxModeNote({ taxInclusive: true })).toBe("Menu prices include GST");
-    expect(taxModeNote({ taxInclusive: false })).toBe("GST added to menu prices");
+  it("says no GST is charged for a bill issued without GST", () => {
+    expect(gstNote({ gstMode: "none" })).toBe("No GST charged");
   });
 
-  it("names a composition bill of supply, which charges no GST", () => {
-    expect(taxModeNote({ taxInclusive: false, gstScheme: "composition" })).toBe("Composition scheme: no GST charged");
+  it("says the prices include GST otherwise", () => {
+    expect(gstNote({ gstMode: "included" })).toBe("Includes GST");
+  });
+
+  it("reads old snapshots through their legacy flags", () => {
+    expect(gstNote({ gstScheme: "composition" })).toBe("No GST charged");
+    expect(gstNote({ taxInclusive: false })).toBe("Includes GST");
   });
 });
 
@@ -177,13 +181,16 @@ describe("billTaxRates", () => {
   const taxes = [{ gstRate: 5, taxablePaise: 25000, cgstPaise: 0, sgstPaise: 0 }];
   it("lists no per-rate GST rows on a bill whose GST Zomato pays", () => {
     expect(billTaxRates({ taxes }, { gstPaidBy: "zomato" })).toEqual([]);
+    expect(billTaxRates({ taxes }, { gstMode: "included", gstPaidBy: "zomato" })).toEqual([]);
   });
-  it("lists no per-rate GST rows on a composition bill of supply", () => {
+  it("lists no per-rate GST rows on a bill issued without GST", () => {
+    expect(billTaxRates({ taxes }, { gstMode: "none" })).toEqual([]);
     expect(billTaxRates({ taxes }, { gstScheme: "composition" })).toEqual([]);
   });
   it("lists the per-rate GST rows on the restaurant's own bills", () => {
     expect(billTaxRates({ taxes }, undefined)).toBe(taxes);
     expect(billTaxRates({ taxes }, {})).toBe(taxes);
+    expect(billTaxRates({ taxes }, { gstMode: "included" })).toBe(taxes);
   });
 });
 

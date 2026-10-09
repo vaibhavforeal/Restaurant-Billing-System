@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
+import { receiptGstMode } from "@forkflow/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
@@ -12,7 +13,7 @@ import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { billPaymentLabel, billTaxRates, taxModeNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
+import { billPaymentLabel, billTaxRates, gstNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
 
@@ -25,20 +26,21 @@ type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string;
 
 export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
   const rates = billTaxRates(value, gst);
-  const noGst = gst?.gstPaidBy === "zomato" || gst?.gstScheme === "composition";
+  // Nothing GST-related is shown for a bill issued without GST or one whose GST Zomato pays.
+  const noGst = gst !== undefined && (gst.gstPaidBy === "zomato" || receiptGstMode(gst) === "none");
+  const includedPaise = value.cgstPaise + value.sgstPaise;
   const breakdown = <>
-    <p>{taxModeNote({ taxInclusive: value.taxInclusive, ...gst })}</p>
-    <p>Subtotal: {money(value.subtotalPaise)} · Discount: {money(value.discountPaise)}</p>
+    {gst && <p>{gstNote(gst)}</p>}
     {!noGst && <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "right", borderSpacing: "8px" }}>
       <thead><tr><th scope="col">GST rate</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead>
       <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
     </table></div>}
-    <p>Round off: {money(value.roundingPaise)}</p>
   </>;
-  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{!noGst && <><dt>CGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.cgstPaise, 0))}</dd><dt>SGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.sgstPaise, 0))}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
+  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd><dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
+  const includes = !noGst && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
-    {compact ? <>{amounts}{payable}<details className="bill-tax-details"><summary>Tax details</summary>{breakdown}</details></> : <>{breakdown}{payable}</>}
+    {compact ? <>{amounts}{payable}{includes}<details className="bill-tax-details"><summary>Tax details</summary>{breakdown}</details></> : <>{amounts}{payable}{includes}{breakdown}</>}
   </div>;
 }
 

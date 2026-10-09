@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DishCost } from "@forkflow/domain";
 import { PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
+import type { GstMode } from "@forkflow/domain/gst";
 import { apiFetch } from "../api";
-import { COSTING_PRO_NOTE, formatTierPrice, sortDishes } from "../dish-costing";
+import { COSTING_PRO_NOTE, costingPriceNote, formatTierPrice, sortDishes } from "../dish-costing";
 import { formatMovementCost } from "../stock-costs";
 import { useIntegrations } from "../integrations";
 
@@ -12,14 +13,14 @@ const cell = { padding: "6px 10px", verticalAlign: "top" } as const;
 export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refresh: number }) {
   const { isEnabled } = useIntegrations();
   const tiers = TIERS.filter((tier) => tier !== "zomato" || isEnabled("zomato"));
-  const [data, setData] = useState<{ dishes: DishCost[]; taxInclusive: boolean } | null>(null);
+  const [data, setData] = useState<{ dishes: DishCost[]; gstMode: GstMode } | null>(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("all");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!fullRecipe) { setData(null); setError(""); return; }
     const controller = new AbortController();
-    apiFetch<{ dishes: DishCost[]; taxInclusive: boolean }>("/api/costing/dishes", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+    apiFetch<{ dishes: DishCost[]; gstMode: GstMode }>("/api/costing/dishes", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
       .then((result) => { if (!controller.signal.aborted) { setData(result); setError(""); } })
       .catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not load dish costing"); });
     return () => controller.abort();
@@ -35,7 +36,7 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
 
   return <section className="dish-costing" aria-label="Dish costing">
     <h3>Dish costing</h3>
-    <p className="muted">Current recipe cost at today's average ingredient costs, against each selling price before GST{data?.taxInclusive ? " (menu prices include GST)" : ""}. Highest cost % first.</p>
+    <p className="muted">Current recipe cost at today's average ingredient costs, against {data ? costingPriceNote(data.gstMode) : "each selling price"}. Highest cost % first.</p>
     {error && <div className="recipe-error"><p role="alert">{error}</p><button onClick={() => setRetry((value) => value + 1)}>Retry</button></div>}
     {!data && !error && <p role="status">Loading dish costing…</p>}
     {data && <>

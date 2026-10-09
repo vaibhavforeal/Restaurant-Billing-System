@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DishCost } from "@forkflow/domain";
-import { COSTING_PRO_NOTE, formatTierPrice, sortDishes } from "./dish-costing";
+import { COSTING_PRO_NOTE, costingPriceNote, formatTierPrice, sortDishes } from "./dish-costing";
 
 function dish(name: string, category: string, nonAcPercent: number | null, status: DishCost["status"] = nonAcPercent === null ? "incomplete" : "complete"): DishCost {
   const known = nonAcPercent !== null;
@@ -72,5 +72,14 @@ describe("formatTierPrice", () => {
 describe("COSTING_PRO_NOTE", () => {
   it("says all costing is Pro without implying Basic can cost single-ingredient recipes", () => {
     expect(COSTING_PRO_NOTE).toBe("Ingredient costing and profit reports are part of the Pro plan.");
+  });
+});
+
+describe("costingPriceNote", () => {
+  it("measures against the price before GST when menu prices include GST", () => {
+    expect(costingPriceNote("included")).toBe("each selling price before GST (menu prices include GST)");
+  });
+  it("measures against the plain selling price when no GST is charged", () => {
+    expect(costingPriceNote("none")).toBe("each selling price (no GST is charged)");
   });
 });

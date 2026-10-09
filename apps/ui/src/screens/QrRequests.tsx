@@ -164,7 +164,7 @@ function RequestCard({ request, table, canAccept, busy, saving, onReview, onOpen
   return <article className="qr-request-card" aria-label={`QR request from ${request.tableName}`}>
     <div className="qr-request-title"><div><h4>{request.tableName}</h4><time dateTime={new Date(request.createdAt).toISOString()}>{when(request.createdAt)}</time></div><span className={`qr-request-status ${request.status}`}>{request.status}</span></div>
     <ul className="qr-request-items">{request.items.map((item, index) => <li key={`${item.productId}:${item.variantId ?? "base"}:${index}`}><div><span><strong>{item.qty} ×</strong> {item.name}</span><span>{amount(item.pricePaise * item.qty)}</span></div>{item.note && <p className="qr-item-note">Note: {item.note}</p>}</li>)}</ul>
-    <div className="qr-request-subtotal"><span>Menu subtotal {request.taxInclusive ? "(no GST added)" : "(before GST)"}</span><strong>{amount(request.subtotalPaise)}</strong></div>
+    <div className="qr-request-subtotal"><span>Menu subtotal</span><strong>{amount(request.subtotalPaise)}</strong></div>
     {request.reason && <p className="qr-review-note">{request.reason}</p>}
     {request.reviewedAt && <p className="qr-help">Reviewed {when(request.reviewedAt)}{request.reviewedByName ? ` by ${request.reviewedByName}` : ""}.</p>}
     {request.status === "accepted" && request.orderId && <button disabled={busy} onClick={() => onOpenOrder(request.orderId!)}>Open accepted order</button>}
