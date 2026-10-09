@@ -251,8 +251,9 @@ describe("guest QR ordering", () => {
     expect(hiddenProduct.statusCode).toBe(201);
     expect((await f.api("PATCH", `/api/categories/${hiddenCategory.json().category.id}`, { isActive: false })).statusCode).toBe(200);
     const menu = await f.menu();
-    expect(Object.keys(menu).sort()).toEqual(["categories", "menuVersion", "orderingAvailable", "products", "restaurantName", "table", "taxInclusive"]);
-    expect(menu).toMatchObject({ restaurantName: SETUP.restaurantName, table: { id: f.diningTable.id, name: "T1", area: "Patio" }, orderingAvailable: true, taxInclusive: false });
+    expect(Object.keys(menu).sort()).toEqual(["categories", "menuVersion", "orderingAvailable", "products", "restaurantName", "table"]);
+    expect(menu).toMatchObject({ restaurantName: SETUP.restaurantName, table: { id: f.diningTable.id, name: "T1", area: "Patio" }, orderingAvailable: true });
+    expect(menu).not.toHaveProperty("taxInclusive");
     expect(menu.menuVersion).toMatch(/^[a-f0-9]{64}$/);
     expect(menu.categories).toEqual([{ id: f.category.id, name: "Meals" }]);
     expect(menu.products.map((product) => product.id).sort()).toEqual([f.meal.id, f.water.id].sort());
@@ -272,7 +273,7 @@ describe("guest QR ordering", () => {
     expect((await f.app.inject({ method: "POST", url: `/api/qr/requests/${first.request.id}/accept`, headers: { "x-qr-token": f.qrToken }, payload: { orderId: null } })).statusCode).toBe(401);
     const own = await f.receipt(first.request.id, first.body.receiptToken);
     expect(own.statusCode, own.body).toBe(200);
-    expect(Object.keys(own.json().request).sort()).toEqual(["createdAt", "expiresAt", "id", "items", "preparation", "reason", "status", "subtotalPaise", "tableName", "taxInclusive"]);
+    expect(Object.keys(own.json().request).sort()).toEqual(["createdAt", "expiresAt", "id", "items", "preparation", "reason", "status", "subtotalPaise", "tableName"]);
     expect((await f.receipt(second.request.id, first.body.receiptToken)).statusCode).toBe(404);
     expect((await f.receipt(first.request.id, f.qrToken)).statusCode).toBe(404);
     expect((await f.app.inject({ url: `/api/guest/requests/${first.request.id}`, headers: { "x-qr-token": f.qrToken } })).statusCode).toBeGreaterThanOrEqual(400);
@@ -377,7 +378,7 @@ describe("guest QR ordering", () => {
     expect(f.count("guest_requests")).toBe(0);
   });
 
-  it("rejects a stale menu version after price or tax changes before recording a request", async () => {
+  it("rejects a stale menu version after a price or default GST rate change before recording a request", async () => {
     const f = await fixture(); const stalePrice = await f.submission();
     expect((await f.api("PATCH", `/api/variants/${f.meal.variants[0]!.id}`, { pricePaise: 18000 })).statusCode).toBe(200);
     const priceChanged = await f.submit(stalePrice);
@@ -385,15 +386,39 @@ describe("guest QR ordering", () => {
     expect(priceChanged.json().code).toBe("menu_changed");
     const newMenu = await f.menu();
     expect(newMenu.menuVersion).not.toBe(stalePrice.menuVersion);
-    const staleTax = await f.submission();
+    const defaultItem = await f.api("POST", "/api/products", { categoryId: f.category.id, name: "Default-rate tea", pricePaise: 2000 });
+    expect(defaultItem.statusCode, defaultItem.body).toBe(201);
+    const before = await f.menu();
+    const staleRate = await f.submission();
+    expect(before.products.find((p) => p.name === "Default-rate tea")!.gstRate).toBe(5);
     const settings = (await f.api("GET", "/api/settings")).json().settings;
-    expect((await f.api("PUT", "/api/settings", { ...settings, taxInclusive: true })).statusCode).toBe(200);
-    const taxChanged = await f.submit(staleTax);
-    expect(taxChanged.statusCode, taxChanged.body).toBe(409);
-    expect(taxChanged.json().code).toBe("menu_changed");
+    expect((await f.api("PUT", "/api/settings", { ...settings, gstRate: 12 })).statusCode).toBe(200);
+    const after = await f.menu();
+    expect(after.products.find((p) => p.name === "Default-rate tea")!.gstRate).toBe(12);
+    expect(after.menuVersion).not.toBe(before.menuVersion);
+    const rateChanged = await f.submit(staleRate);
+    expect(rateChanged.statusCode, rateChanged.body).toBe(409);
+    expect(rateChanged.json().code).toBe("menu_changed");
     expect(f.count("guest_requests")).toBe(0);
     const fresh = await f.request();
-    expect(fresh.request).toMatchObject({ taxInclusive: true, subtotalPaise: 36000 });
+    expect(fresh.request).not.toHaveProperty("taxInclusive");
+    expect(fresh.request).toMatchObject({ subtotalPaise: 36000 });
+  });
+
+  it("records the effective GST rate on an accepted request's order item", async () => {
+    const f = await fixture();
+    const tea = (await f.api("POST", "/api/products", { categoryId: f.category.id, name: "Default-rate tea", pricePaise: 2000 })).json().product as Product;
+    const menu = await f.menu();
+    expect(menu.products.find((p) => p.id === tea.id)!.gstRate).toBe(5);
+    const body = { clientRef: randomUUID(), receiptToken: randomBytes(32).toString("hex"), menuVersion: menu.menuVersion,
+      items: [{ productId: tea.id, variantId: null, qty: 1, note: "" }] };
+    const submitted = await f.submit(body);
+    expect(submitted.statusCode, submitted.body).toBe(201);
+    expect(submitted.json().request.items[0].gstRate).toBe(5);
+    const accepted = await f.accept(submitted.json().request.id);
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    const row = f.app.db.prepare("SELECT gst_rate_snapshot FROM order_items WHERE product_id = ?").get(tea.id) as { gst_rate_snapshot: number };
+    expect(row.gst_rate_snapshot).toBe(5);
   });
 
   it("uses server price snapshots and prevents approval after their prices change", async () => {

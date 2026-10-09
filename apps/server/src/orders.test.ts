@@ -755,6 +755,35 @@ describe("orders: items punch/update/cancel", () => {
   });
 });
 
+describe("orders: GST rate at punch", () => {
+  it("records the item override, else the default, at punch", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { categoryId } = await fixtures(app, admin.token);
+    const make = async (name: string, gstRate?: number | null) => (await app.inject({
+      method: "POST", url: "/api/products", headers: auth(admin.token),
+      payload: { categoryId, name, pricePaise: 10000, ...(gstRate === undefined ? {} : { gstRate }) },
+    })).json().product.id as string;
+    const defaultItem = await make("Tea", null);
+    const overrideItem = await make("Cake", 18);
+    const orderId = (await app.inject({ method: "POST", url: "/api/orders", payload: { clientRef: "gst-punch", type: "parcel" }, headers: auth(admin.token) })).json().order.id;
+    const punch = (items: object[]) => app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, payload: { items }, headers: auth(admin.token) });
+
+    const first = await punch([{ productId: defaultItem, variantId: null, qty: 1 }, { productId: overrideItem, variantId: null, qty: 1 }]);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().order.items.map((i: { name: string; gstRate: number }) => [i.name, i.gstRate])).toEqual([["Tea", 5], ["Cake", 18]]);
+
+    const changed = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
+    const put = await app.inject({ method: "PUT", url: "/api/settings", payload: { ...changed.json().settings, gstRate: 12 }, headers: auth(admin.token) });
+    expect(put.statusCode, put.body).toBe(200);
+
+    const second = await punch([{ productId: defaultItem, variantId: null, qty: 1 }]);
+    expect(second.statusCode, second.body).toBe(200);
+    const rates = second.json().order.items.map((i: { name: string; gstRate: number }) => [i.name, i.gstRate]);
+    expect(rates).toEqual([["Tea", 5], ["Cake", 18], ["Tea", 12]]);
+  });
+});
+
 describe("orders: order cancel", () => {
   it("blocks cancel if sent items exist, allows after cancelling them", async () => {
     app = freshApp();

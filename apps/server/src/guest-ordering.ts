@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { GuestSubmission, nextSplitLabel, uuidv7, type Database, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "@forkflow/domain";
+import { GuestSubmission, effectiveGstRate, nextSplitLabel, uuidv7, type Database, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "@forkflow/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import QRCode from "qrcode";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { httpError } from "./http-error.js";
 import { loadOrderJson, type OrderRow } from "./mappers.js";
 import { lanUrls } from "./system.js";
 import { menuPhotoUrl } from "./menu-photo.js";
+import { readGstSettings } from "./gst-settings.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 const TTL = 2 * 60 * 60 * 1000;
@@ -16,7 +17,7 @@ const credential = (value: unknown) => typeof value === "string" && /^[a-f0-9]{6
 interface TableRow { price_tier: "non_ac" | "ac"; id: string; name: string; area: string | null; is_active: number; enabled: number | null; token: string | null }
 interface RequestRow {
   id: string; client_ref: string; table_id: string; table_name: string; receipt_hash: string; fingerprint: string;
-  items_json: string; subtotal_paise: number; tax_inclusive: number; status: GuestReceipt["status"];
+  items_json: string; subtotal_paise: number; status: GuestReceipt["status"];
   created_at: number; expires_at: number; reason: string | null; order_id: string | null;
   reviewed_at: number | null; reviewed_by: string | null; decision_json: string | null; reviewer_name: string | null;
 }
@@ -51,7 +52,7 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
 }
 const receiptJson = (db: Database, r: RequestRow): GuestReceipt => ({
   id: r.id, status: r.status, tableName: r.table_name, items: JSON.parse(r.items_json) as GuestRequestItem[],
-  subtotalPaise: r.subtotal_paise, taxInclusive: r.tax_inclusive === 1, createdAt: r.created_at,
+  subtotalPaise: r.subtotal_paise, createdAt: r.created_at,
   expiresAt: r.expires_at, reason: r.reason, preparation: preparation(db, r),
 });
 const requestJson = (db: Database, r: RequestRow): GuestRequest => ({ ...receiptJson(db, r), tableId: r.table_id, orderId: r.order_id,
@@ -98,17 +99,18 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     return row;
   }
   function menu(table: TableRow, orderingAvailable: boolean): GuestMenu {
-    const settings = app.db.prepare("SELECT restaurant_name, tax_inclusive, gst_scheme FROM settings WHERE id = 1").get() as { restaurant_name: string; tax_inclusive: number; gst_scheme: string };
+    const settings = app.db.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name: string };
+    const { gstRate: defaultRate } = readGstSettings(app.db);
     const categories = app.db.prepare("SELECT id, name FROM categories WHERE is_active = 1 ORDER BY sort_order, name, id").all() as GuestMenu["categories"];
     const products = app.db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, CASE WHEN ? = 'ac' THEN COALESCE(p.ac_price_paise, p.price_paise) ELSE p.price_paise END AS pricePaise,
-      p.gst_rate AS gstRate, p.is_veg, p.description, p.is_sold_out, p.photo_hash FROM products p JOIN categories c ON c.id = p.category_id
-      WHERE p.is_active = 1 AND c.is_active = 1 ORDER BY p.name, p.id`).all(table.price_tier) as Array<Omit<GuestMenu["products"][number], "isVeg" | "variants" | "photoUrl" | "isSoldOut"> & { is_veg: number; is_sold_out: number; photo_hash: string | null }>;
+      p.gst_rate AS itemGstRate, p.is_veg, p.description, p.is_sold_out, p.photo_hash FROM products p JOIN categories c ON c.id = p.category_id
+      WHERE p.is_active = 1 AND c.is_active = 1 ORDER BY p.name, p.id`).all(table.price_tier) as Array<Omit<GuestMenu["products"][number], "isVeg" | "variants" | "photoUrl" | "isSoldOut" | "gstRate"> & { itemGstRate: number | null; is_veg: number; is_sold_out: number; photo_hash: string | null }>;
     const variants = app.db.prepare("SELECT id, product_id, name, CASE WHEN ? = 'ac' THEN COALESCE(ac_price_paise, price_paise) ELSE price_paise END AS pricePaise FROM variants WHERE is_active = 1 ORDER BY name, id").all(table.price_tier) as Array<{ id: string; product_id: string; name: string; pricePaise: number }>;
     const byProduct = new Map<string, GuestMenu["products"][number]["variants"]>();
     for (const v of variants) { const list = byProduct.get(v.product_id) ?? []; list.push({ id: v.id, name: v.name, pricePaise: v.pricePaise }); byProduct.set(v.product_id, list); }
-    const visible = products.map(({ is_veg, is_sold_out, photo_hash, ...p }) => ({ ...p, isVeg: is_veg === 1, isSoldOut: is_sold_out === 1, photoUrl: menuPhotoUrl(p.id, photo_hash), variants: byProduct.get(p.id) ?? [] }));
-    // Guests see whether tax is added on top; a composition restaurant adds none, like an inclusive one.
-    const snapshot = { taxInclusive: settings.tax_inclusive === 1 || settings.gst_scheme === "composition", categories, products: visible };
+    const visible = products.map(({ is_veg, is_sold_out, photo_hash, itemGstRate, ...p }) => ({ ...p, gstRate: effectiveGstRate(itemGstRate, defaultRate), isVeg: is_veg === 1, isSoldOut: is_sold_out === 1, photoUrl: menuPhotoUrl(p.id, photo_hash), variants: byProduct.get(p.id) ?? [] }));
+    // Prices never have tax added on top, and the version covers every effective rate.
+    const snapshot = { categories, products: visible };
     const pricing = { ...snapshot, products: visible.map(({ description: _description, photoUrl: _photoUrl, ...p }) => p) };
     return { restaurantName: settings.restaurant_name, table: { id: table.id, name: table.name, area: table.area },
       orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot };
@@ -148,9 +150,9 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     app.db.transaction(() => {
       const pending = app.db.prepare("SELECT COUNT(*) AS n FROM guest_requests WHERE table_id = ? AND status = 'pending'").get(table.id) as { n: number };
       if (pending.n >= 10) throw httpError(429, "This table has several requests awaiting review. Please ask a member of staff.");
-      app.db.prepare(`INSERT INTO guest_requests (id, client_ref, table_id, table_name, receipt_hash, fingerprint, items_json, subtotal_paise, tax_inclusive, created_at, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.clientRef, table.id, table.name, hash(body.receiptToken), fingerprint,
-          JSON.stringify(items), items.reduce((sum, i) => sum + i.pricePaise * i.qty, 0), current.taxInclusive ? 1 : 0, now, now + TTL);
+      app.db.prepare(`INSERT INTO guest_requests (id, client_ref, table_id, table_name, receipt_hash, fingerprint, items_json, subtotal_paise, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.clientRef, table.id, table.name, hash(body.receiptToken), fingerprint,
+          JSON.stringify(items), items.reduce((sum, i) => sum + i.pricePaise * i.qty, 0), now, now + TTL);
     })();
     changed();
     return reply.status(201).send({ request: receiptJson(app.db, getRequest(id)!) });
@@ -225,7 +227,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       if (!table?.is_active) throw httpError(409, "The table is no longer active");
       const items = JSON.parse(row.items_json) as GuestRequestItem[], current = menu(table, true);
       const latest = snapshotItems(current, items.map(({ productId, variantId, qty, note }) => ({ productId, variantId, qty, note })));
-      if (JSON.stringify(latest) !== JSON.stringify(items) || current.taxInclusive !== (row.tax_inclusive === 1)) {
+      if (JSON.stringify(latest) !== JSON.stringify(items)) {
         throw httpError(409, "The requested items or prices have changed. Reject this request and ask the customer to review the menu.", "menu_changed");
       }
       const now = Date.now(), target = body.orderId ?? uuidv7();

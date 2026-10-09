@@ -2,10 +2,11 @@ import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFo
 import { z } from "zod";
 import { rowPrice, tablePriceTier, type PriceRow } from "./pricing.js";
 import { can } from "@forkflow/core";
+import { readGstSettings } from "./gst-settings.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
-import { reverseStock } from "@forkflow/domain";
+import { effectiveGstRate, reverseStock } from "@forkflow/domain";
 import { publishStock } from "./stock.js";
 import { cancelSlip } from "./print/templates.js";
 import { readProfile } from "./print/profile.js";
@@ -160,7 +161,7 @@ export function registerOrders(app: FastifyInstance): void {
       id: string;
       name: string;
       price_paise: number;
-      gst_rate: number;
+      gst_rate: number | null;
       is_active: number;
       is_sold_out: number;
     }
@@ -172,6 +173,7 @@ export function registerOrders(app: FastifyInstance): void {
       is_active: number;
     }
 
+    const defaultGstRate = readGstSettings(app.db).gstRate;
     const itemsToInsert: Array<{
       clientRef: string | null;
       productId: string;
@@ -209,7 +211,7 @@ export function registerOrders(app: FastifyInstance): void {
         variantId: item.variantId,
         name,
         pricePaise,
-        gstRate: product.gst_rate,
+        gstRate: effectiveGstRate(product.gst_rate, defaultGstRate),
         qty: item.qty,
         note: item.note,
       });
