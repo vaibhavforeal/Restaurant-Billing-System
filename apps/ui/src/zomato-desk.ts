@@ -88,15 +88,16 @@ export function validateAgeThresholds(warnMinutes: number, lateMinutes: number):
 /**
  * How urgent a Zomato card looks, from the minutes since the order was opened.
  *
- * Decision for the owner: when does a card turn amber ("warn") and red ("late")?
+ * A card turns amber at the amber minute and red at the red minute (both inclusive).
  * The restaurant sets the two thresholds in Marketplace > Zomato > Settings (amber after 15
  * and red after 25 minutes unless changed). Zomato tracks the restaurant's preparation time,
  * so a slow order costs ratings and rider waiting time, but a screen that is mostly red stops
  * meaning anything; red should be the exception.
  */
 export function zomatoAgeTone(minutes: number, thresholds: { warnMinutes: number; lateMinutes: number }): ZomatoTone {
-  void minutes; void thresholds;
-  return "ok"; // TODO(you): compare minutes with thresholds
+  if (minutes >= thresholds.lateMinutes) return "late";
+  if (minutes >= thresholds.warnMinutes) return "warn";
+  return "ok";
 }
 
 // One reference per order and target status, kept until that request succeeds, so retrying the same click is not applied twice.

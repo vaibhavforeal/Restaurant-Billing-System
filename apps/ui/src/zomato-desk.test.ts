@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, validateAgeThresholds, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
+import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, validateAgeThresholds, zomatoAgeTone, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -201,5 +201,23 @@ describe("validateAgeThresholds", () => {
   it("starts at 15 and 25 minutes", () => {
     expect(DEFAULT_ZOMATO_AGE).toEqual({ warnMinutes: 15, lateMinutes: 25 });
     expect(validateAgeThresholds(DEFAULT_ZOMATO_AGE.warnMinutes, DEFAULT_ZOMATO_AGE.lateMinutes)).toBe("");
+  });
+});
+
+describe("zomato card age tone", () => {
+  it("turns amber at the amber minute and red at the red minute", () => {
+    expect(zomatoAgeTone(0, DEFAULT_ZOMATO_AGE)).toBe("ok");
+    expect(zomatoAgeTone(14, DEFAULT_ZOMATO_AGE)).toBe("ok");
+    expect(zomatoAgeTone(15, DEFAULT_ZOMATO_AGE)).toBe("warn");
+    expect(zomatoAgeTone(24, DEFAULT_ZOMATO_AGE)).toBe("warn");
+    expect(zomatoAgeTone(25, DEFAULT_ZOMATO_AGE)).toBe("late");
+    expect(zomatoAgeTone(90, DEFAULT_ZOMATO_AGE)).toBe("late");
+  });
+
+  it("uses the restaurant's own thresholds", () => {
+    const slowKitchen = { warnMinutes: 20, lateMinutes: 30 };
+    expect(zomatoAgeTone(19, slowKitchen)).toBe("ok");
+    expect(zomatoAgeTone(20, slowKitchen)).toBe("warn");
+    expect(zomatoAgeTone(30, slowKitchen)).toBe("late");
   });
 });
