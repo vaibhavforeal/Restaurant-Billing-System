@@ -21,6 +21,18 @@ describe("catalog CSV Zomato columns", () => {
   });
 });
 
+describe("catalog CSV gst_rate column", () => {
+  it("accepts a header without gst_rate", () => {
+    const [row] = parseCatalogCsv(catalogCsv([["category", "name", "price"], ["Mains", "Dal", "250.00"]]));
+    expect(row?.values.gst_rate).toBeUndefined();
+    expect(row?.values.name).toBe("Dal");
+  });
+  it("still requires category, name and price", () => {
+    expect(() => parseCatalogCsv(catalogCsv([["name", "price"], ["Dal", "250"]]))).toThrow("Missing required column: category.");
+    expect(() => parseCatalogCsv(catalogCsv([["category", "name", "gst_rate"], ["A", "Dal", ""]]))).toThrow("Missing required column: price.");
+  });
+});
+
 describe("catalog schemas Zomato price", () => {
   it("accepts a nullable optional zomatoPricePaise on products and variants", () => {
     expect(ProductCreate.parse({ categoryId: "c1", name: "Dal", pricePaise: 25000, gstRate: 5, zomatoPricePaise: 29000 }).zomatoPricePaise).toBe(29000);

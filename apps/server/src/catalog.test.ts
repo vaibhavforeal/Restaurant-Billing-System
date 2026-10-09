@@ -145,6 +145,33 @@ describe("products and variants", () => {
     expect(cleared.json().product.kotStationId).toBeNull();
   });
 
+  it("stores a null item GST rate by default and round-trips an override", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const c = await cat(admin.token);
+    const { product } = (await app.inject({
+      method: "POST", url: "/api/products",
+      payload: { categoryId: c.id, name: "Chai", pricePaise: 2000 }, headers: auth(admin.token),
+    })).json();
+    expect(product.gstRate).toBeNull();
+    const patch = (payload: object) => app.inject({ method: "PATCH", url: `/api/products/${product.id}`, payload, headers: auth(admin.token) });
+    expect((await patch({ gstRate: 18 })).json().product.gstRate).toBe(18);
+    expect((await patch({ name: "Masala chai" })).json().product.gstRate).toBe(18);
+    expect((await patch({ gstRate: null })).json().product.gstRate).toBeNull();
+    expect((await patch({ gstRate: 0 })).json().product.gstRate).toBe(0);
+    expect((await patch({ gstRate: 7 })).statusCode).toBe(400);
+  });
+
+  it("returns the restaurant default GST rate with the product list", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const list = () => app.inject({ method: "GET", url: "/api/products", headers: auth(admin.token) });
+    expect((await list()).json().defaultGstRate).toBe(5);
+    const put = await app.inject({ method: "PUT", url: "/api/settings", payload: { restaurantName: "Cafe", gstRate: 18 }, headers: auth(admin.token) });
+    expect(put.statusCode).toBe(200);
+    expect((await list()).json().defaultGstRate).toBe(18);
+  });
+
   it("updates product fields and 404s on unknown ids", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

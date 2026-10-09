@@ -79,6 +79,7 @@ describe("item CSV transfer", () => {
     ["price", ["New", "Bad", "12.345", "5"], "price"],
     ["negative price", ["New", "Bad", "-1", "5"], "price"],
     ["GST", ["New", "Bad", "12", "7"], "gst_rate"],
+    ["fractional GST", ["New", "Bad", "12", "5.5"], "gst_rate"],
     ["blank name", ["New", "", "12", "5"], "name"],
   ])("rejects invalid %s without partial writes", async (_label, bad, field) => {
     app = freshApp(); const { token } = await setupAdmin(app);
@@ -89,6 +90,47 @@ describe("item CSV transfer", () => {
     expect(res.json().error).toContain(`Row 3: ${field}`);
     expect(await products(token)).toHaveLength(0);
     expect(app.db.prepare("SELECT * FROM categories").all()).toHaveLength(0);
+  });
+
+  it("rejects an unsupported gst_rate with the exact message", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    const res = await preview(token, csv(["A", "Tea", "10", "7"]));
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("Row 2: gst_rate must be blank, 0, 5, 12, 18 or 28.");
+  });
+
+  it("treats a blank gst_rate as the restaurant default, for new items and by resetting existing ones", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    await apply(token, csv(["A", "Tea", "10", ""], ["A", "Cake", "50", "18"], ["A", "Water", "20", "0"]));
+    const rate = async (name: string) => (await products(token)).find((p: { name: string }) => p.name === name).gstRate;
+    expect(await rate("Tea")).toBeNull();
+    expect(await rate("Cake")).toBe(18);
+    expect(await rate("Water")).toBe(0);
+    await apply(token, csv(["A", "Cake", "50", ""]));
+    expect(await rate("Cake")).toBeNull();
+    expect(await rate("Water")).toBe(0);
+  });
+
+  it("keeps an existing item's rate when the gst_rate column is absent", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    await apply(token, csv(["A", "Cake", "50", "18"]));
+    await apply(token, catalogCsv([["category", "name", "price"], ["A", "Cake", "60"], ["A", "Tea", "10"]]));
+    const list = await products(token);
+    expect(list.find((p: { name: string }) => p.name === "Cake")).toMatchObject({ pricePaise: 6000, gstRate: 18 });
+    expect(list.find((p: { name: string }) => p.name === "Tea")).toMatchObject({ gstRate: null });
+  });
+
+  it("exports a blank cell for the default rate and the number for an override, and re-import leaves every rate unchanged", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    await apply(token, csv(["A", "Tea", "10", ""], ["A", "Cake", "50", "18"], ["A", "Water", "20", "0"], ["A", "Soda", "30", "28"]));
+    const rates = async () => (await products(token)).map((p: { name: string; gstRate: number | null }) => [p.name, p.gstRate]).sort();
+    const before = await rates();
+    expect(before).toEqual([["Cake", 18], ["Soda", 28], ["Tea", null], ["Water", 0]]);
+    const source = (await app.inject({ method: "GET", url: "/api/catalog/export", headers: auth(token) })).json().csv;
+    const exported = Object.fromEntries(parseCatalogCsv(source).map((r) => [r.values.name, r.values.gst_rate]));
+    expect(exported).toEqual({ Tea: "", Cake: "18", Water: "0", Soda: "28" });
+    expect((await apply(token, source)).json()).toMatchObject({ created: 0, updated: 4 });
+    expect(await rates()).toEqual(before);
   });
 
   it("rejects stale previews after a catalog change", async () => {

@@ -65,7 +65,7 @@ export function parseCatalogCsv(source: string): { row: number; values: Partial<
   for (const name of header) {
     if (!(CATALOG_CSV_COLUMNS as readonly string[]).includes(name)) throw new Error(`Unknown column: ${name}. Use the CSV template headers.`);
   }
-  for (const name of ["category", "name", "price", "gst_rate"]) {
+  for (const name of ["category", "name", "price"]) {
     if (!header.includes(name)) throw new Error(`Missing required column: ${name}.`);
   }
   if (!rows.length) throw new Error("The CSV has no items to import.");

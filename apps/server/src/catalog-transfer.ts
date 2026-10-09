@@ -8,7 +8,7 @@ interface Category { id: string; name: string; sort_order: number; is_active: nu
 interface Station { id: string; name: string; is_active: number }
 interface Item {
   ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null;
-  id: string; category_id: string; name: string; price_paise: number; gst_rate: number;
+  id: string; category_id: string; name: string; price_paise: number; gst_rate: number | null;
   is_veg: number; is_active: number; is_sold_out: number; description: string; kot_station_id: string | null;
 }
 interface Variant { ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; id: string; product_id: string; name: string; price_paise: number; is_active: number }
@@ -33,7 +33,7 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
     for (const v of data.variants) variants.set(v.product_id, [...(variants.get(v.product_id) ?? []), v]);
     const rows: string[][] = [[...CATALOG_CSV_COLUMNS]];
     for (const p of data.items) {
-      const base = [p.id, categories.get(p.category_id)!, p.name, rupees(p.price_paise), String(p.gst_rate),
+      const base = [p.id, categories.get(p.category_id)!, p.name, rupees(p.price_paise), p.gst_rate === null ? "" : String(p.gst_rate),
         String(!!p.is_veg), String(!!p.is_active), String(!!p.is_sold_out), p.description,
         p.kot_station_id ? stations.get(p.kot_station_id)! : ""];
       const optional = (paise: number | null) => paise === null ? "" : rupees(paise);
@@ -110,8 +110,13 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
           stationId = station.id;
         }
       }
-      const gst = Number(v.gst_rate);
-      if (!v.gst_rate?.trim() || !/^\d+(?:\.0+)?$/.test(v.gst_rate.trim()) || !(GST_RATES as readonly number[]).includes(gst)) return fail("gst_rate must be 0, 5, 12, 18 or 28.");
+      // Absent column keeps the current rate; a blank cell means "use the restaurant default".
+      let gst: number | null = existing?.gst_rate ?? null;
+      if (v.gst_rate !== undefined) {
+        const text = v.gst_rate.trim();
+        gst = text === "" ? null : Number(text);
+        if (gst !== null && (!/^\d+(?:\.0+)?$/.test(text) || !(GST_RATES as readonly number[]).includes(gst))) return fail("gst_rate must be blank, 0, 5, 12, 18 or 28.");
+      }
       const description = v.description?.trim() ?? existing?.description ?? "";
       if (description.length > 500) return fail("description must be 500 characters or fewer.");
       const value: Item = {

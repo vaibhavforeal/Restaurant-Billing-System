@@ -26,7 +26,7 @@ interface ProductRow {
   ac_price_paise: number | null;
   takeaway_price_paise: number | null;
   zomato_price_paise: number | null;
-  gst_rate: number;
+  gst_rate: number | null;
   is_veg: number;
   kot_station_id: string | null;
   is_active: number;
@@ -141,7 +141,8 @@ export function registerCatalog(app: FastifyInstance): void {
       list.push(v);
       byProduct.set(v.product_id, list);
     }
-    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [])) };
+    const { gst_rate: defaultGstRate } = app.db.prepare("SELECT gst_rate FROM settings WHERE id = 1").get() as { gst_rate: number };
+    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [])), defaultGstRate };
   });
 
   app.post("/api/products", { preHandler: manage }, async (req, reply) => {
@@ -185,7 +186,7 @@ export function registerCatalog(app: FastifyInstance): void {
         body.categoryId ?? row.category_id,
         body.name ?? row.name,
         body.pricePaise ?? row.price_paise,
-        body.gstRate ?? row.gst_rate,
+        body.gstRate === undefined ? row.gst_rate : body.gstRate,
         (body.isVeg ?? row.is_veg === 1) ? 1 : 0,
         station,
         (body.isActive ?? row.is_active === 1) ? 1 : 0,

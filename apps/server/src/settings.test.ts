@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", taxInclusive: false, upiId: "", receiptStyle: "classic", gstScheme: "regular",
+      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5,
     });
 
     const put = await app.inject({
@@ -83,14 +83,25 @@ describe("settings", () => {
       expect((await save({ receiptStyle })).statusCode).toBe(400);
     }
   });
-  it("saves the GST scheme, preserves it when omitted, and rejects unknown schemes", async () => {
+  it("saves the GST mode and default rate, preserves them when omitted, and rejects unsupported values", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
     const save = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", ...fields } });
-    for (const gstScheme of ["composition", "regular"]) {
-      expect((await save({ gstScheme })).json().settings.gstScheme).toBe(gstScheme);
-      expect((await save({ address: "New address" })).json().settings.gstScheme).toBe(gstScheme);
+    expect((await save({ gstMode: "none", gstRate: 18 })).json().settings).toMatchObject({ gstMode: "none", gstRate: 18 });
+    expect((await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) })).json().settings).toMatchObject({ gstMode: "none", gstRate: 18 });
+    expect((await save({ address: "New address" })).json().settings).toMatchObject({ gstMode: "none", gstRate: 18 });
+    expect((await save({ gstMode: "included" })).json().settings).toMatchObject({ gstMode: "included", gstRate: 18 });
+    expect((await save({ gstRate: 12 })).json().settings).toMatchObject({ gstMode: "included", gstRate: 12 });
+    for (const fields of [{ gstRate: 28 }, { gstRate: 0 }, { gstMode: "exclusive" }, { gstMode: null }, { gstRate: null }]) {
+      expect((await save(fields)).statusCode, JSON.stringify(fields)).toBe(400);
     }
-    for (const gstScheme of ["unregistered", "", null]) expect((await save({ gstScheme })).statusCode).toBe(400);
+    expect((await save({ address: "Again" })).json().settings).toMatchObject({ gstMode: "included", gstRate: 12 });
+  });
+  it("no longer exposes taxInclusive or gstScheme", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { settings } = (await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) })).json();
+    expect(settings).not.toHaveProperty("taxInclusive");
+    expect(settings).not.toHaveProperty("gstScheme");
   });
 });

@@ -35,7 +35,7 @@ export async function seedDemo(app: FastifyInstance) {
   const products: Array<{ id: string; name: string }> = [];
   for (const section of menu) {
     const category = (await request("/api/categories", { name: section.category })).category;
-    for (const [name, pricePaise] of section.dishes) products.push((await request("/api/products", { name, pricePaise, categoryId: category.id, gstRate: 5, isVeg: true, kotStationId: station.id })).product);
+    for (const [name, pricePaise] of section.dishes) products.push((await request("/api/products", { name, pricePaise, categoryId: category.id, isVeg: true, kotStationId: station.id })).product);
   }
   const stocks: Array<{ id: string }> = [];
   for (const [name, unit, openingQty, lowStockThreshold] of [["Rice", "kg", 25, 5], ["Oil", "L", 8, 2], ["Paneer", "kg", 6, 2], ["Flour", "kg", 20, 5], ["Milk", "L", 2, 3]] as const) {
