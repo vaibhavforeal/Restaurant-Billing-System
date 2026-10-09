@@ -242,9 +242,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       <ServiceRequests compact disabled={creating || actionBusy || qrBusy || qrManagerBusy || !!reservationView} onBusyChange={(value) => { serviceLock.current = value; setServiceBusy(value); }} />
     </div>
     {hasSide && <div className="tables-pane-switch" aria-label="Tables view">
-      <button aria-pressed={!showParcels} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>
-      {openParcels.length > 0 && <button aria-pressed={showParcels} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {openParcels.length}</button>}
-      {showZomatoPanel && <button aria-pressed={showZomato} aria-controls="zomato-list" onClick={() => setMobilePane("zomato")}>Zomato · {zomatoList.length}</button>}
+      <button aria-pressed={visiblePane === "tables"} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>
+      {openParcels.length > 0 && <button aria-pressed={visiblePane === "parcels"} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {openParcels.length}</button>}
+      {showZomatoPanel && <button aria-pressed={visiblePane === "zomato"} aria-controls="zomato-list" onClick={() => setMobilePane("zomato")}>Zomato · {zomatoList.length}</button>}
     </div>}
     <div className="filter-bar tables-filter-bar"><div className="tabs" aria-label="Table status">
         {(["all", "free", "occupied", "reserved", "billed"] as const).map((status) => <button key={status} className={filter === status ? "selected" : ""} aria-pressed={filter === status} onClick={() => setFilter(status)}>{({ all: "All tables", free: "Available", reserved: "Reserved", occupied: "Occupied", billed: "Billed" })[status]}<span className="count">{status === "all" ? active.length : active.filter((t) => t.status === status).length}</span></button>)}
@@ -283,7 +283,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       {showZomatoPanel && <aside className="tables-parcels tables-zomato" id="zomato-list" aria-label="Zomato orders"><ZomatoPanel orders={zomatoList} canCreate={zomatoOn} disabled={busy} onNew={() => setZomatoDialog(true)} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} /></aside>}
       </div>}
     </div>
-    {canQuickBill && <NewZomatoOrderDialog open={zomatoDialog} onClose={() => setZomatoDialog(false)} onCreated={(orderId) => { setZomatoDialog(false); openOrder(orderId); }} />}
+    {canQuickBill && <NewZomatoOrderDialog open={zomatoDialog} orders={zomatoList} onClose={() => setZomatoDialog(false)} onCreated={(orderId) => { setZomatoDialog(false); openOrder(orderId); }} />}
     {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId}
       onClose={() => setReservationView(null)} onOpenOrder={(id) => { setReservationView(null); openOrder(id); }}
       onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}

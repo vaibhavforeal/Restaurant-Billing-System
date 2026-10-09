@@ -19,6 +19,12 @@ export function zomatoOrders(orders: Order[]): Order[] {
   return orders.filter((order) => order.type === "zomato" && (order.status === "open" || order.status === "billed")).sort((a, b) => a.openedAt - b.openedAt);
 }
 
+/** The open or billed Zomato order carrying this ID (trimmed), if any; closed and cancelled orders do not count. */
+export function findZomatoOrderById(orders: Order[], id: string): Order | undefined {
+  const wanted = id.trim();
+  return wanted ? zomatoOrders(orders).find((order) => order.zomatoOrderId === wanted) : undefined;
+}
+
 /**
  * How urgent a Zomato card looks, from the minutes since the order was opened.
  *

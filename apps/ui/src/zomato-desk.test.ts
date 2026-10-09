@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { setZomatoStatus, zomatoCardAction, zomatoOrders } from "./zomato-desk";
+import { findZomatoOrderById, setZomatoStatus, zomatoCardAction, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -49,6 +49,25 @@ describe("zomatoOrders", () => {
     const list = [order({ id: "b", openedAt: 2 }), order({ id: "a", openedAt: 1 })];
     zomatoOrders(list);
     expect(list.map((o) => o.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("findZomatoOrderById", () => {
+  const list = [
+    order({ id: "a", zomatoOrderId: "Z-1" }),
+    order({ id: "b", zomatoOrderId: "Z-2", status: "billed" }),
+    order({ id: "c", zomatoOrderId: "Z-3", status: "settled" }),
+    order({ id: "d", zomatoOrderId: "Z-4", status: "cancelled" }),
+    order({ id: "e", type: "parcel", zomatoOrderId: "Z-5" }),
+  ];
+
+  it("finds an open or billed zomato order, trimming what was typed", () => {
+    expect(findZomatoOrderById(list, " Z-1 ")?.id).toBe("a");
+    expect(findZomatoOrderById(list, "Z-2")?.id).toBe("b");
+  });
+
+  it("finds nothing for closed, cancelled, non-zomato or unknown IDs", () => {
+    for (const id of ["Z-3", "Z-4", "Z-5", "Z-9", ""]) expect(findZomatoOrderById(list, id)).toBeUndefined();
   });
 });
 
