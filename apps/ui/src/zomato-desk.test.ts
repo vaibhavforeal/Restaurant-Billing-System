@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { billContextLabel, billPaymentLabel, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
+import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -158,5 +158,23 @@ describe("billPaymentLabel", () => {
     expect(billPaymentLabel("zomato")).toBe("Zomato");
     expect(billPaymentLabel("cash")).toBe("CASH");
     expect(billPaymentLabel("upi")).toBe("UPI");
+  });
+});
+
+describe("canReconcileZomato", () => {
+  it("offers Zomato reconciliation to admins and cashiers, whether Zomato is on or off", () => {
+    expect(canReconcileZomato("admin")).toBe(true);
+    expect(canReconcileZomato("cashier")).toBe(true);
+    for (const role of ["waiter", "captain", "kitchen"]) expect(canReconcileZomato(role)).toBe(false);
+  });
+});
+
+describe("billTaxRates", () => {
+  const taxes = [{ gstRate: 5, taxablePaise: 25000, cgstPaise: 0, sgstPaise: 0 }];
+  it("lists no per-rate GST rows on a bill whose GST Zomato pays", () => {
+    expect(billTaxRates({ taxes }, "zomato")).toEqual([]);
+  });
+  it("lists the per-rate GST rows on the restaurant's own bills", () => {
+    expect(billTaxRates({ taxes }, undefined)).toBe(taxes);
   });
 });

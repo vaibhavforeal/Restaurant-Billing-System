@@ -35,6 +35,19 @@ export function taxModeNote(bill: { taxInclusive: boolean; gstPaidBy?: "zomato" 
   return bill.taxInclusive ? "Menu prices include GST" : "GST added to menu prices";
 }
 
+/** The per-rate GST rows a bill shows: none when Zomato pays the GST (the 9(5) note stands instead). */
+export function billTaxRates<T>(bill: { taxes: T[] }, gstPaidBy: "zomato" | undefined): T[] {
+  return gstPaidBy === "zomato" ? [] : bill.taxes;
+}
+
+/**
+ * Who sees Reports, Zomato reconciliation: admins and cashiers, whether Zomato is on or off, so receivables from
+ * orders closed before Zomato was turned off (or the licence changed) can still be matched against payouts.
+ */
+export function canReconcileZomato(role: string): boolean {
+  return role === "admin" || role === "cashier";
+}
+
 export function billPaymentLabel(mode: PaymentMode): string {
   return mode === "zomato" ? "Zomato" : mode.toUpperCase();
 }

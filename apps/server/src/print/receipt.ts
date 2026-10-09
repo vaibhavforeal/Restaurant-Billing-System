@@ -107,7 +107,10 @@ export function receiptHtml(bill: Bill): string {
   const r = bill.receipt;
   const e = escape;
   const due = Math.max(0, bill.totalPaise - paidAmount(bill));
-  const service = r.orderType === "parcel" ? "Takeaway / Parcel" : "Dine-in";
+  const service = r.orderType === "zomato" ? "Zomato" : r.orderType === "parcel" ? "Takeaway / Parcel" : "Dine-in";
+  const order = r.orderType === "zomato" ? `Zomato #${e(r.zomatoOrderId ?? "")}` : "Parcel";
+  // Zomato collects and pays the GST on its orders (section 9(5)): the bill shows the note, never per-rate GST lines.
+  const zomatoGst = r.gstPaidBy === "zomato";
   const payment = billUpiPayment(bill);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Bill #${bill.billNo}</title><style>${RECEIPT_CSS}
@@ -118,19 +121,19 @@ export function receiptHtml(bill: Bill): string {
     <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
   </div><div class="bill-identity"><p class="eyebrow">Restaurant bill</p><p class="bill-number">Bill #${bill.billNo}</p><span class="status">${statusLabel(bill)}</span></div></header>
   <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(bill.createdAt))}</dd></div><div><dt>Service</dt><dd>${service}</dd></div>
-    <div><dt>${r.orderType === "dine_in" ? "Table / Group" : "Order"}</dt><dd>${r.orderType === "dine_in" ? e(contextLine(r.orderType, r.tableName, r.splitLabel)) : "Parcel"}</dd></div></dl>
+    <div><dt>${r.orderType === "dine_in" ? "Table / Group" : "Order"}</dt><dd>${r.orderType === "dine_in" ? e(contextLine(r.orderType, r.tableName, r.splitLabel)) : order}</dd></div></dl>
   <table class="items" aria-label="Bill items"><thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate ₹</th><th scope="col">Amount ₹</th></tr></thead><tbody>
-    ${r.items.map((i, index) => `<tr><td>${index + 1}</td><td><span class="item-name">${e(i.name)}</span><span class="item-tax">GST ${i.gstRate}%</span></td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td><td class="amount"><strong>${money(i.pricePaise * i.qty)}</strong></td></tr>`).join("")}
+    ${r.items.map((i, index) => `<tr><td>${index + 1}</td><td><span class="item-name">${e(i.name)}</span>${zomatoGst ? "" : `<span class="item-tax">GST ${i.gstRate}%</span>`}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td><td class="amount"><strong>${money(i.pricePaise * i.qty)}</strong></td></tr>`).join("")}
   </tbody></table><div class="item-count"><span>${r.items.length} items · ${quantity(bill)} total quantity</span><span>All amounts in INR</span></div>
-  <div class="summary"><section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
+  <div class="summary">${zomatoGst ? `<section aria-label="GST"><h2 class="section-title">GST</h2><p class="tax-note">GST paid by Zomato (section 9(5))</p></section>` : `<section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
     <table class="taxes"><thead><tr><th scope="col">GST</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead><tbody>
     ${bill.taxes.map((t) => `<tr><td>${t.gstRate}%</td><td>${money(t.taxablePaise)}</td><td>${money(t.cgstPaise)}<br><small>@ ${t.gstRate / 2}%</small></td><td>${money(t.sgstPaise)}<br><small>@ ${t.gstRate / 2}%</small></td></tr>`).join("")}
     </tbody></table><p class="tax-note">${bill.taxInclusive ? "Prices include GST" : "GST added to menu prices"}</p>
-  </section><section aria-label="Bill totals"><table class="totals"><tbody>
+  </section>`}<section aria-label="Bill totals"><table class="totals"><tbody>
     <tr><td>Subtotal</td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
     ${bill.discountPaise ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise)}</td></tr>` : ""}
-    <tr><td>CGST${bill.taxInclusive ? " (included)" : ""}</td><td class="amount">₹${money(bill.cgstPaise)}</td></tr>
-    <tr><td>SGST${bill.taxInclusive ? " (included)" : ""}</td><td class="amount">₹${money(bill.sgstPaise)}</td></tr>
+    ${zomatoGst ? "" : `<tr><td>CGST${bill.taxInclusive ? " (included)" : ""}</td><td class="amount">₹${money(bill.cgstPaise)}</td></tr>
+    <tr><td>SGST${bill.taxInclusive ? " (included)" : ""}</td><td class="amount">₹${money(bill.sgstPaise)}</td></tr>`}
     <tr><td>Round off</td><td class="amount">₹${money(bill.roundingPaise)}</td></tr>
     <tr class="grand-total"><td>Grand total</td><td class="amount">₹${money(bill.totalPaise)}</td></tr>
   </tbody></table>${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}</section></div>

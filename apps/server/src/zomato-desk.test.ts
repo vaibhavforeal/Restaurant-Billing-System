@@ -284,8 +284,16 @@ describe("Zomato status and Picked up", () => {
       const { bill, order: closed } = res.json();
       expect(bill).toMatchObject({ orderId: order.id, status: "paid", subtotalPaise: 25000, discountPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 25000 });
       expect(bill.taxes.every((t: { cgstPaise: number; sgstPaise: number }) => t.cgstPaise === 0 && t.sgstPaise === 0)).toBe(true);
-      expect(bill.receipt).toMatchObject({ orderType: "zomato", zomatoOrderId: order.zomatoOrderId, gstPaidBy: "zomato" });
+      // No GST is backed out or added, whatever the restaurant's setting: the snapshot says so too.
+      expect(bill.receipt).toMatchObject({ orderType: "zomato", zomatoOrderId: order.zomatoOrderId, gstPaidBy: "zomato", taxInclusive: false });
+      expect(bill.taxInclusive).toBe(false);
       expect(bill.payments).toEqual([expect.objectContaining({ mode: "zomato", amountPaise: 25000 })]);
+      // The receipt can still be viewed on screen; it names the Zomato order and carries the 9(5) note.
+      const receipt = await app.inject({ method: "GET", url: `/api/bills/${bill.id}/receipt`, headers: auth(admin.token) });
+      expect(receipt.statusCode).toBe(200);
+      expect(receipt.body).toContain(`Zomato #${order.zomatoOrderId}`);
+      expect(receipt.body).toContain("GST paid by Zomato (section 9(5))");
+      expect(receipt.body).not.toMatch(/Prices include GST|GST added to menu prices|CGST/);
       expect(closed).toMatchObject({ status: "settled", zomatoStatus: "picked_up" });
       expect(count("SELECT COUNT(*) n FROM bills")).toBe(1);
       expect(count("SELECT COUNT(*) n FROM payments")).toBe(1);

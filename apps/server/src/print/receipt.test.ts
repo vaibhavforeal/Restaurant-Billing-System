@@ -68,4 +68,17 @@ describe("receipts", () => {
     expect(html).toContain("Thank you for visiting."); expect(slip).toContain("Thank you for visiting.");
     expect(html).toContain("size:A4 portrait"); expect(html).toContain("display:table-header-group");
   });
+  it("labels a Zomato bill as a Zomato order with the section 9(5) note and no GST lines", () => {
+    const totals = calculateBill([{ pricePaise: 25000, qty: 1, gstRate: 5 }], 0, false, "operator");
+    const zomato: Bill = { ...bill, ...totals,
+      receipt: { ...bill.receipt, orderType: "zomato", tableName: null, splitLabel: null, zomatoOrderId: "5821", gstPaidBy: "zomato",
+        items: [{ name: "Thali", pricePaise: 25000, qty: 1, gstRate: 5 }] },
+      payments: [{ mode: "zomato", amountPaise: 25000, refNote: null, createdAt: 1 }] };
+    const html = receiptHtml(zomato);
+    expect(html).toContain("<dt>Service</dt><dd>Zomato</dd>");
+    expect(html).toContain("<dt>Order</dt><dd>Zomato #5821</dd>");
+    expect(html).toContain("GST paid by Zomato (section 9(5))");
+    expect(html).not.toMatch(/Dine-in|Parcel|Prices include GST|GST added to menu prices|CGST|SGST|GST 5%/);
+    expect(html).toContain("₹250.00");
+  });
 });

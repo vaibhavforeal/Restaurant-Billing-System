@@ -12,7 +12,7 @@ import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { billPaymentLabel, taxModeNote, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
+import { billPaymentLabel, billTaxRates, taxModeNote, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
 
@@ -24,13 +24,14 @@ function preferredPayment(): "cash" | "card" | "upi" { const value = readPrefere
 type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string; refNote: string };
 
 export function BillSummary({ value, compact = false, gstPaidBy }: { value: BillTotals; compact?: boolean; gstPaidBy?: "zomato" | undefined }) {
+  const rates = billTaxRates(value, gstPaidBy);
   const breakdown = <>
     <p>{taxModeNote({ taxInclusive: value.taxInclusive, gstPaidBy })}</p>
     <p>Subtotal: {money(value.subtotalPaise)} · Discount: {money(value.discountPaise)}</p>
-    <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "right", borderSpacing: "8px" }}>
+    {gstPaidBy !== "zomato" && <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "right", borderSpacing: "8px" }}>
       <thead><tr><th scope="col">GST rate</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead>
-      <tbody>{value.taxes.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
-    </table></div>
+      <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
+    </table></div>}
     <p>Round off: {money(value.roundingPaise)}</p>
   </>;
   const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd><dt>CGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.cgstPaise, 0))}</dd><dt>SGST</dt><dd>{money(value.taxes.reduce((sum, tax) => sum + tax.sgstPaise, 0))}</dd><dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
