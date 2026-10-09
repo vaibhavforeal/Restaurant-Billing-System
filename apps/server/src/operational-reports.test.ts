@@ -33,8 +33,8 @@ describe("operational reports", () => {
   });
   afterEach(async () => { vi.restoreAllMocks(); await app.close(); app.db.close(); });
 
-  it.each([false, true])("reconciles every paise for mixed-tax bills, saved categories and void bills kept on their issue date (inclusive=%s)", async (inclusive) => {
-    app.db.prepare("UPDATE settings SET tax_inclusive = ?").run(Number(inclusive));
+  it.each(["included", "none"])("reconciles every paise for mixed-tax bills, saved categories and void bills kept on their issue date (gst mode %s)", async (gstMode) => {
+    app.db.prepare("UPDATE settings SET gst_mode = ?").run(gstMode);
     const otherCategory = (await post("/api/categories", { name: "Drinks" })).category.id;
     const other = (await post("/api/products", { name: "Juice", categoryId: otherCategory, pricePaise: 5353, gstRate: 12, kotStationId: null })).product.id;
     const o = await order([{ productId, qty: 2 }, { productId, qty: 1 }, { productId: other, qty: 3 }]);

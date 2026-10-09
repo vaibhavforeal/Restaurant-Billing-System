@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { UnitCostSet, buildProfitReport, dishCost, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@forkflow/domain";
+import { UnitCostSet, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@forkflow/domain";
+import { readGstSettings } from "./gst-settings.js";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { publishStock, versionCheck } from "./stock.js";
@@ -52,13 +53,14 @@ export function registerCosting(app: FastifyInstance): void {
   });
 
   app.get("/api/costing/dishes", { preHandler: costs }, async (_req, reply) => {
-    // A composition restaurant charges no GST, so its menu prices are the whole selling price: nothing is backed out.
-    const settings = db.prepare("SELECT tax_inclusive, gst_scheme FROM settings WHERE id = 1").get() as { tax_inclusive: number; gst_scheme: string };
-    const taxInclusive = settings.tax_inclusive === 1 && settings.gst_scheme !== "composition";
+    // A restaurant that charges no GST sells at its menu prices: nothing is backed out. Otherwise GST is included in
+    // the menu price, at the item's own rate or else the restaurant's default.
+    const { gstMode, gstRate: defaultRate } = readGstSettings(db);
+    const taxInclusive = gstMode === "included";
     const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, p.zomato_price_paise, c.name AS category_name
       FROM products p JOIN categories c ON c.id = p.category_id WHERE p.is_active = 1
       ORDER BY c.sort_order, c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id`).all() as Array<{
-      id: string; name: string; price_paise: number; gst_rate: number; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; category_name: string;
+      id: string; name: string; price_paise: number; gst_rate: number | null; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; category_name: string;
     }>;
     const variantRows = db.prepare("SELECT id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise, is_active FROM variants ORDER BY name COLLATE NOCASE, id").all() as Array<{
       id: string; product_id: string; name: string; price_paise: number; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; is_active: number;
@@ -86,7 +88,7 @@ export function registerCosting(app: FastifyInstance): void {
           prices: PRICE_TIERS.map((tier): DishPrice => {
             const pricePaise = priceForTier(item, tier);
             // Zomato bills carry no GST (Zomato pays it under section 9(5)), so nothing is backed out of that price.
-            const preGst = tier === "zomato" ? pricePaise : preGstPaise(pricePaise, p.gst_rate, taxInclusive);
+            const preGst = tier === "zomato" ? pricePaise : preGstPaise(pricePaise, effectiveGstRate(p.gst_rate, defaultRate), taxInclusive);
             const known = cost.costPaise !== null && preGst !== 0;
             return {
               tier, pricePaise, preGstPaise: preGst,
@@ -101,7 +103,7 @@ export function registerCosting(app: FastifyInstance): void {
       else for (const v of variants) if (v.is_active === 1) row(v.id, `${p.name} · ${v.name}`, v);
     }
     reply.header("Cache-Control", "no-store");
-    return { dishes, taxInclusive };
+    return { dishes, gstMode };
   });
 
   app.get("/api/reports/profit", { preHandler: costs }, async (req, reply) => {

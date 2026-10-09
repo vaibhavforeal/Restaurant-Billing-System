@@ -223,6 +223,29 @@ describe("billing and day-end", () => {
       expect((await app.inject({ url })).statusCode).toBe(401);
     }
   });
+  it("reports sales without GST on their own line, outside the GST breakdown, net taxable value and credited tax", async () => {
+    const gst = await issue(await order());
+    app.db.prepare("UPDATE settings SET gst_mode = 'none' WHERE id = 1").run();
+    const plain = await issue(await order());
+    expect(plain.totalPaise).toBe(10500);
+    const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+    expect(day.sales).toMatchObject({ billCount: 2, totalPaise: gst.totalPaise + plain.totalPaise });
+    expect(day.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
+    expect(day.noGstSalesPaise).toBe(plain.totalPaise);
+    expect(day.net).toEqual({ totalPaise: 21000, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 });
+    expect(day.zomatoSuppliesPaise).toBe(0);
+
+    // Refunding one of the no-GST bill lines lowers the credited total only: it carries no taxable value or tax rows.
+    await pay(plain);
+    const orderItemId = (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(plain.id) as { id: string }).id;
+    const refund = await app.inject({ method: "POST", url: `/api/bills/${plain.id}/refund`, headers: auth(token),
+      payload: { clientRef: uuidv7(), reason: "Cold food", lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 10500 }], approverPin: "1234" } });
+    expect(refund.statusCode, refund.body).toBe(201);
+    const after = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+    expect(after.creditNotes).toEqual({ count: 1, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, totalPaise: 10500, taxes: [] });
+    expect(after.noGstSalesPaise).toBe(plain.totalPaise);
+    expect(after.net).toEqual({ totalPaise: 10500, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 });
+  });
   it("reports bill-date sales separately from collection-date payments and validates dates", async () => {
     const old = await issue(await order()); const today = await issue(await order());
     app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(new Date(2026, 8, 26, 23, 59).getTime(), old.id);

@@ -187,7 +187,7 @@ describe("stock costing", () => {
       expect(res.statusCode).toBe(200);
     }
     type Dish = { productId: string; variantId: string | null; name: string; categoryName: string; costPaise: number | null; status: string; missing: string[]; prices: Array<{ tier: string; pricePaise: number; preGstPaise: number; costPercent: number | null; marginPaise: number | null }> };
-    const dishes = async (as = token) => (await request("GET", "/api/costing/dishes", undefined, as)).json() as { dishes: Dish[]; taxInclusive: boolean };
+    const dishes = async (as = token) => (await request("GET", "/api/costing/dishes", undefined, as)).json() as { dishes: Dish[]; gstMode: "included" | "none" };
 
     it("values stock on hand", async () => {
       const paneer = await costed("Paneer", 10, 32_000_000);
@@ -216,9 +216,8 @@ describe("stock costing", () => {
       const cat = await category();
       const p = await product(cat, { acPricePaise: 12_600 });
       await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
-      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", taxInclusive: true })).statusCode).toBe(200);
       const body = await dishes();
-      expect(body.taxInclusive).toBe(true);
+      expect(body.gstMode).toBe("included");
       expect(body.dishes).toHaveLength(1);
       expect(body.dishes[0]).toMatchObject({
         productId: p.id, variantId: null, name: "Paneer Tikka", categoryName: "Mains", costPaise: 4_800, status: "complete", missing: [],
@@ -233,27 +232,47 @@ describe("stock costing", () => {
       expect(body.dishes[0]!.prices[0]!.pricePaise).toBe(10_500);
     });
 
+    it("backs the restaurant default rate out of an item with no rate of its own, and its own rate out of an override", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const byDefault = await product(cat, { name: "Default", gstRate: null });
+      const override = await product(cat, { name: "Override", gstRate: 18, pricePaise: 11_800 });
+      await recipe(byDefault.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      await recipe(override.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      let body = await dishes();
+      expect(body.gstMode).toBe("included");
+      expect(body.dishes.find((d) => d.productId === byDefault.id)!.prices[0]).toMatchObject({ pricePaise: 10_500, preGstPaise: 10_000 });
+      expect(body.dishes.find((d) => d.productId === override.id)!.prices[0]).toMatchObject({ pricePaise: 11_800, preGstPaise: 10_000 });
+      // A new default applies to items that follow it, while an override keeps its own rate.
+      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", gstRate: 12 })).statusCode).toBe(200);
+      body = await dishes();
+      expect(body.dishes.find((d) => d.productId === byDefault.id)!.prices[0]).toMatchObject({ pricePaise: 10_500, preGstPaise: 9_375 });
+      expect(body.dishes.find((d) => d.productId === override.id)!.prices[0]!.preGstPaise).toBe(10_000);
+    });
+
     it("costs a Zomato price on its own, with no GST backed out because Zomato bills carry none", async () => {
       const paneer = await costed("Paneer", 10, 32_000_000);
       const cat = await category();
       const p = await product(cat, { zomatoPricePaise: 12_000 });
       await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
-      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", taxInclusive: true })).statusCode).toBe(200);
       const dish = (await dishes()).dishes[0]!;
       expect(dish.prices.map((x) => x.tier)).toEqual(["non_ac", "ac", "takeaway", "zomato"]);
       expect(dish.prices[3]).toMatchObject({ tier: "zomato", pricePaise: 12_000, preGstPaise: 12_000, costPercent: 40, marginPaise: 7_200 });
       expect(dish.prices[2]).toMatchObject({ tier: "takeaway", pricePaise: 10_500, preGstPaise: 10_000, marginPaise: 5_200 });
     });
 
-    it("backs no GST out of any price under the composition scheme", async () => {
+    it("backs no GST out of any price when the restaurant charges none", async () => {
       const paneer = await costed("Paneer", 10, 32_000_000);
       const cat = await category();
       const p = await product(cat, {});
       await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
-      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", taxInclusive: true, gstScheme: "composition" })).statusCode).toBe(200);
+      const override = await product(cat, { name: "Override", gstRate: 18 });
+      await recipe(override.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", gstMode: "none" })).statusCode).toBe(200);
       const body = await dishes();
-      expect(body.taxInclusive).toBe(false);
-      expect(body.dishes[0]!.prices.every((x) => x.preGstPaise === x.pricePaise)).toBe(true);
+      expect(body.gstMode).toBe("none");
+      expect(body.dishes).toHaveLength(2);
+      expect(body.dishes.every((d) => d.prices.every((x) => x.preGstPaise === x.pricePaise))).toBe(true);
     });
 
     it("prices a blank Zomato tier at Takeaway and a Zomato price of zero at zero", async () => {
@@ -276,7 +295,6 @@ describe("stock costing", () => {
       app.db.prepare("UPDATE variants SET is_active = 0 WHERE name = 'Jumbo'").run();
       app.db.prepare("INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_active, created_at) VALUES ('p-off', ?, 'Retired', 100, 5, 0, 1)").run(cat);
       const body = await dishes();
-      expect(body.taxInclusive).toBe(false);
       expect(body.dishes.map((d) => d.name).sort()).toEqual(["Paneer Tikka · Full", "Paneer Tikka · Half"]);
       const half = body.dishes.find((d) => d.name.endsWith("Half"))!;
       const full = body.dishes.find((d) => d.name.endsWith("Full"))!;

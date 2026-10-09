@@ -36,8 +36,8 @@ describe("order analytics", () => {
   });
   afterEach(async () => { await app.close(); app.db.close(); });
 
-  it.each([false, true])("counts multi-line orders once and reconciles every paise (inclusive=%s)", async (inclusive) => {
-    app.db.prepare("UPDATE settings SET tax_inclusive = ?").run(Number(inclusive));
+  it.each(["included", "none"])("counts multi-line orders once and reconciles every paise (gst mode %s)", async (gstMode) => {
+    app.db.prepare("UPDATE settings SET gst_mode = ?").run(gstMode);
     const parcel = await issue("parcel", [{ productId, qty: 3 }, { productId, qty: 2 }, { productId: otherId, qty: 1 }], 27, 12, 999);
     const table = await issue("dine_in", [{ productId: otherId, qty: 2 }], 29, 18);
     const before = app.db.prepare("SELECT * FROM bills ORDER BY id").all();
