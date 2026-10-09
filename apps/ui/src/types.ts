@@ -156,6 +156,7 @@ export interface KotWithContext {
   acceptedAt: number | null;
   doneAt: number | null;
   orderType: "dine_in" | "parcel" | "zomato";
+  zomatoOrderId: string | null;
   tableName: string | null;
   splitLabel: string | null;
   items: Array<{

@@ -5,6 +5,7 @@ import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees } from "../money";
 import { connectWs } from "../ws";
 import { TableScroller } from "../PosControls";
+import { billContextLabel } from "../zomato-desk";
 
 export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -31,7 +32,7 @@ export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
     {!bills.length && <p>No bills to show.</p>}
     <TableScroller><table style={{ width: "100%", textAlign: "left", borderSpacing: "8px 16px" }}>
       <thead><tr><th>Bill</th><th>Date</th><th>Table / parcel</th><th className="pos-money">Total</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody>{bills.map((b) => <tr key={b.id}><td>#{b.billNo}</td><td>{new Date(b.createdAt).toLocaleString()}</td><td>{b.receipt.orderType === "parcel" ? "Parcel" : `${b.receipt.tableName} · ${b.receipt.splitLabel ?? "A"}`}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td><span className={`status ${b.status} refund-${b.refundState}`}>{billStatusLabel(b)}</span></td><td><button onClick={() => onOpenOrder(b.orderId)}>Open bill #{b.billNo}</button></td></tr>)}</tbody>
+      <tbody>{bills.map((b) => <tr key={b.id}><td>#{b.billNo}</td><td>{new Date(b.createdAt).toLocaleString()}</td><td>{billContextLabel(b.receipt)}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td><span className={`status ${b.status} refund-${b.refundState}`}>{billStatusLabel(b)}</span></td><td><button onClick={() => onOpenOrder(b.orderId)}>Open bill #{b.billNo}</button></td></tr>)}</tbody>
     </table></TableScroller>
     {more && <button disabled={busy} onClick={async () => {
       setBusy(true);

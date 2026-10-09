@@ -12,7 +12,9 @@ import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
+import { billPaymentLabel, taxModeNote, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
+import "../zomato.css";
 
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"] };
@@ -21,9 +23,9 @@ function preferredPayment(): "cash" | "card" | "upi" { const value = readPrefere
 
 type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string; refNote: string };
 
-export function BillSummary({ value, compact = false }: { value: BillTotals; compact?: boolean }) {
+export function BillSummary({ value, compact = false, gstPaidBy }: { value: BillTotals; compact?: boolean; gstPaidBy?: "zomato" | undefined }) {
   const breakdown = <>
-    <p>{value.taxInclusive ? "Menu prices include GST" : "GST added to menu prices"}</p>
+    <p>{taxModeNote({ taxInclusive: value.taxInclusive, gstPaidBy })}</p>
     <p>Subtotal: {money(value.subtotalPaise)} · Discount: {money(value.discountPaise)}</p>
     <div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "right", borderSpacing: "8px" }}>
       <thead><tr><th scope="col">GST rate</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead>
@@ -38,7 +40,7 @@ export function BillSummary({ value, compact = false }: { value: BillTotals; com
   </div>;
 }
 
-export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** Void and refund are offered to admins and cashiers only. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
+export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Void and refund are offered to admins and cashiers only. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -67,6 +69,8 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const options = useRef<HTMLDetailsElement>(null);
   const dialogTitleId = useId();
   const quick = !!onPrepare;
+  const zomatoStatus = useZomatoStatus();
+  const zomatoLock = useRef(false);
   const blocked = busy || disabled;
   const itemsKey = JSON.stringify(order.items);
 
@@ -205,6 +209,17 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     acceptBill(result.bill);
     onChanged().catch(() => { /* the order refreshes on the next update */ });
   }
+  async function advanceZomato() {
+    const { status } = zomatoCardAction(order);
+    if (!status || blocked || hasDraft || zomatoLock.current) return;
+    zomatoLock.current = true; onBusyChange?.(true);
+    let applied = false;
+    try { applied = await zomatoStatus.advance(order, status); }
+    finally { zomatoLock.current = false; onBusyChange?.(false); }
+    if (!applied) return;
+    try { await onChanged(); } catch { /* the order refreshes on the next update */ }
+    if (status === "picked_up") onClosed?.();
+  }
   async function reloadBill() {
     try { acceptBill((await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`)).bill); } catch { /* keep the last confirmed bill */ }
     try { await onChanged(); } catch { /* keep the last confirmed order */ }
@@ -228,14 +243,23 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const totals = bill ?? preview;
   const canShowQr = !!bill && bill.status === "unpaid" && !!bill.receipt.upiId && bill.totalPaise > 0;
   const canGoToTables = bill?.status === "paid" && order.type === "dine_in" && !!onGoToTables;
-  const canVoid = !!bill && (role === "admin" || role === "cashier") && bill.status !== "void" && bill.refundState !== "refunded";
+  // Zomato bills are never printed and never credited: Zomato issues the customer invoice and handles refunds.
+  const zomatoBill = bill?.receipt.orderType === "zomato";
+  const zomatoDesk = order.type === "zomato";
+  const zomatoAction = zomatoCardAction(order);
+  const zomatoPill = order.zomatoStatus ?? "new";
+  const canVoid = !!bill && !zomatoBill && (role === "admin" || role === "cashier") && bill.status !== "void" && bill.refundState !== "refunded";
   const canRefund = canVoid && bill?.status === "paid" && bill.totalPaise > 0;
   // A cancelled order with no bill has nothing to bill; a voided bill on a cancelled order stays viewable.
   if (order.status === "cancelled" && !bill) return null;
   return <section aria-label="Billing" className="billing-panel billing-footer">
     {bill && <div className="billing-footer-total"><span>Bill #{bill.billNo}<span className={`status ${bill.status} refund-${bill.refundState}`}>{billStatusLabel(bill)}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
     <div className="billing-footer-actions">
-      {!bill && order.status === "open" && <>
+      {!bill && order.status === "open" && zomatoDesk && <>
+        <span className={`zomato-desk-pill is-${zomatoPill}`}>{ZOMATO_PILL[zomatoPill]}</span>
+        <button className="primary pos-pay" disabled={blocked || hasDraft || zomatoAction.status === null || zomatoStatus.busyId !== null} onClick={() => void advanceZomato()}>{zomatoStatus.busyId !== null ? "Saving…" : zomatoAction.label}</button>
+      </>}
+      {!bill && order.status === "open" && !zomatoDesk && <>
         <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => openDialog(true)}>{shortcut("discount", "Discount")}</button>
         <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Review total and payment")} disabled={previewDisabled} onClick={() => void run(getPreview)}>{quick ? busy ? "Preparing…" : shortcut("billing", "Pay") : shortcut("billing", "Preview bill")}</button>
       </>}
@@ -243,7 +267,11 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       {canShowQr && <button disabled={blocked} onClick={() => setShowQr(true)}>Show UPI QR</button>}
       {canGoToTables && <button className="primary" disabled={blocked} onClick={goToTables}>Go to tables</button>}
     </div>
-    <div className="pos-printer-status">Printer: {printerId ? printers.find((p) => p.id === printerId)?.name ?? "Selected printer" : "Browser / A4"}{job ? ` · ${job.status}` : ""}</div>
+    {!bill && order.status === "open" && zomatoDesk && <>
+      {zomatoStatus.error && <p className="error-message" role="alert">{zomatoStatus.error}</p>}
+      {hasDraft ? <p className="billing-zomato-hint">Punch or remove the items in your cart first.</p> : zomatoAction.status === null && <p className="billing-zomato-hint">Add items to hand this order over.</p>}
+    </>}
+    {!zomatoDesk && <div className="pos-printer-status">Printer: {printerId ? printers.find((p) => p.id === printerId)?.name ?? "Selected printer" : "Browser / A4"}{job ? ` · ${job.status}` : ""}</div>}
     {error && <button className="billing-attention" onClick={() => openDialog()}>Billing needs attention</button>}
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
       <header className="billing-dialog-header">
@@ -256,10 +284,10 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
         {message && <p className="billing-message" role="status">{message}</p>}
         <div className={`billing-dialog-grid${totals ? "" : " billing-awaiting-preview"}`}>
           <div className="billing-review">
-            {totals && <BillSummary value={totals} compact />}
+            {totals && <BillSummary value={totals} compact gstPaidBy={bill?.receipt.gstPaidBy} />}
             {bill?.discountNote && <p className="billing-note">Discount reason: {bill.discountNote}</p>}
             {bill && <BillItemLines items={order.items} refundedQty={bill.refundedQty} showRefunded={bill.creditNotes.length > 0} />}
-            <details ref={options} className="billing-options" open={!totals}>
+            {!zomatoBill && <details ref={options} className="billing-options" open={!totals}>
               <summary>Bill options</summary>
               <div className="billing-options-fields">
                 <label>Receipt printer <select value={printerId} onChange={(e) => changePrinter(e.target.value)} disabled={blocked}>
@@ -270,7 +298,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
                   <label className="billing-wide-field">Discount reason <input maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} /></label>
                 </>}
               </div>
-            </details>
+            </details>}
             {!bill && order.status === "open" && <>
               {hasDraft && !quick && <p className="billing-note">Punch or remove the items in your cart before billing.</p>}
               <button {...(!preview ? shortcutProps("billing") : {})} title={!preview ? shortcut("billing", "Refresh server total") : "Refresh server total"} className={preview ? "billing-refresh" : "primary billing-refresh"} disabled={previewDisabled} onClick={() => void run(getPreview)}>{previewLabel}</button>
@@ -305,15 +333,15 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
               <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Record the entered payment amounts")} disabled={entered !== bill.totalPaise} onClick={() => void run(settle)}>{shortcut("billing", "Settle bill")}</button>
             </fieldset>}
             {bill.status === "void" && <p className="billing-note" role="status">This bill is void.</p>}
-            {bill.status === "paid" && <p className="billing-paid">Paid: {bill.payments.length ? bill.payments.map((p) => `${p.mode.toUpperCase()} ${money(p.amountPaise)}`).join(" + ") : "No payment due"}</p>}
+            {bill.status === "paid" && <p className="billing-paid">Paid: {bill.payments.length ? bill.payments.map((p) => `${billPaymentLabel(p.mode)} ${money(p.amountPaise)}`).join(" + ") : "No payment due"}</p>}
             <div className="billing-receipt-actions">
               {canGoToTables && <button className="primary" disabled={blocked} onClick={goToTables}>Go to tables</button>}
               <button disabled={busy} onClick={() => void run(viewReceipt)}>View receipt</button>
-              {printerId && <button disabled={busy} onClick={() => void run(async () => {
+              {printerId && !zomatoBill && <button disabled={busy} onClick={() => void run(async () => {
                 const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${bill.id}/print`, { method: "POST", body: JSON.stringify({ printerId }) });
                 setJob(result.job); setMessage("Receipt queued for printing.");
               })}>Print receipt</button>}
-              {html && <button disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
+              {html && !zomatoBill && <button disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
               {canRefund && <button disabled={blocked} onClick={() => setCreditKind("refund")}>Refund items</button>}
               {canVoid && <button className="billing-void" disabled={blocked} onClick={() => setCreditKind("void")}>Void bill</button>}
             </div>
@@ -325,6 +353,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       </div>
     </dialog>, document.body)}
     {bill && <UpiQrPreview billId={bill.id} open={showQr && canShowQr} onClose={() => setShowQr(false)} />}
-    {bill && (role === "admin" || role === "cashier") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
+    {bill && !zomatoBill && (role === "admin" || role === "cashier") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
   </section>;
 }

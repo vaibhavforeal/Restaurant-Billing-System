@@ -4,6 +4,7 @@ import type { Kot, KotWithContext } from "../types";
 import { connectWs } from "../ws";
 import { Icon } from "../Icon";
 import { isKdsOff } from "../kds";
+import { kitchenContextLabel } from "../zomato-desk";
 
 export function Kitchen({ standalone = false, onBusyChange }: { standalone?: boolean; onBusyChange?: (busy: boolean) => void }) {
   const [kots, setKots] = useState<KotWithContext[]>([]);
@@ -101,7 +102,7 @@ export function Kitchen({ standalone = false, onBusyChange }: { standalone?: boo
     {loaded && !loadError && kots.length === 0 && <div className="panel empty-state"><Icon name="kitchen" size={36} /><h3>No active tickets</h3></div>}
     <div className="kitchen-grid">{kots.map((kot) => <article className="kitchen-ticket" key={kot.id}>
       <div className="ticket-header"><strong>KOT #{kot.kotNo}</strong><span><Icon name="clock" size={12} /> {age(kot.createdAt)}</span></div>
-      <div className="ticket-location">{kot.orderType === "parcel" ? "Parcel" : kot.splitLabel && kot.splitLabel !== "A" ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}` : kot.tableName ?? "Table"}</div>
+      <div className={`ticket-location${kot.orderType === "zomato" ? " kds-tag-zomato" : ""}`}>{kitchenContextLabel(kot)}</div>
       <ul className="ticket-items">{kot.items.map((item) => <li key={item.id} style={{ textDecoration: item.status === "cancelled" ? "line-through" : "none", opacity: item.status === "cancelled" ? .5 : 1 }}>{item.qty} × {item.name}{item.note && <small>{item.note}</small>}</li>)}</ul>
       <button className="primary button-icon" disabled={!connected || !!loadError || busyIds.has(kot.id)} onClick={() => void markDone(kot.id)}><Icon name="check" size={17} />{busyIds.has(kot.id) ? "Saving…" : "Done"}</button>
     </article>)}</div>

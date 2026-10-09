@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { findZomatoOrderById, setZomatoStatus, zomatoCardAction, zomatoOrders } from "./zomato-desk";
+import { billContextLabel, billPaymentLabel, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -103,5 +103,60 @@ describe("setZomatoStatus", () => {
     await expect(setZomatoStatus("o1", "picked_up")).rejects.toThrow();
     const refs = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body).clientRef);
     expect(new Set(refs).size).toBe(3);
+  });
+});
+
+describe("zomatoLabel", () => {
+  it("reads Zomato #<id>", () => {
+    expect(zomatoLabel("Z-1")).toBe("Zomato #Z-1");
+  });
+});
+
+describe("kitchenContextLabel", () => {
+  const kot = { orderType: "dine_in" as const, tableName: "T1", splitLabel: "A", zomatoOrderId: null };
+
+  it("shows Zomato #<id> for a zomato ticket", () => {
+    expect(kitchenContextLabel({ ...kot, orderType: "zomato", tableName: null, splitLabel: null, zomatoOrderId: "Z-9" })).toBe("Zomato #Z-9");
+  });
+
+  it("keeps the parcel and table labels", () => {
+    expect(kitchenContextLabel({ ...kot, orderType: "parcel", tableName: null })).toBe("Parcel");
+    expect(kitchenContextLabel(kot)).toBe("T1");
+    expect(kitchenContextLabel({ ...kot, splitLabel: "B" })).toBe("T1 · B");
+    expect(kitchenContextLabel({ ...kot, tableName: null, splitLabel: null })).toBe("Table");
+  });
+});
+
+describe("billContextLabel", () => {
+  const receipt = { orderType: "dine_in" as const, tableName: "T1", splitLabel: null, zomatoOrderId: undefined };
+
+  it("shows Zomato #<id> for a zomato bill", () => {
+    expect(billContextLabel({ ...receipt, orderType: "zomato", tableName: null, zomatoOrderId: "Z-9" })).toBe("Zomato #Z-9");
+  });
+
+  it("keeps the parcel and table labels", () => {
+    expect(billContextLabel({ ...receipt, orderType: "parcel", tableName: null })).toBe("Parcel");
+    expect(billContextLabel(receipt)).toBe("T1 · A");
+    expect(billContextLabel({ ...receipt, splitLabel: "C" })).toBe("T1 · C");
+  });
+});
+
+describe("taxModeNote", () => {
+  it("says GST is paid by Zomato even when the snapshot copied tax-inclusive pricing", () => {
+    expect(taxModeNote({ taxInclusive: true, gstPaidBy: "zomato" })).toBe("GST paid by Zomato (section 9(5))");
+    expect(taxModeNote({ taxInclusive: false, gstPaidBy: "zomato" })).toBe("GST paid by Zomato (section 9(5))");
+  });
+
+  it("keeps the restaurant wording otherwise", () => {
+    expect(taxModeNote({ taxInclusive: true })).toBe("Menu prices include GST");
+    expect(taxModeNote({ taxInclusive: false })).toBe("GST added to menu prices");
+  });
+});
+
+describe("billPaymentLabel", () => {
+  it("names the zomato receivable Zomato and upper-cases the rest as before", () => {
+    expect(billPaymentLabel("zomato")).toBe("Zomato");
+    expect(billPaymentLabel("cash")).toBe("CASH");
+    expect(billPaymentLabel("upi")).toBe("UPI");
   });
 });

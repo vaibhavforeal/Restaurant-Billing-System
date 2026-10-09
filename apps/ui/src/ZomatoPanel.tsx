@@ -1,11 +1,7 @@
-import { useRef, useState } from "react";
-import { ApiError } from "./api";
 import { paiseToRupees } from "./money";
 import type { Order } from "./types";
-import { setZomatoStatus, zomatoAgeTone, zomatoCardAction } from "./zomato-desk";
+import { useZomatoStatus, ZOMATO_PILL, zomatoAgeTone, zomatoCardAction } from "./zomato-desk";
 import "./zomato.css";
-
-const PILL = { new: "New", preparing: "Preparing", ready: "Ready", picked_up: "Picked up" } as const;
 
 /** Open Zomato orders with one-tap Ready and Picked up. The caller passes only open or billed Zomato orders, oldest first. */
 export function ZomatoPanel({ orders, canCreate, disabled, onNew, onOpenOrder, onChanged }: {
@@ -16,22 +12,12 @@ export function ZomatoPanel({ orders, canCreate, disabled, onNew, onOpenOrder, o
   onOpenOrder: (orderId: string) => void;
   onChanged: () => void;
 }) {
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const lock = useRef(false);
+  const { busyId, error, advance } = useZomatoStatus();
 
   async function act(order: Order) {
     const { status } = zomatoCardAction(order);
     if (status === null) { onOpenOrder(order.id); return; }
-    if (lock.current) return;
-    if (status === "picked_up" && !window.confirm(`Close Zomato #${order.zomatoOrderId}?`)) return;
-    lock.current = true; setBusyId(order.id); setError("");
-    try {
-      await setZomatoStatus(order.id, status);
-      onChanged();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Request failed");
-    } finally { lock.current = false; setBusyId(null); }
+    if (await advance(order, status)) onChanged();
   }
 
   return <div className="zomato-desk">
@@ -46,7 +32,7 @@ export function ZomatoPanel({ orders, canCreate, disabled, onNew, onOpenOrder, o
         return <li key={order.id} className={`zomato-desk-card zomato-age-${zomatoAgeTone(minutes)}`}>
           <button className="zomato-desk-open" disabled={disabled} onClick={() => onOpenOrder(order.id)}>
             <span className="zomato-desk-id">#{order.zomatoOrderId}</span>
-            <span className={`zomato-desk-pill is-${status}`}>{PILL[status]}</span>
+            <span className={`zomato-desk-pill is-${status}`}>{ZOMATO_PILL[status]}</span>
             <small>{minutes} min</small>
             <strong className="pos-money">₹{paiseToRupees(total)}</strong>
           </button>

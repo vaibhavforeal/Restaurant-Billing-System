@@ -73,4 +73,6 @@
 .zomato-new-form { display: grid; gap: 12px; min-width: min(320px, 100%); }
 .zomato-new-form label { display: grid; gap: 6px; }
 .zomato-new-form .primary { justify-self: start; }
+.billing-footer-actions > .zomato-desk-pill { flex: 0 0 auto; align-self: center; font-size: 12px; padding: 3px 9px; }
+.billing-zomato-hint { margin: 6px 0 0; font-size: 11px; color: var(--muted); }
 @media (pointer: coarse) { .zomato-desk-action, .zomato-desk .zomato-desk-new { min-height: 40px; } }

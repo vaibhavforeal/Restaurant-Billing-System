@@ -9,6 +9,7 @@ import { BillingPanel } from "./BillingPanel";
 import { mergeBlockedReason, mergeRoles } from "../table-transfer";
 import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
 import { Icon } from "../Icon";
+import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
@@ -418,7 +419,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   return <section className="screen order-screen">
     <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
-      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
+      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
         {order.type === "dine_in" && order.status === "open" ? <div className="order-captain-picker">
           <span>Captain</span>
           <button type="button" aria-label="Captain for this order" aria-haspopup="dialog" aria-expanded={captainPickerOpen} disabled={locked}
@@ -498,7 +499,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3><p>Try another name or category.</p></div>}</div>
       </section>}
       <aside className="order-cart" id="order-cart" aria-label="Current order">
-        <div className="cart-heading"><h3>Current order <span>{itemCount} items</span></h3><Icon name={order.type === "parcel" ? "bag" : "tables"} size={17} /></div>
+        <div className="cart-heading"><h3>Current order <span>{itemCount} items</span></h3><Icon name={order.type === "dine_in" ? "tables" : "bag"} size={17} /></div>
         <div className="cart-items" ref={cartItems} role="region" tabIndex={0} aria-label="Order items">
         {order.status === "open" && (draft.length > 0 || order.items.length === 0) && <div className="cart-section">
           <h3>{captain ? "Not sent" : "Cart"} ({draft.length} items)</h3>
@@ -525,7 +526,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total"><div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
         {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || (!draft.length && !hasKitchenPending)}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button></div> : <div className="cart-actions">{!isQuick && draft.length > 0 && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked}>{shortcut("save_items", "Punch")}</button>}{!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || (!draft.length && !hasKitchenPending)}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}{canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}</div>)}
-        {!captain && (user.role === "admin" || user.role === "cashier") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
+        {!captain && (user.role === "admin" || user.role === "cashier") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
         {isQuick && order.status === "settled" && onNextTakeaway && <button className="primary next-takeaway" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Next takeaway")} disabled={locked} onClick={() => { if (canLeave()) onNextTakeaway(); }}>Next takeaway</button>}
         </div>
       </aside>

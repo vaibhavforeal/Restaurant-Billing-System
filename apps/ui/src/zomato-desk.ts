@@ -1,9 +1,43 @@
-import { apiFetch } from "./api";
+import { useRef, useState } from "react";
+import type { PaymentMode } from "@forkflow/domain";
+import { ApiError, apiFetch } from "./api";
 import type { Order } from "./types";
 import { uuid } from "./uuid";
 
 export type ZomatoNext = "ready" | "picked_up";
 export type ZomatoTone = "ok" | "warn" | "late";
+
+/** Pill wording for a Zomato order; a null status is a new order. */
+export const ZOMATO_PILL = { new: "New", preparing: "Preparing", ready: "Ready", picked_up: "Picked up" } as const;
+
+/** How a Zomato order is named on screens and tickets. */
+export function zomatoLabel(zomatoOrderId: string | null | undefined): string {
+  return `Zomato #${zomatoOrderId ?? ""}`;
+}
+
+/** The location line of a kitchen ticket. */
+export function kitchenContextLabel(kot: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | null }): string {
+  if (kot.orderType === "zomato") return zomatoLabel(kot.zomatoOrderId);
+  if (kot.orderType === "parcel") return "Parcel";
+  return kot.splitLabel && kot.splitLabel !== "A" ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}` : kot.tableName ?? "Table";
+}
+
+/** The "Table / parcel" cell of a bill, from its receipt snapshot. */
+export function billContextLabel(receipt: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | undefined }): string {
+  if (receipt.orderType === "zomato") return zomatoLabel(receipt.zomatoOrderId);
+  if (receipt.orderType === "parcel") return "Parcel";
+  return `${receipt.tableName} · ${receipt.splitLabel ?? "A"}`;
+}
+
+/** The GST line of a bill. A Zomato snapshot still copies the restaurant's tax-inclusive setting, so Zomato wins. */
+export function taxModeNote(bill: { taxInclusive: boolean; gstPaidBy?: "zomato" | undefined }): string {
+  if (bill.gstPaidBy === "zomato") return "GST paid by Zomato (section 9(5))";
+  return bill.taxInclusive ? "Menu prices include GST" : "GST added to menu prices";
+}
+
+export function billPaymentLabel(mode: PaymentMode): string {
+  return mode === "zomato" ? "Zomato" : mode.toUpperCase();
+}
 
 /** The one action a Zomato card offers, from where the order is in its life. */
 export function zomatoCardAction(order: Order): { label: "Add items" | "Ready" | "Picked up"; status: ZomatoNext | null } {
@@ -48,4 +82,29 @@ export async function setZomatoStatus(orderId: string, status: ZomatoNext): Prom
   const { order } = await apiFetch<{ order: Order }>(`/api/orders/${orderId}/zomato-status`, { method: "POST", body: JSON.stringify({ status, clientRef }) });
   pendingRefs.delete(key);
   return order;
+}
+
+/**
+ * One Zomato status change at a time, with the "Close Zomato #<id>?" check before Picked up and the server's message on refusal.
+ * Resolves true when the server applied the change.
+ */
+export function useZomatoStatus() {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const lock = useRef(false);
+
+  async function advance(order: Order, status: ZomatoNext): Promise<boolean> {
+    if (lock.current) return false;
+    if (status === "picked_up" && !window.confirm(`Close ${zomatoLabel(order.zomatoOrderId)}?`)) return false;
+    lock.current = true; setBusyId(order.id); setError("");
+    try {
+      await setZomatoStatus(order.id, status);
+      return true;
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Request failed");
+      return false;
+    } finally { lock.current = false; setBusyId(null); }
+  }
+
+  return { busyId, error, advance };
 }
