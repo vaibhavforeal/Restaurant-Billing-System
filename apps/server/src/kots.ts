@@ -79,6 +79,10 @@ export function registerKots(app: FastifyInstance): void {
 
         createdKots.push({ id: kotId, stationId });
       }
+      // A new Zomato order enters the kitchen; a Ready one goes back (new items to cook). Only when a KOT was created.
+      if (createdKots.length > 0) {
+        app.db.prepare("UPDATE orders SET zomato_status = 'preparing' WHERE id = ? AND type = 'zomato' AND (zomato_status IS NULL OR zomato_status = 'ready')").run(id);
+      }
       if (body) app.db.prepare("INSERT INTO kot_requests (client_ref, order_id, user_id, fingerprint, kot_ids) VALUES (?, ?, ?, ?, ?)")
         .run(body.clientRef, id, req.user.id, fingerprint, JSON.stringify(createdKots.map((k) => k.id)));
       const orderResult = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow;
@@ -120,6 +124,8 @@ export function registerKots(app: FastifyInstance): void {
         let contextLine: string;
         if (orderResult.type === "parcel") {
           contextLine = "Parcel";
+        } else if (orderResult.type === "zomato") {
+          contextLine = `Zomato #${orderResult.zomato_order_id}`;
         } else if (tableName) {
           if (orderResult.split_label === null || orderResult.split_label === "A") {
             contextLine = tableName;
@@ -137,6 +143,7 @@ export function registerKots(app: FastifyInstance): void {
             kotNo: kotRow.kot_no,
             stationName: stationRow.name,
             orderType: orderResult.type,
+            zomatoOrderId: orderResult.zomato_order_id ?? null,
             tableName,
             splitLabel: orderResult.split_label,
             items: kotItemsForPrint.map((i) => ({
@@ -240,10 +247,22 @@ export function registerKots(app: FastifyInstance): void {
     }
 
     const now = Date.now();
-    app.db.prepare("UPDATE kots SET accepted_at = COALESCE(accepted_at, done_at, ?), done_at = COALESCE(done_at, ?) WHERE id = ?").run(now, now, id);
+    // The kitchen finishing the last KOT of a Preparing Zomato order makes it Ready, in the same transaction as Done.
+    const becameReady = app.db.transaction(() => {
+      app.db.prepare("UPDATE kots SET accepted_at = COALESCE(accepted_at, done_at, ?), done_at = COALESCE(done_at, ?) WHERE id = ?").run(now, now, id);
+      const order = app.db.prepare("SELECT type, status, zomato_status FROM orders WHERE id = ?").get(kot.order_id) as Pick<OrderRow, "type" | "status" | "zomato_status">;
+      if (order.type !== "zomato" || order.status !== "open" || order.zomato_status !== "preparing") return false;
+      const waiting = app.db.prepare(`SELECT 1 FROM kots WHERE order_id = ? AND done_at IS NULL
+        UNION ALL SELECT 1 FROM order_items oi JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1`).get(kot.order_id, kot.order_id);
+      if (waiting) return false;
+      app.db.prepare("UPDATE orders SET zomato_status = 'ready' WHERE id = ?").run(kot.order_id);
+      return true;
+    })();
 
     const updated = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(id) as KotRow;
     broadcastKotUpdated(updated);
+    if (becameReady) app.broadcast("order.updated", { order: loadOrderJson(app.db, kot.order_id)! });
 
     return reply.status(200).send({ kot: kotJson(updated) });
   });

@@ -121,4 +121,20 @@ describe("templates", () => {
       expect(renderBytes(buf)).toMatchSnapshot();
     });
   });
+
+  describe("zomato context line", () => {
+    it("prints ZOMATO #<id> on the KOT and cancel slips", () => {
+      const kot = renderBytes(kotSlip({
+        kotNo: 7, stationName: "Kitchen", orderType: "zomato" as const, zomatoOrderId: "5821", tableName: null, splitLabel: null,
+        items: [{ qty: 1, name: "Dal", note: null, cancelled: false }], atMs: baseDate,
+      }, 80));
+      expect(kot).toContain("ZOMATO #5821\n");
+      expect(kot).not.toContain("Table");
+      const cancel = renderBytes(cancelSlip({
+        kotNo: 7, stationName: "Kitchen", orderType: "zomato" as const, zomatoOrderId: "5821", tableName: null, splitLabel: null,
+        item: { qty: 1, name: "Dal" }, reason: "Out of stock", atMs: baseDate,
+      }, 58));
+      expect(cancel).toContain("ZOMATO #5821\n");
+    });
+  });
 });

@@ -312,6 +312,8 @@ export function registerOrders(app: FastifyInstance): void {
             let contextLine: string;
             if (order.type === "parcel") {
               contextLine = "Parcel";
+            } else if (order.type === "zomato") {
+              contextLine = `Zomato #${order.zomato_order_id}`;
             } else if (tableName) {
               if (order.split_label === null || order.split_label === "A") {
                 contextLine = tableName;
@@ -329,6 +331,7 @@ export function registerOrders(app: FastifyInstance): void {
                 kotNo: kot.kot_no,
                 stationName: stationRow.name,
                 orderType: order.type,
+                zomatoOrderId: order.zomato_order_id ?? null,
                 tableName,
                 splitLabel: order.split_label,
                 item: { qty: item.qty, name: item.name_snapshot },

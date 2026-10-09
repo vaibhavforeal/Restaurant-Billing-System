@@ -6,6 +6,7 @@ export interface KotSlipCtx {
   kotNo: number;
   stationName: string;
   orderType: "dine_in" | "parcel" | "zomato";
+  zomatoOrderId?: string | null;
   tableName: string | null;
   splitLabel: string | null;
   items: Array<{ qty: number; name: string; note: string | null; cancelled: boolean }>;
@@ -16,6 +17,7 @@ export interface CancelSlipCtx {
   kotNo: number;
   stationName: string;
   orderType: "dine_in" | "parcel" | "zomato";
+  zomatoOrderId?: string | null;
   tableName: string | null;
   splitLabel: string | null;
   item: { qty: number; name: string };
@@ -34,10 +36,12 @@ function formatTime(ms: number): string {
 /**
  * Context line for KOT/cancel slips (kitchen-board rule):
  * - parcel → "Parcel"
+ * - zomato → "ZOMATO #<id>"
  * - dine-in → tableName when splitLabel is null or 'A', else "tableName / splitLabel"
  */
-export function contextLine(orderType: "dine_in" | "parcel" | "zomato", tableName: string | null, splitLabel: string | null): string {
+export function contextLine(orderType: "dine_in" | "parcel" | "zomato", tableName: string | null, splitLabel: string | null, zomatoOrderId: string | null = null): string {
   if (orderType === "parcel") return "Parcel";
+  if (orderType === "zomato") return `ZOMATO #${zomatoOrderId ?? ""}`;
   if (!splitLabel || splitLabel === "A") return tableName ?? "Table";
   return `${tableName ?? "Table"} / ${splitLabel}`;
 }
@@ -53,7 +57,7 @@ export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProf
     .size(2, 2)
     .line(`KOT #${ctx.kotNo}`)
     .size(1, 1)
-    .line(contextLine(ctx.orderType, ctx.tableName, ctx.splitLabel))
+    .line(contextLine(ctx.orderType, ctx.tableName, ctx.splitLabel, ctx.zomatoOrderId))
     .line(formatTime(ctx.atMs))
     .bold(false)
     .hr(width)
@@ -86,7 +90,7 @@ export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: Pri
     .line("CANCELLED")
     .size(1, 1)
     .line(`KOT #${ctx.kotNo}`)
-    .line(contextLine(ctx.orderType, ctx.tableName, ctx.splitLabel))
+    .line(contextLine(ctx.orderType, ctx.tableName, ctx.splitLabel, ctx.zomatoOrderId))
     .line(formatTime(ctx.atMs))
     .hr(width)
     .bold(true)

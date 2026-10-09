@@ -84,6 +84,7 @@ export function kotWithContextJson(
   return {
     ...kotJson(kot),
     orderType: order.type,
+    zomatoOrderId: order.zomato_order_id ?? null,
     tableName,
     splitLabel: order.split_label,
     items: items.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),

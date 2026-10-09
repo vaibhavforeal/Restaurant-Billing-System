@@ -416,3 +416,149 @@ describe("billing guards on Zomato orders", () => {
     expect(app.db.prepare("SELECT status FROM bills WHERE id = ?").get(bill.id)).toEqual({ status: "paid" });
   });
 });
+
+describe("Zomato KOTs and the Kitchen Display", () => {
+  /** Zomato order with one pending item routed to the seeded Kitchen station (optionally with a printer on it). */
+  async function stationOrder(token: string, zomatoId = "5821", printer = false) {
+    const stationId = (await app.inject({ method: "GET", url: "/api/kot-stations", headers: auth(token) })).json().stations[0].id as string;
+    if (printer) {
+      const p = (await app.inject({ method: "POST", url: "/api/printers", headers: auth(token), payload: { name: "Kitchen", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } })).json().printer;
+      await app.inject({ method: "PATCH", url: `/api/kot-stations/${stationId}`, headers: auth(token), payload: { printerId: p.id } });
+    }
+    const p = await product(token, { name: `Dal ${uuidv7()}`, pricePaise: 20000, kotStationId: stationId });
+    const order = (await createOrder(token, zomatoId)).json().order as { id: string };
+    await addItem(token, order.id, p.id);
+    return { order, productId: p.id, stationId };
+  }
+  const send = (token: string, orderId: string) => app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(token) });
+  const done = (token: string, kotId: string) => app.inject({ method: "POST", url: `/api/kots/${kotId}/done`, headers: auth(token) });
+  const statusOf = (orderId: string) => (app.db.prepare("SELECT zomato_status s FROM orders WHERE id = ?").get(orderId) as { s: string | null }).s;
+  const setReady = (orderId: string) => app.db.prepare("UPDATE orders SET zomato_status = 'ready' WHERE id = ?").run(orderId);
+
+  it("moves a new order to Preparing on send, labels the print job and slip with the Zomato ID", async () => {
+    const admin = await setup();
+    const { order } = await stationOrder(admin.token, "5821", true);
+    expect(statusOf(order.id)).toBeNull();
+    const res = await send(admin.token, order.id);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().order.zomatoStatus).toBe("preparing");
+    expect(statusOf(order.id)).toBe("preparing");
+    const jobs = app.db.prepare("SELECT job_json, payload FROM print_jobs").all() as Array<{ job_json: string; payload: Buffer }>;
+    expect(jobs).toHaveLength(1);
+    expect(JSON.parse(jobs[0]!.job_json)).toMatchObject({ kind: "kot", label: "KOT #1 — Zomato #5821" });
+    expect(Buffer.from(jobs[0]!.payload).toString("latin1")).toContain("ZOMATO #5821");
+  });
+
+  it("moves a Ready order back to Preparing when new items are sent", async () => {
+    const admin = await setup();
+    const { order, productId } = await stationOrder(admin.token);
+    expect((await send(admin.token, order.id)).statusCode).toBe(200);
+    setReady(order.id);
+    await addItem(admin.token, order.id, productId);
+    const res = await send(admin.token, order.id);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().order.zomatoStatus).toBe("preparing");
+  });
+
+  it("leaves a new order with only stationless items alone", async () => {
+    const admin = await setup();
+    const p = await product(admin.token, { name: "Cola", pricePaise: 5000 });
+    const order = (await createOrder(admin.token, "5822")).json().order as { id: string };
+    await addItem(admin.token, order.id, p.id);
+    expect((await send(admin.token, order.id)).statusCode).toBe(409);
+    expect(statusOf(order.id)).toBeNull();
+  });
+
+  it("does not touch the status on a replayed send", async () => {
+    const admin = await setup();
+    const { order } = await stationOrder(admin.token);
+    const itemIds = (app.db.prepare("SELECT id FROM order_items WHERE order_id = ?").all(order.id) as Array<{ id: string }>).map((i) => i.id);
+    const payload = { clientRef: uuidv7(), itemIds };
+    const first = await app.inject({ method: "POST", url: `/api/orders/${order.id}/send`, headers: auth(admin.token), payload });
+    expect(first.statusCode, first.body).toBe(200);
+    setReady(order.id);
+    const again = await app.inject({ method: "POST", url: `/api/orders/${order.id}/send`, headers: auth(admin.token), payload });
+    expect(again.statusCode).toBe(200);
+    expect(statusOf(order.id)).toBe("ready");
+  });
+
+  it("labels the cancel slip of a sent Zomato item with the Zomato ID", async () => {
+    const admin = await setup();
+    const { order } = await stationOrder(admin.token, "5821", true);
+    await send(admin.token, order.id);
+    const itemId = (app.db.prepare("SELECT id FROM order_items WHERE order_id = ?").get(order.id) as { id: string }).id;
+    const res = await app.inject({ method: "POST", url: `/api/order-items/${itemId}/cancel`, headers: auth(admin.token), payload: { reason: "Out of stock" } });
+    expect(res.statusCode, res.body).toBe(200);
+    const jobs = (app.db.prepare("SELECT job_json, payload FROM print_jobs ORDER BY sequence").all() as Array<{ job_json: string; payload: Buffer }>);
+    expect(JSON.parse(jobs[1]!.job_json)).toMatchObject({ kind: "cancel", label: "Cancel — KOT #1 — Zomato #5821" });
+    expect(Buffer.from(jobs[1]!.payload).toString("latin1")).toContain("ZOMATO #5821");
+  });
+
+  it("makes the order Ready when the kitchen marks its only KOT Done, and broadcasts the order", async () => {
+    const admin = await setup();
+    enableIntegration(app, "kds");
+    const { order } = await stationOrder(admin.token);
+    const kotId = (await send(admin.token, order.id)).json().kots[0].id as string;
+    const broadcast = vi.spyOn(app, "broadcast");
+    expect((await done(admin.token, kotId)).statusCode).toBe(200);
+    expect(statusOf(order.id)).toBe("ready");
+    const updates = broadcast.mock.calls.filter(([event]) => event === "order.updated");
+    expect(updates).toHaveLength(1);
+    expect(updates[0]![1]).toMatchObject({ order: { id: order.id, zomatoStatus: "ready" } });
+    // Repeating Done changes nothing and does not re-broadcast the order.
+    expect((await done(admin.token, kotId)).statusCode).toBe(200);
+    expect(broadcast.mock.calls.filter(([event]) => event === "order.updated")).toHaveLength(1);
+  });
+
+  it("keeps the order Preparing until every KOT is Done", async () => {
+    const admin = await setup();
+    enableIntegration(app, "kds");
+    const { order, productId } = await stationOrder(admin.token);
+    const first = (await send(admin.token, order.id)).json().kots[0].id as string;
+    await addItem(admin.token, order.id, productId);
+    const second = (await send(admin.token, order.id)).json().kots[0].id as string;
+    expect((await done(admin.token, first)).statusCode).toBe(200);
+    expect(statusOf(order.id)).toBe("preparing");
+    expect((await done(admin.token, second)).statusCode).toBe(200);
+    expect(statusOf(order.id)).toBe("ready");
+  });
+
+  it("keeps the order Preparing while station items are still unsent", async () => {
+    const admin = await setup();
+    enableIntegration(app, "kds");
+    const { order, productId } = await stationOrder(admin.token);
+    const kotId = (await send(admin.token, order.id)).json().kots[0].id as string;
+    await addItem(admin.token, order.id, productId);
+    expect((await done(admin.token, kotId)).statusCode).toBe(200);
+    expect(statusOf(order.id)).toBe("preparing");
+  });
+
+  it("does not change a dine-in order when its KOT is Done", async () => {
+    const admin = await setup();
+    enableIntegration(app, "kds");
+    const stationId = (await app.inject({ method: "GET", url: "/api/kot-stations", headers: auth(admin.token) })).json().stations[0].id as string;
+    const p = await product(admin.token, { name: "Biryani", pricePaise: 30000, kotStationId: stationId });
+    const table = (await app.inject({ method: "POST", url: "/api/tables", headers: auth(admin.token), payload: { name: "T1" } })).json().table;
+    const order = (await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "dine_in", tableId: table.id } })).json().order;
+    await addItem(admin.token, order.id, p.id);
+    const kotId = (await send(admin.token, order.id)).json().kots[0].id as string;
+    expect((await done(admin.token, kotId)).statusCode).toBe(200);
+    expect(statusOf(order.id)).toBeNull();
+  });
+
+  it("shows the Zomato order ID on the Kitchen Display and on KOT events", async () => {
+    const admin = await setup();
+    enableIntegration(app, "kds");
+    const { order, stationId } = await stationOrder(admin.token, "5821");
+    const broadcast = vi.spyOn(app, "broadcast");
+    const sent = await send(admin.token, order.id);
+    expect(sent.json().kots[0]).toMatchObject({ orderType: "zomato", zomatoOrderId: "5821", tableName: null });
+    expect(broadcast.mock.calls.find(([event]) => event === "kot.created")![1]).toMatchObject({ kot: { zomatoOrderId: "5821" } });
+    const board = await app.inject({ method: "GET", url: "/api/kots", headers: auth(admin.token) });
+    expect(board.json().kots[0]).toMatchObject({ orderType: "zomato", zomatoOrderId: "5821" });
+    const parcel = (await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel" } })).json().order;
+    const roll = await product(admin.token, { name: "Roll", pricePaise: 9000, kotStationId: stationId });
+    await addItem(admin.token, parcel.id, roll.id);
+    expect((await send(admin.token, parcel.id)).json().kots[0].zomatoOrderId).toBeNull();
+  });
+});
