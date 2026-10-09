@@ -43,8 +43,8 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
   // A bill that charged no GST (no-GST restaurant or Zomato) has a credit note with none either.
   if (receiptGstMode(r) === "included") for (const t of note.taxes) {
     pair(`Taxable @ ${t.gstRate}%`, money(t.taxablePaise));
-    pair(`CGST @ ${t.gstRate / 2}%`, money(t.cgstPaise));
-    pair(`SGST @ ${t.gstRate / 2}%`, money(t.sgstPaise));
+    pair(`CGST ${t.gstRate / 2}%`, money(t.cgstPaise));
+    pair(`SGST ${t.gstRate / 2}%`, money(t.sgstPaise));
   }
   if (roundingOf(note)) pair("Round off", money(roundingOf(note)));
   pos.hr(width).bold(true);
@@ -91,7 +91,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   </tbody></table><div class="item-count"><span>${note.lines.reduce((sum, l) => sum + l.qty, 0)} total quantity credited</span><span>All amounts in INR</span></div>
   <div class="summary">${supply ? `<section aria-label="GST"><p class="tax-note">No GST was charged on this bill.</p></section>` : `<section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
     <table class="taxes"><thead><tr><th scope="col">GST</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead><tbody>
-    ${note.taxes.map((t) => `<tr><td>${t.gstRate}%</td><td>${money(t.taxablePaise)}</td><td>${money(t.cgstPaise)}<br><small>@ ${t.gstRate / 2}%</small></td><td>${money(t.sgstPaise)}<br><small>@ ${t.gstRate / 2}%</small></td></tr>`).join("")}
+    ${note.taxes.map((t) => `<tr><td>${t.gstRate}%</td><td>${money(t.taxablePaise)}</td><td>${money(t.cgstPaise)}<br><small>${t.gstRate / 2}%</small></td><td>${money(t.sgstPaise)}<br><small>${t.gstRate / 2}%</small></td></tr>`).join("")}
     </tbody></table>
   </section>`}<section aria-label="Credit note totals"><table class="totals"><tbody>
     ${supply ? `<tr><td>Item value</td><td class="amount">₹${money(note.taxablePaise)}</td></tr>` : `<tr><td>Taxable value</td><td class="amount">₹${money(note.taxablePaise)}</td></tr>

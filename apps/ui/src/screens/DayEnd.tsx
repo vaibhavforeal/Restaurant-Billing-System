@@ -48,7 +48,7 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
         <dt>Orders cancelled on this date</dt><dd>{report.cancellations.orderCount}</dd>
       </dl>
       </section><section><h3>GST breakdown</h3>
-      <p>Before credit notes. Zomato bills are not included: Zomato pays their GST.</p>
+      <p>Before credit notes. Zomato bills (Zomato pays their GST) and bills issued without GST (shown on the Sales without GST line) are not included.</p>
       <table style={{ width: "100%", textAlign: "right", borderSpacing: 8 }}><thead><tr><th>Rate</th><th>Taxable</th><th>CGST</th><th>SGST</th></tr></thead><tbody>
         {report.taxes.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)}</td><td>{money(t.sgstPaise)}</td></tr>)}
       </tbody></table>

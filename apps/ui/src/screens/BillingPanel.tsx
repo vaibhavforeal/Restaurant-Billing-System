@@ -38,7 +38,7 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
   </>;
   const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd><dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
-  const includes = !noGst && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
+  const includes = !noGst && includedPaise > 0 && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
     {compact ? <>{amounts}{payable}{includes}<details className="bill-tax-details"><summary>Tax details</summary>{breakdown}</details></> : <>{amounts}{payable}{includes}{breakdown}</>}
   </div>;

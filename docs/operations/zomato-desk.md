@@ -87,7 +87,7 @@ Kitchen Display shows the ticket as **Zomato #<id>** with a Zomato colour tag.
 ## Bills, GST and refunds
 
 **Picked up** issues a bill for the item value with no discount and **no GST charged**,
-whatever the restaurant's "menu prices include GST" setting. The bill is marked
+whatever the restaurant's GST setting (Settings > Restaurant profile > GST). The bill is marked
 **GST paid by Zomato (section 9(5))** and the payment mode is **Zomato**.
 
 For these supplies Zomato, as the e-commerce operator, is responsible for collecting and

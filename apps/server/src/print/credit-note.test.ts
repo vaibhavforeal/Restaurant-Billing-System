@@ -47,7 +47,7 @@ describe("credit note slip", () => {
       expect(rendered).toContain("CREDIT NOTE CN-1");
       expect(rendered).toContain(`Bill #${bill.billNo}`);
       expect(rendered).toContain("Thali");
-      expect(rendered).toContain("CGST @ 2.5%");
+      expect(rendered).toContain("CGST 2.5%"); expect(rendered).toContain("SGST 2.5%"); expect(rendered).not.toContain("@ 2.5%");
       expect(rendered).toContain("TOTAL REFUNDED");
       expect(rendered).toContain("34.99");
       expect(rendered).toContain("CASH");

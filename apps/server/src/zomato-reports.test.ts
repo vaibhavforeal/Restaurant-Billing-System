@@ -68,6 +68,8 @@ describe("Zomato in reports", () => {
     expect(report.net.taxablePaise).toBe(takeaway.taxes.reduce((sum: number, t: { taxablePaise: number }) => sum + t.taxablePaise, 0));
     expect(report.net).toMatchObject({ cgstPaise: takeaway.cgstPaise, sgstPaise: takeaway.sgstPaise, totalPaise: takeaway.totalPaise + zomatoBill.totalPaise });
     expect(report.zomatoSuppliesPaise).toBe(58000);
+    // A Zomato bill carries no GST either, but it is a 9(5) supply, not a "Sales without GST" bill.
+    expect(report.noGstSalesPaise).toBe(0);
   });
 
   it("excludes Zomato receivables from the sales and cashier collections", async () => {
