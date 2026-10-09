@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  type Bill, type Database, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
+  type Bill, type Database, type PaymentMode, type ReceiptSnapshot, type TaxLine, type TaxMode } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
@@ -36,11 +36,83 @@ export function loadBill(db: Database, id: string): Bill {
     receipt, taxInclusive: receipt.taxInclusive, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise) };
 }
 
+type IssueRole = Parameters<typeof roleFor>[0];
+
+/** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
+function priceOrder(db: Database, orderId: string, discountPaise: number, role: IssueRole, taxMode: TaxMode, receiptExtra?: Partial<ReceiptSnapshot>) {
+  const order = loadOrderJson(db, orderId);
+  if (!order) throw httpError(404, "order not found");
+  if (order.status !== "open") throw httpError(409, "order is not open");
+  const items = order.items.filter((item) => item.status !== "cancelled");
+  if (!items.length) throw httpError(409, "Add items before billing");
+  const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
+  if (unsent) throw httpError(409, "Send kitchen items before billing");
+  let totals;
+  const { tax_inclusive } = db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number };
+  try { totals = calculateBill(items, discountPaise, tax_inclusive === 1, taxMode); }
+  catch (err) { throw httpError(400, err instanceof Error ? err.message : "Invalid bill"); }
+  const limit = roleFor(role).limits?.["max_discount_percent"];
+  if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
+  const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId">;
+  const receipt: ReceiptSnapshot = { ...profile, taxInclusive: tax_inclusive === 1, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
+    items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })), ...receiptExtra };
+  return { items, totals, receipt };
+}
+
+/**
+ * Creates the bill for an open order: bill row, tax lines, report lines, stock deduction, and the order moves to `billed`.
+ * Call inside an open `db.transaction`. Printing and broadcasting are the caller's job; the returned stock IDs are for `publishStock`.
+ */
+export function issueBill(db: Database, orderId: string, opts: {
+  discountPaise: number; discountNote: string | null; clientRef: string; requestJson: string; actorId: string; role: IssueRole;
+  taxMode?: TaxMode; receiptExtra?: Partial<ReceiptSnapshot>;
+}): { billId: string; changedStockIds: string[] } {
+  const { totals, receipt } = priceOrder(db, orderId, opts.discountPaise, opts.role, opts.taxMode ?? "restaurant", opts.receiptExtra);
+  const id = uuidv7();
+  const billNo = nextSequence(db, "bill_no");
+  db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
+    cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, orderId, totals.subtotalPaise,
+      totals.discountPaise, opts.discountNote || null, totals.cgstPaise, totals.sgstPaise, totals.roundingPaise,
+      totals.totalPaise, Date.now(), opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt));
+  for (const tax of totals.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
+  saveReportLines(db, id);
+  // All remaining pending items are stationless; deduct before changing status.
+  const pending = db.prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'pending'").all(orderId) as { id: string }[];
+  const changedStockIds = consumeStock(db, pending.map((item) => item.id), opts.actorId);
+  db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(orderId);
+  db.prepare("UPDATE orders SET status = 'billed' WHERE id = ?").run(orderId);
+  return { billId: id, changedStockIds };
+}
+
+/**
+ * Records the payments for an unpaid bill, marks the bill paid and settles its order. Returns the linked table IDs,
+ * read before settling deactivates the table links. Call inside an open `db.transaction`; replay detection by
+ * `clientRef` is the caller's job.
+ */
+export function settleBill(db: Database, billId: string, opts: {
+  payments: Array<{ mode: PaymentMode; amountPaise: number; refNote?: string | null }>; clientRef: string; requestJson: string; actorId: string;
+}): string[] {
+  const bill = db.prepare("SELECT * FROM bills WHERE id = ?").get(billId) as BillRow | undefined;
+  if (!bill) throw httpError(404, "bill not found");
+  if (bill.status !== "unpaid") throw httpError(409, "Bill already settled or void");
+  const order = loadOrderJson(db, bill.order_id);
+  if (order?.status !== "billed") throw httpError(409, "Order is not billed");
+  const amount = opts.payments.reduce((sum, p) => sum + p.amountPaise, 0);
+  if (amount !== bill.total_paise) throw httpError(400, "Payments must exactly match the bill total");
+  const now = Date.now();
+  const linkedTables = linkedTableIds(db, bill.order_id);
+  db.prepare("INSERT INTO bill_settlements (bill_id, client_ref, request_json, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(billId, opts.clientRef, opts.requestJson, opts.actorId, now);
+  for (const payment of opts.payments) db.prepare("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), billId, payment.mode, payment.amountPaise, payment.refNote || null, now);
+  db.prepare("UPDATE bills SET status = 'paid' WHERE id = ?").run(billId);
+  db.prepare("UPDATE orders SET status = 'settled', closed_at = ? WHERE id = ?").run(now, bill.order_id);
+  return linkedTables;
+}
+
 export function registerBilling(app: FastifyInstance): void {
   const db = app.db;
   const read = app.requirePermission("bills.read");
   const create = app.requirePermission("bills.create");
-  const getRow = (id: string) => db.prepare("SELECT * FROM bills WHERE id = ?").get(id) as BillRow | undefined;
   const getBill = (id: string): Bill => loadBill(db, id);
   function printer(id: string): PrinterRow {
     const p = db.prepare("SELECT * FROM printers WHERE id = ? AND is_active = 1").get(id) as PrinterRow | undefined;
@@ -69,22 +141,7 @@ export function registerBilling(app: FastifyInstance): void {
     return order;
   }
   function preview(orderId: string, body: z.infer<typeof BillPreview>, role: Parameters<typeof roleFor>[0]) {
-    const order = loadOrderJson(db, orderId);
-    if (!order) throw httpError(404, "order not found");
-    if (order.status !== "open") throw httpError(409, "order is not open");
-    const items = order.items.filter((item) => item.status !== "cancelled");
-    if (!items.length) throw httpError(409, "Add items before billing");
-    const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
-    if (unsent) throw httpError(409, "Send kitchen items before billing");
-    let totals;
-    const { tax_inclusive } = db.prepare("SELECT tax_inclusive FROM settings WHERE id = 1").get() as { tax_inclusive: number };
-    try { totals = calculateBill(items, body.discountPaise, tax_inclusive === 1); }
-    catch (err) { throw httpError(400, err instanceof Error ? err.message : "Invalid bill"); }
-    const limit = roleFor(role).limits?.["max_discount_percent"];
-    if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
-    const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId">;
-    const receipt: ReceiptSnapshot = { ...profile, taxInclusive: tax_inclusive === 1, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
-      items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })) };
+    const { items, totals, receipt } = priceOrder(db, orderId, body.discountPaise, role, "restaurant");
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
     return { ...totals, receipt, previewKey };
   }
@@ -113,22 +170,10 @@ export function registerBilling(app: FastifyInstance): void {
       const value = preview(orderId, body, req.user.role);
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
       const target = body.printerId ? printer(body.printerId) : null;
-      const id = uuidv7();
-      const billNo = nextSequence(db, "bill_no");
-      db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
-        cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, orderId, value.subtotalPaise,
-          value.discountPaise, body.discountNote || null, value.cgstPaise, value.sgstPaise, value.roundingPaise,
-          value.totalPaise, Date.now(), req.user.id, body.clientRef, requestJson, JSON.stringify(value.receipt));
-      for (const tax of value.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
-      saveReportLines(db, id);
-      // All remaining pending items are stationless; deduct before changing status.
-      const pending = db.prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'pending'").all(orderId) as { id: string }[];
-      changedStockIds.push(...consumeStock(db, pending.map((item) => item.id), req.user.id));
-      db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(orderId);
-      db.prepare("UPDATE orders SET status = 'billed' WHERE id = ?").run(orderId);
-      const print = target ? printNewBill(getBill(id), target) : { value: null, error: null };
-      return { billId: id, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };
+      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role });
+      changedStockIds.push(...issued.changedStockIds);
+      const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
+      return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };
     })();
     const bill = getBill(result.billId);
     if (result.created) publishStock(app, changedStockIds);
@@ -147,20 +192,7 @@ export function registerBilling(app: FastifyInstance): void {
         if (replay.bill_id !== id || replay.request_json !== requestJson) throw httpError(409, "Settlement reference already used for a different request");
         return null;
       }
-      const bill = getRow(id);
-      if (!bill) throw httpError(404, "bill not found");
-      if (bill.status !== "unpaid") throw httpError(409, "Bill already settled or void");
-      const order = loadOrderJson(db, bill.order_id);
-      if (order?.status !== "billed") throw httpError(409, "Order is not billed");
-      const amount = body.payments.reduce((sum, p) => sum + p.amountPaise, 0);
-      if (amount !== bill.total_paise) throw httpError(400, "Payments must exactly match the bill total");
-      const now = Date.now();
-      const linkedTables = linkedTableIds(db, bill.order_id);
-      db.prepare("INSERT INTO bill_settlements (bill_id, client_ref, request_json, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(id, body.clientRef, requestJson, req.user.id, now);
-      for (const payment of body.payments) db.prepare("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, payment.mode, payment.amountPaise, payment.refNote || null, now);
-      db.prepare("UPDATE bills SET status = 'paid' WHERE id = ?").run(id);
-      db.prepare("UPDATE orders SET status = 'settled', closed_at = ? WHERE id = ?").run(now, bill.order_id);
-      return linkedTables;
+      return settleBill(db, id, { payments: body.payments, clientRef: body.clientRef, requestJson, actorId: req.user.id });
     })();
     const bill = getBill(id);
     return { bill, order: changed ? broadcast(bill.orderId, changed) : loadOrderJson(db, bill.orderId) };
