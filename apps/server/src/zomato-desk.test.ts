@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { uuidv7 } from "@forkflow/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 import { nextZomatoStatus } from "./zomato-desk.js";
@@ -205,6 +205,31 @@ describe("Zomato status and Picked up", () => {
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json().order).toMatchObject({ id: order.id, zomatoStatus: "ready", status: "open" });
     expect(res.json().bill).toBeUndefined();
+  });
+
+  it("answers a repeated Ready with the current order, unchanged and without a broadcast", async () => {
+    const admin = await setup();
+    const order = await zomatoOrder(admin.token, { station: true });
+    markSent(order.id);
+    setDbStatus(order.id, "preparing");
+    const broadcast = vi.spyOn(app, "broadcast");
+    const clientRef = uuidv7();
+    const first = await setStatus(admin.token, order.id, "ready", clientRef);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().order.zomatoStatus).toBe("ready");
+    expect(broadcast.mock.calls.filter(([event]) => event === "order.updated")).toHaveLength(1);
+    for (const ref of [clientRef, uuidv7()]) {
+      const again = await setStatus(admin.token, order.id, "ready", ref);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(again.json().order).toEqual(first.json().order);
+      expect(again.json().bill).toBeUndefined();
+    }
+    expect(broadcast.mock.calls.filter(([event]) => event === "order.updated")).toHaveLength(1);
+    // A closed order is not "already ready": Ready after Picked up stays refused.
+    expect((await setStatus(admin.token, order.id, "picked_up")).statusCode).toBe(200);
+    const late = await setStatus(admin.token, order.id, "ready", clientRef);
+    expect(late.statusCode).toBe(409);
+    expect(late.json().code).toBe("zomato_status");
   });
 
   it("refuses Ready while a station item is still pending", async () => {

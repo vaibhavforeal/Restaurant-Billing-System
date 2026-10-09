@@ -64,6 +64,8 @@ export function registerZomatoDesk(app: FastifyInstance): void {
         const state = order.status === "cancelled" ? "cancelled" : STATUS_LABEL[current ?? "new"];
         throw httpError(409, `Zomato #${zomatoOrderId} is already ${state}.`, "zomato_status");
       }
+      // Ready has no stored reference: a repeat (lost response, double-tap, second counter) gets the current order unchanged.
+      if (body.status === "ready" && current === "ready") return { billId: null, changed: false };
       const hasItems = db.prepare("SELECT 1 FROM order_items WHERE order_id = ? AND status != 'cancelled' LIMIT 1").get(id) !== undefined;
       const hasPendingStationItems = db.prepare(`SELECT 1 FROM order_items oi JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1`).get(id) !== undefined;
