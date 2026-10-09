@@ -47,7 +47,8 @@ export const ProductCreate = z.object({
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
   zomatoPricePaise: Paise.nullable().optional(),
-  gstRate: GstRate,
+  /** null follows the restaurant default rate. */
+  gstRate: GstRate.nullable().default(null),
   isVeg: z.boolean().default(true),
   kotStationId: z.string().min(1).nullable().default(null),
   variants: z.array(VariantCreate).default([]),
@@ -64,7 +65,7 @@ export const ProductUpdate = z.object({
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
   zomatoPricePaise: Paise.nullable().optional(),
-  gstRate: GstRate.optional(),
+  gstRate: GstRate.nullable().optional(),
   isVeg: z.boolean().optional(),
   kotStationId: z.string().min(1).nullable().optional(),
   isActive: z.boolean().optional(),

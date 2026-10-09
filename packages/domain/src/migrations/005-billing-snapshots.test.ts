@@ -10,7 +10,8 @@ describe("billing migration", () => {
       migrate(db, MIGRATIONS.slice(0, 4));
       db.prepare("UPDATE settings SET restaurant_name = 'Existing cafe'").run();
       db.prepare("UPDATE sequences SET value = 17 WHERE name = 'bill_no'").run();
-      migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
+      const upToThis = MIGRATIONS.filter((m) => m.version <= 30); // later migrations drop tax_inclusive
+      migrate(db, upToThis); migrate(db, upToThis);
       expect(db.prepare("SELECT restaurant_name, tax_inclusive FROM settings").get()).toEqual({ restaurant_name: "Existing cafe", tax_inclusive: 0 });
       expect(db.prepare("SELECT value FROM sequences WHERE name = 'bill_no'").get()).toEqual({ value: 17 });
       expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);

@@ -10,7 +10,7 @@ describe("UPI settings upgrade", () => {
       migrate(db, MIGRATIONS.filter((m) => m.version < 15));
       db.prepare("UPDATE settings SET restaurant_name = 'Existing cafe', tax_inclusive = 1 WHERE id = 1").run();
       const before = db.prepare("SELECT * FROM settings").get() as object;
-      migrate(db, MIGRATIONS);
+      migrate(db, MIGRATIONS.filter((m) => m.version <= 30)); // later migrations drop tax_inclusive and gst_scheme
       expect(db.prepare("SELECT * FROM settings").get()).toEqual({ ...before, upi_id: "", require_kitchen_acceptance: 1, receipt_style: "classic", gst_scheme: "regular" });
       db.prepare("UPDATE settings SET upi_id = 'cafe@bank'").run();
       migrate(db, MIGRATIONS);

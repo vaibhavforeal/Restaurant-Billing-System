@@ -14,7 +14,6 @@ export type GuestSubmission = z.infer<typeof GuestSubmission>;
 export interface GuestMenu {
   restaurantName: string;
   table: { id: string; name: string; area: string | null };
-  taxInclusive: boolean;
   orderingAvailable: boolean;
   menuVersion: string;
   categories: Array<{ id: string; name: string }>;
@@ -26,7 +25,7 @@ export interface GuestRequestItem {
 }
 export interface GuestReceipt {
   id: string; status: "pending" | "accepted" | "rejected" | "expired";
-  tableName: string; items: GuestRequestItem[]; subtotalPaise: number; taxInclusive: boolean;
+  tableName: string; items: GuestRequestItem[]; subtotalPaise: number;
   createdAt: number; expiresAt: number; reason: string | null;
   preparation: GuestPreparation | null;
 }

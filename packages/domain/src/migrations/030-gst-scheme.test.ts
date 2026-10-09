@@ -10,10 +10,11 @@ describe("GST scheme upgrade", () => {
       migrate(db, MIGRATIONS.filter((m) => m.version < 30));
       db.prepare("UPDATE settings SET restaurant_name = 'Existing cafe', tax_inclusive = 1").run();
       const before = db.prepare("SELECT * FROM settings").get() as object;
-      migrate(db, MIGRATIONS);
+      const upToThis = MIGRATIONS.filter((m) => m.version <= 30); // 031 replaces gst_scheme
+      migrate(db, upToThis);
       expect(db.prepare("SELECT * FROM settings").get()).toEqual({ ...before, gst_scheme: "regular" });
       db.prepare("UPDATE settings SET gst_scheme = 'composition'").run();
-      migrate(db, MIGRATIONS);
+      migrate(db, upToThis);
       expect(db.prepare("SELECT gst_scheme FROM settings").get()).toEqual({ gst_scheme: "composition" });
       expect(() => db.prepare("UPDATE settings SET gst_scheme = 'unregistered'").run()).toThrow();
     } finally { db.close(); }

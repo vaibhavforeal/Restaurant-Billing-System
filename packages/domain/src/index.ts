@@ -30,7 +30,7 @@ export {
   type VariantCreateInput, type VariantUpdateInput,
 } from "./catalog-schemas.js";
 export { RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
-export { SettingsUpdate, UpiId, GST_SCHEMES, type GstScheme, type SettingsUpdateInput } from "./settings-schemas.js";
+export { SettingsUpdate, UpiId, type SettingsUpdateInput } from "./settings-schemas.js";
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {

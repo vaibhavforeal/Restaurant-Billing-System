@@ -10,7 +10,7 @@ describe("receipt style upgrade", () => {
       migrate(db, MIGRATIONS.filter((m) => m.version < 29));
       db.prepare("UPDATE settings SET restaurant_name = 'Existing cafe', tax_inclusive = 1, upi_id = 'cafe@bank'").run();
       const before = db.prepare("SELECT * FROM settings").get() as object;
-      migrate(db, MIGRATIONS);
+      migrate(db, MIGRATIONS.filter((m) => m.version <= 30)); // later migrations drop tax_inclusive and gst_scheme
       expect(db.prepare("SELECT * FROM settings").get()).toEqual({ ...before, receipt_style: "classic", gst_scheme: "regular" });
       db.prepare("UPDATE settings SET receipt_style = 'heritage'").run();
       migrate(db, MIGRATIONS);

@@ -30,5 +30,6 @@ import { migration027 } from "./027-zomato-desk.js";
 import { migration028 } from "./028-zomato-age-thresholds.js";
 import { migration029 } from "./029-receipt-styles.js";
 import { migration030 } from "./030-gst-scheme.js";
+import { migration031 } from "./031-simple-gst.js";
 
-export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015, migration016, migration017, migration018, migration019, migration020, migration021, migration022, migration023, migration024, migration025, migration026, migration027, migration028, migration029, migration030];
+export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014, migration015, migration016, migration017, migration018, migration019, migration020, migration021, migration022, migration023, migration024, migration025, migration026, migration027, migration028, migration029, migration030, migration031];
