@@ -19,14 +19,14 @@ export function zomatoLabel(zomatoOrderId: string | null | undefined): string {
 export function kitchenContextLabel(kot: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | null }): string {
   if (kot.orderType === "zomato") return zomatoLabel(kot.zomatoOrderId);
   if (kot.orderType === "parcel") return "Parcel";
-  return kot.splitLabel && kot.splitLabel !== "A" ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}` : kot.tableName ?? "Table";
+  return kot.splitLabel && kot.splitLabel !== "A" ? `${kot.tableName ?? "Table"} Â· ${kot.splitLabel}` : kot.tableName ?? "Table";
 }
 
 /** The "Table / parcel" cell of a bill, from its receipt snapshot. */
 export function billContextLabel(receipt: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | undefined }): string {
   if (receipt.orderType === "zomato") return zomatoLabel(receipt.zomatoOrderId);
   if (receipt.orderType === "parcel") return "Parcel";
-  return `${receipt.tableName} · ${receipt.splitLabel ?? "A"}`;
+  return `${receipt.tableName} Â· ${receipt.splitLabel ?? "A"}`;
 }
 
 /** The GST line of a bill. A Zomato snapshot still copies the restaurant's tax-inclusive setting, so Zomato wins. */

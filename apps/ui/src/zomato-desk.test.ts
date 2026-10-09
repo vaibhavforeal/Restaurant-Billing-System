@@ -122,7 +122,7 @@ describe("kitchenContextLabel", () => {
   it("keeps the parcel and table labels", () => {
     expect(kitchenContextLabel({ ...kot, orderType: "parcel", tableName: null })).toBe("Parcel");
     expect(kitchenContextLabel(kot)).toBe("T1");
-    expect(kitchenContextLabel({ ...kot, splitLabel: "B" })).toBe("T1 · B");
+    expect(kitchenContextLabel({ ...kot, splitLabel: "B" })).toBe("T1 Â· B");
     expect(kitchenContextLabel({ ...kot, tableName: null, splitLabel: null })).toBe("Table");
   });
 });
@@ -136,8 +136,8 @@ describe("billContextLabel", () => {
 
   it("keeps the parcel and table labels", () => {
     expect(billContextLabel({ ...receipt, orderType: "parcel", tableName: null })).toBe("Parcel");
-    expect(billContextLabel(receipt)).toBe("T1 · A");
-    expect(billContextLabel({ ...receipt, splitLabel: "C" })).toBe("T1 · C");
+    expect(billContextLabel(receipt)).toBe("T1 Â· A");
+    expect(billContextLabel({ ...receipt, splitLabel: "C" })).toBe("T1 Â· C");
   });
 });
 
