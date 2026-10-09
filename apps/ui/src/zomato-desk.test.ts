@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
+import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, taxModeNote, validateAgeThresholds, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -176,5 +176,30 @@ describe("billTaxRates", () => {
   });
   it("lists the per-rate GST rows on the restaurant's own bills", () => {
     expect(billTaxRates({ taxes }, undefined)).toBe(taxes);
+  });
+});
+
+describe("validateAgeThresholds", () => {
+  it("accepts whole minutes from 1 to 240 with red later than amber", () => {
+    expect(validateAgeThresholds(15, 25)).toBe("");
+    expect(validateAgeThresholds(1, 2)).toBe("");
+    expect(validateAgeThresholds(239, 240)).toBe("");
+  });
+
+  it("says red must be later than amber when it is equal or earlier", () => {
+    expect(validateAgeThresholds(20, 20)).toBe("Red must be later than amber");
+    expect(validateAgeThresholds(30, 10)).toBe("Red must be later than amber");
+  });
+
+  it("asks for whole minutes from 1 to 240, including empty or fractional input", () => {
+    const range = "Amber and red must be whole minutes from 1 to 240";
+    for (const [warn, late] of [[0, 25], [15, 241], [-1, 25], [15, 0], [Number.NaN, 25], [15, Number.NaN], [10.5, 25], [15, 25.5]] as const) {
+      expect(validateAgeThresholds(warn, late), `${warn}/${late}`).toBe(range);
+    }
+  });
+
+  it("starts at 15 and 25 minutes", () => {
+    expect(DEFAULT_ZOMATO_AGE).toEqual({ warnMinutes: 15, lateMinutes: 25 });
+    expect(validateAgeThresholds(DEFAULT_ZOMATO_AGE.warnMinutes, DEFAULT_ZOMATO_AGE.lateMinutes)).toBe("");
   });
 });

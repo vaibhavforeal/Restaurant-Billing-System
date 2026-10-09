@@ -32,7 +32,7 @@ export interface ZomatoProvider {
 }
 interface ConfigRow {
   restaurant_id: string; restaurant_name: string; pos_id: string; webhook_base_url: string;
-  enabled: number; version: number; last_event_at: number | null;
+  enabled: number; version: number; last_event_at: number | null; warn_minutes: number; late_minutes: number;
 }
 interface OrderRow {
   restaurant_id: string; order_id: string; placed_at: number; status: ZomatoOrder["status"];
@@ -187,12 +187,14 @@ export function registerZomato(app: FastifyInstance, provider?: ZomatoProvider) 
   const settings = (): ZomatoSettings => {
     const c = config(app.db);
     return { restaurantId: c.restaurant_id, restaurantName: c.restaurant_name, posId: c.pos_id, webhookBaseUrl: c.webhook_base_url,
-      enabled: !!c.enabled, version: c.version, adapterConfigured: !!provider, lastEventAt: c.last_event_at };
+      enabled: !!c.enabled, version: c.version, adapterConfigured: !!provider, lastEventAt: c.last_event_at,
+      warnMinutes: c.warn_minutes, lateMinutes: c.late_minutes };
   };
   app.get("/api/zomato/settings", { preHandler: read }, async (_req, reply) => { reply.header("Cache-Control", "no-store"); return settings(); });
   app.patch("/api/zomato/settings", { preHandler: manage }, async (req) => {
     const body = z.object({ restaurantId: identifier, restaurantName: z.string().trim().max(160), posId: z.string().trim().max(160),
-      webhookBaseUrl: z.string().trim().max(500), enabled: z.boolean(), version: z.number().int().positive() }).parse(req.body);
+      webhookBaseUrl: z.string().trim().max(500), enabled: z.boolean(), version: z.number().int().positive(),
+      warnMinutes: z.number().int().min(1).max(240).optional(), lateMinutes: z.number().int().min(1).max(240).optional() }).parse(req.body);
     if (body.webhookBaseUrl) {
       let url: URL; try { url = new URL(body.webhookBaseUrl); } catch { throw httpError(400, "Use a valid public HTTPS origin for the webhook service"); }
       if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "") || url.hostname === "localhost" || url.hostname.endsWith(".local") || /^[\d.]+$/.test(url.hostname) || url.hostname.startsWith("["))
@@ -201,13 +203,15 @@ export function registerZomato(app: FastifyInstance, provider?: ZomatoProvider) 
     app.db.transaction(() => {
       const current = config(app.db);
       if (current.version !== body.version) throw httpError(409, "Connection settings changed. Refresh before saving.");
+      const warnMinutes = body.warnMinutes ?? current.warn_minutes, lateMinutes = body.lateMinutes ?? current.late_minutes;
+      if (lateMinutes <= warnMinutes) throw httpError(400, "Red must be later than amber");
       if (body.enabled && (!provider || !body.posId || !body.webhookBaseUrl)) throw httpError(409, "Live activation needs an approved provider adapter, POS ID and registered HTTPS webhook service.");
       if (body.restaurantId !== current.restaurant_id) {
         const used = app.db.prepare("SELECT 1 FROM zomato_orders UNION ALL SELECT 1 FROM zomato_settlements UNION ALL SELECT 1 FROM zomato_events LIMIT 1").get();
         if (used) throw httpError(409, "This ledger already belongs to the saved restaurant ID and cannot be reassigned.");
       }
-      app.db.prepare("UPDATE zomato_settings SET restaurant_id=?,restaurant_name=?,pos_id=?,webhook_base_url=?,enabled=?,version=version+1 WHERE id=1")
-        .run(body.restaurantId, body.restaurantName, body.posId, body.webhookBaseUrl.replace(/\/$/, ""), body.enabled ? 1 : 0);
+      app.db.prepare("UPDATE zomato_settings SET restaurant_id=?,restaurant_name=?,pos_id=?,webhook_base_url=?,enabled=?,warn_minutes=?,late_minutes=?,version=version+1 WHERE id=1")
+        .run(body.restaurantId, body.restaurantName, body.posId, body.webhookBaseUrl.replace(/\/$/, ""), body.enabled ? 1 : 0, warnMinutes, lateMinutes);
     })();
     app.broadcast("zomato.changed", {}); return settings();
   });

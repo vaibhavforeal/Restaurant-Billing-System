@@ -76,7 +76,7 @@ describe("migration 027 zomato desk", () => {
       const paymentsBefore = db.prepare("SELECT * FROM payments ORDER BY id").all();
       expect(Object.values(before).every((n) => n > 0)).toBe(true);
 
-      migrate(db, MIGRATIONS);
+      migrate(db, MIGRATIONS.filter((m) => m.version <= 27));
 
       expect(db.pragma("user_version", { simple: true })).toBe(27);
       expect(counts(db)).toEqual(before);
@@ -130,7 +130,7 @@ describe("migration 027 zomato desk", () => {
       expect(before.orders).toBe(3 + N);
       expect(before.payments).toBe(1 + N + N / 3);
 
-      migrate(db, MIGRATIONS);
+      migrate(db, MIGRATIONS.filter((m) => m.version <= 27));
 
       expect(db.pragma("user_version", { simple: true })).toBe(27);
       expect(counts(db)).toEqual(before);
@@ -154,7 +154,7 @@ describe("migration 027 zomato desk", () => {
       const orphans = db.pragma("foreign_key_check");
       expect(orphans).toEqual([expect.objectContaining({ table: "variants", parent: "products" })]);
 
-      migrate(db, MIGRATIONS);
+      migrate(db, MIGRATIONS.filter((m) => m.version <= 27));
 
       expect(db.pragma("user_version", { simple: true })).toBe(27);
       expect(db.pragma("foreign_key_check")).toEqual(orphans);

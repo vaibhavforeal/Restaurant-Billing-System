@@ -4,6 +4,8 @@ export type ZomatoOrderStatus = typeof ZOMATO_STATUSES[number];
 export interface ZomatoSettings {
   restaurantId: string; restaurantName: string; posId: string; webhookBaseUrl: string;
   enabled: boolean; version: number; adapterConfigured: boolean; lastEventAt: number | null;
+  /** Minutes since punch-in after which a Zomato order card turns amber, then red (1 to 240, red later than amber). */
+  warnMinutes: number; lateMinutes: number;
 }
 export interface ZomatoOrder {
   orderId: string; restaurantId: string; placedAt: number; status: ZomatoOrderStatus;

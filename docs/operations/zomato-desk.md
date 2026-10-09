@@ -19,6 +19,11 @@ The Zomato card in the Marketplace has a **Settings** button (admin only) that o
 the connection form: the Zomato restaurant ID and name. Save the restaurant ID before
 you import payout sheets. See [Zomato setup and reconciliation](zomato.md).
 
+The same form sets how fast an order should move. **Amber after (minutes)** and
+**Red after (minutes)** are counted from punch-in; a card turns amber, then red, once
+its age passes each value. They start at 15 and 25 minutes. Each is a whole number from
+1 to 240 and red must be later than amber. A change shows on every counter within seconds.
+
 If Zomato is turned off while orders are still open, the section stays until they are
 closed and **Ready** and **Picked up** keep working. Only **+ New** is refused.
 

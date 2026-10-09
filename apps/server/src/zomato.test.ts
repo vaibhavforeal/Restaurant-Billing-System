@@ -57,6 +57,56 @@ describe("Zomato setup and reconciliation", () => {
     expect(off.statusCode).toBe(503);
     expect(off.json().error).toBe("Zomato is turned off in the Marketplace");
   });
+  it("returns the card age thresholds, 15 and 25 minutes until the restaurant changes them", async () => {
+    const f = await fixture();
+    const cashier = await createUser(app, f.admin.token, { name: "Cash", pin: "2345", role: "cashier" });
+    const read = await f.api("GET", "/api/zomato/settings", undefined, cashier.token);
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({ warnMinutes: 15, lateMinutes: 25 });
+  });
+  it("saves the card age thresholds with the connection and bumps the version", async () => {
+    const f = await fixture();
+    const saved = await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, warnMinutes: 10, lateMinutes: 20 });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({ warnMinutes: 10, lateMinutes: 20, version: 3 });
+    expect((await f.api("GET", "/api/zomato/settings")).json()).toMatchObject({ warnMinutes: 10, lateMinutes: 20, version: 3 });
+    const edges = await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 3, warnMinutes: 1, lateMinutes: 240 });
+    expect(edges.statusCode, edges.body).toBe(200);
+    expect(edges.json()).toMatchObject({ warnMinutes: 1, lateMinutes: 240 });
+  });
+  it("refuses thresholds outside 1 to 240 minutes or fractions, and red that is not later than amber", async () => {
+    const f = await fixture();
+    for (const [warnMinutes, lateMinutes] of [[0, 25], [15, 241], [15, 0], [241, 250], [-5, 25], [10.5, 25], [15, 25.5]]) {
+      expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, warnMinutes, lateMinutes })).statusCode, `${warnMinutes}/${lateMinutes}`).toBe(400);
+    }
+    for (const [warnMinutes, lateMinutes] of [[20, 20], [30, 10]]) {
+      const refused = await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, warnMinutes, lateMinutes });
+      expect(refused.statusCode).toBe(400);
+      expect(refused.json().error).toBe("Red must be later than amber");
+    }
+    expect((await f.api("GET", "/api/zomato/settings")).json()).toMatchObject({ warnMinutes: 15, lateMinutes: 25, version: 2 });
+  });
+  it("checks red against amber using the stored value when only one threshold is sent", async () => {
+    const f = await fixture();
+    expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, warnMinutes: 30 })).statusCode).toBe(400);
+    expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, lateMinutes: 15 })).statusCode).toBe(400);
+    const ok = await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, lateMinutes: 40 });
+    expect(ok.statusCode, ok.body).toBe(200);
+    expect(ok.json()).toMatchObject({ warnMinutes: 15, lateMinutes: 40 });
+  });
+  it("keeps the stored thresholds when an older client leaves them out", async () => {
+    const f = await fixture();
+    expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, warnMinutes: 10, lateMinutes: 20 })).statusCode).toBe(200);
+    const saved = await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 3, restaurantName: "Renamed" });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({ restaurantName: "Renamed", warnMinutes: 10, lateMinutes: 20, version: 4 });
+  });
+  it("keeps the other settings rules when thresholds are sent", async () => {
+    const f = await fixture();
+    expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 1, warnMinutes: 10, lateMinutes: 20 })).statusCode).toBe(409);
+    expect((await f.api("PATCH", "/api/zomato/settings", { ...f.settings, version: 2, enabled: true, warnMinutes: 10, lateMinutes: 20 })).statusCode).toBe(409);
+    expect((await f.api("GET", "/api/zomato/settings")).json()).toMatchObject({ warnMinutes: 15, lateMinutes: 25, version: 2 });
+  });
   it("reports live integration as not configured when the Marketplace is on but there is no provider or it is disabled", async () => {
     await fixture();
     enableIntegration(app, "zomato");

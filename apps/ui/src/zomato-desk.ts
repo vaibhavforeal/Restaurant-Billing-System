@@ -72,17 +72,31 @@ export function findZomatoOrderById(orders: Order[], id: string): Order | undefi
   return wanted ? zomatoOrders(orders).find((order) => order.zomatoOrderId === wanted) : undefined;
 }
 
+/** Minutes since punch-in after which a Zomato card turns amber, then red, until the restaurant's own settings load. */
+export const DEFAULT_ZOMATO_AGE = { warnMinutes: 15, lateMinutes: 25 };
+
+const AGE_RANGE_MESSAGE = "Amber and red must be whole minutes from 1 to 240";
+const AGE_ORDER_MESSAGE = "Red must be later than amber";
+
+/** The message to show for these two thresholds (the same rules the server applies), or "" when they are fine. */
+export function validateAgeThresholds(warnMinutes: number, lateMinutes: number): string {
+  const whole = (n: number) => Number.isInteger(n) && n >= 1 && n <= 240;
+  if (!whole(warnMinutes) || !whole(lateMinutes)) return AGE_RANGE_MESSAGE;
+  return lateMinutes > warnMinutes ? "" : AGE_ORDER_MESSAGE;
+}
+
 /**
  * How urgent a Zomato card looks, from the minutes since the order was opened.
  *
  * Decision for the owner: when does a card turn amber ("warn") and red ("late")?
- * Zomato tracks the restaurant's preparation time, so a slow order costs ratings and
- * rider waiting time, but a screen that is mostly red stops meaning anything. Pick the
- * thresholds that match your usual prep time so red is the exception.
+ * The restaurant sets the two thresholds in Marketplace > Zomato > Settings (amber after 15
+ * and red after 25 minutes unless changed). Zomato tracks the restaurant's preparation time,
+ * so a slow order costs ratings and rider waiting time, but a screen that is mostly red stops
+ * meaning anything; red should be the exception.
  */
-export function zomatoAgeTone(minutes: number): ZomatoTone {
-  void minutes;
-  return "ok"; // TODO(you): choose thresholds
+export function zomatoAgeTone(minutes: number, thresholds: { warnMinutes: number; lateMinutes: number }): ZomatoTone {
+  void minutes; void thresholds;
+  return "ok"; // TODO(you): compare minutes with thresholds
 }
 
 // One reference per order and target status, kept until that request succeeds, so retrying the same click is not applied twice.
