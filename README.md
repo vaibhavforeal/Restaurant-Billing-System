@@ -171,8 +171,9 @@ the final payable amount. Quick takeaway can issue the QR bill before payment.
 Staff verify receipt in their bank app before settling; see
 [UPI payment setup and behavior](docs/operations/upi-payments.md).
 
-In **Settings → Menu price tax mode**, choose **Add GST at checkout** (default)
-or **Menu prices include GST**. Changing the setting affects new bills only.
+In **Settings → Restaurant profile → GST**, choose **Prices include GST** (default,
+with a **Default GST rate** of 5%, 12% or 18%) or **No GST charged**. Items can
+override the rate in the Catalog. Changing the setting affects new bills only.
 The mode, restaurant details, item prices and GST rates are saved with each bill.
 
 Dine-in cashier/admin flow: punch the cart → send kitchen items → **Preview bill** →

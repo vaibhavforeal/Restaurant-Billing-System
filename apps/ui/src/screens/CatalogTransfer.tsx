@@ -56,8 +56,8 @@ export function CatalogTransfer({ busy, run, onImported }: {
       <button disabled={busy} onClick={() => input.current?.click()}>Import CSV</button>
       <button disabled={busy} onClick={() => download(catalogCsv([
         CATALOG_CSV_COLUMNS,
-        ["", "Beverages", "Masala chai", "40.00", "5", "true", "true", "false", "Freshly brewed tea", "Kitchen", "", "", "", "", "50.00", "45.00", "", ""],
-        ["", "Beverages", "Masala chai", "40.00", "5", "true", "true", "false", "Freshly brewed tea", "Kitchen", "", "Large", "60.00", "true", "50.00", "45.00", "70.00", "65.00"],
+        ["", "Beverages", "Masala chai", "40.00", "5", "true", "true", "false", "Freshly brewed tea", "Kitchen", "", "", "", "", "50.00", "45.00", "", "", "", ""],
+        ["", "Beverages", "Masala chai", "40.00", "5", "true", "true", "false", "Freshly brewed tea", "Kitchen", "", "Large", "60.00", "true", "50.00", "45.00", "70.00", "65.00", "", ""],
       ]), "forkflow-items-template.csv")}>Download template</button>
       <input ref={input} type="file" accept=".csv,text/csv" aria-label="Choose item CSV" hidden disabled={busy}
         onChange={(e) => { chooseFile(e.target.files?.[0]); e.target.value = ""; }} />

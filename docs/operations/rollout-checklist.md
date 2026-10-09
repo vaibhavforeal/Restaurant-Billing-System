@@ -48,7 +48,7 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 
 ## 2. Basic setup for testing
 
-- [ ] **Settings → Restaurant profile:** GST number, address, receipt footer, tax mode, UPI ID (if used). Save.
+- [ ] **Settings → Restaurant profile:** GST number, address, receipt footer, **GST** (Prices include GST with the default rate, or No GST charged), UPI ID (if used). Save.
 - [ ] **Kitchen screen:** decide with the owner. If the kitchen will use a Kitchen screen (Pro plan), turn on **Kitchen Display (KDS)** in the Marketplace; if it only gets printed KOTs, leave it off.
 - [ ] Add staff: at least one cashier, one captain/waiter and one kitchen user, each with their own PIN.
 - [ ] Add 3–5 test menu items across two kitchen stations (for example Kitchen and Bar), and tables T1–T6, including at least one AC table if the restaurant uses AC pricing.
@@ -83,7 +83,7 @@ Do this for **each** printer. Start in **Settings → Printers**.
 
 - [ ] Open a table order, add one item from each station, send to kitchen. **Expect:** each station's printer prints its own KOT with the right items, table and KOT number.
 - [ ] Cancel one sent item with a reason. **Expect:** a cancellation slip at that station.
-- [ ] Issue the bill with a receipt printer selected. **Expect:** receipt with restaurant details, GST lines, total, and the UPI QR if a UPI ID is set. Scan the QR with a UPI app — **Expect:** correct payee and amount (don't pay).
+- [ ] Issue the bill with a receipt printer selected. **Expect:** receipt with restaurant details, the Tax invoice heading and Includes GST block (or Restaurant bill / Bill of supply when GST is off), total, and the UPI QR if a UPI ID is set. Scan the QR with a UPI app — **Expect:** correct payee and amount (don't pay).
 
 ### 4c. Failure handling (important — this was never tested on real hardware)
 

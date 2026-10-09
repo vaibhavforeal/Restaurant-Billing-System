@@ -9,9 +9,15 @@
     while (Date.now() < end) { const value = fn(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 50)); }
     throw new Error(`Timed out: ${description}. Page: ${document.body.innerText.slice(-1800)}`);
   };
-  const button = (text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
+  const button = (text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().replace(/ · F\d+$/, '') === text);
   const click = async (text) => { const b = await waitFor(() => button(text), `button ${text}`); if (b.disabled) throw new Error(`Disabled: ${text}`); b.click(); await new Promise((resolve) => setTimeout(resolve, 80)); };
-  const field = (text) => [...document.querySelectorAll('label')].find((label) => label.textContent.trim().startsWith(text))?.querySelector('input,select');
+  const field = (text) => [...document.querySelectorAll('label')].find((label) => label.textContent.trim().startsWith(text) && (text !== 'GST' || label.querySelector('select')))?.querySelector('input,select');
+  const nav = async (text) => {
+    const open = document.querySelector('dialog[open]');
+    if (open) { [...open.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Close')?.click(); await waitFor(() => !document.querySelector('dialog[open]'), 'dialog closed'); }
+    // On an order page the Tables tab is the current page, so use the order's own way back.
+    if (text === 'tables' && button('tables')?.disabled) await click('← Tables'); else await click(text);
+  };
   const fill = async (text, value) => {
     const input = await waitFor(() => field(text), `field ${text}`);
     const prototype = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
@@ -28,12 +34,17 @@
   const productName = `Gate meal ${suffix}`;
   await api('/products', 'POST', { categoryId: category.id, name: productName, pricePaise: 10500, gstRate: 5, kotStationId: null });
   async function mode(value) {
-    await click('settings'); await fill('Menu price tax mode', value); await click('Save');
+    await nav('settings'); await fill('GST', value); await click('Save');
     await waitFor(() => document.body.innerText.includes('Saved'), 'saved settings');
-    check((await api('/settings')).settings.taxInclusive === (value === 'inclusive'), `${value} setting persisted`);
+    check((await api('/settings')).settings.gstMode === value, `${value} GST mode persisted`);
+  }
+  async function payMode(row, label) {
+    const choice = await waitFor(() => [...document.querySelectorAll(`[role=group][aria-label="Mode ${row}"] button`)].find((b) => b.textContent.trim() === label), `${label} mode ${row}`);
+    choice.click(); await new Promise((resolve) => setTimeout(resolve, 80));
   }
   async function checkout() {
-    await click('tables'); await click('New parcel');
+    await nav('tables');
+    const table = await waitFor(() => [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Open table') && !b.disabled), 'a free table'); table.click(); await new Promise((resolve) => setTimeout(resolve, 80));
     await waitFor(() => button('Preview bill'), 'order loaded');
     if (!button(category.name)?.disabled) await click(category.name);
     const item = await waitFor(() => [...document.querySelectorAll('button')].find((b) => b.textContent.includes(productName)), 'product');
@@ -44,33 +55,40 @@
     await click('Issue bill'); await waitFor(() => button('Settle bill'), 'bill issued');
     return (await api('/bills')).bills[0];
   }
-  await mode('inclusive');
-  const inclusive = await checkout();
-  check(inclusive.totalPaise === 10500 && inclusive.cgstPaise === 250 && inclusive.taxInclusive, 'Inclusive bill totals correct');
-  await fill('Amount 1', '50'); await click('Add payment method');
-  await waitFor(() => field('Amount 2'), 'second payment');
+  await mode('included');
+  const included = await checkout();
+  check(included.totalPaise === 10500 && included.cgstPaise === 250 && included.receipt.gstMode === 'included', 'GST-included bill totals correct');
+  await payMode(1, 'Cash'); await fill('Amount 1', '50'); await click('Add payment method');
+  await waitFor(() => field('Amount 2'), 'second payment'); await payMode(2, 'UPI');
   check(field('Amount 2').value === '55.00', 'Remaining balance fills second payment');
   await click('Settle bill'); await waitFor(() => document.body.innerText.includes('PAID:') || document.body.innerText.includes('Paid:'), 'paid receipt');
-  const paid = (await api(`/bills/${inclusive.id}`)).bill;
+  const paid = (await api(`/bills/${included.id}`)).bill;
   check(paid.status === 'paid' && paid.payments.length === 2 && paid.payments[0].mode === 'cash' && paid.payments[1].mode === 'upi', 'Split payment persisted once');
   await click('View receipt');
-  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('All prices include tax'), 'HTML receipt');
+  await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Includes GST') && html.includes('Tax invoice'); }, 'HTML receipt');
   await waitFor(() => button('Print / save PDF') && !button('Print / save PDF').disabled, 'receipt print readiness');
   check(!button('Print / save PDF').disabled, 'Browser receipt is ready to print');
-  await mode('exclusive');
-  const exclusive = await checkout();
-  check(exclusive.totalPaise === 11000 && !exclusive.taxInclusive, 'Exclusive bill adds GST and rounds correctly');
-  await fill('Mode 1', 'card'); await click('Settle bill');
+  await mode('none');
+  const none = await checkout();
+  check(none.totalPaise === 10500 && none.cgstPaise === 0 && none.sgstPaise === 0 && none.receipt.gstMode === 'none', 'No-GST bill adds and shows no tax');
+  await payMode(1, 'Card'); await click('Settle bill');
   await waitFor(() => document.body.innerText.includes('Paid:'), 'card settlement');
-  await click('bills'); await fill('Show', 'paid');
-  await click(`Open bill #${inclusive.billNo}`); await click('View receipt');
-  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('All prices include tax'), 'old receipt');
-  check((await api(`/bills/${inclusive.id}`)).bill.taxInclusive, 'Old inclusive bill unchanged after mode switch');
-  await click('Reports & Analytics');
+  await click('View receipt');
+  await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('Restaurant bill'), 'no-GST receipt');
+  const plain = document.querySelector('iframe').contentDocument.body.innerText;
+  check(!/Tax invoice|Includes GST|CGST|SGST|Bill of supply/.test(plain), 'No-GST receipt without a GSTIN is a plain Restaurant bill with no GST lines');
+  await nav('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid');
+  await click(`Open bill #${included.billNo}`);
+  await waitFor(() => button('View receipt') || button('View bill'), 'bill actions');
+  if (!button('View receipt')) await click('View bill');
+  await click('View receipt');
+  await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Includes GST') && html.includes('Tax invoice'); }, 'old receipt');
+  check((await api(`/bills/${included.id}`)).bill.receipt.gstMode === 'included', 'Old GST bill keeps its mode and receipt after the switch');
+  await nav('tables'); await nav('Reports & Analytics'); await click('Day-end / GST');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');
   check(document.body.innerText.includes('105.00') || document.body.innerText.includes('110.00'), 'Day-end payment breakdown rendered');
   const report = (await api('/reports/day-end')).report;
   check(report.sales.billCount >= 2 && report.payments.length === 3, 'Report matches saved cash, UPI and card collections');
-  window.__m4Report = { steps, inclusiveBill: inclusive.billNo, exclusiveBill: exclusive.billNo };
+  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo };
   return window.__m4Report;
 })()

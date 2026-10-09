@@ -39,6 +39,7 @@
       if (paid) await api('/bills/' + bill.id + '/settle', 'POST', { clientRef: crypto.randomUUID(), payments: [{ mode: 'cash', amountPaise: 2000 }, { mode: 'upi', amountPaise: bill.totalPaise - 2000 }] });
     }
     document.querySelector('nav button[aria-label="Reports & Analytics"]').click();
+    await wait(() => button('Day-end / GST')); button('Day-end / GST').click();
     await wait(() => button('Export CSV') && !button('Export CSV').disabled);
     button('Refresh report').click();
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -84,6 +85,7 @@
     button('Download template').click(); await wait(() => downloads.length === 3);
     check((await downloads[2].text).includes('variant_price'), 'Catalog downloads still work with the shared download helper');
     document.querySelector('nav button[aria-label="Reports & Analytics"]').click();
+    await wait(() => button('Day-end / GST')); button('Day-end / GST').click();
     await wait(() => button('Export CSV') && !button('Export CSV').disabled);
     window.__reportExportChecks = { status: 'passed', checks };
     return window.__reportExportChecks;

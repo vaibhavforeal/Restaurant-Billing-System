@@ -21,7 +21,7 @@
   };
   const visible = value => !!value && value.getClientRects().length > 0 && getComputedStyle(value).visibility !== 'hidden' && !value.closest('[hidden],[inert]');
   const actionScope = () => document.querySelector('dialog[open]') || document;
-  const button = label => [...actionScope().querySelectorAll('button')].find(value => visible(value) && (value.textContent.trim() === label || value.getAttribute('aria-label') === label));
+  const button = label => [...actionScope().querySelectorAll('button')].find(value => visible(value) && (value.textContent.trim().replace(/ · F\d+$/, '') === label || value.getAttribute('aria-label') === label));
   const click = async (label, twice = false) => {
     const value = await wait(() => { const b = button(label); return b && !b.matches(':disabled') ? b : null; }, 'enabled ' + label);
     value.click(); if (twice) value.click(); await pause();
@@ -34,6 +34,11 @@
     input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
     await pause();
   };
+  const modeLabel = { cash: 'Cash', upi: 'UPI', card: 'Card' };
+  async function segment(group, label) {
+    const choice = await wait(() => [...actionScope().querySelectorAll('[role=group][aria-label="' + group + '"] button')].find(b => visible(b) && b.textContent.trim() === label && !b.disabled), group + ' ' + label);
+    choice.click(); await pause();
+  }
   async function closeBilling() {
     if (!document.querySelector('dialog.billing-dialog[open]')) return;
     await click('Close billing');
@@ -45,13 +50,9 @@
   }
   async function chooseCategory() {
     await showPane('menu');
-    const select = await wait(() => {
-      const value = actionScope().querySelector('select[aria-label="Menu category"]');
-      return visible(value) && !value.disabled && [...value.options].some(option => option.value === state.category.id) ? value : null;
-    }, 'menu category');
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, state.category.id);
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    await pause();
+    const rail = await wait(() => { const value = actionScope().querySelector('[role=group][aria-label="Menu categories"]'); return visible(value) ? value : null; }, 'menu categories');
+    const choice = await wait(() => [...rail.querySelectorAll('button')].find(b => b.textContent.trim() === state.category.name && !b.disabled), 'category ' + state.category.name);
+    choice.click(); await pause();
   }
   const headers = { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body) => {
@@ -92,9 +93,9 @@
   async function openQuick() {
     await home();
     await click('Takeaway', true);
-    await wait(() => document.querySelector('.order-screen select[aria-label="Menu category"]') && savedTakeaway()?.orderId, 'quick takeaway menu');
+    await wait(() => document.querySelector('.order-screen [role=group][aria-label="Menu categories"]') && savedTakeaway()?.orderId, 'quick takeaway menu');
     await showPane('cart');
-    await wait(() => button('Checkout'), 'quick takeaway cart');
+    await wait(() => button('Pay'), 'quick takeaway cart');
     await wait(() => localStorage.getItem('forkflow.generation'), 'checked server generation');
     return savedTakeaway().orderId;
   }
@@ -102,9 +103,9 @@
     const prior = savedTakeaway().orderId;
     await closeBilling();
     await click('Next takeaway', true);
-    await wait(() => savedTakeaway()?.orderId && savedTakeaway().orderId !== prior && document.querySelector('.order-screen select[aria-label="Menu category"]'), 'next empty takeaway menu');
+    await wait(() => savedTakeaway()?.orderId && savedTakeaway().orderId !== prior && document.querySelector('.order-screen [role=group][aria-label="Menu categories"]'), 'next empty takeaway menu');
     await showPane('cart');
-    await wait(() => button('Checkout'), 'next empty takeaway');
+    await wait(() => button('Pay'), 'next empty takeaway');
     const order = await currentOrder();
     check(order.type === 'parcel' && order.status === 'open' && order.items.length === 0, 'Next takeaway starts one empty parcel');
     check((await api('/orders')).orders.filter(value => value.clientRef === order.clientRef).length === 1, 'Double-click Next takeaway creates no duplicate parcel');
@@ -117,13 +118,13 @@
   }
   async function checkout() {
     await showPane('cart');
-    await click('Checkout', true);
-    await wait(() => field('Payment method') && button('Issue bill & record cash payment'), 'checkout total and payment method');
+    await click('Pay', true);
+    await wait(() => actionScope().querySelector('[role=group][aria-label="Payment method"]') && button('Record payment'), 'checkout total and payment method');
     return (await api('/orders/' + savedTakeaway().orderId + '/bill-preview', 'POST', {})).preview;
   }
   async function paid(mode, twice = true) {
-    await fill('Payment method', mode);
-    await click('Issue bill & record ' + (mode === 'upi' ? 'UPI' : mode) + ' payment', twice);
+    await segment('Payment method', modeLabel[mode]);
+    await click('Record payment', twice);
     await wait(() => actionScope().querySelector('.billing-paid')?.textContent.includes('Paid:'), 'paid confirmation');
     await closeBilling();
     await wait(() => button('Next takeaway'), 'paid takeaway');
@@ -151,8 +152,9 @@
       state.bottles = (await api('/stock-items', 'POST', { clientRef: crypto.randomUUID(), name: 'Gate bottles ' + stamp, unit: 'pcs', openingQty: 50 })).item;
       await api('/products/' + state.meal.id + '/stock-links', 'PUT', { expectedVersion: 0, stockItemId: state.rice.id, qtyPerSale: 0.25 });
       await api('/products/' + state.water.id + '/stock-links', 'PUT', { expectedVersion: 0, stockItemId: state.bottles.id, qtyPerSale: 1 });
+      await api('/integrations/kds', 'PATCH', { enabled: true }); // the gate reads each KOT back through the kitchen API
       const settings = (await api('/settings')).settings;
-      await api('/settings', 'PUT', { ...settings, taxInclusive: false });
+      await api('/settings', 'PUT', { ...settings, gstMode: 'included', gstRate: 5 });
       const orderId = await openQuick(); await add(state.meal); await add(state.water);
       await showPane('cart'); await click('Increase ' + state.meal.name);
       check(draft(orderId).length === 2 && draft(orderId).find(item => item.productId === state.meal.id).qty === 2, 'Quick cart persists item quantities before checkout');
@@ -165,15 +167,15 @@
       const mealMoves = await stockMoves(state.rice.id, orderId);
       check(mealMoves.length === 1 && mealMoves[0].delta === -0.5, 'Kitchen stock is deducted exactly once at checkout');
       check((await stockMoves(state.bottles.id, orderId)).length === 0, 'Stationless stock is not deducted before bill issue');
-      check(preview.totalPaise === 23500 && preview.subtotalPaise === 22500 && !preview.taxInclusive, 'Checkout preview has exact menu subtotal and GST total');
-      await fill('Cash received', '1'); check(button('Issue bill & record cash payment').disabled, 'Insufficient cash blocks payment confirmation');
-      await fill('Cash received', '300'); check(document.querySelector('.quick-payment').textContent.includes('65.00'), 'Cash change is calculated from cash received');
+      check(preview.totalPaise === 22500 && preview.subtotalPaise === 22500 && preview.cgstPaise === 476 && preview.sgstPaise === 476, 'Checkout preview total equals the menu subtotal with GST included in it');
+      await segment('Payment method', 'Cash'); await fill('Cash received', '1'); check(button('Record payment').disabled, 'Insufficient cash blocks payment confirmation');
+      await fill('Cash received', '300'); check(document.querySelector('.quick-payment').textContent.includes('75.00'), 'Cash change is calculated from cash received');
       const cash = await paid('cash');
       const bottleMoves = await stockMoves(state.bottles.id, orderId);
       check(bottleMoves.length === 1 && bottleMoves[0].delta === -1 && (await stockMoves(state.rice.id, orderId)).length === 1, 'Bill issue deducts stationless stock once without rededucting kitchen stock');
       await click('View bill'); await click('View receipt');
       await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('CASH'), 'paid receipt HTML');
-      check(actionScope().querySelector('.billing-receipt-frame').contentDocument.body.innerText.includes('235.00'), 'Paid receipt shows the recorded amount rather than cash tendered');
+      check(actionScope().querySelector('.billing-receipt-frame').contentDocument.body.innerText.includes('225.00'), 'Paid receipt shows the recorded amount rather than cash tendered');
       await next(); await add(state.water); await checkout(); await paid('upi');
       await next(); await add(state.meal); await checkout(); await paid('card');
       await api('/license', 'PUT', { license: window.__m10BasicLicense });
@@ -211,7 +213,7 @@
       await add(state.meal); await add(state.water); await checkout();
       const orderId = savedTakeaway().orderId, path = '/api/orders/' + orderId + '/bill';
       const fault = loseResponse(path);
-      await click('Issue bill & record cash payment', true);
+      await segment('Payment method', 'Cash'); await click('Record payment', true);
       const queued = await wait(() => fault.lost && queues().find(request => request.path === path), 'saved lost bill response');
       const bill = (await api('/orders/' + orderId + '/bill')).bill;
       check(bill.status === 'unpaid' && bill.payments.length === 0, 'Lost bill response never claims payment was recorded');
@@ -225,7 +227,7 @@
       const bill = await currentBill();
       check(bill.id === state.billRecovery.billId && bill.billNo === state.billRecovery.billNo && bill.status === 'unpaid', 'Reload reconciles the original unpaid bill');
       check((await api('/bills?status=all')).bills.filter(value => value.orderId === state.billRecovery.orderId).length === 1, 'Bill replay after reload creates no duplicate invoice');
-      await fill('Mode 1', 'card');
+      await segment('Mode 1', 'Card');
       const path = '/api/bills/' + bill.id + '/settle', fault = loseResponse(path);
       await click('Settle bill', true);
       const queued = await wait(() => fault.lost && queues().find(request => request.path === path), 'saved lost payment response');
@@ -241,7 +243,7 @@
       check(bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === 'card' && bill.payments[0].amountPaise === state.settleRecovery.totalPaise, 'Reloaded settlement replay keeps exactly one correct payment');
       check((await api('/orders/' + state.settleRecovery.orderId)).order.status === 'settled', 'Recovered paid takeaway remains settled');
       check((await stockMoves(state.rice.id, state.settleRecovery.orderId)).length === 1 && (await stockMoves(state.bottles.id, state.settleRecovery.orderId)).length === 1, 'Bill and settlement recovery do not duplicate either stock deduction');
-      await closeBilling(); await click('bills'); await fill('Show', 'paid'); await click('Open bill #' + bill.billNo);
+      await closeBilling(); await click('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid'); await click('Open bill #' + bill.billNo);
       await wait(() => button('Next takeaway'), 'recovered paid order'); await click('View bill'); await click('View receipt');
       await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('CARD'), 'recovered paid receipt');
       check(true, 'Recovered paid receipt and Next takeaway are available');

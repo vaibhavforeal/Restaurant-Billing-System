@@ -99,11 +99,11 @@
     button(`Open bill #${bill.billNo}`, row).click();
     await clickButton('View bill', await wait(() => document.querySelector('.billing-panel'), 'billing panel'));
     const dialog = await wait(() => document.querySelector('dialog[open]')?.textContent.includes('Tax details') ? document.querySelector('dialog[open]') : null, 'bill dialog');
-    check(dialog.textContent.includes('GST paid by Zomato (section 9(5))') && dialog.textContent.includes('Paid: Zomato ' + money(PRICE)) && dialog.textContent.includes('CGST₹0.00') && dialog.textContent.includes('SGST₹0.00') && !dialog.querySelector('.bill-tax-details table'), 'The bill shows "GST paid by Zomato (section 9(5))", no GST, no per-rate GST rows and the Zomato payment');
+    check(dialog.textContent.includes('GST paid by Zomato (section 9(5))') && dialog.textContent.includes('Paid: Zomato ' + money(PRICE)) && !/CGST|SGST|Includes GST/.test(dialog.textContent) && !dialog.querySelector('.bill-tax-details table'), 'The bill shows "GST paid by Zomato (section 9(5))", no GST, no per-rate GST rows and the Zomato payment');
     await clickButton('View receipt', dialog);
     const receiptFrame = await wait(() => document.querySelector('dialog[open] iframe'), 'receipt frame');
     const receiptHtml = receiptFrame.getAttribute('srcdoc') ?? '';
-    check(receiptHtml.includes('<dd>Zomato</dd>') && receiptHtml.includes('Zomato #E2E-1') && receiptHtml.includes('GST paid by Zomato (section 9(5))') && !/Dine-in|Prices include GST|GST added to menu prices|CGST/.test(receiptHtml), 'The on-screen receipt names the service Zomato and the order Zomato #E2E-1, with the 9(5) note and no GST lines');
+    check(receiptHtml.includes('<dd>Zomato</dd>') && receiptHtml.includes('Zomato #E2E-1') && receiptHtml.includes('GST paid by Zomato (section 9(5))') && !/Dine-in|Prices include GST|GST added to menu prices|Includes GST|CGST/.test(receiptHtml), 'The on-screen receipt names the service Zomato and the order Zomato #E2E-1, with the 9(5) note and no GST lines');
     const labels = [...document.querySelectorAll('button')].map(b => b.textContent.trim());
     check(!labels.some(t => /print|reprint|credit note|refund|void/i.test(t)), 'The Zomato bill has no Print, Reprint, Credit note, Refund or Void button');
     check((await call('POST', `/api/bills/${bill.id}/print`, ownToken, {})).status === 409, 'The server refuses to print a Zomato bill');

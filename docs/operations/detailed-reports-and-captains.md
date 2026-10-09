@@ -50,7 +50,7 @@ helping at the table. Financial reports remain restricted to admins/cashiers.
 ## Verification
 
 `npm run typecheck` checks both server and UI. The operational report tests cover
-tax-inclusive/exclusive allocations, saved categories, void exclusion, collecting
+GST-included and no-GST allocations, saved categories, void exclusion, collecting
 cashier attribution, midnight boundaries, KOT averages, cancellation auditing,
 stock reconciliation, empty data, invalid dates and permissions. Migration tests
 exercise old-bill upgrades without inventing historical category/date data.

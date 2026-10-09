@@ -91,7 +91,7 @@ The guest sees that reason. A Basic downgrade preserves request history and
 allows staff to reject pending requests, but disables acceptance and new guest
 submissions until ordering is enabled again.
 
-Menu prices, options, availability, and tax mode are checked on submission and
+Menu prices, options and availability are checked on submission and
 again on acceptance. If a guest's cart is stale, they must reload the menu and
 review it. If staff cannot accept because the requested items or prices changed,
 reject the request and ask the guest to review the current menu and resubmit.
@@ -113,7 +113,9 @@ Receipts show acceptance, rejection, or expiry and keep tracking preparation
 after acceptance. The receipt remains recoverable with its saved credential even
 after the table code is disabled/replaced or the plan is downgraded. A receipt
 confirms the guest request; the restaurant's issued bill remains the payment and
-tax record. Staff can reopen accepted orders from the inbox's **Accepted** history.
+tax record. Guests always see "No tax is added to menu prices." on the QR menu;
+any GST is shown on the bill, as an **Includes GST** block when the restaurant
+charges GST. Staff can reopen accepted orders from the inbox's **Accepted** history.
 
 ## Preparation and ordering more
 

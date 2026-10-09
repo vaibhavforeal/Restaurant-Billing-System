@@ -34,8 +34,8 @@ Cash, UPI, and card are records of payment received by staff. This screen does
 not charge a card, collect UPI payment, or verify a bank transaction. Confirm the
 payment through the restaurant's normal process before recording it.
 
-The restaurant's configured GST mode applies: menu prices either include GST
-or have GST added at checkout. Issuing the bill freezes its item prices, taxes,
+The restaurant's configured GST mode applies: menu prices include GST (shown as
+an **Includes GST** line), or no GST is charged at all. Issuing the bill freezes its item prices, taxes,
 discount, and restaurant details. Items without a kitchen station deduct stock
 when the bill is issued. Payment and receipt printing do not deduct stock again.
 

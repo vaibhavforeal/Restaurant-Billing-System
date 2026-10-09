@@ -295,7 +295,8 @@ overflow; page errors were empty. The accompanying full suite passed 364 tests.
 
 ## M10 quick takeaway gate
 
-Use a fresh, signed-Pro disposable server on `http://127.0.0.1:4121` with the
+Use a fresh, signed-Pro disposable server on `http://127.0.0.1:4121` (the gate turns the
+Kitchen Display add-on on itself and sets GST to Prices include GST, default 5%) with the
 latest UI. Sign in as admin and register the test browser. Provide a higher
 revision Basic grant for that same disposable installation in
 `window.__m10BasicLicense` before the first run; the gate verifies Basic billing.
@@ -312,7 +313,7 @@ Four real page reloads exercise cart, create, bill, and settlement recovery.
 Require a final `status: passed`; failures return their completed assertions
 and page context. Re-running after completion returns the saved results.
 
-The completed gate passed 56 checks: parcel creation without a table, automatic
+The completed gate passed 56 checks (GST-included preview total 225.00, cash change 75.00): parcel creation without a table, automatic
 kitchen send, mixed kitchen/stationless stock timing, cash change, UPI/card,
 Basic access, double clicks, draft recovery, and lost-response retries with one
 bill/payment and no duplicate stock deductions.
@@ -483,9 +484,11 @@ The server does not daemonize. To stop it:
 
 ## M4 billing gate
 
-`m4-billing.js` verifies both GST settings, cart guards, preview/issue, cash+UPI
-split settlement, card payment, receipt iframe, history, immutable tax mode and
-the day-end report. It creates test menu items and bills: use a **scratch DB**.
+`m4-billing.js` verifies both GST modes (prices include GST, no GST charged), cart
+guards, preview/issue, cash+UPI split settlement, card payment, the receipt iframe
+(Tax invoice with an Includes GST block; a plain Restaurant bill for no GST with no
+GSTIN), history, an old bill keeping its GST mode after a switch and the day-end
+report. It opens a free table from Tables, so the restaurant needs one free table. It creates test menu items and bills: use a **scratch DB**.
 Build the current UI first, start the server with that DB, open it in
 agent-browser and complete setup/sign in as an admin.
 
@@ -497,7 +500,7 @@ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js |
 
 The gate uses DOM events in the real browser (works around native-click issues
 seen with agent-browser 0.38 on Windows), with API fixture setup and persisted
-result assertions. It prints 12 passing checks, or throws at the failed step.
+result assertions. It prints 13 passing checks, or throws at the failed step.
 The gate must run on localhost/127.0.0.1 and is repeatable on the scratch DB.
 
 ## M5 inventory gate

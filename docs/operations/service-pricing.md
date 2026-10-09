@@ -3,8 +3,8 @@
 In **Catalog → Edit**, enter the Non-AC, AC and takeaway prices in rupees.
 The existing base price becomes the Non-AC price. AC and takeaway prices are
 optional: leave either blank to use that item's Non-AC price. Zero is an explicit
-price, not a blank. GST calculation continues to use the restaurant's inclusive
-or exclusive setting.
+price, not a blank. GST calculation continues to use the restaurant's GST setting (prices include
+GST, or no GST charged) and each item's rate.
 
 Portions have their own three prices under **Variants (portions)**. Use **Edit
 prices → Save variant** for an existing portion. A blank portion service price
