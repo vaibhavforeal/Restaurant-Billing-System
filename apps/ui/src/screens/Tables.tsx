@@ -12,6 +12,10 @@ import { ServiceRequests } from "./ServiceRequests";
 import { Reservations } from "./Reservations";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { useShortcutLabels } from "../pos-shortcuts";
+import { useIntegrations } from "../integrations";
+import { zomatoOrders } from "../zomato-desk";
+import { ZomatoPanel } from "../ZomatoPanel";
+import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
 import "../tables-overview.css";
 
@@ -20,7 +24,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const [filter, setFilter] = useState<"all" | TableInfo["status"]>("all");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
-  const [mobilePane, setMobilePane] = useState<"tables" | "parcels">("tables");
+  const [mobilePane, setMobilePane] = useState<"tables" | "parcels" | "zomato">("tables");
+  const { isEnabled } = useIntegrations();
+  const [zomatoDialog, setZomatoDialog] = useState(false);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [managing, setManaging] = useState(false);
@@ -201,6 +207,11 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const openParcels = orders.filter((o) => o.type === "parcel");
   const isAdmin = !captain && user.role === "admin";
   const canQuickBill = !captain && (isAdmin || user.role === "cashier");
+  // Zomato is for admin and cashier. While it is off, orders still open stay visible so they can be finished, but no new ones start.
+  const zomatoList = canQuickBill ? zomatoOrders(orders) : [];
+  const zomatoOn = canQuickBill && isEnabled("zomato");
+  const showZomatoPanel = zomatoOn || zomatoList.length > 0;
+  const hasSide = openParcels.length > 0 || showZomatoPanel;
   const busy = creating || actionBusy || qrBusy || qrManagerBusy || serviceBusy || reservationBusy;
   const active = tables.filter((table) => table.isActive);
   const areas = Array.from(new Set(active.map((table) => table.area ?? "Main")));
@@ -214,6 +225,8 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }
   const pickerTable = tables.find((table) => table.id === pickerTableId);
   const showParcels = mobilePane === "parcels" && openParcels.length > 0;
+  const showZomato = mobilePane === "zomato" && showZomatoPanel;
+  const visiblePane = showParcels ? "parcels" : showZomato ? "zomato" : "tables";
   return <section className="screen tables-screen table-overview">
     <div className="page-header tables-header"><div className="tables-heading"><h2>{captain ? "Tables" : "Tables & orders"}</h2><p><span className="tables-available-dot" aria-hidden="true" />{active.filter((table) => table.status === "free").length} available <span aria-hidden="true">·</span> {active.length} tables across {areas.length} {areas.length === 1 ? "area" : "areas"}</p></div><div className="actions">
       <button disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>Reservations</button>
@@ -228,16 +241,17 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       <QrRequests compact openSignal={qrInbox} tables={tables} disabled={creating || actionBusy || qrManagerBusy || serviceBusy || !!reservationView} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} onBusyChange={(value) => { qrLock.current = value; setQrBusy(value); }} />
       <ServiceRequests compact disabled={creating || actionBusy || qrBusy || qrManagerBusy || !!reservationView} onBusyChange={(value) => { serviceLock.current = value; setServiceBusy(value); }} />
     </div>
-    {openParcels.length > 0 && <div className="tables-pane-switch" aria-label="Tables view">
+    {hasSide && <div className="tables-pane-switch" aria-label="Tables view">
       <button aria-pressed={!showParcels} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>
       {openParcels.length > 0 && <button aria-pressed={showParcels} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {openParcels.length}</button>}
+      {showZomatoPanel && <button aria-pressed={showZomato} aria-controls="zomato-list" onClick={() => setMobilePane("zomato")}>Zomato · {zomatoList.length}</button>}
     </div>}
     <div className="filter-bar tables-filter-bar"><div className="tabs" aria-label="Table status">
         {(["all", "free", "occupied", "reserved", "billed"] as const).map((status) => <button key={status} className={filter === status ? "selected" : ""} aria-pressed={filter === status} onClick={() => setFilter(status)}>{({ all: "All tables", free: "Available", reserved: "Reserved", occupied: "Occupied", billed: "Billed" })[status]}<span className="count">{status === "all" ? active.length : active.filter((t) => t.status === status).length}</span></button>)}
       </div><div className="tables-search-controls"><div className="search-field"><Icon name="search" size={15} /><input aria-label="Search tables" placeholder="Find a table or area…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <select aria-label="Table area" value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}><option value="">All areas</option>{areaFilter && !areas.includes(areaFilter) && <option value={areaFilter}>{areaFilter}</option>}{areas.map((area) => <option value={area} key={area}>{area}</option>)}</select>
       </div></div>
-    <div className={`tables-layout ${openParcels.length > 0 ? "has-parcels" : ""} show-${showParcels ? "parcels" : "tables"}`}>
+    <div className={`tables-layout ${hasSide ? "has-parcels" : ""} show-${visiblePane}`}>
       <div className="table-list" id="table-list" role="region" aria-label="Dining tables" tabIndex={0}>
       {Array.from(grouped.entries()).map(([area, list]) => <section className="table-area" key={area}>
         <h3><span className="table-area-name">{area}</span><span>{list.length} {list.length === 1 ? "table" : "tables"}</span><span className="table-area-rule" aria-hidden="true" /></h3>
@@ -262,10 +276,14 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       </section>)}
       {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables using Manage tables." : "Ask an admin to add tables."}</p></div>}
       </div>
+      {hasSide && <div className="tables-side">
       {openParcels.length > 0 && <aside className="tables-parcels" aria-label="Open takeaways"><div className="panel-title"><h3>Open takeaways</h3><span>{openParcels.length}</span></div><div className="parcel-list" id="parcel-list" role="region" aria-label="Takeaway orders" tabIndex={0}>
         {openParcels.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">Takeaway {order.clientRef.slice(0, 8)}<small>{order.status === "billed" ? "Awaiting payment" : "Open order"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
       </div></aside>}
+      {showZomatoPanel && <aside className="tables-parcels tables-zomato" id="zomato-list" aria-label="Zomato orders"><ZomatoPanel orders={zomatoList} canCreate={zomatoOn} disabled={busy} onNew={() => setZomatoDialog(true)} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} /></aside>}
+      </div>}
     </div>
+    {canQuickBill && <NewZomatoOrderDialog open={zomatoDialog} onClose={() => setZomatoDialog(false)} onCreated={(orderId) => { setZomatoDialog(false); openOrder(orderId); }} />}
     {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId}
       onClose={() => setReservationView(null)} onOpenOrder={(id) => { setReservationView(null); openOrder(id); }}
       onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}

@@ -37,6 +37,8 @@
 .parcel-list > button > span { flex: 1; overflow-wrap: anywhere; font-size: 12px; }
 .parcel-list small { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .tables-pane-switch { display: none; }
+.tables-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; overflow: auto; align-self: start; max-height: 100%; }
+.tables-side > .tables-parcels { flex: none; }
 .table-add-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .table-add-form label { display: grid; gap: 4px; }
 .table-manager-list { list-style: none; margin: 0; padding: 0; }
@@ -75,7 +77,9 @@
   .tables-layout, .tables-layout.has-parcels { display: flex; gap: 0; }
   .table-list, .tables-parcels { flex: 1; }
   .tables-layout.show-tables .tables-parcels, .tables-layout.show-parcels .table-list { display: none; }
-  .tables-screen:has(.tables-layout.show-parcels) .tables-filter-bar { display: none; }
+  .tables-side { flex: 1; align-self: stretch; }
+  .tables-layout.show-tables .tables-side, .tables-layout.show-parcels .tables-zomato, .tables-layout.show-zomato .table-list, .tables-layout.show-zomato .tables-parcels:not(.tables-zomato) { display: none; }
+  .tables-screen:has(.tables-layout.show-parcels, .tables-layout.show-zomato) .tables-filter-bar { display: none; }
   .tables-screen .table-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 6px; }
   .tables-screen .table-card { min-height: 86px; padding: 8px; }
   .tables-screen .table-card strong { font-size: 16px; }

@@ -13,7 +13,7 @@ const item = (id: string, qty: number, pricePaise: number, status: OrderItem["st
 });
 
 const order = (id: string, patch: Partial<Order> = {}): Order => ({
-  id, clientRef: id, priceTier: "non_ac", stockWarnings: [], type: "dine_in", tableId: "t", splitLabel: "A",
+  id, clientRef: id, priceTier: "non_ac", stockWarnings: [], type: "dine_in", zomatoOrderId: null, zomatoStatus: null, tableId: "t", splitLabel: "A",
   tableName: "T4", tableLabel: "T4", mergedInto: null, status: "open", openedBy: "u", openedAt: 0, closedAt: null, items: [], kots: [], ...patch,
 });
 

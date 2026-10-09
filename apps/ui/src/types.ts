@@ -121,7 +121,9 @@ export interface Order {
   stockWarnings: import("@forkflow/domain").StockWarning[];
   id: string;
   clientRef: string;
-  type: "dine_in" | "parcel";
+  type: "dine_in" | "parcel" | "zomato";
+  zomatoOrderId: string | null;
+  zomatoStatus: "preparing" | "ready" | "picked_up" | null;
   tableId: string | null;
   splitLabel: string | null;
   tableName: string | null;
@@ -153,7 +155,7 @@ export interface KotWithContext {
   createdAt: number;
   acceptedAt: number | null;
   doneAt: number | null;
-  orderType: "dine_in" | "parcel";
+  orderType: "dine_in" | "parcel" | "zomato";
   tableName: string | null;
   splitLabel: string | null;
   items: Array<{

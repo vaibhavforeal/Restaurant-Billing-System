@@ -109,7 +109,9 @@ html[data-theme] .tables-screen.table-overview {
     .tables-layout, .tables-layout.has-parcels { display: flex; gap: 0; }
     .tables-pane-switch { display: flex; }
     .tables-layout.show-tables .tables-parcels, .tables-layout.show-parcels .table-list { display: none; }
-    &:has(.tables-layout.show-parcels) .tables-filter-bar { display: none; }
+    .tables-side { flex: 1; align-self: stretch; }
+    .tables-layout.show-tables .tables-side, .tables-layout.show-parcels .tables-zomato, .tables-layout.show-zomato .table-list, .tables-layout.show-zomato .tables-parcels:not(.tables-zomato) { display: none; }
+    &:has(.tables-layout.show-parcels, .tables-layout.show-zomato) .tables-filter-bar { display: none; }
     .table-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tables-parcels { align-self: stretch; }
   }
