@@ -1,6 +1,6 @@
 // Run with agent-browser eval --stdin on the disposable sales-dashboard fixture (tools/e2e/sales-dashboard-server.mts),
 // signed in as admin (1234) OR as cashier (2345): the script detects the role and runs that role's checks.
-// The fixture starts with Zomato OFF in the Marketplace and one open Zomato order (#000201). Every run ends with
+// The fixture starts with Zomato OFF in the Marketplace and one open POS Zomato order (#000201, still New). Every run ends with
 // Zomato OFF again, so the gate can be repeated. Never run this against a restaurant database.
 (async () => {
   if (location.origin !== 'http://127.0.0.1:4145') throw new Error('Disposable sales fixture only');
@@ -101,7 +101,7 @@
       // ---------- Dashboard Alerts show the Zomato order ----------
       await goto('home'); await wait(() => homeReady() && rows().length === 1, 'Alerts row');
       const row = rows()[0];
-      check(row.textContent.includes('Zomato') && row.textContent.includes('#000201') && row.textContent.includes('Received') && row.textContent.includes('₹420.00') && row.textContent.includes('Prepaid') && /Zomato order 000201, Received, ₹420.00, Prepaid, placed/.test(row.getAttribute('aria-label')), 'Alerts lists the open Zomato order with channel, id, status, amount and payment mode');
+      check(row.textContent.includes('Zomato') && row.textContent.includes('#000201') && /New · (just now|\d+m)/.test(row.textContent) && row.textContent.includes('₹280.00') && /Zomato order 000201, New, ₹280.00, New · (just now|\d+m)/.test(row.getAttribute('aria-label')), 'Alerts lists the open POS Zomato order with channel, id, status and age, and amount');
       const billed = (await call('GET', '/api/orders', ownToken)).json.orders.filter(o => o.status === 'billed').length;
       check(document.querySelector('.dash-badge').textContent.trim() === String(rows().length + (billed > 0 ? 1 : 0)), 'Alerts badge counts the Zomato rows plus one counter alert when orders are billed');
       check(alertsText().includes('Swiggy not connected.') && [...document.querySelectorAll('.dash-alerts .dash-link')].some(b => b.textContent === 'Open Marketplace') && !alertsText().includes('Turn on Zomato'), 'Alerts says Swiggy is not connected and links admins to the Marketplace');
@@ -130,7 +130,7 @@
       await goto('Reports & Analytics'); await wait(() => document.querySelector('.sales-presets') && !zomatoTab(), 'Zomato reconciliation tab hidden again');
       await goto('home'); await wait(homeReady, 'home');
       check(rows().length === 0 && alertsText().includes('Turn on Zomato or Swiggy in the Marketplace') && !!navItem('marketplace') && !navItem('zomato'), 'Turned off: Zomato nav item and Alerts rows are gone and the hint returns');
-      check(((await call('GET', '/api/zomato/orders', ownToken)).json.orders ?? []).length === 1, 'Turning Zomato off leaves its orders untouched');
+      check(((await call('GET', '/api/orders', ownToken)).json.orders ?? []).filter(o => o.type === 'zomato' && o.status === 'open').length === 1, 'Turning Zomato off leaves its open orders untouched');
 
       // ---------- Kitchen Display: an add-on that starts off; the Kitchen tab and board follow its switch ----------
       await setKds(false);

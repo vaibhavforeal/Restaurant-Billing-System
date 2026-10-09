@@ -3,7 +3,7 @@ import { freshAppWithFakeSink, setupAdmin, createUser, auth } from "../../apps/s
 import fastifyStatic from "@fastify/static";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { uuidv7, localDateKey, ZOMATO_CSV_COLUMNS, zomatoCsv } from "@forkflow/domain";
+import { uuidv7, localDateKey } from "@forkflow/domain";
 
 const { app } = freshAppWithFakeSink();
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist") });
@@ -37,7 +37,7 @@ for (let offset = 29; offset >= 0; offset--) {
   }
 }
 // Today also gets dine-in and takeaway bills in several four-hour slots, including 00:30 (the LAST slot, 21:00-01:00),
-// plus an open order, a cancelled order and an open Zomato order. Zomato stays OFF in the Marketplace until a check turns it on.
+// plus an open order, a cancelled order and an open POS Zomato order (#000201, still new). Zomato stays OFF in the Marketplace until a check turns it on.
 const tables = (await (await app.inject({ url: "/api/tables", headers: auth(admin.token) })).json()).tables as Array<{ id: string }>;
 const todayAt = (hour: number, minute: number) => { const d = new Date(); d.setHours(hour, minute, 0, 0); return d; };
 let tableCursor = 0;
@@ -55,10 +55,12 @@ const openOrder = (await post("/api/orders", { clientRef: uuidv7(), type: "parce
 await post(`/api/orders/${openOrder.id}/items`, { items: [{ clientRef: uuidv7(), productId: product.id, qty: 1 }] });
 const cancelledOrder = (await post("/api/orders", { clientRef: uuidv7(), type: "parcel" })).order;
 await post(`/api/orders/${cancelledOrder.id}/cancel`, { reason: "Fixture cancel" });
+// One open POS Zomato order: Zomato is switched on only long enough to punch it in, then OFF again so the fixture starts with Zomato off.
 await post("/api/zomato/settings", { restaurantId: "123456", restaurantName: "Demo restaurant", posId: "", webhookBaseUrl: "", enabled: false, version: 1 }, "PATCH");
-const zomatoCsvText = zomatoCsv([ZOMATO_CSV_COLUMNS.orders, ["123456", "000201", new Date().toISOString(), "received", "420", "prepaid"]]);
-const zomatoPreview = await post("/api/zomato/import/preview", { kind: "orders", csv: zomatoCsvText });
-await post("/api/zomato/import/commit", { kind: "orders", csv: zomatoCsvText, revision: zomatoPreview.revision });
+await post("/api/integrations/zomato", { enabled: true }, "PATCH");
+const zomatoOrder = (await post("/api/orders", { clientRef: uuidv7(), type: "zomato", zomatoOrderId: "000201" })).order;
+await post(`/api/orders/${zomatoOrder.id}/items`, { items: [{ clientRef: uuidv7(), productId: product.id, qty: 1 }] });
+await post("/api/integrations/zomato", { enabled: false }, "PATCH");
 mkdirSync("output/sales-dashboard", { recursive: true }); mkdirSync(".e2e-scratch", { recursive: true });
 const expected = (await app.inject({ url: "/api/reports/sales", headers: auth(admin.token) })).json().report;
 writeFileSync(".e2e-scratch/sales-dashboard-expected.json", JSON.stringify(expected, null, 2));

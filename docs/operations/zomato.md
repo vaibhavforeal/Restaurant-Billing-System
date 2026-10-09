@@ -1,5 +1,10 @@
 # Zomato setup and reconciliation
 
+> The **Zomato** sidebar page described below has moved: reconciliation and imports are
+> now **Reports → Zomato reconciliation**, and the connection form is **Settings** on the
+> Zomato card in the [Marketplace](marketplace.md). Day-to-day Zomato orders are handled
+> on the counter; see [Zomato desk](zomato-desk.md).
+
 Open **Zomato** in the sidebar. It appears once an administrator turns Zomato on in the
 [Marketplace](marketplace.md); until then the sidebar item is hidden and the screen shows a "Zomato is turned off"
 notice (administrators get a link to the Marketplace). Live webhook events are also

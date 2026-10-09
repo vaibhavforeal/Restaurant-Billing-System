@@ -1,5 +1,29 @@
 # ForkFlow E2E Gate
 
+## Zomato desk
+
+Build the UI and start `node --import tsx tools/e2e/zomato-desk-server.mts`. It is a
+disposable in-memory restaurant on `http://127.0.0.1:4150/` with Zomato and the Kitchen
+Display switched **on**, a Zomato restaurant ID saved and one product, "Paneer tikka",
+on a kitchen station (300 base, 260 Takeaway, 240 Zomato). PINs: admin **1234**,
+cashier **2345**, waiter **3456**. It uses a fake printer and never opens the live database.
+
+Sign in as admin, then add `tools/e2e/zomato-desk.js` to the page (agent-browser
+`eval --stdin`, or Playwright `page.addScriptTag({ path })`) and require
+`window.__zomatoDeskResult.status === "passed"` (25 checks; progress is
+`window.__zomatoDeskProgress`). It punches in order `E2E-1` and covers: the Zomato
+section and the server refusing a waiter (403), the Zomato price on the menu, no
+bill/discount/pay controls, Send KOT to Preparing, Ready and Picked up from the card
+(with the confirm), one paid bill with GST 0 and "GST paid by Zomato (section 9(5))",
+no Print/Reprint/Credit note/Refund/Void on that bill and a refused print request, a
+refused duplicate ID (message and `409 zomato_duplicate`), the dashboard Zomato card,
+day-end "Zomato receivable (outstanding)" outside cash/UPI/card, and the row in Reports,
+Zomato reconciliation. `E2E-1` stays reserved, so restart the fixture before each run.
+
+The waiter's view is checked by hand: sign out, sign in with **3456**, and expect the
+Captain app with no Zomato section; sign in with **2345** and expect the Zomato section
+on Tables & orders. Stop the fixture afterwards.
+
 ## Zomato setup and reconciliation
 
 Build the UI and start `node --import tsx tools/e2e/zomato-server.mts`.
@@ -53,7 +77,7 @@ Build the UI, then run `node --import tsx tools/e2e/sales-dashboard-server.mts`.
 It creates an in-memory restaurant with 30 days of API-issued bills, split
 payments, later collections, unpaid bills and a zero-activity date. Today also has
 dine-in and takeaway bills in several slots (including 00:30, which belongs to the
-last slot), an open order, a cancelled order and one open Zomato order. Zomato starts
+last slot), an open order, a cancelled order and one open POS Zomato order (#000201, punched in through the API while Zomato was briefly on). Zomato starts
 **off** in the Marketplace. It uses a fake printer and never opens the live
 restaurant database.
 
@@ -92,7 +116,7 @@ Use the same sales-dashboard fixture (port 4145, Zomato off). Sign in as admin
 `marketplace`); require `status: passed` (36 checks). Then sign out, sign in as
 cashier **2345** and run it again (13 checks; read-only Marketplace, live enable and
 disable from a second admin session obtained through the API, the Zomato
-reconciliation tab disappearing live without a reload). The script detects the role from `/api/me`,
+reconciliation tab disappearing live without a reload). The Alerts checks expect that order as "New" at ₹280.00. The script detects the role from `/api/me`,
 turns Zomato off again in `finally`, and keeps its result in
 `window.__marketplaceResult` (progress in `window.__marketplaceProgress`).
 
@@ -526,3 +550,19 @@ the billing dialog and opens Tables. It checks that a fully settled table is
 free and that another unpaid split keeps it occupied. It reports 10 checks
 and saves the result to `window.__settleTablesResult`. Use only the disposable
 fixture: the gate creates menu items, orders and payments.
+
+## Running gates through the Playwright MCP
+
+Where agent-browser is not installed, sign in by typing the PIN into the "Staff PIN" box,
+then add the gate with `page.addScriptTag({ path })` and wait for its result global with
+`page.waitForFunction`. Gates that download CSVs (sales-dashboard, zomato) close the MCP browser
+when the real download starts: first run
+`const real = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) return; return real.call(this); }`
+in the page, then add the gate. The gate still captures and checks each blob.
+`kitchen-app.js` also needs a page with no POS session: remove `forkflow.token` from
+local storage first. `demo-kitchen.js` and `kitchen-app.js` expect the demo on port 4110; while
+the ForkFlow Demo app holds it, run a scratch demo from source on 4112 (set
+`globalThis.__FORKFLOW_DEMO__ = true`, then import `apps/server/src/main.ts` with
+`FORKFLOW_PORT=4112` and a scratch `FORKFLOW_DATA_DIR`) and run copies of the two scripts
+with the port rewritten.
+
