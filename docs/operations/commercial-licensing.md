@@ -195,8 +195,10 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 
 The activation request is an information handoff, not proof of purchase. The
 provider must authorize the subscription and choose entitlements before signing.
-The current issuer remains `tools/issue-license.ts`; hosted issuance and automatic
-renewal are separate work. Its claims JSON reader also accepts UTF-8 BOM files.
+`tools/issue-license.ts` remains the hand-issuing route. Builds made with
+`FORKFLOW_LICENSE_SERVICE_URL` also fetch trials and Razorpay renewals
+automatically; see `apps/licensing-worker/README.md`. Its claims JSON reader also
+accepts UTF-8 BOM files.
 
 Plan dates use the restaurant server's timezone. Device counts come from the
 server, including blocked registrations after a downgrade. License status is
