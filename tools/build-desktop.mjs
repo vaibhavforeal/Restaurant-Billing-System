@@ -7,7 +7,7 @@ import { deflateSync } from "node:zlib";
 import { desktopBuildConfig } from "./desktop-build-config.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint } = desktopBuildConfig(process.argv.slice(2), process.env);
+const { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint, serviceUrl } = desktopBuildConfig(process.argv.slice(2), process.env);
 if (process.argv.includes("--check")) { console.log(`${edition} build configuration OK`); process.exit(0); }
 const stage = join(root, "build", "desktop", stageName);
 // Only ever clear the build staging directory, not source or restaurant data.
@@ -42,7 +42,7 @@ function copyDependency(name, from, parent = stage) {
 }
 for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
+  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl),__FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
   plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
 await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo) } });

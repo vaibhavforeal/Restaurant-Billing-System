@@ -44,8 +44,9 @@ export interface LicenseStatus {
   revision: number | null;
   registeredDevices: number;
   trial: boolean;
-}
-export interface LicensedDevice {
+  /** Where an administrator buys or manages a plan; null when this build has no licensing service. */
+  subscribeUrl: string | null;
+}export interface LicensedDevice {
   id: string; name: string; createdAt: number; current: boolean; allowed: boolean;
   lastSeenAt: number | null; version: number;
 }

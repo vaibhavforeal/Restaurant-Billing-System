@@ -35,6 +35,19 @@ test("customer builds reject missing, private and non-Ed25519 keys", () => {
   assert.throws(() => desktopBuildConfig(["--commercial"], { FORKFLOW_LICENSE_PUBLIC_KEY: "not a key" }));
 });
 
+test("only customer builds carry the licensing service URL, and it must be HTTPS", () => {
+  const withUrl = { ...env, FORKFLOW_LICENSE_SERVICE_URL: "https://license.example.com" };
+  assert.equal(desktopBuildConfig(["--commercial"], withUrl).serviceUrl, "https://license.example.com");
+  assert.equal(desktopBuildConfig(["--commercial"], env).serviceUrl, "");
+  assert.equal(desktopBuildConfig(["--demo"], withUrl).serviceUrl, "");
+  assert.equal(desktopBuildConfig([], withUrl).serviceUrl, "");
+  for (const url of ["http://license.example.com", "http://127.0.0.1:8787", "license.example.com", "https://"]) {
+    assert.throws(() => desktopBuildConfig(["--commercial"], { ...env, FORKFLOW_LICENSE_SERVICE_URL: url }), /Licensing service URL must use HTTPS/);
+  }
+  // Ambient settings never break a build that does not use them.
+  assert.equal(desktopBuildConfig(["--demo"], { ...env, FORKFLOW_LICENSE_SERVICE_URL: "http://example.com" }).serviceUrl, "");
+});
+
 test("release stages cannot be redirected or overwritten by development builds", () => {
   assert.throws(() => desktopBuildConfig(["--demo", "--commercial"], env), /separate products/);
   for (const stage of ["demo", "commercial", "kitchen"]) {

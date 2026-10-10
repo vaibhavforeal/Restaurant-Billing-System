@@ -47,7 +47,8 @@ try {
   app.addHook("preClose", async () => { await closeCaptain?.(); });
   daily();
   const timer = setInterval(daily, 60 * 60 * 1000); timer.unref();
-  app.addHook("onClose", async () => { clearInterval(timer); db?.close(); await release(); });
+  let stopRenewals: (() => void) | undefined;
+  app.addHook("onClose", async () => { clearInterval(timer); stopRenewals?.(); db?.close(); await release(); });
   const uiDist = process.env["FORKFLOW_UI_DIR"] ?? resolve(here, "../../ui/dist");
   if (existsSync(uiDist)) {
     await app.register(fastifyStatic, { root: uiDist, wildcard: true, setHeaders: (response, filePath) => {
@@ -65,6 +66,8 @@ try {
   parent?.on("message", ({ data }) => { if (data === "shutdown") void close().then(() => process.exit(0)); });
   if (demo) await seedDemo(app);
   await app.listen({ host: "0.0.0.0", port });
+  // Billing never waits on the licensing service: this only fetches in the background and logs failures.
+  if (!demo) stopRenewals = app.licensing.startRenewalChecks((message) => app.log.warn(message));
   if (captainTls) {
     try {
       if (captainTls.port === port) throw new Error("Captain HTTPS must use a different port from the desktop POS");

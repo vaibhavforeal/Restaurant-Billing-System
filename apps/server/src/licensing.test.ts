@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
@@ -17,10 +17,10 @@ function signed(input: LicenseClaims, privateKey = keys.privateKey) {
   const message = `ff1.${Buffer.from(JSON.stringify(input)).toString("base64url")}`;
   return `${message}.${sign(null, Buffer.from(message), privateKey).toString("base64url")}`;
 }
-async function fixture() {
+async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch } = {}) {
   let now = Date.now();
   const db = openDb(":memory:"); migrate(db, MIGRATIONS);
-  const app = buildServer({ db, licensing: { publicKey, installationId, now: () => now } });
+  const app = buildServer({ db, licensing: { publicKey, installationId, now: () => now, ...extra } });
   // Exercise the same permission + entitlement guard that future paid routes use.
   app.get("/api/test-recipes", { preHandler: [app.requirePermission("stock.manage"), app.requireFeature("recipes")] }, async () => ({ allowed: true }));
   app.get("/api/test-kds", { preHandler: [app.requirePermission("kots.read"), app.requireFeature("kds")] }, async () => ({ allowed: true }));
@@ -357,5 +357,159 @@ describe("commercial licensing", () => {
     const responses = await Promise.all([f.register(second, "Counter"), f.register(third, "Phone")]);
     expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 409]);
     expect(f.app.licensing.devices(device)).toHaveLength(2);
+  });
+});
+
+describe("licence renewal from the licensing service", () => {
+  const serviceUrl = "https://license.example.com";
+  const unreachable = "Couldn't reach the licensing service. Billing continues on your current licence.";
+  const reply = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
+  // A fake service whose next answer the test chooses; every call is recorded by the spy.
+  function service(answer: () => Response | Promise<Response> = () => reply(200, { license: null })) {
+    const spy = vi.fn(async (_url: unknown, _init?: RequestInit) => answer());
+    return { spy, fetch: spy as unknown as typeof fetch };
+  }
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("installs a newer licence from the service", async () => {
+    let next = "";
+    const s = service(() => reply(200, { license: next }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
+    next = `${signed({ ...f.claims, revision: 2, plan: "pro", maxDevices: 5, features: PLANS.pro.features })}\n`;
+    const result = await f.app.licensing.fetchLatest();
+    expect(result).toEqual({ outcome: "installed", message: "A new licence was installed." });
+    expect(f.app.licensing.status(device)).toMatchObject({ revision: 2, plan: "pro", canOperate: true });
+    expect(f.app.licensing.history().events[0]).toMatchObject({ kind: "license_activated", actorName: "Automatic renewal", revision: 2 });
+    const [url, init] = s.spy.mock.calls[0]!;
+    expect(url).toBe(`${serviceUrl}/v1/activate`);
+    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json" } });
+    expect(init!.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.parse(init!.body as string)).toMatchObject({ format: "forkflow-activation-request", installationId, currentRevision: 1, licenseId: scope.licenseId });
+  });
+
+  it("equal revision is up to date", async () => {
+    const s = service(() => reply(200, { license: null }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate();
+    expect(await f.app.licensing.fetchLatest()).toEqual({ outcome: "up_to_date", message: "Your licence is up to date." });
+    // Re-sending the licence already installed changes nothing either.
+    let installed = "";
+    const g = await fixture({ serviceUrl, fetch: service(() => reply(200, { license: installed })).fetch }); await g.activate();
+    installed = `${signed(g.claims)}\n`;
+    expect((await g.app.licensing.fetchLatest()).outcome).toBe("up_to_date");
+    expect(g.app.licensing.history().events).toHaveLength(1);
+  });
+
+  it("unreachable service leaves billing alone", async () => {
+    let failure: () => Response | Promise<Response> = () => { throw new TypeError("fetch failed"); };
+    const s = service(() => failure());
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
+    const before = f.app.licensing.status(device);
+    const outcomes = [];
+    for (const next of [
+      () => { throw new TypeError("fetch failed"); },
+      () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); },
+      () => reply(500, { error: "internal" }), () => reply(400, { error: "bad_request" }), () => reply(429, "slow down"),
+      () => reply(200, "<html>captive portal</html>"), () => reply(200, { license: 42 }),
+    ]) { failure = next; outcomes.push(await f.app.licensing.fetchLatest()); }
+    expect(outcomes).toEqual(outcomes.map(() => ({ outcome: "unreachable", message: unreachable })));
+    expect(f.app.licensing.status(device)).toEqual(before);
+  });
+
+  it("a licence for another installation is rejected", async () => {
+    let next = "";
+    const f = await fixture({ serviceUrl, fetch: service(() => reply(200, { license: next })).fetch }); await f.activate(); await f.register();
+    const before = f.app.db.prepare("SELECT * FROM license_state").get();
+    next = `${signed({ ...f.claims, revision: 2, installationId: randomUUID() })}\n`;
+    expect(await f.app.licensing.fetchLatest()).toMatchObject({ outcome: "rejected", message: "The licensing service returned a licence this installation can't use." });
+    expect(f.app.db.prepare("SELECT * FROM license_state").get()).toEqual(before);
+    // A clock-skewed licence (issued in the future) and a stale revision are refused the same way.
+    next = `${signed({ ...f.claims, revision: 2, issuedAt: f.claims.issuedAt + 3_600_000, expiresAt: f.claims.expiresAt + 3_600_000, graceUntil: f.claims.graceUntil + 3_600_000 })}\n`;
+    expect((await f.app.licensing.fetchLatest()).outcome).toBe("rejected");
+    next = "ff1.garbage.garbage\n";
+    expect((await f.app.licensing.fetchLatest()).outcome).toBe("rejected");
+    expect(f.app.db.prepare("SELECT * FROM license_state").get()).toEqual(before);
+    expect(f.app.licensing.status(device)).toMatchObject({ revision: 1, canOperate: true });
+  });
+
+  it("a wrong-key refusal from the service is rejected", async () => {
+    const f = await fixture({ serviceUrl, fetch: service(() => reply(409, { error: "wrong_key" })).fetch }); await f.activate();
+    expect(await f.app.licensing.fetchLatest()).toMatchObject({ outcome: "rejected", message: "The licensing service returned a licence this installation can't use." });
+    expect(f.app.licensing.status().revision).toBe(1);
+  });
+
+  it("no service URL makes no request", async () => {
+    const s = service();
+    const f = await fixture({ fetch: s.fetch });
+    expect(await f.app.licensing.fetchLatest()).toEqual({ outcome: "disabled", message: "Automatic renewal is not set up for this installation." });
+    const dev = freshApp(); apps.push(dev);
+    expect((await dev.licensing.fetchLatest()).outcome).toBe("disabled");
+    const stop = f.app.licensing.startRenewalChecks(() => {}); stop();
+    expect(s.spy).not.toHaveBeenCalled();
+  });
+
+  it("two simultaneous checks share one request", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const s = service(async () => { await gate; return reply(200, { license: null }); });
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate();
+    const first = f.app.licensing.fetchLatest(), second = f.app.licensing.fetchLatest();
+    release();
+    const results = await Promise.all([first, second]);
+    expect(s.spy).toHaveBeenCalledTimes(1);
+    expect(results[0]).toEqual({ outcome: "up_to_date", message: "Your licence is up to date." });
+    expect(results[1]).toBe(results[0]);
+    await f.app.licensing.fetchLatest();
+    expect(s.spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks on start and every six hours until stopped, never logging the licence", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let next: string | null = null;
+    const s = service(() => reply(200, { license: next }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
+    const log: string[] = [];
+    const stop = f.app.licensing.startRenewalChecks((m) => log.push(m));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(s.spy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000 - 1);
+    expect(s.spy).toHaveBeenCalledTimes(1);
+    next = `${signed({ ...f.claims, revision: 2 })}\n`;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(s.spy).toHaveBeenCalledTimes(2);
+    expect(f.app.licensing.status(device).revision).toBe(2);
+    next = `${signed({ ...f.claims, revision: 3, installationId: randomUUID() })}\n`;
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+    expect(log.length).toBeGreaterThanOrEqual(2);
+    expect(log.join("\n")).toContain("A new licence was installed.");
+    expect(log.join("\n")).not.toContain("ff1.");
+    stop();
+    await vi.advanceTimersByTimeAsync(12 * 60 * 60 * 1000);
+    expect(s.spy).toHaveBeenCalledTimes(3);
+  });
+
+  it("check endpoint needs settings.manage", async () => {
+    let next: string | null = null;
+    const f = await fixture({ serviceUrl, fetch: service(() => reply(200, { license: next })).fetch }); await f.activate(); await f.register();
+    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", pin: "2345" } });
+    const cashier = await f.login(device, "2345");
+    const broadcast = vi.spyOn(f.app, "broadcast");
+    expect((await f.app.inject({ method: "POST", url: "/api/license/check", headers: cashier })).statusCode).toBe(403);
+    const ok = await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers });
+    expect(ok.statusCode, ok.body).toBe(200);
+    expect(ok.json()).toMatchObject({ outcome: "up_to_date", message: "Your licence is up to date.", status: { revision: 1, state: "active", subscribeUrl: `${serviceUrl}/subscribe?installation=${installationId}` } });
+    next = `${signed({ ...f.claims, revision: 2 })}\n`;
+    expect(broadcast).not.toHaveBeenCalled(); // nothing changed, so nobody is told
+    const installed = await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers });
+    expect(installed.json()).toMatchObject({ outcome: "installed", status: { revision: 2 } });
+    expect(broadcast).toHaveBeenCalledWith("license.changed", {});
+  });
+
+  it("status exposes the subscribe URL", async () => {
+    const f = await fixture({ serviceUrl });
+    expect(f.app.licensing.status().subscribeUrl).toBe(`${serviceUrl}/subscribe?installation=${installationId}`);
+    expect((await f.app.inject({ url: "/api/license", headers: f.headers })).json().subscribeUrl).toBe(`${serviceUrl}/subscribe?installation=${installationId}`);
+    const without = await fixture(); expect(without.app.licensing.status().subscribeUrl).toBeNull();
+    const dev = freshApp(); apps.push(dev);
+    expect(dev.licensing.status().subscribeUrl).toBeNull();
   });
 });

@@ -11,7 +11,28 @@ export interface LicensingOptions {
   publicKey: string;
   installationId: string;
   now?: () => number;
+  /** Base URL of the licensing service (no trailing slash); without it nothing is ever fetched. */
+  serviceUrl?: string;
+  /** Tests inject a fake; defaults to the global fetch. */
+  fetch?: typeof fetch;
 }
+export interface LicenseCheckResult {
+  outcome: "installed" | "up_to_date" | "unreachable" | "rejected" | "disabled";
+  message: string;
+  /** Why a licence was rejected, for the log; never contains licence text. */
+  detail?: string;
+}
+const RENEWAL_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 10_000;
+const AUTOMATIC_ACTOR = "Automatic renewal";
+const CHECK_MESSAGES = {
+  unreachable: "Couldn't reach the licensing service. Billing continues on your current licence.",
+  up_to_date: "Your licence is up to date.",
+  installed: "A new licence was installed.",
+  rejected: "The licensing service returned a licence this installation can't use.",
+  disabled: "Automatic renewal is not set up for this installation.",
+} as const;
+const serviceReply = z.object({ license: z.string().max(16_384).nullable() });
 interface SavedLicense {
   envelope: string | null; revision: number; last_seen_at: number;
   license_id: string | null; organization_id: string | null; outlet_id: string | null;
@@ -61,6 +82,7 @@ export class Licensing {
       features: { recipes: false, qrOrdering: false, kds: false }, expiresAt: null, graceUntil: null,
       deviceRegistered: false, canOperate: false, message: "Activate this installation to start billing.",
       serverTime: now, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, revision: null, registeredDevices: 0, trial: false,
+      subscribeUrl: this.options?.serviceUrl ? `${this.options.serviceUrl}/subscribe?installation=${this.options.installationId}` : null,
     };
     if (!this.enabled) return { ...base, state: "development", canOperate: true, deviceRegistered: true,
       features: { recipes: true, qrOrdering: true, kds: true }, message: "Development build. Commercial license checks are not enabled." };
@@ -183,6 +205,52 @@ export class Licensing {
       organizationId: saved.organization_id, outletId: saved.outlet_id, currentRevision: saved.revision, generatedAt: this.now(),
       verificationKeyFingerprint: createHash("sha256").update(createPublicKey(this.options.publicKey).export({ type: "spki", format: "der" })).digest("hex") };
   }
+  private inflight: Promise<LicenseCheckResult> | null = null;
+  /**
+   * Asks the licensing service for this installation's latest licence. Never throws, and never touches
+   * `canOperate` unless the existing activate() checks accept a newer licence. Simultaneous calls share one request.
+   */
+  fetchLatest(): Promise<LicenseCheckResult> {
+    return this.inflight ??= this.fetchOnce().finally(() => { this.inflight = null; });
+  }
+  private async fetchOnce(): Promise<LicenseCheckResult> {
+    const result = (outcome: LicenseCheckResult["outcome"], detail?: string): LicenseCheckResult =>
+      ({ outcome, message: CHECK_MESSAGES[outcome], ...(detail ? { detail } : {}) });
+    const serviceUrl = this.options?.serviceUrl;
+    if (!serviceUrl) return result("disabled");
+    let license: string | null;
+    try {
+      const response = await (this.options?.fetch ?? fetch)(`${serviceUrl}/v1/activate`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(this.activationRequest()),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (response.status === 409 && (await response.json() as { error?: unknown } | null)?.error === "wrong_key") {
+        return result("rejected", "The licensing service signs with a different key than this build trusts");
+      }
+      if (!response.ok) return result("unreachable");
+      license = serviceReply.parse(await response.json()).license;
+    } catch { return result("unreachable"); }
+    if (license === null) return result("up_to_date");
+    try {
+      const revision = this.saved().revision;
+      this.activate(license.trim(), AUTOMATIC_ACTOR);
+      return result(this.saved().revision === revision ? "up_to_date" : "installed");
+    } catch (error) { return result("rejected", error instanceof Error ? error.message : "The licence could not be installed"); }
+  }
+  /** Checks now and every 6 hours; failures are only logged. Returns a function that stops the checks. */
+  startRenewalChecks(log: (message: string) => void): () => void {
+    let stopped = false;
+    const check = () => { void this.fetchLatest().then((r) => {
+      if (stopped) return;
+      if (r.outcome === "installed") this.announceChange();
+      if (r.outcome !== "up_to_date" && r.outcome !== "disabled") log(r.detail ? `${r.message} (${r.detail})` : r.message);
+    }); };
+    check();
+    const timer = setInterval(check, RENEWAL_INTERVAL_MS); timer.unref();
+    return () => { stopped = true; clearInterval(timer); };
+  }
+  /** Close sockets a licence change revoked before telling the remaining clients. */
+  announceChange() { this.app.wsRevalidate(); this.app.broadcast("license.changed", {}); }
   /** Whether a session created on `sessionDevice` may be used by the request's device credential. */
   deviceAllowed(sessionDevice: string | null | undefined, credential: unknown) {
     if (!this.enabled) return true;
@@ -221,8 +289,7 @@ export function registerLicensing(app: FastifyInstance) {
   const manage = app.requirePermission("settings.manage");
   const licenseBody = z.object({ license: z.string().trim().min(1).max(16_384) });
   const deviceName = z.string().trim().min(1).max(80);
-  // Close sockets this change revoked before telling the remaining clients.
-  const licenseChanged = () => { app.wsRevalidate(); app.broadcast("license.changed", {}); };
+  const licenseChanged = () => app.licensing.announceChange();
   app.get("/api/license", { preHandler: app.requireAuth }, async (req, reply) => {
     reply.header("Cache-Control", "no-store"); return app.licensing.status(req.headers["x-forkflow-device"]);
   });
@@ -234,6 +301,11 @@ export function registerLicensing(app: FastifyInstance) {
     const { license, previewKey } = licenseBody.extend({ previewKey: z.string().regex(/^[a-f0-9]{64}$/).optional() }).parse(req.body);
     app.licensing.activate(license, req.user.name, previewKey); licenseChanged();
     return app.licensing.status(req.headers["x-forkflow-device"]);
+  });
+  app.post("/api/license/check", { preHandler: manage }, async (req, reply) => {
+    const result = await app.licensing.fetchLatest();
+    if (result.outcome === "installed") licenseChanged();
+    reply.header("Cache-Control", "no-store"); return { ...result, status: app.licensing.status(req.headers["x-forkflow-device"]) };
   });
   app.get("/api/license/activation-request", { preHandler: manage }, async (_req, reply) => {
     reply.header("Cache-Control", "no-store"); return app.licensing.activationRequest();

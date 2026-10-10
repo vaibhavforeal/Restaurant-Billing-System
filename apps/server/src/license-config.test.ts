@@ -51,3 +51,52 @@ describe("customer build license configuration", () => {
     expect(licenseConfig(directory())?.publicKey).toBe(publicKey);
   });
 });
+
+describe("licensing service URL", () => {
+  const customer = () => {
+    vi.stubGlobal("__FORKFLOW_COMMERCIAL__", true);
+    vi.stubGlobal("__FORKFLOW_LICENSE_PUBLIC_KEY__", publicKey);
+  };
+
+  it("uses the embedded URL in a customer build whatever the environment says", () => {
+    customer();
+    vi.stubGlobal("__FORKFLOW_LICENSE_SERVICE_URL__", "https://license.example.com/");
+    vi.stubEnv("FORKFLOW_LICENSE_SERVICE_URL", "https://attacker.example.net");
+    expect(licenseConfig(directory())?.serviceUrl).toBe("https://license.example.com");
+    vi.stubEnv("FORKFLOW_LICENSE_SERVICE_URL", "");
+    expect(licenseConfig(directory())?.serviceUrl).toBe("https://license.example.com");
+  });
+
+  it("leaves a customer build with no embedded URL without one", () => {
+    customer();
+    vi.stubGlobal("__FORKFLOW_LICENSE_SERVICE_URL__", "");
+    vi.stubEnv("FORKFLOW_LICENSE_SERVICE_URL", "https://attacker.example.net");
+    expect(licenseConfig(directory())?.serviceUrl).toBeUndefined();
+  });
+
+  it("refuses a URL that is not HTTPS", () => {
+    customer();
+    for (const url of ["http://example.com", "ftp://example.com", "example.com", "https://", "javascript:alert(1)"]) {
+      vi.stubGlobal("__FORKFLOW_LICENSE_SERVICE_URL__", url);
+      expect(() => licenseConfig(directory()), url).toThrow("Licensing service URL must use HTTPS");
+    }
+    // Loopback is a development convenience only; a customer build still needs HTTPS.
+    vi.stubGlobal("__FORKFLOW_LICENSE_SERVICE_URL__", "http://127.0.0.1:8787");
+    expect(() => licenseConfig(directory())).toThrow("Licensing service URL must use HTTPS");
+  });
+
+  it("accepts a development environment URL", () => {
+    vi.stubGlobal("__FORKFLOW_COMMERCIAL__", undefined);
+    vi.stubGlobal("__FORKFLOW_LICENSE_PUBLIC_KEY__", undefined);
+    vi.stubGlobal("__FORKFLOW_LICENSE_SERVICE_URL__", undefined);
+    vi.stubEnv("FORKFLOW_LICENSE_PUBLIC_KEY", publicKey);
+    for (const [url, expected] of [["http://127.0.0.1:8787", "http://127.0.0.1:8787"], ["http://localhost:8787/", "http://localhost:8787"], ["https://license.example.com", "https://license.example.com"]] as const) {
+      vi.stubEnv("FORKFLOW_LICENSE_SERVICE_URL", url);
+      expect(licenseConfig(directory())?.serviceUrl, url).toBe(expected);
+    }
+    vi.stubEnv("FORKFLOW_LICENSE_SERVICE_URL", "http://example.com");
+    expect(() => licenseConfig(directory())).toThrow("Licensing service URL must use HTTPS");
+    vi.stubEnv("FORKFLOW_LICENSE_SERVICE_URL", "");
+    expect(licenseConfig(directory())?.serviceUrl).toBeUndefined();
+  });
+});

@@ -1,5 +1,9 @@
 import { createHash, createPublicKey } from "node:crypto";
 
+function isHttpsUrl(value) {
+  try { const url = new URL(value); return url.protocol === "https:" && url.hostname !== ""; } catch { return false; }
+}
+
 export function desktopBuildConfig(args, env) {
   const demo = args.includes("--demo");
   const commercial = args.includes("--commercial");
@@ -23,5 +27,8 @@ export function desktopBuildConfig(args, env) {
   if (parsedKey && parsedKey.asymmetricKeyType !== "ed25519") throw new Error("Expected an Ed25519 public key");
   const publicKey = parsedKey ? parsedKey.export({ type: "spki", format: "pem" }).toString() : "";
   const verificationKeyFingerprint = parsedKey ? createHash("sha256").update(parsedKey.export({ type: "spki", format: "der" })).digest("hex") : null;
-  return { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint };
+  // The licensing service is optional and, like the key, only a customer build embeds it.
+  const serviceUrl = commercial ? (env.FORKFLOW_LICENSE_SERVICE_URL ?? "").trim() : "";
+  if (serviceUrl && !isHttpsUrl(serviceUrl)) throw new Error("Licensing service URL must use HTTPS");
+  return { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint, serviceUrl };
 }
