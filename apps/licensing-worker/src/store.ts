@@ -30,7 +30,10 @@ export async function createInstallation(db: D1Like, row: Pick<InstallationRow, 
     .bind(row.installationId, row.licenseId, row.organizationId, row.outletId, row.trialStartedAt, row.createdAt, row.revisionFloor).run();
 }
 
-export const latestLicense = (db: D1Like, installationId: string) =>
+export const setContactEmailStatement = (db: D1Like, installationId: string, email: string): D1StatementLike =>
+  db.prepare(`UPDATE installations SET contact_email = ? WHERE installation_id = ?`).bind(email, installationId);
+
+export const latestLicense =(db: D1Like, installationId: string) =>
   db.prepare(`SELECT ${LICENSE_COLUMNS} FROM licenses WHERE installation_id = ? ORDER BY revision DESC LIMIT 1`).bind(installationId).first<LicenseRow>();
 
 export async function nextRevision(db: D1Like, installationId: string): Promise<number> {

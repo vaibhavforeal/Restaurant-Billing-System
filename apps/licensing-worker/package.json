@@ -6,7 +6,8 @@
   "description": "Cloudflare Worker that issues trial licences and renews paid ones from Razorpay webhooks. Deployed with wrangler; never imported by the counter app.",
   "dependencies": {
     "@forkflow/domain": "*",
-    "@forkflow/license-issuer": "*"
+    "@forkflow/license-issuer": "*",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "wrangler": "^4.149.0"

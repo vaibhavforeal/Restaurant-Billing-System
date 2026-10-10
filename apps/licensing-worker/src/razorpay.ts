@@ -48,7 +48,7 @@ export interface RazorpayApi {
 
 export function razorpayApi(keyId: string, keySecret: string, fetchImpl: typeof fetch = fetch): RazorpayApi {
   const authorization = `Basic ${btoa(`${keyId}:${keySecret}`)}`;
-  const post = async (path: string, body: unknown): Promise<unknown> => {
+  const post = async (path: string, body: unknown): Promise<{ status: number; body: unknown }> => {
     const response = await fetchImpl(`${API}${path}`, { method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify(body) });
     const text = await response.text();
     let parsed: unknown = null;
@@ -57,12 +57,14 @@ export function razorpayApi(keyId: string, keySecret: string, fetchImpl: typeof 
       const description = (parsed as { error?: { description?: unknown } } | null)?.error?.description;
       throw new Error(`Razorpay ${response.status}: ${typeof description === "string" ? description : response.statusText || "request failed"}`);
     }
-    return parsed;
+    return { status: response.status, body: parsed };
   };
   return {
     async createSubscription({ planId, totalCount, notes }) {
-      const created = (await post("/subscriptions", { plan_id: planId, total_count: totalCount, customer_notify: true, notes })) as { id: string; status: string };
-      return { id: created.id, status: created.status };
+      const { status, body } = await post("/subscriptions", { plan_id: planId, total_count: totalCount, customer_notify: true, notes });
+      const { id, status: state } = (body ?? {}) as { id?: unknown; status?: unknown };
+      if (typeof id !== "string" || typeof state !== "string") throw new Error(`Razorpay ${status}: unexpected response`);
+      return { id, status: state };
     },
     async cancelSubscription(id) { await post(`/subscriptions/${encodeURIComponent(id)}/cancel`, { cancel_at_cycle_end: false }); },
   };

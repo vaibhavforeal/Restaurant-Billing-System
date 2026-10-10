@@ -55,6 +55,16 @@ describe("razorpayApi", () => {
     await expect(razorpayApi("k", "s", fetchImpl).createSubscription({ planId: "bad", totalCount: 1, notes: {} })).rejects.toThrow("Razorpay 400: The plan id provided is invalid.");
   });
 
+  it.each([
+    ["non-JSON", () => new Response("<html>ok</html>", { status: 200 })],
+    ["missing id", () => reply(200, { status: "created" })],
+    ["missing status", () => reply(200, { id: "sub_1" })],
+    ["non-string id", () => reply(201, { id: 7, status: "created" })],
+  ])("a 2xx createSubscription response that is %s throws", async (_name, response) => {
+    const { fetchImpl } = recorder(response);
+    await expect(razorpayApi("k", "s", fetchImpl).createSubscription({ planId: "p", totalCount: 1, notes: {} })).rejects.toThrow(/^Razorpay (200|201): unexpected response$/);
+  });
+
   it("a non-JSON error body still throws with the status", async () => {
     const { fetchImpl } = recorder(() => new Response("<html>bad gateway</html>", { status: 502 }));
     await expect(razorpayApi("k", "s", fetchImpl).cancelSubscription("sub_1")).rejects.toThrow(/^Razorpay 502/);
