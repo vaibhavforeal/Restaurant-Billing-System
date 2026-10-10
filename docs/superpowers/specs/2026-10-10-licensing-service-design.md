@@ -98,7 +98,7 @@ For step 4 the floor is the only time a client-reported revision is trusted; aft
 
 ### 3.5 Checkout
 
-1. `/subscribe` requires a known installation; otherwise it says "Open ForkFlow once while connected to the internet, then try again".
+1. `/subscribe` requires a known installation; otherwise it says "Open ForkFlow while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again."
 2. The page posts to `/v1/subscriptions`, which creates the subscription with the plan id for the chosen plan and period, and opens Razorpay Checkout with the subscription id.
 3. Choosing a plan when an active subscription already exists creates the new one; the old one is cancelled once the new one's first charge succeeds (§3.4 step 4), so the restaurant is never left without a paid subscription.
 4. The success screen tells the admin to return to ForkFlow and press **Check for renewal**. The browser success callback never issues a licence; only the verified webhook does.

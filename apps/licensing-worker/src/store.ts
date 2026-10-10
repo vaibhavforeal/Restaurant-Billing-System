@@ -30,10 +30,14 @@ export async function createInstallation(db: D1Like, row: Pick<InstallationRow, 
     .bind(row.installationId, row.licenseId, row.organizationId, row.outletId, row.trialStartedAt, row.createdAt, row.revisionFloor).run();
 }
 
+/** The floor only ever rises: it records the highest revision the counter is known to hold (reported by it, or handed to it). */
+export const raiseRevisionFloorStatement = (db: D1Like, installationId: string, revision: number): D1StatementLike =>
+  db.prepare(`UPDATE installations SET revision_floor = MAX(revision_floor, ?) WHERE installation_id = ?`).bind(revision, installationId);
+
 export const setContactEmailStatement = (db: D1Like, installationId: string, email: string): D1StatementLike =>
   db.prepare(`UPDATE installations SET contact_email = ? WHERE installation_id = ?`).bind(email, installationId);
 
-export const latestLicense =(db: D1Like, installationId: string) =>
+export const latestLicense = (db: D1Like, installationId: string) =>
   db.prepare(`SELECT ${LICENSE_COLUMNS} FROM licenses WHERE installation_id = ? ORDER BY revision DESC LIMIT 1`).bind(installationId).first<LicenseRow>();
 
 export async function nextRevision(db: D1Like, installationId: string): Promise<number> {
@@ -76,6 +80,14 @@ export async function paymentUsed(db: D1Like, paymentId: string): Promise<boolea
 
 export const getSubscription = (db: D1Like, id: string) =>
   db.prepare(`SELECT ${SUBSCRIPTION_COLUMNS} FROM subscriptions WHERE razorpay_subscription_id = ?`).bind(id).first<SubscriptionRow>();
+
+/** True when the installation has another subscription created strictly after `createdAt` that has already been charged (issued a licence). */
+export async function newerChargedSubscriptionExists(db: D1Like, installationId: string, createdAt: number, exceptId: string): Promise<boolean> {
+  return (await db.prepare(`SELECT 1 AS hit FROM subscriptions s
+    WHERE s.installation_id = ? AND s.razorpay_subscription_id != ? AND s.created_at > ?
+      AND EXISTS (SELECT 1 FROM licenses l WHERE l.razorpay_subscription_id = s.razorpay_subscription_id AND l.reason = 'charge') LIMIT 1`)
+    .bind(installationId, exceptId, createdAt).first()) !== null;
+}
 
 /** Subscriptions of the installation created strictly before `beforeCreatedAt` that can still bill (a halted one can be resumed by Razorpay, so it counts). */
 export async function olderOpenSubscriptions(db: D1Like, installationId: string, beforeCreatedAt: number, exceptId: string): Promise<SubscriptionRow[]> {

@@ -14,7 +14,8 @@ const pair = generateKeyPairSync("ed25519");
 const publicPem = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privatePem = pair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const installationId = "66666666-6666-4666-8666-666666666666";
-const RECONNECT = "Open ForkFlow once while connected to the internet, then try again.";
+// As it appears in the page source: the ">" is escaped.
+const RECONNECT = "Open ForkFlow while connected to the internet, press Check for renewal in Settings &gt; Plan and devices, then try again.";
 
 let env: Env;
 let limited: string[];

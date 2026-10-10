@@ -51,10 +51,11 @@ const send = async (body: unknown, { eventId = `evt_${++seq}`, signature, omitEv
   return { status: res.status, type: res.headers.get("content-type"), body: await res.json() as { outcome?: string; error?: string } };
 };
 
-interface ChargeOver { event?: string; subId?: string; paymentId?: string; currentEnd?: number | null | "omit"; notes?: unknown; status?: string }
-const subscriptionEvent = ({ event = "subscription.charged", subId = "sub_A", paymentId = `pay_${seq + 1}`, currentEnd = Math.floor((T0 + 30 * DAY) / 1000), notes, status = "active" }: ChargeOver = {}) => {
+interface ChargeOver { event?: string; subId?: string; paymentId?: string; currentEnd?: number | null | "omit"; notes?: unknown; status?: string; createdAt?: unknown }
+const subscriptionEvent = ({ event = "subscription.charged", subId = "sub_A", paymentId = `pay_${seq + 1}`, currentEnd = Math.floor((T0 + 30 * DAY) / 1000), notes, status = "active", createdAt }: ChargeOver = {}) => {
   const entity: Record<string, unknown> = { id: subId, status, notes: notes === undefined ? { installationId, plan: "pro", period: "monthly" } : notes };
   if (currentEnd !== "omit") entity.current_end = currentEnd;
+  if (createdAt !== undefined) entity.created_at = createdAt;
   const payload: Record<string, unknown> = { subscription: { entity } };
   if (event === "subscription.charged" || event === "subscription.completed") payload.payment = { entity: { id: paymentId } };
   return { entity: "event", event, payload };
@@ -195,6 +196,67 @@ describe("POST /v1/webhook", () => {
     expect(res).toMatchObject({ status: 200, body: { outcome: "issued" } });
     expect(cancelled).toEqual([]);
     expect(logs.some((l) => l.includes("could not cancel superseded subscription sub_A") && l.includes("already cancelled"))).toBe(true);
+  });
+
+  it("a renewal of a superseded subscription issues nothing and retries the cancel", async () => {
+    await activate();
+    await send(charged({ subId: "sub_A", notes: { installationId, plan: "basic", period: "monthly" } }));
+    now += DAY;
+    failCancel = true;
+    expect((await send(charged({ subId: "sub_B", currentEnd: endOf(31) }))).body.outcome).toBe("issued");
+    expect(cancelled).toEqual([]);
+    failCancel = false;
+    now += DAY;
+    const before = (await latestLicense(db, installationId))!;
+    const res = await send(charged({ subId: "sub_A", paymentId: "pay_old_renewal", notes: { installationId, plan: "basic", period: "monthly" }, currentEnd: endOf(60) }));
+    expect(res).toMatchObject({ status: 200, body: { outcome: "superseded" } });
+    expect(await latestLicense(db, installationId)).toEqual(before);
+    expect(await chargeLicenses()).toBe(2);
+    expect((await outcomes()).at(-1)).toMatchObject({ outcome: "superseded" });
+    expect(cancelled).toEqual(["sub_A"]);
+  });
+
+  it("a failed retry of the superseded cancel is logged and still answers 200", async () => {
+    await activate();
+    await send(charged({ subId: "sub_A" }));
+    now += DAY;
+    failCancel = true;
+    await send(charged({ subId: "sub_B", currentEnd: endOf(31) }));
+    now += DAY;
+    logs = [];
+    expect(await send(charged({ subId: "sub_A", paymentId: "pay_old_renewal", currentEnd: endOf(60) }))).toMatchObject({ status: 200, body: { outcome: "superseded" } });
+    expect(logs.some((l) => l.includes("could not cancel superseded subscription sub_A"))).toBe(true);
+    expect(await chargeLicenses()).toBe(2);
+  });
+
+  it("an older subscription's charge still issues while no newer subscription has been charged", async () => {
+    await activate();
+    await send(charged({ subId: "sub_A" }));
+    now += DAY;
+    await send(subscriptionEvent({ event: "subscription.authenticated", subId: "sub_B", status: "authenticated", currentEnd: null }));
+    now += DAY;
+    expect((await send(charged({ subId: "sub_A", paymentId: "pay_renew", currentEnd: endOf(60) }))).body.outcome).toBe("issued");
+    expect((await latestLicense(db, installationId))!).toMatchObject({ revision: 3, razorpaySubscriptionId: "sub_A" });
+  });
+
+  it.each([["equal to now", 0], ["in the past", -1]])("a charge whose period end is %s is ignored with 200", async (_name, days) => {
+    await activate();
+    const res = await send(charged({ currentEnd: Math.floor((T0 + days * DAY) / 1000) }));
+    expect(res).toMatchObject({ status: 200, body: { outcome: "ignored" } });
+    expect(await chargeLicenses()).toBe(0);
+    expect(logs.some((l) => l.includes("is not after now"))).toBe(true);
+  });
+
+  it("a charge that creates the subscription row takes Razorpay's created_at, or now without one", async () => {
+    await activate();
+    const created = Math.floor((T0 - 10 * DAY) / 1000);
+    await send(charged({ subId: "sub_A", createdAt: created }));
+    expect((await getSubscription(db, "sub_A"))!.createdAt).toBe(created * 1000);
+    expect((await send(charged({ subId: "sub_A", createdAt: created + 999, paymentId: "pay_later", currentEnd: endOf(60) }))).body.outcome).toBe("issued");
+    expect((await getSubscription(db, "sub_A"))!.createdAt).toBe(created * 1000);
+    now += DAY;
+    await send(charged({ subId: "sub_B", createdAt: "yesterday", currentEnd: endOf(61) }));
+    expect((await getSubscription(db, "sub_B"))!.createdAt).toBe(now);
   });
 
   it("a charge on the same subscription again cancels nothing", async () => {

@@ -1,4 +1,4 @@
-export const RECONNECT_COPY = "Open ForkFlow once while connected to the internet, then try again.";
+export const RECONNECT_COPY = "Open ForkFlow while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again.";
 export const SUCCESS_COPY = "Payment received. Return to ForkFlow and press Check for renewal.";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };

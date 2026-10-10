@@ -45,7 +45,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);
-    return body.ok ? handleActivate(await deps(), body.body) : json({ error: "bad_request" }, 400);
+    return body.ok ? handleActivate({ ...(await deps()), log: (message) => console.warn(message) }, body.body) : json({ error: "bad_request" }, 400);
   }
   if (method === "POST" && url.pathname === "/v1/subscriptions") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);

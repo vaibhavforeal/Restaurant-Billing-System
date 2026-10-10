@@ -3,7 +3,7 @@ import type { Period } from "./env.js";
 import { issueLicense, type Deps } from "./issue.js";
 import { verifyWebhookSignature, type RazorpayApi } from "./razorpay.js";
 import {
-  eventSeen, getInstallation, getSubscription, latestLicenseForSubscription, olderOpenSubscriptions, paymentUsed,
+  eventSeen, getInstallation, getSubscription, latestLicenseForSubscription, newerChargedSubscriptionExists, olderOpenSubscriptions, paymentUsed,
   recordEventStatement, upsertSubscriptionStatement,
 } from "./store.js";
 
@@ -56,9 +56,11 @@ export async function handleWebhook(deps: WebhookDeps, request: Request): Promis
     const status = typeof entity.status === "string" ? entity.status : type.slice("subscription.".length);
     const periodEnd = typeof entity.current_end === "number" && Number.isFinite(entity.current_end) ? entity.current_end * 1000 : null;
     const existing = await getSubscription(db, subscriptionId);
+    // A row created here (the webhook beat /v1/subscriptions' write, or it was lost) takes Razorpay's creation time, so subscription order stays right.
+    const createdAt = typeof entity.created_at === "number" && Number.isFinite(entity.created_at) ? entity.created_at * 1000 : now;
     const subscription = {
       razorpaySubscriptionId: subscriptionId, installationId: installation.installationId, plan: notes.plan, period: notes.period,
-      status, currentPeriodEnd: periodEnd ?? existing?.currentPeriodEnd ?? null, createdAt: existing?.createdAt ?? now,
+      status, currentPeriodEnd: periodEnd ?? existing?.currentPeriodEnd ?? null, createdAt: existing?.createdAt ?? createdAt,
     };
 
     if (type !== "subscription.charged") {
@@ -71,6 +73,15 @@ export async function handleWebhook(deps: WebhookDeps, request: Request): Promis
     if (await paymentUsed(db, paymentId)) return await record("ignored", `payment ${paymentId} already issued`);
     const latest = await latestLicenseForSubscription(db, subscriptionId);
     if (latest && periodEnd <= latest.expiresAt) return await record("ignored", `period end ${periodEnd} is not newer than ${latest.expiresAt}`);
+    // A charge on a subscription that a newer, already charged one replaced must not hand the old plan the top revision.
+    if (await newerChargedSubscriptionExists(db, installation.installationId, subscription.createdAt, subscriptionId)) {
+      const response = await record("superseded", `subscription ${subscriptionId} was replaced by a newer charged subscription`);
+      // Its cancel failed or was lost earlier, so try again; a failure is for manual follow-up, never a reason to fail the webhook.
+      try { await deps.razorpay.cancelSubscription(subscriptionId); }
+      catch (error) { log(`could not cancel superseded subscription ${subscriptionId}: ${error instanceof Error ? error.message : String(error)}`); }
+      return response;
+    }
+    if (periodEnd <= now) return await record("ignored", `period end ${periodEnd} is not after now (${now})`);
 
     const { statement } = await issueLicense(deps, {
       installation, plan: notes.plan, expiresAt: periodEnd, graceUntil: periodEnd + GRACE_MS, trial: false, reason: "charge", subscriptionId, paymentId,
