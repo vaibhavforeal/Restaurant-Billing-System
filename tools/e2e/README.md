@@ -211,10 +211,19 @@ Get-Content -Raw -Encoding utf8 tools/e2e/licensing.js |
   .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session licensing eval --stdin
 ```
 
-Require 21 passing checks: activation request download, file limits, signatures,
-verified previews, interrupted activation and safe retry, device registration,
-remote rename/removal, downgrade impact, stale previews, already-installed grants,
-upgrades, history, and failed-refresh recovery.
+The server also starts a fake licensing service on `http://127.0.0.1:4129`
+(`/v1/activate` answers from a queue the script fills through the server's
+`/__fake-service/queue` route; `/__fake-service/stop` shuts it down). Use the
+Playwright MCP browser if agent-browser is not installed: navigate to the server,
+add the fixtures file and the script with `page.addScriptTag({ path })`, then
+`waitForFunction` on `window.__licenseChecks`.
+
+Require 29 passing checks: activation request download, the Subscribe link, file
+limits, signatures, verified previews, interrupted activation and safe retry,
+device registration, remote rename/removal, downgrade impact, stale previews,
+already-installed grants, upgrades, history, failed-refresh recovery, Manage plan,
+Check for renewal installing a trial and then a paid renewal, the up-to-date and
+unreachable-service messages, and billing pages loading with the service down.
 
 Set the printed `clock-offset.txt` to `10800000` (ASCII text). This advances only
 the test license clock by three hours; never change the PC's system time. Set the

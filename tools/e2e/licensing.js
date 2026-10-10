@@ -11,6 +11,9 @@
   const input = (name) => [...panel().querySelectorAll('label')].find((l) => l.textContent.startsWith(name))?.querySelector('input,textarea');
   const set = async (el, value) => { Object.getOwnPropertyDescriptor(el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })); await tick(); };
   const choose = async (text, name = 'license.txt') => { const el = document.querySelector('[aria-label="License file"]'), transfer = new DataTransfer(); transfer.items.add(new File([text], name, { type: 'text/plain' })); el.files = transfer.files; el.dispatchEvent(new Event('change', { bubbles: true })); await tick(); };
+  const link = (name) => [...panel().querySelectorAll('a')].find((a) => a.textContent.trim() === name);
+  const post = (path, body) => originalFetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const messageIs = (text) => panel().querySelector('.license-message')?.textContent === text;
   const alertHas = (text) => [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes(text));
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
   const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' });
@@ -31,6 +34,9 @@
     await wait(() => panel() && !button('Refresh plan').disabled);
     check((await api('/license')).state === 'unactivated' && !!button('Back up now'), 'Unactivated installation provides activation and backup recovery');
     check((await originalFetch('/api/products', { headers: headers() })).status === 403, 'Commercial operations require activation');
+    const subscribe = link('Subscribe');
+    check(!!subscribe && subscribe.href === 'http://127.0.0.1:4129/subscribe?installation=' + fixtures.installationId && subscribe.target === '_blank' && subscribe.rel.includes('noopener') && !link('Manage plan'),
+      'Subscribe opens the checkout for this installation in a new tab');
     document.querySelector('.license-identity').open = true;
     await click('Download activation request'); await wait(() => downloads.length === 1);
     const request = JSON.parse(await downloads[0].text);
@@ -95,6 +101,21 @@
     check(!alertHas('Device list unavailable'), 'Device management recovers after a failed refresh');
     const history = (await api('/license/history')).events;
     check(history.some((e) => e.kind === 'device_removed') && history.some((e) => e.kind === 'device_renamed') && history.every((e) => e.actorName === 'QA Admin'), 'History records activation and device changes with the acting administrator');
+    check(!!link('Manage plan') && !link('Subscribe') && !panel().innerText.includes('Pro trial'), 'A paid plan offers Manage plan instead of Subscribe');
+    await post('/__fake-service/queue', { licenses: [fixtures.trialFromService] });
+    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && panel().innerText.includes('Pro trial — ends'));
+    check((await api('/license')).revision === 4 && !!link('Subscribe') && !link('Manage plan'), 'Check for renewal installs the licence the service has queued and a trial offers Subscribe');
+    await post('/__fake-service/queue', { licenses: [fixtures.renewalFromService] });
+    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && !panel().innerText.includes('Pro trial') && !!link('Manage plan'));
+    check((await api('/license')).revision === 5 && (await api('/license/history')).events.some((e) => e.actorName === 'Automatic renewal'), 'A paid renewal replaces the trial and is recorded as automatic');
+    await click('Check for renewal'); await wait(() => messageIs('Your licence is up to date.'));
+    check((await api('/license')).revision === 5, 'Nothing queued means the licence is up to date');
+    check((await post('/__fake-service/stop', {})).ok, 'The fake licensing service can be stopped');
+    await click('Check for renewal'); await wait(() => messageIs("Couldn't reach the licensing service. Billing continues on your current licence."));
+    check((await api('/license')).canOperate && (await originalFetch('/api/products', { headers: headers() })).status === 200, 'An unreachable service leaves billing on the current licence');
+    document.querySelector('nav button[aria-label="tables"]').click(); await wait(() => !panel() && !document.querySelector('.license-recovery'));
+    check(document.body.innerText.trim().length > 0 && !document.body.innerText.includes('Checking your plan'), 'Billing pages still load while the licensing service is unreachable');
+    document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     window.__licenseChecks = { status: 'passed', checks };
     return window.__licenseChecks;
   } finally { release(); window.fetch = originalFetch; URL.createObjectURL = originalUrl; HTMLAnchorElement.prototype.click = originalClick; window.confirm = originalConfirm; window.alert = originalAlert; }

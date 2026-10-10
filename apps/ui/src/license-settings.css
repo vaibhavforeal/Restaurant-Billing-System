@@ -17,6 +17,11 @@
 .license-settings textarea, .license-settings input { min-width: 0; width: 100%; box-sizing: border-box; }
 .license-settings textarea { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
 .license-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.license-heading .license-actions { justify-content: flex-end; }
+.license-link { display: inline-flex; align-items: center; min-height: 40px; box-sizing: border-box; padding: 9px 15px; border: 1px solid #dcdee4; border-radius: 8px; background: #fff; color: var(--ink); font-weight: 600; text-decoration: none; }
+.license-link:hover { background: #fafafa; border-color: #c6c8d0; }
+.license-link.primary { color: #fff; background: var(--red); border-color: var(--red); }
+.license-link.primary:hover { background: var(--red-hover); border-color: var(--red-hover); }
 .license-settings code { overflow-wrap: anywhere; }
 .license-settings summary { cursor: pointer; font-weight: 600; }
 .license-preview { background: #f7f9fa; border: 1px solid var(--line); padding: 16px; border-radius: 8px; margin-top: 14px; font-size: 13px; overflow-wrap: anywhere; }

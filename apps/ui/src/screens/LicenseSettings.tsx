@@ -115,17 +115,25 @@ export function LicenseSettings() {
     }, false);
   }
   const timezone = status?.timezone;
+  const showBilling = status?.mode === "commercial" && !!status.subscribeUrl;
   const current = devices?.find((d) => d.current);
   const canRegister = status && ["active", "grace"].includes(status.state) && !current && devices !== null && devices.length < (status.maxDevices ?? 0);
   return <section className="panel license-settings" aria-label="Plan and devices">
     <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>
-      <button disabled={busy || loading} onClick={() => { void run(async () => {}, true); }}>Refresh plan</button></div>
+      <div className="license-actions">
+        {showBilling && (!status.plan || status.trial) && <a className="license-link primary" href={status.subscribeUrl!} target="_blank" rel="noopener noreferrer">Subscribe</a>}
+        {showBilling && status.plan && !status.trial && <a className="license-link" href={status.subscribeUrl!} target="_blank" rel="noopener noreferrer">Manage plan</a>}
+        {showBilling && <button disabled={busy || loading} onClick={() => { void run(async () => {
+          setMessage((await apiFetch<{ message: string }>("/api/license/check", { method: "POST" })).message);
+        }, true); }}>Check for renewal</button>}
+        <button disabled={busy || loading} onClick={() => { void run(async () => {}, true); }}>Refresh plan</button></div></div>
     {(error || loadError || statusError) && <p role="alert" className="error-message">{error || loadError || statusError}</p>}
     {message && <p role="status" className="license-message">{message}</p>}
     {status?.mode === "development" && <p>{status.message}</p>}
     {status?.mode === "commercial" && <>
       <div className="license-summary">
-        <div><span className="license-label">Current plan</span><strong>{planName(status.plan)}</strong><span className={`license-badge ${status.state}`}>{status.state.replaceAll("_", " ")}</span></div>
+        <div><span className="license-label">Current plan</span><strong>{planName(status.plan)}</strong><span className={`license-badge ${status.state}`}>{status.state.replaceAll("_", " ")}</span>
+          {status.trial && status.expiresAt !== null && <span>Pro trial — ends {dateTime(status.expiresAt, timezone)}</span>}</div>
         <div><span className="license-label">Registered devices</span><strong>{status.registeredDevices} / {status.maxDevices ?? "-"}</strong><span>{status.deviceRegistered ? "This browser is registered" : current ? status.maxDevices !== null ? "This browser is over the limit" : "Registration saved" : "This browser needs registration"}</span></div>
         <div><span className="license-label">Renewal due</span><strong className="license-date">{status.expiresAt === null ? "Awaiting activation" : dateTime(status.expiresAt, timezone)}</strong><span>{status.revision ? `License revision ${status.revision}` : "Import a license to get started"}</span></div>
       </div>
