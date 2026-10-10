@@ -11,6 +11,20 @@ export function slotScale(bars: readonly SlotBar[]): { min: number; max: number 
   return max === min ? { min: 0, max: 100 } : { min, max };
 }
 
+/** The slot chart's height when it is not stretched to fill a panel, and the smallest height it will be drawn at. */
+export const SLOT_CHART_HEIGHT = 236;
+export const SLOT_CHART_MIN_HEIGHT = 150;
+const SLOT_CHART_TOP = 28, SLOT_CHART_LABEL_BAND = 44;
+
+/**
+ * Plot geometry for a slot chart drawn `height` SVG units tall: the bars sit between `top` and `bottom`, and a fixed band
+ * below `bottom` carries the slot labels. A missing measurement falls back to the default height.
+ */
+export function slotChartFrame(height: number): { height: number; top: number; bottom: number } {
+  const total = Number.isFinite(height) ? Math.max(SLOT_CHART_MIN_HEIGHT, Math.round(height)) : SLOT_CHART_HEIGHT;
+  return { height: total, top: SLOT_CHART_TOP, bottom: total - SLOT_CHART_LABEL_BAND };
+}
+
 /** Approximate width of one character of an 11px semibold `.dash-bar-label` (tabular figures), in SVG units. */
 export const BAR_LABEL_CHAR_PX = 6.8;
 

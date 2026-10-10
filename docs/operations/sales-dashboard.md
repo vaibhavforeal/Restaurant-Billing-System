@@ -9,6 +9,15 @@ financial reports. The dashboard reuses existing read-only reports and adds no
 dependencies or database tables. (The Marketplace that controls the Zomato part of
 Alerts is described in [Marketplace](marketplace.md).)
 
+## Fits the window
+
+On a window at least 1101 px wide and 640 px tall, Home fills the window with nothing
+to scroll: the sales chart stretches to the room left, and the Alerts list scrolls inside
+its own panel when there are more orders than rows. On a shorter window the Order
+Statistics captions and the payment footnote are hidden to leave Alerts more rows.
+Narrower or shorter windows, tablets in portrait and phones use the stacked layout and scroll as before.
+
+
 ## Use
 
 - **Status strip.** Shows "Updated just now / N mins ago", a single-day date picker

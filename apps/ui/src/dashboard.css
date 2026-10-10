@@ -43,7 +43,8 @@ html[data-theme] .dash .dash-icon-button { display: inline-flex; align-items: ce
 .dash-swatch.takeaway { background: var(--dash-takeaway); }
 .dash-swatch.zomato { background: var(--zomato); }
 .dash-slot-chart { margin: var(--space-4) 0 0; border-radius: var(--radius); }
-.dash-slot-chart svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+.dash-slot-plot { height: 236px; }
+.dash-slot-chart svg { display: block; width: 100%; height: 100%; overflow: visible; touch-action: pan-y; }
 .dash-slot-chart text { font-family: inherit; font-variant-numeric: tabular-nums; }
 .dash-axis-label { font-size: 11px; fill: var(--muted); }
 .dash-bar-label { font-size: 11px; font-weight: 600; fill: var(--ink); }
@@ -100,5 +101,37 @@ html[data-theme] .dash .dash-alert-row:hover:not(:disabled) { background: var(--
   .dash-date input { width: 100%; }
   .dash-channel { padding: var(--space-6) var(--space-8); }
   .dash-channel-amount { font-size: 20px; }
+}
+/* Fit mode: on a wide, tall window the dashboard fills the workspace with nothing scrolling. Below this it stacks and scrolls. */
+@media (min-width: 1101px) and (min-height: 640px) {
+  html[data-theme] .workspace:has(> .financial-home) { display: flex; flex-direction: column; }
+  html[data-theme] .financial-home { flex: 1; min-height: 0; gap: var(--space-3); }
+  html[data-theme] .financial-home .sales-dashboard { flex: 1; min-height: 0; gap: var(--space-3); }
+  .dash-layout { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; gap: var(--space-4); }
+  .dash-main, .dash-side { min-height: 0; gap: var(--space-4); }
+  .dash-panel { padding: var(--space-6); }
+  .dash-strip { padding: var(--space-2) var(--space-6); }
+  .dash-channel { padding: var(--space-4) var(--space-6); gap: var(--space-2); }
+  .dash-channel-icon { width: 28px; height: 28px; }
+  .dash-slots { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .dash-slot-chart { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: var(--space-2); }
+  .dash-slot-plot { flex: 1; min-height: 0; height: auto; }
+  .dash-slot-detail { margin-top: var(--space-2); min-height: 0; }
+  .dash-legend { margin-top: var(--space-3); }
+  .dash-alerts { flex: 1 1 0; min-height: 120px; display: flex; flex-direction: column; }
+  .dash-alert-list:not(.dash-operational) { flex: 1; min-height: 0; max-height: none; }
+  .dash-alerts-head { padding: var(--space-4) var(--space-6); }
+  html[data-theme] .dash .dash-alert-row { padding: var(--space-4) var(--space-6); }
+  .dash-alert-note, .dash-alert-empty, .dash-alert-op { padding: var(--space-4) var(--space-6); }
+  .dash-stat-list { margin-top: var(--space-4); }
+  .dash-side .sales-chart-panel { padding: var(--space-6); flex: none; }
+  .dash-side .payment-bars { gap: var(--space-4); margin: var(--space-4) 0 0; }
+}
+/* Shorter windows: Alerts keeps the room, so the fixed panels drop their captions. */
+@media (min-width: 1101px) and (min-height: 640px) and (max-height: 860px) {
+  .dash-stat small, .dash-side .sales-chart-note { display: none; }
+  .dash-stat-list { margin-top: var(--space-2); }
+  .dash-side .payment-bars { gap: var(--space-3); margin-top: var(--space-3); }
+  .dash-side .payment-bar-label { margin-bottom: var(--space-1); }
 }
 @media print { .dash-strip-controls, .dash-alert-row { display: none; } }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { slotBars } from "./dashboard-data";
-import { DASHBOARD_MIN_DATE, alertBadge, perBarLabelsFit, pickedDate, slotScale, statusText, updatedLabel } from "./dashboard-view";
+import { DASHBOARD_MIN_DATE, alertBadge, perBarLabelsFit, pickedDate, slotChartFrame, slotScale, statusText, updatedLabel } from "./dashboard-view";
 
 describe("dashboard date picker", () => {
   it("ignores the partial years a browser emits while the year is being typed", () => {
@@ -74,5 +74,27 @@ describe("dashboard labels", () => {
     expect(statusText("picked_up")).toBe("Picked up");
     expect(statusText("received")).toBe("Received");
     expect(statusText("")).toBe("Unknown");
+  });
+});
+
+describe("slotChartFrame", () => {
+  it("reproduces the fixed layout at the default 236px height", () => {
+    expect(slotChartFrame(236)).toEqual({ height: 236, top: 28, bottom: 192 });
+  });
+
+  it("keeps a fixed band under the plot for the slot labels as the height changes", () => {
+    for (const height of [180, 236, 420, 700]) {
+      const frame = slotChartFrame(height);
+      expect(frame.height).toBe(height);
+      expect(frame.height - frame.bottom).toBe(44);
+      expect(frame.bottom).toBeGreaterThan(frame.top);
+    }
+  });
+
+  it("never shrinks below a readable minimum, and rounds a fractional measurement", () => {
+    expect(slotChartFrame(40).height).toBe(150);
+    expect(slotChartFrame(0).height).toBe(150);
+    expect(slotChartFrame(Number.NaN).height).toBe(236);
+    expect(slotChartFrame(300.6).height).toBe(301);
   });
 });

@@ -1,25 +1,27 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import type { SlotBar } from "./dashboard-data";
-import { perBarLabelsFit, slotScale } from "./dashboard-view";
+import { perBarLabelsFit, SLOT_CHART_HEIGHT, slotChartFrame, slotScale } from "./dashboard-view";
 import { reportMoney } from "./sales-report";
 
 const SHORT_LABELS = ["1–5am", "5–9am", "9am–1pm", "1–5pm", "5–9pm", "9pm–1am"];
 const compact = (paise: number) => `${paise < 0 ? "-" : ""}₹${new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 }).format(Math.abs(paise) / 100)}`;
-const HEIGHT = 236, TOP = 28, BOTTOM = 192, LEFT = 52, RIGHT = 12;
+const LEFT = 52, RIGHT = 12;
 
 /** Sales per four-hour slot, dine-in and takeaway side by side, plus Zomato as a third bar once the day has any Zomato sales. Values are net of credit notes and can be negative. */
 export function SlotChart({ bars }: { bars: SlotBar[] }) {
   const id = useId();
-  const figure = useRef<HTMLElement>(null);
+  const plot = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
+  const [measuredHeight, setMeasuredHeight] = useState(SLOT_CHART_HEIGHT);
   const [selected, setSelected] = useState<number | null>(null);
   useEffect(() => {
-    const element = figure.current;
+    const element = plot.current;
     if (!element) return;
-    const measure = () => setWidth(Math.max(260, element.clientWidth));
+    const measure = () => { setWidth(Math.max(260, element.clientWidth)); setMeasuredHeight(element.clientHeight); };
     measure(); const observer = new ResizeObserver(measure); observer.observe(element);
     return () => observer.disconnect();
   }, []);
+  const { height: HEIGHT, top: TOP, bottom: BOTTOM } = slotChartFrame(measuredHeight);
   const { min, max } = slotScale(bars);
   // A negative bar carries its label below it, so leave room above the slot labels.
   const plotBottom = min < 0 ? BOTTOM - 16 : BOTTOM;
@@ -45,12 +47,13 @@ export function SlotChart({ bars }: { bars: SlotBar[] }) {
   return <section className="dash-panel dash-slots" aria-label="Sales by time slot">
     <header className="dash-panel-head"><h3>Sales</h3><small>By four-hour slot · net of credit notes</small></header>
     <div className="dash-legend"><span><i className="dash-swatch dine-in" />Dine In</span><span><i className="dash-swatch takeaway" />Takeaway</span>{showZomato && <span><i className="dash-swatch zomato" />Zomato</span>}{empty && <span>No sales on this day</span>}</div>
-    <figure ref={figure} className="dash-slot-chart" tabIndex={0} aria-label="Sales by time slot. Use left and right arrows to explore slots." onKeyDown={(event) => {
+    <figure className="dash-slot-chart" tabIndex={0} aria-label="Sales by time slot. Use left and right arrows to explore slots." onKeyDown={(event) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
       event.preventDefault();
       const last = bars.length - 1, forward = event.key === "ArrowRight";
       select(event.key === "Home" ? 0 : event.key === "End" ? last : index === null ? (forward ? 0 : last) : index + (forward ? 1 : -1));
     }} onBlur={() => setSelected(null)}>
+      <div ref={plot} className="dash-slot-plot">
       <svg viewBox={`0 0 ${width} ${HEIGHT}`} role="img" aria-labelledby={`${id}-title ${id}-desc`} onPointerLeave={(event) => { if (event.pointerType === "mouse") setSelected(null); }} onPointerMove={pick} onPointerDown={pick}>
         <title id={`${id}-title`}>Sales by four-hour slot, dine in and takeaway{showZomato ? " and Zomato" : ""}</title>
         <desc id={`${id}-desc`}>{bars.map((bar) => `${bar.label}: dine in ${reportMoney(bar.dineInPaise)}, takeaway ${reportMoney(bar.takeawayPaise)}${showZomato ? `, Zomato ${reportMoney(bar.zomatoPaise)}` : ""}`).join("; ")}.</desc>
@@ -81,6 +84,7 @@ export function SlotChart({ bars }: { bars: SlotBar[] }) {
           </g>;
         })}
       </svg>
+      </div>
       <figcaption className="dash-slot-detail" aria-live="polite">{detail
         ? <><strong>{detail.label}</strong><span>Dine In <strong>{reportMoney(detail.dineInPaise)}</strong></span><span>Takeaway <strong>{reportMoney(detail.takeawayPaise)}</strong></span>{showZomato && <span>Zomato <strong>{reportMoney(detail.zomatoPaise)}</strong></span>}</>
         : <span>{perBarLabels ? "Hover or use arrow keys for exact values." : "Labels show each slot's total. Tap a slot for exact values."}</span>}</figcaption>
