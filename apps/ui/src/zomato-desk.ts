@@ -70,6 +70,11 @@ export function zomatoOrders(orders: Order[]): Order[] {
   return orders.filter((order) => order.type === "zomato" && (order.status === "open" || order.status === "billed")).sort((a, b) => a.openedAt - b.openedAt);
 }
 
+/** The Open takeaways list: parcels plus the Zomato orders this user may see (pass none when they may not), oldest first. */
+export function openTakeaways(orders: Order[], zomato: Order[]): Order[] {
+  return [...orders.filter((order) => order.type === "parcel"), ...zomato].sort((a, b) => a.openedAt - b.openedAt);
+}
+
 /** The open or billed Zomato order carrying this ID (trimmed), if any; closed and cancelled orders do not count. */
 export function findZomatoOrderById(orders: Order[], id: string): Order | undefined {
   const wanted = id.trim();

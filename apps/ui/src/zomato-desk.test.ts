@@ -4,7 +4,7 @@ import type { Order, OrderItem } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ apiFetch: fetchMock }));
 
-import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, setZomatoStatus, gstNote, validateAgeThresholds, zomatoAgeTone, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
+import { billContextLabel, billPaymentLabel, billTaxRates, canReconcileZomato, DEFAULT_ZOMATO_AGE, findZomatoOrderById, kitchenContextLabel, openTakeaways, setZomatoStatus, gstNote, validateAgeThresholds, zomatoAgeTone, zomatoCardAction, zomatoLabel, zomatoOrders } from "./zomato-desk";
 
 function item(status: OrderItem["status"]): OrderItem {
   return { id: `i-${status}`, name: "Dosa", pricePaise: 5000, qty: 1, status, note: null, cancelReason: null, kotId: null } as OrderItem;
@@ -234,5 +234,25 @@ describe("zomato card age tone", () => {
     expect(zomatoAgeTone(19, slowKitchen)).toBe("ok");
     expect(zomatoAgeTone(20, slowKitchen)).toBe("warn");
     expect(zomatoAgeTone(30, slowKitchen)).toBe("late");
+  });
+});
+
+describe("openTakeaways", () => {
+  const parcel = (id: string, openedAt: number) => order({ id, type: "parcel", openedAt });
+  const zomato = (id: string, openedAt: number) => order({ id, type: "zomato", openedAt });
+
+  it("lists parcels and the given Zomato orders together, oldest first", () => {
+    const list = openTakeaways([parcel("p2", 3000), zomato("ignored", 500), parcel("p1", 1000)], [zomato("z1", 2000), zomato("z2", 4000)]);
+    expect(list.map((o) => o.id)).toEqual(["p1", "z1", "p2", "z2"]);
+  });
+
+  it("takes Zomato orders only from the list the caller may see, so staff without Zomato access get parcels alone", () => {
+    const orders = [parcel("p1", 1000), zomato("z1", 2000)];
+    expect(openTakeaways(orders, []).map((o) => o.id)).toEqual(["p1"]);
+  });
+
+  it("ignores dine-in orders and keeps equal-age orders in their given order", () => {
+    const dine = order({ id: "d1", type: "dine_in", openedAt: 1000 });
+    expect(openTakeaways([dine, parcel("a", 1000), parcel("b", 1000)], []).map((o) => o.id)).toEqual(["a", "b"]);
   });
 });

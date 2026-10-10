@@ -13,7 +13,7 @@ import { Reservations } from "./Reservations";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
-import { zomatoOrders } from "../zomato-desk";
+import { openTakeaways, ZOMATO_PILL, zomatoOrders } from "../zomato-desk";
 import { ZomatoPanel } from "../ZomatoPanel";
 import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
@@ -204,14 +204,14 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     }
   }, [tables, pickerTableId]);
 
-  const openParcels = orders.filter((o) => o.type === "parcel");
   const isAdmin = !captain && user.role === "admin";
   const canQuickBill = !captain && (isAdmin || user.role === "cashier");
   // Zomato is for admin and cashier. While it is off, orders still open stay visible so they can be finished, but no new ones start.
   const zomatoList = canQuickBill ? zomatoOrders(orders) : [];
   const zomatoOn = canQuickBill && isEnabled("zomato");
   const showZomatoPanel = zomatoOn || zomatoList.length > 0;
-  const hasSide = openParcels.length > 0 || showZomatoPanel;
+  const takeaways = openTakeaways(orders, zomatoList);
+  const hasSide = takeaways.length > 0 || showZomatoPanel;
   const busy = creating || actionBusy || qrBusy || qrManagerBusy || serviceBusy || reservationBusy;
   const active = tables.filter((table) => table.isActive);
   const areas = Array.from(new Set(active.map((table) => table.area ?? "Main")));
@@ -224,7 +224,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     list.push(table); grouped.set(area, list);
   }
   const pickerTable = tables.find((table) => table.id === pickerTableId);
-  const showParcels = mobilePane === "parcels" && openParcels.length > 0;
+  const showParcels = mobilePane === "parcels" && takeaways.length > 0;
   const showZomato = mobilePane === "zomato" && showZomatoPanel;
   const visiblePane = showParcels ? "parcels" : showZomato ? "zomato" : "tables";
   return <section className="screen tables-screen table-overview">
@@ -243,7 +243,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     </div>
     {hasSide && <div className="tables-pane-switch" aria-label="Tables view">
       <button aria-pressed={visiblePane === "tables"} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>
-      {openParcels.length > 0 && <button aria-pressed={visiblePane === "parcels"} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {openParcels.length}</button>}
+      {takeaways.length > 0 && <button aria-pressed={visiblePane === "parcels"} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {takeaways.length}</button>}
       {showZomatoPanel && <button aria-pressed={visiblePane === "zomato"} aria-controls="zomato-list" onClick={() => setMobilePane("zomato")}>Zomato · {zomatoList.length}</button>}
     </div>}
     <div className="filter-bar tables-filter-bar"><div className="tabs" aria-label="Table status">
@@ -277,8 +277,8 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables using Manage tables." : "Ask an admin to add tables."}</p></div>}
       </div>
       {hasSide && <div className="tables-side">
-      {openParcels.length > 0 && <aside className="tables-parcels" aria-label="Open takeaways"><div className="panel-title"><h3>Open takeaways</h3><span>{openParcels.length}</span></div><div className="parcel-list" id="parcel-list" role="region" aria-label="Takeaway orders" tabIndex={0}>
-        {openParcels.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">Takeaway {order.clientRef.slice(0, 8)}<small>{order.status === "billed" ? "Awaiting payment" : "Open order"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
+      {takeaways.length > 0 && <aside className="tables-parcels" aria-label="Open takeaways"><div className="panel-title"><h3>Open takeaways</h3><span>{takeaways.length}</span></div><div className="parcel-list" id="parcel-list" role="region" aria-label="Takeaway orders" tabIndex={0}>
+        {takeaways.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">{order.type === "zomato" ? `Zomato #${order.zomatoOrderId}` : `Takeaway ${order.clientRef.slice(0, 8)}`}<small>{order.type === "zomato" ? ZOMATO_PILL[order.zomatoStatus ?? "new"] : order.status === "billed" ? "Awaiting payment" : "Open order"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
       </div></aside>}
       {showZomatoPanel && <aside className="tables-parcels tables-zomato" id="zomato-list" aria-label="Zomato orders"><ZomatoPanel orders={zomatoList} canCreate={zomatoOn} disabled={busy} onNew={() => setZomatoDialog(true)} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} /></aside>}
       </div>}
