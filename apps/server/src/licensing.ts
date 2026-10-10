@@ -242,9 +242,14 @@ export class Licensing {
     let stopped = false;
     const check = () => { void this.fetchLatest().then((r) => {
       if (stopped) return;
-      if (r.outcome === "installed") this.announceChange();
-      if (r.outcome !== "up_to_date" && r.outcome !== "disabled") log(r.detail ? `${r.message} (${r.detail})` : r.message);
-    }); };
+      // The licence is already saved by now; a failing broadcast or log sink must not become an unhandled rejection.
+      try {
+        if (r.outcome === "installed") this.announceChange();
+        if (r.outcome !== "up_to_date" && r.outcome !== "disabled") log(r.detail ? `${r.message} (${r.detail})` : r.message);
+      } catch (error) {
+        try { log(`Renewal check failed after the licence was saved (${error instanceof Error ? error.name : "error"}).`); } catch { /* nothing left to report to */ }
+      }
+    }).catch(() => { /* fetchLatest reports its own failures as outcomes */ }); };
     check();
     const timer = setInterval(check, RENEWAL_INTERVAL_MS); timer.unref();
     return () => { stopped = true; clearInterval(timer); };

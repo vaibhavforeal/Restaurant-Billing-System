@@ -42,7 +42,7 @@ function copyDependency(name, from, parent = stage) {
 }
 for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl),__FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
+  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
   plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
 await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo) } });

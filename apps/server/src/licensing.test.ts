@@ -487,6 +487,29 @@ describe("licence renewal from the licensing service", () => {
     expect(s.spy).toHaveBeenCalledTimes(3);
   });
 
+  it("a failing post-install broadcast is logged, not an unhandled rejection", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let next: string | null = null;
+    const s = service(() => reply(200, { license: next }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
+    next = `${signed({ ...f.claims, revision: 2 })}\n`;
+    vi.spyOn(f.app, "broadcast").mockImplementation(() => { throw new Error("socket exploded"); });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on("unhandledRejection", onUnhandled);
+    const log: string[] = [];
+    try {
+      const stop = f.app.licensing.startRenewalChecks((m) => log.push(m));
+      await vi.advanceTimersByTimeAsync(0);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      stop();
+    } finally { process.off("unhandledRejection", onUnhandled); }
+    expect(unhandled).toEqual([]);
+    expect(f.app.licensing.status(device).revision).toBe(2);
+    expect(log.join("\n")).toContain("Renewal check failed");
+    expect(log.join("\n")).not.toContain("ff1.");
+  });
+
   it("check endpoint needs settings.manage", async () => {
     let next: string | null = null;
     const f = await fixture({ serviceUrl, fetch: service(() => reply(200, { license: next })).fetch }); await f.activate(); await f.register();
