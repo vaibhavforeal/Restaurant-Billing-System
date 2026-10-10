@@ -43,6 +43,7 @@ export interface LicenseStatus {
   timezone: string;
   revision: number | null;
   registeredDevices: number;
+  trial: boolean;
 }
 export interface LicensedDevice {
   id: string; name: string; createdAt: number; current: boolean; allowed: boolean;
@@ -51,7 +52,7 @@ export interface LicensedDevice {
 export interface LicensePreview {
   previewKey: string; alreadyInstalled: boolean; currentPlan: Plan | null;
   plan: Plan; revision: number; maxDevices: number; features: LicenseStatus["features"];
-  expiresAt: number; graceUntil: number;
+  expiresAt: number; graceUntil: number; trial: boolean;
   blockedDevices: Array<{ id: string; name: string }>;
 }
 export interface LicenseEvent {

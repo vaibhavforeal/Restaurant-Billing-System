@@ -60,7 +60,7 @@ export class Licensing {
       installationId: this.options?.installationId ?? null, plan: null, maxDevices: null,
       features: { recipes: false, qrOrdering: false, kds: false }, expiresAt: null, graceUntil: null,
       deviceRegistered: false, canOperate: false, message: "Activate this installation to start billing.",
-      serverTime: now, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, revision: null, registeredDevices: 0,
+      serverTime: now, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, revision: null, registeredDevices: 0, trial: false,
     };
     if (!this.enabled) return { ...base, state: "development", canOperate: true, deviceRegistered: true,
       features: { recipes: true, qrOrdering: true, kds: true }, message: "Development build. Commercial license checks are not enabled." };
@@ -86,7 +86,7 @@ export class Licensing {
       this.app.db.prepare("UPDATE licensed_devices SET last_seen_at = ? WHERE id = ?").run(now, currentDevice.id);
     }
     return { ...base, state, plan: claims.plan, maxDevices: claims.maxDevices, features: claims.features,
-      expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, deviceRegistered,
+      expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, deviceRegistered, trial: claims.trial === true,
       canOperate: state !== "expired" && deviceRegistered,
       message: state === "expired" ? "Your offline license has expired. Renew it to resume billing."
         : currentDevice && !deviceRegistered ? "This browser exceeds your plan's device limit. An administrator can remove an unused device or upgrade the plan."
@@ -110,7 +110,7 @@ export class Licensing {
     const previewKey = createHash("sha256").update(JSON.stringify({ envelope, saved: { envelope: saved.envelope, revision: saved.revision },
       devices: devices.map((d) => ({ id: d.id, name: d.name, version: d.version })) })).digest("hex");
     return { previewKey, alreadyInstalled, currentPlan, plan: claims.plan, revision: claims.revision, maxDevices: claims.maxDevices,
-      features: claims.features, expiresAt: claims.expiresAt, graceUntil: claims.graceUntil,
+      features: claims.features, expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, trial: claims.trial === true,
       blockedDevices: devices.slice(claims.maxDevices).map((d) => ({ id: d.id, name: d.name })) };
   }
   activate(envelope: string, actorName = "Administrator", previewKey?: string) {

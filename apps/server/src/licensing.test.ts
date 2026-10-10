@@ -229,6 +229,25 @@ describe("commercial licensing", () => {
     expect(f.app.licensing.status().features.kds).toBe(false);
   });
 
+  it("reports a trial licence as trial and older grants as paid", async () => {
+    const f = await fixture();
+    const pro = { ...f.claims, plan: "pro" as const, features: PLANS.pro.features, maxDevices: 5 };
+    const preview = await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: signed({ ...pro, trial: true }) } });
+    expect(preview.json().trial).toBe(true);
+    expect((await f.activate({ ...pro, trial: true })).statusCode).toBe(200);
+    expect((await f.app.inject({ url: "/api/license", headers: f.headers })).json().trial).toBe(true);
+    expect((await f.activate({ ...pro, revision: 2 })).statusCode).toBe(200);
+    expect((await f.app.inject({ url: "/api/license", headers: f.headers })).json().trial).toBe(false);
+    expect((await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: signed({ ...pro, revision: 3 }) } })).json().trial).toBe(false);
+    const dev = freshApp(); apps.push(dev);
+    expect(dev.licensing.status().trial).toBe(false);
+  });
+
+  it("rejects a non-boolean trial claim", async () => {
+    const f = await fixture();
+    expect((await f.activate({ ...f.claims, trial: "yes" } as unknown as LicenseClaims)).statusCode).toBe(400);
+  });
+
   it("names the kitchen display in the missing-feature error", async () => {
     const f = await fixture(); await f.activate(); await f.register();
     const res = await f.app.inject({ url: "/api/test-kds", headers: f.headers });
