@@ -9,7 +9,9 @@
     "baseUrl": ".",
     "paths": {
       "@forkflow/domain": ["packages/domain/src/index.ts"],
-      "@forkflow/core": ["packages/core/src/index.ts"]
+      "@forkflow/domain/licensing": ["packages/domain/src/licensing.ts"],
+      "@forkflow/core": ["packages/core/src/index.ts"],
+      "@forkflow/license-issuer": ["packages/license-issuer/src/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"],

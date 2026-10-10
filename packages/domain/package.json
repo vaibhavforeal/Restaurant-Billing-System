@@ -12,7 +12,8 @@
     "./operational-reports": "./src/operational-reports.ts",
     "./catalog-csv": "./src/catalog-csv.ts",
     "./zomato": "./src/zomato.ts",
-    "./integrations": "./src/integrations.ts"
+    "./integrations": "./src/integrations.ts",
+    "./licensing": "./src/licensing.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

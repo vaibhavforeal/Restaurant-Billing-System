@@ -1,0 +1,14 @@
+{
+  "name": "@forkflow/license-issuer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builds and signs licence envelopes. Runs in Node tools and Cloudflare Workers; never imported by the counter app.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@forkflow/domain": "*",
+    "zod": "^4.4.3"
+  }
+}

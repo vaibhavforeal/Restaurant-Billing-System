@@ -57,18 +57,26 @@ describe("signing", () => {
     expect(keyFingerprint(privatePem)).toBe(expectedFingerprint);
   });
 
-  it("signs a license the app can verify", () => {
+  it("signs a license the app can verify", async () => {
     const claims = buildClaims(parseActivationRequest(JSON.stringify(firstRequest)), { plan: "pro", months: 12, graceDays: 7 }, now, fakeUuid());
-    const license = signClaims(claims, privatePem);
+    const license = await signClaims(claims, privatePem);
     const [prefix, payload, signature] = license.trim().split(".");
     expect(prefix).toBe("ff1");
     expect(JSON.parse(Buffer.from(payload!, "base64url").toString())).toEqual(claims);
     expect(verify(null, Buffer.from(`ff1.${payload}`), createPublicKey(privatePem), Buffer.from(signature!, "base64url"))).toBe(true);
   });
 
-  it("refuses a non-Ed25519 key", () => {
+  it("signClaims output is unchanged by the refactor", async () => {
+    const claims = buildClaims(parseActivationRequest(JSON.stringify(firstRequest)), { plan: "pro", months: 12, graceDays: 7 }, now, fakeUuid());
+    expect("trial" in claims).toBe(false);
+    const payload = (await signClaims(claims, privatePem)).trim().split(".")[1];
+    expect(payload).toBe(Buffer.from(JSON.stringify(claims)).toString("base64url"));
+  });
+
+  it("refuses a non-Ed25519 key", async () => {
     const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     expect(() => keyFingerprint(rsa)).toThrow(/Ed25519/);
+    await expect(signClaims(buildClaims(parseActivationRequest(JSON.stringify(firstRequest)), { plan: "pro", months: 12, graceDays: 7 }, now, fakeUuid()), rsa)).rejects.toThrow(/Ed25519/);
   });
 });
 
@@ -88,13 +96,13 @@ describe("with the real app", () => {
       const request = parseActivationRequest(requestText);
       expect(keyFingerprint(privatePem)).toBe(request.verificationKeyFingerprint);
 
-      const first = signClaims(buildClaims(request, { plan: "pro", months: 12, graceDays: 7 }, Date.now()), privatePem);
+      const first = await signClaims(buildClaims(request, { plan: "pro", months: 12, graceDays: 7 }, Date.now()), privatePem);
       const applied = await app.inject({ method: "PUT", url: "/api/license", headers, payload: { license: first } });
       expect(applied.statusCode, applied.body).toBe(200);
       expect(applied.json()).toMatchObject({ plan: "pro", maxDevices: 5, revision: 1 });
 
       const renewalRequest = parseActivationRequest((await app.inject({ url: "/api/license/activation-request", headers })).body);
-      const renewal = signClaims(buildClaims(renewalRequest, { plan: "basic", months: 1, graceDays: 0 }, Date.now()), privatePem);
+      const renewal = await signClaims(buildClaims(renewalRequest, { plan: "basic", months: 1, graceDays: 0 }, Date.now()), privatePem);
       const renewed = await app.inject({ method: "PUT", url: "/api/license", headers, payload: { license: renewal } });
       expect(renewed.statusCode, renewed.body).toBe(200);
       expect(renewed.json()).toMatchObject({ plan: "basic", maxDevices: 2, revision: 2 });

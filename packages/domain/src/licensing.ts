@@ -22,6 +22,7 @@ export const LicenseClaims = z.object({
   issuedAt: z.number().int().nonnegative().max(8_640_000_000_000_000),
   expiresAt: z.number().int().positive().max(8_640_000_000_000_000),
   graceUntil: z.number().int().positive().max(8_640_000_000_000_000),
+  trial: z.boolean().optional(),
 }).strict().refine((c) => c.issuedAt < c.expiresAt && c.expiresAt <= c.graceUntil,
   "License dates must be ordered: issued, expires, grace");
 export type LicenseClaims = z.infer<typeof LicenseClaims>;

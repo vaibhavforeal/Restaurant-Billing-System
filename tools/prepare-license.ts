@@ -32,7 +32,7 @@ if (values.sign) {
     throw new Error("This private key does not match the public key built into this restaurant's ForkFlow. The license would be refused. Use the key pair that the installer was built with.");
   }
   written = join(folder, `license-${name}.txt`);
-  writeFileSync(written, signClaims(claims, privatePem), { flag: "wx" });
+  writeFileSync(written, await signClaims(claims, privatePem),{ flag: "wx" });
 } else {
   written = join(folder, `claims-${name}.json`);
   writeFileSync(written, `${JSON.stringify(claims, null, 2)}\n`, { flag: "wx" });

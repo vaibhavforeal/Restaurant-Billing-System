@@ -11,6 +11,7 @@ export default defineConfig({
       { find: /^@forkflow\/domain\/(.+)$/, replacement: fileURLToPath(new URL("./packages/domain/src/$1.ts", import.meta.url)) },
       { find: "@forkflow/domain", replacement: pkg("domain") },
       { find: "@forkflow/core", replacement: pkg("core") },
+      { find: "@forkflow/license-issuer", replacement: pkg("license-issuer") },
     ],
   },
   test: {
