@@ -74,9 +74,10 @@ export async function paymentUsed(db: D1Like, paymentId: string): Promise<boolea
 export const getSubscription = (db: D1Like, id: string) =>
   db.prepare(`SELECT ${SUBSCRIPTION_COLUMNS} FROM subscriptions WHERE razorpay_subscription_id = ?`).bind(id).first<SubscriptionRow>();
 
-export async function otherActiveSubscriptions(db: D1Like, installationId: string, exceptId: string): Promise<SubscriptionRow[]> {
+/** Subscriptions of the installation created strictly before `beforeCreatedAt` that can still bill (a halted one can be resumed by Razorpay, so it counts). */
+export async function olderOpenSubscriptions(db: D1Like, installationId: string, beforeCreatedAt: number, exceptId: string): Promise<SubscriptionRow[]> {
   const { results } = await db.prepare(`SELECT ${SUBSCRIPTION_COLUMNS} FROM subscriptions
-    WHERE installation_id = ? AND razorpay_subscription_id != ? AND status NOT IN ('cancelled', 'completed', 'expired', 'halted')`)
-    .bind(installationId, exceptId).all<SubscriptionRow>();
+    WHERE installation_id = ? AND razorpay_subscription_id != ? AND created_at < ? AND status NOT IN ('cancelled', 'completed', 'expired')`)
+    .bind(installationId, exceptId, beforeCreatedAt).all<SubscriptionRow>();
   return results;
 }

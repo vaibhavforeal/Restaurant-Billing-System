@@ -3,7 +3,7 @@ import type { Period } from "./env.js";
 import { issueLicense, type Deps } from "./issue.js";
 import { verifyWebhookSignature, type RazorpayApi } from "./razorpay.js";
 import {
-  eventSeen, getInstallation, getSubscription, latestLicenseForSubscription, otherActiveSubscriptions, paymentUsed,
+  eventSeen, getInstallation, getSubscription, latestLicenseForSubscription, olderOpenSubscriptions, paymentUsed,
   recordEventStatement, upsertSubscriptionStatement,
 } from "./store.js";
 
@@ -28,12 +28,12 @@ function readNotes(notes: unknown): Notes | null {
 
 export async function handleWebhook(deps: WebhookDeps, request: Request): Promise<Response> {
   const { db, log } = deps;
-  const rawBody = await request.text();
-  if (!(await verifyWebhookSignature(rawBody, request.headers.get("x-razorpay-signature"), deps.webhookSecret))) return json({ error: "bad_signature" }, 400);
   const eventId = request.headers.get("x-razorpay-event-id");
-  if (!eventId) return json({ error: "missing_event_id" }, 400);
 
   try {
+    const rawBody = await request.text();
+    if (!(await verifyWebhookSignature(rawBody, request.headers.get("x-razorpay-signature"), deps.webhookSecret))) return json({ error: "bad_signature" }, 400);
+    if (!eventId) return json({ error: "missing_event_id" }, 400);
     if (await eventSeen(db, eventId)) return json({ outcome: "duplicate" });
     const now = deps.now();
     let body: unknown = null;
@@ -77,13 +77,16 @@ export async function handleWebhook(deps: WebhookDeps, request: Request): Promis
     });
     await db.batch([statement, upsertSubscriptionStatement(db, subscription), recordEventStatement(db, eventId, type, "issued", now)]);
 
-    // The new subscription is paid; retire the others. A failure here is for manual follow-up, never a reason to fail the webhook (the licence is already issued).
-    try {
-      for (const other of await otherActiveSubscriptions(db, installation.installationId, subscriptionId)) {
-        try { await deps.razorpay.cancelSubscription(other.razorpaySubscriptionId); }
-        catch (error) { log(`could not cancel superseded subscription ${other.razorpaySubscriptionId}: ${error instanceof Error ? error.message : String(error)}`); }
-      }
-    } catch (error) { log(`could not list superseded subscriptions for ${installation.installationId}: ${error instanceof Error ? error.message : String(error)}`); }
+    // Only a subscription's first paid charge retires the older ones (§3.5.3); renewals of an old subscription never touch a newer one still awaiting its first payment.
+    // A failure here is for manual follow-up, never a reason to fail the webhook (the licence is already issued).
+    if (!latest) {
+      try {
+        for (const older of await olderOpenSubscriptions(db, installation.installationId, subscription.createdAt, subscriptionId)) {
+          try { await deps.razorpay.cancelSubscription(older.razorpaySubscriptionId); }
+          catch (error) { log(`could not cancel superseded subscription ${older.razorpaySubscriptionId}: ${error instanceof Error ? error.message : String(error)}`); }
+        }
+      } catch (error) { log(`could not list superseded subscriptions for ${installation.installationId}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
     return json({ outcome: "issued" });
   } catch (error) {
     log(`webhook ${eventId} failed: ${error instanceof Error ? error.message : String(error)}`);

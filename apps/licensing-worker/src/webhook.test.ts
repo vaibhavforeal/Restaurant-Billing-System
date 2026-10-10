@@ -130,22 +130,74 @@ describe("POST /v1/webhook", () => {
     expect(latest).toMatchObject({ revision: 3, plan: "basic", razorpaySubscriptionId: "sub_B", expiresAt: endOf(30) * 1000 });
   });
 
-  it("a new subscription's first charge cancels the old one, and a failed cancel is logged without failing", async () => {
+  it("a new subscription's first charge cancels the older one, its second charge cancels nothing", async () => {
     await activate();
     await send(charged({ subId: "sub_A" }));
     expect(cancelled).toEqual([]);
+    now += DAY;
     expect((await send(charged({ subId: "sub_B", currentEnd: endOf(31) }))).body.outcome).toBe("issued");
     expect(cancelled).toEqual(["sub_A"]);
-
-    failCancel = true;
     cancelled = [];
-    const res = await send(charged({ subId: "sub_C", currentEnd: endOf(32) })); // sub_A and sub_B are still active in the store
+    now += DAY;
+    await send(charged({ subId: "sub_B", currentEnd: endOf(61) }));
+    expect(cancelled).toEqual([]);
+    expect(await chargeLicenses()).toBe(3);
+  });
+
+  it("an old subscription's renewal never cancels a newer one still awaiting its first charge", async () => {
+    await activate();
+    await send(charged({ subId: "sub_A" }));
+    now += DAY;
+    await send(subscriptionEvent({ event: "subscription.authenticated", subId: "sub_B", status: "created", currentEnd: null }));
+    expect((await getSubscription(db, "sub_B"))!.status).toBe("created");
+    now += DAY;
+    expect((await send(charged({ subId: "sub_A", paymentId: "pay_renew", currentEnd: endOf(60) }))).body.outcome).toBe("issued");
+    expect(cancelled).toEqual([]);
+    now += DAY;
+    await send(charged({ subId: "sub_B", currentEnd: endOf(65) }));
+    expect(cancelled).toEqual(["sub_A"]);
+  });
+
+  it("a halted older subscription is cancelled on the new one's first charge", async () => {
+    await activate();
+    await send(charged({ subId: "sub_A" }));
+    await send(subscriptionEvent({ event: "subscription.halted", subId: "sub_A", status: "halted", currentEnd: null }));
+    now += DAY;
+    await send(charged({ subId: "sub_B", currentEnd: endOf(40) }));
+    expect(cancelled).toEqual(["sub_A"]);
+  });
+
+  it("finished subscriptions are never cancelled, and another installation's subscriptions are never touched", async () => {
+    await activate();
+    const other = "66666666-6666-4666-8666-666666666666";
+    const otherNotes = { installationId: other, plan: "pro", period: "monthly" };
+    await handleActivate(deps, {
+      format: "forkflow-activation-request", version: 1, installationId: other, licenseId: null, organizationId: null, outletId: null,
+      currentRevision: 0, generatedAt: now, verificationKeyFingerprint: signer.fingerprint,
+    });
+    await send(charged({ subId: "sub_other", notes: otherNotes }));
+    await send(charged({ subId: "sub_done" }));
+    await send(subscriptionEvent({ event: "subscription.completed", subId: "sub_done", status: "completed", paymentId: "pay_done", currentEnd: null }));
+    now += DAY;
+    await send(charged({ subId: "sub_B", currentEnd: endOf(40) }));
+    expect(cancelled).toEqual([]);
+    now += DAY;
+    await send(charged({ subId: "sub_other_2", notes: otherNotes, currentEnd: endOf(41) }));
+    expect(cancelled).toEqual(["sub_other"]);
+  });
+
+  it("a failed cancel is logged without failing the webhook", async () => {
+    await activate();
+    await send(charged({ subId: "sub_A" }));
+    now += DAY;
+    failCancel = true;
+    const res = await send(charged({ subId: "sub_B", currentEnd: endOf(31) }));
     expect(res).toMatchObject({ status: 200, body: { outcome: "issued" } });
     expect(cancelled).toEqual([]);
     expect(logs.some((l) => l.includes("could not cancel superseded subscription sub_A") && l.includes("already cancelled"))).toBe(true);
   });
 
-  it("a charge on the active subscription again cancels nothing", async () => {
+  it("a charge on the same subscription again cancels nothing", async () => {
     await activate();
     await send(charged({ paymentId: "pay_1" }));
     await send(charged({ paymentId: "pay_2", currentEnd: endOf(60) }));
@@ -252,14 +304,27 @@ describe("POST /v1/webhook", () => {
 
   it("a store failure returns 500, writes nothing, and a retry then succeeds", async () => {
     await activate();
+    await send(charged({ subId: "sub_A" }));
+    now += DAY;
     const real = db;
     let failing = true;
     deps = { ...deps, db: { prepare: (sql) => real.prepare(sql), batch: (s) => { if (failing) throw new Error("D1 unavailable"); return real.batch(s); } } };
-    const res = await send(charged(), { eventId: "evt_retry" });
+    const second = () => charged({ subId: "sub_B", currentEnd: endOf(31) });
+    const res = await send(second(), { eventId: "evt_retry" });
     expect(res.status).toBe(500);
-    expect(await chargeLicenses()).toBe(0);
-    expect(await count("webhook_events")).toBe(0);
+    expect(cancelled).toEqual([]);
+    expect(await chargeLicenses()).toBe(1);
+    expect(await count("webhook_events")).toBe(1);
     failing = false;
-    expect(await send(charged(), { eventId: "evt_retry" })).toMatchObject({ status: 200, body: { outcome: "issued" } });
+    expect(await send(second(), { eventId: "evt_retry" })).toMatchObject({ status: 200, body: { outcome: "issued" } });
+    expect(cancelled).toEqual(["sub_A"]);
+  });
+
+  it("an unexpected throw before the signature check (an unreadable body) is a JSON 500", async () => {
+    const request = { headers: new Headers({ "x-razorpay-event-id": "evt_x" }), text: async () => { throw new Error("stream broke"); } } as unknown as Request;
+    const res = await handleWebhook(deps, request);
+    expect(res.status).toBe(500);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(logs.some((l) => l.includes("stream broke"))).toBe(true);
   });
 });
