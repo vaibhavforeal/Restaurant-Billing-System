@@ -48,6 +48,12 @@ export const insertLicenseStatement = (db: D1Like, r: LicenseRow): D1StatementLi
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(r.installationId, r.revision, r.plan, r.issuedAt, r.expiresAt, r.graceUntil, r.envelope, r.reason, r.razorpaySubscriptionId, r.razorpayPaymentId);
 
+/** For racing writers (the trial): a duplicate (installation, revision) is skipped, so the caller re-reads the winner. */
+export const insertLicenseIfAbsentStatement = (db: D1Like, r: LicenseRow): D1StatementLike =>
+  db.prepare(`INSERT OR IGNORE INTO licenses (installation_id, revision, plan, issued_at, expires_at, grace_until, envelope, reason, razorpay_subscription_id, razorpay_payment_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(r.installationId, r.revision, r.plan, r.issuedAt, r.expiresAt, r.graceUntil, r.envelope, r.reason, r.razorpaySubscriptionId, r.razorpayPaymentId);
+
 export const upsertSubscriptionStatement = (db: D1Like, r: SubscriptionRow): D1StatementLike =>
   db.prepare(`INSERT INTO subscriptions (razorpay_subscription_id, installation_id, plan, period, status, current_period_end, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(razorpay_subscription_id) DO UPDATE SET

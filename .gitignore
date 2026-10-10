@@ -25,3 +25,7 @@ Thumbs.db
 .playwright-mcp/
 output/
 /Screenshots/
+
+# Licensing Worker local signing key and wrangler state
+.dev.vars
+.wrangler/
