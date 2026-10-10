@@ -2,13 +2,16 @@
 
 A manual end-to-end run of the licensing service in Razorpay **test mode**. It needs your Razorpay test keys, so it is not automated. Do it against the test Worker environment before the live one; the deployment steps are in `apps/licensing-worker/README.md`.
 
-Use a disposable counter: a build made with the test Worker's URL (`FORKFLOW_LICENSE_SERVICE_URL`) and the matching public key, run with a fresh data folder so it is a new installation. Keep `npx wrangler tail --env test` open in a terminal for the whole run.
+> [!WARNING]
+> The test Worker signs with its own **test** key pair (`C:\secure\license-test-private.pem`), never the production key. Anyone can pay the test Worker with Razorpay's public test card, so a test Worker holding the production key would hand out licences that production counters accept. The README's "What you need" and step 4 show how to set this up.
+
+Use a disposable counter: a test build that embeds the **test** public key (`FORKFLOW_LICENSE_PUBLIC_KEY` from `C:\secure\license-test-public.pem`) and the test Worker's URL (`FORKFLOW_LICENSE_SERVICE_URL`), run with a fresh data folder so it is a new installation. Never give a test build to a restaurant. Keep `npx wrangler tail --env test` open in a terminal for the whole run.
 
 Test-mode helpers (check Razorpay's current test-mode documentation if any of these has changed): test card `4111 1111 1111 1111` with any future expiry and any CVV, and the test UPI id `success@razorpay` (for a failing UPI payment use `failure@razorpay`).
 
 ## Setup
 
-- [ ] The test Worker is deployed, its database migrated, the four secrets and the four plan-id variables set, and the Razorpay test-mode webhook points at `https://<test-worker>/webhooks/razorpay` for the five `subscription.*` events.
+- [ ] The test Worker is deployed, its database migrated, the four secrets (with `LICENSE_SIGNING_KEY` from the test key pair) and the four plan-id variables set, and the Razorpay test-mode webhook points at `https://<test-worker>/webhooks/razorpay` for the five `subscription.*` events.
 - [ ] `POST https://<test-worker>/v1/activate` with an invalid body answers `400`, not `500`, and `wrangler tail` shows no `rate limiter unavailable` line. (The Worker fails open if the rate-limit binding errors, which is what local `wrangler dev` currently does, so a deployed Worker that logs this line is running without rate limiting. Fix the binding before going live.)
 - [ ] The counter starts, you complete setup, and you open **Settings > Plan and devices** as the admin.
 
@@ -36,7 +39,7 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 
 ## 4. An unknown installation cannot subscribe
 
-- [ ] Open `https://<test-worker>/subscribe?installation=<a random UUID>` directly. It says "Open ForkFlow once while connected to the internet, then try again."
+- [ ] Open `https://<test-worker>/subscribe?installation=<a random UUID>` directly. It says "Open ForkFlow while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again."
 
 ## 5. A plan change cancels the old subscription
 
@@ -60,4 +63,6 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 ## Wrap-up
 
 - [ ] Note any step that behaved differently from this list, with the `wrangler tail` output, before repeating the run in live mode.
-- [ ] Cancel the test subscriptions in the Razorpay test dashboard and delete the disposable counter's data folder.
+- [ ] Cancel the test subscriptions in the Razorpay test dashboard and delete the disposable counter's data folder and the test build.
+- [ ] Take the test Worker off the internet: `npx wrangler delete --env test`, or set `"workers_dev": false` in the `env.test` block of `wrangler.jsonc` and run `npx wrangler deploy --env test` again.
+- [ ] Before going live, confirm the production Worker's `LICENSE_SIGNING_KEY` is the production key and the test Worker never held it.
