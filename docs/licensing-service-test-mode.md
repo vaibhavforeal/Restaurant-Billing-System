@@ -9,7 +9,7 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 ## Setup
 
 - [ ] The test Worker is deployed, its database migrated, the four secrets and the four plan-id variables set, and the Razorpay test-mode webhook points at `https://<test-worker>/webhooks/razorpay` for the five `subscription.*` events.
-- [ ] `POST https://<test-worker>/v1/activate` with an invalid body answers `400`, not `500`. (This exercises the rate-limit binding, which could not be run under local `wrangler dev`.)
+- [ ] `POST https://<test-worker>/v1/activate` with an invalid body answers `400`, not `500`, and `wrangler tail` shows no `rate limiter unavailable` line. (The Worker fails open if the rate-limit binding errors, which is what local `wrangler dev` currently does, so a deployed Worker that logs this line is running without rate limiting. Fix the binding before going live.)
 - [ ] The counter starts, you complete setup, and you open **Settings > Plan and devices** as the admin.
 
 ## 1. A fresh install gets a trial
@@ -25,7 +25,7 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 - [ ] Choose Basic, monthly, enter an email and continue to Razorpay Checkout. Pay with the test card or `success@razorpay`.
 - [ ] The success screen says "Payment received. Return to ForkFlow and press Check for renewal."
 - [ ] In the Razorpay dashboard the subscription is `active` and the webhook shows a delivered `subscription.charged` with a `200` response.
-- [ ] In `wrangler tail` there is no error. A `subscription.charged` for a new subscription answers `{"outcome":"issued"}`.
+- [ ] In `wrangler tail` there is no error (the Worker only logs problems). In Razorpay's webhook delivery view for the `subscription.charged` event, the response body is `{"outcome":"issued"}`.
 
 ## 3. Check for renewal installs revision 2
 

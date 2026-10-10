@@ -24,8 +24,14 @@ function signerFor(env: Env): Promise<SignerPair> {
   return cachedSigner.promise;
 }
 
-const rateLimited = async (request: Request, env: Env) =>
-  !(await env.LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success;
+// Fails open: an unavailable rate limiter must not take licensing down. Only the error message is logged (no IP, headers or body).
+async function rateLimited(request: Request, env: Env): Promise<boolean> {
+  try { return !(await env.LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success; }
+  catch (error) {
+    console.error("licensing-worker: rate limiter unavailable:", error instanceof Error ? error.message : "unknown error");
+    return false;
+  }
+}
 
 async function readJson(request: Request): Promise<{ ok: true; body: unknown } | { ok: false }> {
   try { return { ok: true, body: await request.json() }; } catch { return { ok: false }; }

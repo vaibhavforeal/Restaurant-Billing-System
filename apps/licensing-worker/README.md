@@ -21,7 +21,7 @@ Nothing under `apps/server`, `apps/ui`, `packages/domain` or `packages/core` imp
   openssl pkey -in C:\secure\license-private.pem -pubout -out C:\secure\license-public.pem
   ```
 
-  The private key goes only into the Worker secret `LICENSE_SIGNING_KEY` (PKCS#8 PEM). The public key goes into counter builds (see below). A build whose public key does not match this Worker's signing key is told `409 wrong_key`, and Settings shows "The licensing service signs with a different key than this build trusts".
+  The private key goes only into the Worker secret `LICENSE_SIGNING_KEY` (PKCS#8 PEM). The public key goes into counter builds (see below). A build whose public key does not match this Worker's signing key is told `409 wrong_key`. Settings shows only "The licensing service returned a licence this installation can't use."; the specific cause ("The licensing service signs with a different key than this build trusts") is in the counter server's log.
 
 ## Environments
 
@@ -132,7 +132,8 @@ npx wrangler dev
 
 `wrangler dev` reads `.dev.vars` (secrets and variables, same names as above). Both `.dev.vars` and `.wrangler/` are gitignored; keep it that way and use a throwaway signing key and dummy Razorpay values. Never commit `.dev.vars`, a key, or a `database_id` from a local run. Delete `.dev.vars` and `.wrangler/` when you are done.
 
-The unit tests run under Node in the root vitest run against a better-sqlite3 stand-in for D1. A local `wrangler dev` run is how Ed25519 signing on the real Workers runtime was checked: `POST /v1/activate` returned a 14-day Pro trial that `verifyLicenseSignature` accepted. Known local limitation seen on a Windows machine with wrangler 4.149: every call to the `LIMITER` rate-limit binding fails with `internal error`, so every route that rate limits returns 500 under local `wrangler dev`. The first thing to check on a deployed Worker is that `POST /v1/activate` answers 200 or 400, not 500 (step 1 of the test-mode checklist).
+The unit tests run under Node in the root vitest run against a better-sqlite3 stand-in for D1. A local `wrangler dev` run is how Ed25519 signing on the real Workers runtime was checked: `POST /v1/activate` returned a 14-day Pro trial that `verifyLicenseSignature` accepted. 
+**The Worker fails open on rate-limiter errors.** If the `LIMITER` binding throws or rejects, the Worker logs `licensing-worker: rate limiter unavailable:` plus the error message (never the IP, headers or body) and lets the request through as if it were allowed; a `{ success: false }` answer still gets `429`. This matters locally: on a Windows machine with wrangler 4.149 every call to the rate-limit binding currently fails with `internal error` under `wrangler dev`, so local runs exercise that fail-open path (expect one "rate limiter unavailable" log line per request) and need no stub. It also means that on a deployed Worker a broken rate-limit binding silently disables rate limiting, so watch the logs for that line (step 1 of the test-mode checklist checks it).
 
 ## Operations
 

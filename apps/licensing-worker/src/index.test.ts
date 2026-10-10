@@ -77,6 +77,27 @@ describe("routing", () => {
     expect(await getInstallation(env.DB, installationId)).toBeNull();
   });
 
+  it("a failing rate limiter fails open and logs only a fixed message and the error text", async () => {
+    const logged: unknown[][] = [];
+    vi.spyOn(console, "error").mockImplementation((...args) => { logged.push(args); });
+    env.LIMITER = { limit: async () => { throw new Error("internal error; reference = abc"); } };
+    const activate = await send("POST", "/v1/activate", await activationRequest(), { "cf-connecting-ip": "203.0.113.9", "x-secret": "hunter2" });
+    expect(activate.status).toBe(200);
+    expect((await activate.json() as { license: string }).license).toMatch(/^ff1\./);
+    const subscribe = await send("POST", "/v1/subscriptions", checkout(), { "cf-connecting-ip": "203.0.113.9" });
+    expect(subscribe.status).toBe(200);
+    expect(await subscribe.json()).toMatchObject({ subscriptionId: "sub_NEW" });
+    expect(logged).toHaveLength(2);
+    expect(logged[0]).toEqual(["licensing-worker: rate limiter unavailable:", "internal error; reference = abc"]);
+    expect(JSON.stringify(logged)).not.toMatch(/203\.0\.113\.9|hunter2|owner@example\.com|ff1\./);
+  });
+
+  it("a rate limiter that throws synchronously also fails open", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    env.LIMITER = { limit: () => { throw new Error("sync failure"); } };
+    expect((await send("POST", "/v1/activate", await activationRequest())).status).toBe(200);
+  });
+
   it("invalid JSON or schema is 400", async () => {
     for (const body of ["{not json", "[]"]) {
       const res = await send("POST", "/v1/activate", body);
