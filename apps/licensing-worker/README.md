@@ -2,13 +2,37 @@
 
 A Cloudflare Worker with a D1 database. It does three jobs:
 
-- `POST /v1/activate` hands a counter its latest signed licence. A brand-new installation gets one 14-day Pro trial (once per installation id, ever).
-- `GET /subscribe?installation=<id>` and `POST /v1/subscriptions` take an admin to Razorpay Checkout for a Basic or Pro, monthly or yearly subscription.
+- `POST /v1/activate` hands a counter its latest signed licence. A brand-new installation gets one 14-day Pro trial (once per installation id, ever). It needs the installation secret (see below).
+- `POST /v1/subscribe-sessions` gives a counter a short-lived checkout link; `GET /subscribe?session=<token>` and `POST /v1/subscriptions` take an admin to Razorpay Checkout for a Basic or Pro, monthly or yearly subscription. The only way to reach checkout is **Subscribe** or **Manage plan** in Settings > Plan and devices, as an admin. A link expires after 30 minutes; pressing the button again makes a new one.
 - `POST /webhooks/razorpay` turns a verified Razorpay charge into a new signed licence (expiry = the subscription's `current_end`, plus 7 days of offline grace).
 
 The counter app never talks to Razorpay. It only asks this service for a licence, and it verifies the Ed25519 signature with the public key baked into its build, exactly as it does for a licence imported by hand. The design is in `docs/superpowers/specs/2026-10-10-licensing-service-design.md`.
 
 Nothing under `apps/server`, `apps/ui`, `packages/domain` or `packages/core` imports this package. Worker source uses only WebCrypto, `fetch`, `Request`/`Response` and the interfaces in `src/env.ts`.
+
+## The installation secret
+
+An installation id alone is not proof of who is asking: it appears in activation requests and licence files that get emailed around. So each counter also holds a secret.
+
+- On first start the counter generates 32 random bytes (64 lowercase hex characters) and stores them in `installation.json` next to the installation id, in its data folder. An older `installation.json` without a secret gets one on the next start; the id does not change. Back this file up with the rest of the data folder.
+- The counter sends it in the `X-ForkFlow-Installation-Secret` header on `POST /v1/activate` and `POST /v1/subscribe-sessions`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
+- Trust on first use: the Worker stores only the SHA-256 of the secret (`installations.secret_hash`). The first request for an installation that has no hash yet claims it; every later request must present the same secret, or it gets `401` and changes nothing. The secret is never logged or echoed, and the counter never puts it in the activation-request file or in any response to the browser.
+- **Re-pairing a counter** (the data folder was restored from a copy made before the secret existed, or `installation.json` was replaced, so the counter now holds a different secret for the same installation id): clear the stored hash, and the next request from that counter claims it again:
+
+  ```powershell
+  npx wrangler@4 d1 execute forkflow-licensing --remote --command "UPDATE installations SET secret_hash = NULL WHERE installation_id = '<installation id>'"
+  ```
+
+  (Use `forkflow-licensing-test --env test` for the test database.) Do this only for an installation you have verified is the customer's; until the counter makes its next request, whoever asks first becomes its owner.
+- **Upgrading an existing deployment:** migration `0002_installation_secret.sql` adds `secret_hash` and the checkout-session table. Apply it **before** deploying the Worker that needs it, test first:
+
+  ```powershell
+  npx wrangler@4 d1 migrations apply forkflow-licensing-test --env test --remote
+  npx wrangler@4 d1 migrations apply forkflow-licensing --remote
+  ```
+
+  Counters already in the field have no hash on their row, so each one claims it with its first request after it updates. Counters on the previous build send no secret and get `401` from the new Worker until they are updated to a build that does.
+- **Checkout sessions:** `POST /v1/subscribe-sessions` (with the secret header and `{ "installationId": "..." }`) returns `{ "session": "<43-character token>", "expiresAt": <ms> }`. The Worker keeps only the token's SHA-256. `GET /subscribe?session=` and `POST /v1/subscriptions` identify the installation from the session; an installation id in the address or body is ignored. An unknown or expired session gets a 404 page (or `401 { "error": "session_expired" }` from the form's POST) saying "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again."
 
 ## What you need
 
@@ -175,5 +199,6 @@ The unit tests run under Node in the root vitest run against a better-sqlite3 st
 - **Hand-issuing for an installation the service already knows is fine.** Make the licence with `tools/prepare-license.ts` from the counter's activation request as usual. The counter reports the new revision on its next check, and the service issues every later paid licence above it. If a paid licence from the service is still current when the counter reports the hand-issued one, the service re-signs the paid terms (plan, renewal date, grace) at a higher revision on that check, so a hand-issued extension longer than the paid period, or a different plan, may be replaced by the paid terms. A counter whose licence carries different licence, organisation or outlet ids from the ones the service stored gets no new licence; the Worker logs `activate: installation <id> reported identifiers that differ from the stored ones; nothing issued`.
 - **Abandoned checkouts:** `/v1/subscriptions` creates a Razorpay subscription for every checkout attempt, so subscriptions that were opened and never paid pile up in the `created` state. They are harmless: they are never charged, and they never issue a licence. Clear them out of the dashboard whenever you like.
 - **A webhook that Razorpay keeps retrying** means a `5xx` from D1 or signing; the log line starts `webhook <event id> failed`. Fix the cause and Razorpay's retry delivers the licence. Events for an installation the service has never seen are recorded as `unmatched` and answered `200`.
+- **A counter that reports "The licensing service doesn't recognise this installation":** the Worker answered `401`, so the secret in that counter's `installation.json` differs from the one stored for its installation id. If the customer legitimately restored or replaced its data folder, re-pair it (see "The installation secret"). Otherwise treat it as someone else using that installation id.
 - **Trial already used:** a second `/v1/activate` for the same installation id returns its existing licence or `null`, never a second trial. There is no way to grant another trial short of editing the database.
 - **Key rotation:** a new signing key means a new public key in a new counter build. Counters on the old build report `rejected` (wrong key) until they are updated, and keep running on their current licence.

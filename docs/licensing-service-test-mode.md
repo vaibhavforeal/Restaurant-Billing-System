@@ -13,6 +13,8 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 
 - [ ] The test Worker is deployed, its database migrated, the four secrets (with `LICENSE_SIGNING_KEY` from the test key pair) and the four plan-id variables set, and the Razorpay test-mode webhook points at `https://<test-worker>/webhooks/razorpay` for the five `subscription.*` events.
 - [ ] `POST https://<test-worker>/v1/activate` with an invalid body answers `400`, not `500`, and `wrangler tail` shows no `rate limiter unavailable` line. (The Worker fails open if the rate-limit binding errors, which is what local `wrangler dev` currently does, so a deployed Worker that logs this line is running without rate limiting. Fix the binding before going live.)
+- [ ] Migration `0002` (installation secret and checkout sessions) is applied to the test database before the Worker that needs it is deployed.
+- [ ] A request without the secret gets `401`: `POST https://<test-worker>/v1/activate` with a valid body but no `X-ForkFlow-Installation-Secret` header answers `401 {"error":"unauthorized"}`, and so does `POST https://<test-worker>/v1/subscribe-sessions`.
 - [ ] The counter starts, you complete setup, and you open **Settings > Plan and devices** as the admin.
 
 ## 1. A fresh install gets a trial
@@ -20,11 +22,11 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 - [ ] Within a few seconds of starting (or after pressing **Check for renewal**) the plan reads **Pro**, state active, with the line "Pro trial — ends <date 14 days out>", and the history shows an install by "Automatic renewal".
 - [ ] Register the browser (**Device name**, **Register this device**); the workspace unlocks.
 - [ ] Press **Check for renewal** again: "Your licence is up to date." No second trial, no new history entry.
-- [ ] **Subscribe** is shown (a trial is not a paid plan). It is a link that opens in a new tab.
+- [ ] **Subscribe** is shown (a trial is not a paid plan). It is a button (admins only), not a link.
 
 ## 2. Subscribe and pay
 
-- [ ] **Subscribe** opens `https://<test-worker>/subscribe?installation=<this installation id>` in a new tab, showing plan, period and email.
+- [ ] Press **Subscribe**: it reads "Opening payment page…" while it works, then a new tab opens at `https://<test-worker>/subscribe?session=<43-character token>` (there is no installation id in the address), showing plan, period and email. If the browser blocks the new tab, Settings shows an **Open payment page** link instead.
 - [ ] Choose Basic, monthly, enter an email and continue to Razorpay Checkout. Pay with the test card or `success@razorpay`.
 - [ ] The success screen says "Payment received. Return to ForkFlow and press Check for renewal."
 - [ ] In the Razorpay dashboard the subscription is `active` and the webhook shows a delivered `subscription.charged` with a `200` response.
@@ -37,9 +39,12 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 - [ ] History shows the install by "Automatic renewal". Other open browsers update without a reload.
 - [ ] Billing, the kitchen screen and a second registered device all keep working throughout.
 
-## 4. An unknown installation cannot subscribe
+## 4. Checkout needs a live session from an admin
 
-- [ ] Open `https://<test-worker>/subscribe?installation=<a random UUID>` directly. It says "Open ForkFlow while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again."
+- [ ] Open `https://<test-worker>/subscribe` with no session, and again with `?session=<a random 43-character string>`. Each answers `404` with the expired copy (below) and no form. An installation id in the address is ignored.
+- [ ] An expired payment link shows the expired copy. Press **Subscribe** (or **Manage plan**) and leave the new tab untouched for 30 minutes (or delete the row from `subscribe_sessions` in D1 to skip the wait), then fill in the form and continue. The form disappears and the page says "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again." Pressing the button again opens a fresh link that works.
+- [ ] Sign in as a cashier or waiter: **Subscribe** and **Manage plan** are not available, and `POST /api/license/subscribe-session` answers `403`.
+- [ ] Optional: with a second disposable counter, copy the first counter's installation id into its `installation.json` (keep the second counter's own secret) and press **Check for renewal**. It reports "The licensing service doesn't recognise this installation. Contact ForkFlow support." and the first counter's licence is unchanged.
 
 ## 5. A plan change cancels the old subscription
 
