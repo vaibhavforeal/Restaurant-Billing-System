@@ -34,6 +34,18 @@ export async function createInstallation(db: D1Like, row: Pick<InstallationRow, 
 export const claimSecretStatement = (db: D1Like, installationId: string, secretHash: string): D1StatementLike =>
   db.prepare(`UPDATE installations SET secret_hash = ? WHERE installation_id = ? AND secret_hash IS NULL`).bind(secretHash, installationId);
 
+/** Only the SHA-256 of a session token is stored. */
+export const insertSessionStatement = (db: D1Like, r: { tokenHash: string; installationId: string; expiresAt: number; createdAt: number }): D1StatementLike =>
+  db.prepare(`INSERT INTO subscribe_sessions (token_hash, installation_id, expires_at, created_at) VALUES (?, ?, ?, ?)`).bind(r.tokenHash, r.installationId, r.expiresAt, r.createdAt);
+
+export const deleteExpiredSessionsStatement = (db: D1Like, installationId: string, now: number): D1StatementLike =>
+  db.prepare(`DELETE FROM subscribe_sessions WHERE installation_id = ? AND expires_at <= ?`).bind(installationId, now);
+
+/** The installation a session belongs to, while it is unexpired (a session expires at `expires_at`). */
+export async function sessionInstallation(db: D1Like, tokenHash: string, now: number): Promise<string | null> {
+  return (await db.prepare(`SELECT installation_id AS installationId FROM subscribe_sessions WHERE token_hash = ? AND expires_at > ?`).bind(tokenHash, now).first<{ installationId: string }>())?.installationId ?? null;
+}
+
 /** The floor only ever rises: it records the highest revision the counter is known to hold (reported by it, or handed to it). */
 export const raiseRevisionFloorStatement = (db: D1Like, installationId: string, revision: number): D1StatementLike =>
   db.prepare(`UPDATE installations SET revision_floor = MAX(revision_floor, ?) WHERE installation_id = ?`).bind(revision, installationId);

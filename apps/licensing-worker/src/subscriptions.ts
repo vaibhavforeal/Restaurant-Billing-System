@@ -2,20 +2,23 @@ import { z } from "zod";
 import type { Deps } from "./issue.js";
 import type { Env } from "./env.js";
 import { planIdFor, TOTAL_COUNT, type RazorpayApi } from "./razorpay.js";
-import { getInstallation, setContactEmailStatement, upsertSubscriptionStatement } from "./store.js";
+import { resolveSession } from "./sessions.js";
+import { setContactEmailStatement, upsertSubscriptionStatement } from "./store.js";
 
+// Strict: the installation comes from the session only, so an installationId in the body is refused rather than ignored.
 const CheckoutRequest = z.object({
-  installationId: z.string().uuid(), plan: z.enum(["basic", "pro"]), period: z.enum(["monthly", "yearly"]), email: z.string().max(254).email(),
-});
+  session: z.string().max(200), plan: z.enum(["basic", "pro"]), period: z.enum(["monthly", "yearly"]), email: z.string().max(254).email(),
+}).strict();
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 export async function handleCreateSubscription(deps: Deps & { razorpay: RazorpayApi; env: Env }, body: unknown): Promise<Response> {
   const parsed = CheckoutRequest.safeParse(body);
   if (!parsed.success) return json({ error: "bad_request" }, 400);
-  const { installationId, plan, period, email } = parsed.data;
+  const { session, plan, period, email } = parsed.data;
   const { db, env } = deps;
-  if (!(await getInstallation(db, installationId))) return json({ error: "unknown_installation" }, 404);
+  const installationId = await resolveSession(db, session, deps.now());
+  if (!installationId) return json({ error: "session_expired" }, 401);
 
   let created: { id: string; status: string };
   try {

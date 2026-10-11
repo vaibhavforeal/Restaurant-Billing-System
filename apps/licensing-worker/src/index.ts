@@ -1,5 +1,4 @@
 import { webCryptoSigner } from "@forkflow/license-issuer";
-import { z } from "zod";
 import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
 import type { Deps } from "./issue.js";
@@ -7,7 +6,7 @@ import { razorpayApi } from "./razorpay.js";
 import { SECRET_HEADER } from "./secret.js";
 import { subscribePage } from "./subscribe-page.js";
 import { handleCreateSubscription } from "./subscriptions.js";
-import { getInstallation } from "./store.js";
+import { handleCreateSession, resolveSession } from "./sessions.js";
 import { handleWebhook } from "./webhook.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -48,6 +47,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     const body = await readJson(request);
     return body.ok ? handleActivate({ ...(await deps()), log: (message) => console.warn(message) }, body.body, request.headers.get(SECRET_HEADER)) : json({ error: "bad_request" }, 400);
   }
+  if (method === "POST" && url.pathname === "/v1/subscribe-sessions") {
+    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    const body = await readJson(request);
+    return body.ok ? handleCreateSession(await deps(), body.body, request.headers.get(SECRET_HEADER)) : json({ error: "bad_request" }, 400);
+  }
   if (method === "POST" && url.pathname === "/v1/subscriptions") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);
@@ -55,10 +59,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     return handleCreateSubscription({ ...(await deps()), razorpay: razorpayApi(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET), env }, body.body);
   }
   if (method === "GET" && url.pathname === "/subscribe") {
-    // Anything that is not a UUID is treated as unknown and never echoed.
-    const id = z.string().uuid().safeParse(url.searchParams.get("installation"));
-    const known = id.success && (await getInstallation(env.DB, id.data)) !== null;
-    return html(subscribePage(known ? id.data! : "", known), known ? 200 : 404);
+    // A malformed, unknown or expired session is never echoed; `?installation=` is not a thing any more.
+    const session = url.searchParams.get("session");
+    const valid = (await resolveSession(env.DB, session, Date.now())) !== null;
+    return html(subscribePage(valid ? session! : "", valid), valid ? 200 : 404);
   }
   if (method === "POST" && url.pathname === "/webhooks/razorpay") {
     return handleWebhook({

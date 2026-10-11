@@ -1,4 +1,4 @@
-export const RECONNECT_COPY = "Open ForkFlow while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again.";
+export const EXPIRED_COPY = "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again.";
 export const SUCCESS_COPY = "Payment received. Return to ForkFlow and press Check for renewal.";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -8,14 +8,15 @@ const STYLE = `body{font:16px/1.5 system-ui,sans-serif;max-width:28rem;margin:2r
 label{display:block;margin-top:1rem;font-weight:600}select,input,button{font:inherit;width:100%;padding:.6rem;margin-top:.25rem;box-sizing:border-box}
 button{margin-top:1.5rem;cursor:pointer}[role=alert]{color:#b00020}[role=status]{font-weight:600}`;
 
-// Reads the installation id from the form's data attribute, so nothing user-supplied is ever placed inside script text.
+// Reads the session from the form's data attribute, so nothing user-supplied is ever placed inside script text.
 const SCRIPT = `(function(){
-var form=document.getElementById("checkout"),button=document.getElementById("pay"),errorBox=document.getElementById("error"),done=document.getElementById("done");
+var form=document.getElementById("checkout"),button=document.getElementById("pay"),errorBox=document.getElementById("error"),done=document.getElementById("done"),expired=document.getElementById("expired");
 form.addEventListener("submit",async function(event){
 event.preventDefault();errorBox.textContent="";button.disabled=true;
 try{
 var email=form.elements.email.value;
-var response=await fetch("/v1/subscriptions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({installationId:form.dataset.installation,plan:form.elements.plan.value,period:form.elements.period.value,email:email})});
+var response=await fetch("/v1/subscriptions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({session:form.dataset.session,plan:form.elements.plan.value,period:form.elements.period.value,email:email})});
+if(response.status===401){form.hidden=true;expired.hidden=false;return;}
 if(!response.ok)throw new Error("create failed");
 var created=await response.json();
 new Razorpay({key:created.keyId,subscription_id:created.subscriptionId,prefill:{email:email},
@@ -31,9 +32,9 @@ const page = (body: string) => `<!doctype html>
 ${body}
 </main></body></html>`;
 
-export function subscribePage(installationId: string, known: boolean): string {
-  if (!known) return page(`<p role="alert">${escapeHtml(RECONNECT_COPY)}</p>`);
-  return page(`<form id="checkout" data-installation="${escapeHtml(installationId)}">
+export function subscribePage(session: string, valid: boolean): string {
+  if (!valid) return page(`<p role="alert">${escapeHtml(EXPIRED_COPY)}</p>`);
+  return page(`<form id="checkout" data-session="${escapeHtml(session)}">
 <label for="plan">Plan</label>
 <select id="plan" name="plan"><option value="basic">Basic</option><option value="pro" selected>Pro</option></select>
 <label for="period">Billing period</label>
@@ -43,6 +44,7 @@ export function subscribePage(installationId: string, known: boolean): string {
 <button id="pay" type="submit">Continue to payment</button>
 <p id="error" role="alert"></p>
 </form>
+<p id="expired" role="alert" hidden>${escapeHtml(EXPIRED_COPY)}</p>
 <p id="done" role="status" hidden>${escapeHtml(SUCCESS_COPY)}</p>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>${SCRIPT}</script>`);

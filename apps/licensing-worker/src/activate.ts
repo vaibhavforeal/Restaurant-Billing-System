@@ -1,7 +1,7 @@
 import { ActivationRequest } from "@forkflow/license-issuer";
 import { issueLicense, type Deps } from "./issue.js";
-import { constantTimeEqual, isWellFormedSecret, sha256Hex } from "./secret.js";
-import { claimSecretStatement, createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";
+import { isWellFormedSecret, sha256Hex, verifyInstallationSecret } from "./secret.js";
+import { createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";
 
 export type { Deps } from "./issue.js";
 export type ActivateDeps = Deps & { log: (msg: string) => void };
@@ -31,14 +31,13 @@ export async function handleActivate(deps: ActivateDeps, body: unknown, secret: 
       trialStartedAt: held ? null : deps.now(), revisionFloor: held ? request.currentRevision : 0, createdAt: deps.now(), secretHash,
     });
     installation = await getInstallation(db, request.installationId);
-  } else if (installation.secretHash === null) {
-    // Trust on first use: a row without a secret (the operator's reset path) is claimed by the first caller; the re-read decides a race.
-    await claimSecretStatement(db, request.installationId, secretHash).run();
-    installation = await getInstallation(db, request.installationId);
   }
   if (!installation) return json({ error: "unavailable" }, 500);
-  // Nothing is written past this point for a caller that does not hold the secret (this also settles two first contacts that raced).
-  if (installation.secretHash === null || !constantTimeEqual(installation.secretHash, secretHash)) return json({ error: "unauthorized" }, 401);
+  // Trust on first use for a row without a secret (the operator's reset path); the re-read also settles two first contacts that raced.
+  // Nothing is written past this point for a caller that does not hold the secret.
+  const verified = await verifyInstallationSecret(db, installation, secret);
+  if (!verified) return json({ error: "unauthorized" }, 401);
+  installation = verified;
   const { installationId } = installation;
   const mismatched = held && (request.licenseId !== installation.licenseId || request.organizationId !== installation.organizationId || request.outletId !== installation.outletId);
 
