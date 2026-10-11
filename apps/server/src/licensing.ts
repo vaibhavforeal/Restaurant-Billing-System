@@ -255,7 +255,11 @@ export class Licensing {
     const serviceUrl = this.options?.serviceUrl;
     if (!serviceUrl) return { error: CHECK_MESSAGES.disabled, status: 409 };
     let reply = await this.mintSession();
-    if ("status" in reply && reply.status === 404) { await this.fetchLatest(); reply = await this.mintSession(); }
+    if ("status" in reply && reply.status === 404) {
+      // First contact can issue a trial licence; announce it like every other licence change.
+      if ((await this.fetchLatest()).outcome === "installed") this.announceChange();
+      reply = await this.mintSession();
+    }
     if ("session" in reply) return { url: `${serviceUrl}/subscribe?session=${reply.session}` };
     return reply.status === 401 ? { error: NOT_RECOGNISED, status: 409 } : { error: SESSION_UNREACHABLE, status: 503 };
   }

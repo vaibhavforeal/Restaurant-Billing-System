@@ -40,6 +40,7 @@ export function licenseConfig(dataDir: string): LicensingOptions | undefined {
   const kept = saved?.installationSecret;
   const valid = typeof kept === "string" && INSTALLATION_SECRET_PATTERN.test(kept);
   const installationSecret = valid ? kept : randomBytes(32).toString("hex");
-  if (!valid) atomicJson(path, { ...saved, installationId, installationSecret });
+  // A file without an id is left alone (start-up fails on it as before) rather than rewritten.
+  if (!valid && (!saved || typeof saved.installationId === "string")) atomicJson(path, { ...saved, installationId, installationSecret });
   return { publicKey, installationId, installationSecret, ...(serviceUrl ? { serviceUrl } : {}) };
 }

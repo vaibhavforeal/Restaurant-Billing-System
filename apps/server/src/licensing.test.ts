@@ -596,6 +596,38 @@ describe("checkout sessions from the licensing service", () => {
     expect(activate).toMatchObject({ headers: { "X-ForkFlow-Installation-Secret": installationSecret } });
   });
 
+  it("announces a licence installed by the registering check", async () => {
+    let known = false, trial = "";
+    const s = service((url) => url.endsWith("/v1/activate") ? (known = true, reply(200, { license: trial })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    trial = `${signed({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features, trial: true })}
+`;
+    const broadcast = vi.spyOn(f.app, "broadcast"), revalidate = vi.spyOn(f.app, "wsRevalidate");
+    expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
+    expect(f.app.licensing.status().plan).toBe("pro");
+    expect(broadcast).toHaveBeenCalledWith("license.changed", {});
+    expect(revalidate).toHaveBeenCalled();
+  });
+
+  it("the 404 retry shares a renewal check already in flight", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let known = false;
+    const s = service(async (url) => url.endsWith("/v1/activate") ? (await gate, known = true, reply(200, { license: null })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const f = await fixture({ serviceUrl, fetch: s.fetch });
+      const stop = f.app.licensing.startRenewalChecks(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+      const pending = f.app.licensing.subscribeSession();
+      await vi.advanceTimersByTimeAsync(0);
+      release();
+      expect(await pending).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
+      stop();
+      expect(paths(s.spy).filter((p) => p === "/v1/activate")).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("gives up after a second 404", async () => {
     const s = service((url) => url.endsWith("/v1/activate") ? reply(200, { license: null }) : reply(404, { error: "unknown_installation" }));
     const f = await fixture({ serviceUrl, fetch: s.fetch });

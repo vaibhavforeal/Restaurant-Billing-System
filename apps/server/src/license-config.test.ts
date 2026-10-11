@@ -91,6 +91,16 @@ describe("installation secret", () => {
     }
   });
 
+  it("does not rewrite a file that has no installation id", () => {
+    dev();
+    for (const content of ["{}", JSON.stringify({ installationId: 7, note: "x" })]) {
+      const path = directory();
+      writeFileSync(join(path, "installation.json"), content);
+      expect(typeof licenseConfig(path)!.installationId).not.toBe("string");
+      expect(readFileSync(join(path, "installation.json"), "utf8")).toBe(content);
+    }
+  });
+
   it("keeps a valid secret as it is", () => {
     dev();
     const path = directory(), installationId = randomUUID(), installationSecret = "ab".repeat(32);
