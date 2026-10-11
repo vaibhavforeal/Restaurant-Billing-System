@@ -15,12 +15,13 @@
   const post = (path, body) => originalFetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const messageIs = (text) => panel().querySelector('.license-message')?.textContent === text;
   const alertHas = (text) => [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes(text));
-  // window.open is stubbed throughout: each call records a fake tab (its URL, target and the location it is later sent to), or returns null while `blocked`.
+  // window.open is stubbed throughout: each call records a fake tab (its URL, target, the location it is later sent to and what is written into its document), returns null while `blocked`, or throws while `throwing`.
   const tabs = [], sessionUrl = 'http://127.0.0.1:4129/subscribe?session=' + fixtures.sessionToken, originalOpen = window.open;
-  let blocked = false;
+  let blocked = false, throwing = false;
   window.open = (url, target) => {
+    if (throwing) throw new Error('window.open is not allowed');
     if (blocked) return null;
-    const tab = { url, target, closed: false, opener: 'page', location: { href: '' }, close() { this.closed = true; } }; tabs.push(tab); return tab;
+    const tab = { url, target, closed: false, opener: 'page', location: { href: '' }, document: { title: '', body: { textContent: '' } }, close() { this.closed = true; } }; tabs.push(tab); return tab;
   };
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
   const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' });
@@ -49,7 +50,9 @@
     onSession = async (args) => { await sessionGate; return originalFetch(...args); };
     await click('Subscribe'); await wait(() => tabs.length === 1 && !!button('Opening payment page…'));
     check(button('Opening payment page…').disabled && button('Refresh plan').disabled && tabs[0].location.href === '' && tabs[0].url === '' && !tabs[0].closed,
-      'While the session link is fetched the button reads Opening payment page… and is disabled, and the new tab stays blank');
+      'While the session link is fetched the button reads Opening payment page… and is disabled, and the new tab is not navigated');
+    check(tabs[0].document.title === 'Opening payment page…' && tabs[0].document.body.textContent === 'Opening payment page…',
+      'The blank tab says Opening payment page… while the session link is fetched');
     releaseSession(); await wait(() => tabs[0].location.href !== '' && !!button('Subscribe') && !button('Subscribe').disabled);
     check(tabs[0].location.href === sessionUrl && tabs[0].opener === null && tabs[0].target === '_blank' && !tabs[0].closed,
       'Subscribe sends a new tab to the Worker checkout page with a session link and detaches its opener');
@@ -59,9 +62,19 @@
     onSession = null; blocked = true;
     await click('Subscribe'); await wait(() => !!link('Open payment page'));
     const fallback = link('Open payment page');
-    check(tabs.length === 2 && fallback.href === sessionUrl && fallback.target === '_blank' && fallback.rel === 'noopener noreferrer' && panel().innerText.includes('blocked the new tab'),
-      'A blocked tab falls back to an Open payment page link with the session URL');
-    blocked = false; window.fetch = originalFetch;
+    check(tabs.length === 2 && fallback.href === sessionUrl && fallback.target === '_blank' && fallback.rel === 'noopener noreferrer' && panel().innerText.includes("The payment page didn't open automatically.") && !panel().innerText.includes('blocked'),
+      'A blocked tab falls back to an Open payment page link with neutral copy and the session URL');
+    // The ForkFlow desktop app has an Electron user agent: no blank tab, window.open is called once with the session URL (the shell sends it to the system browser).
+    const realAgent = navigator.userAgent; blocked = false;
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => realAgent + ' Electron/33.0.0' });
+    const before = tabs.length; await click('Subscribe');
+    await wait(() => tabs.length === before + 1 && !!button('Subscribe') && !button('Subscribe').disabled);
+    check(tabs.length === before + 1 && tabs[before].url === sessionUrl && tabs[before].target === '_blank' && !tabs.slice(before).some((t) => t.url === '') && !link('Open payment page'),
+      'In the desktop app Subscribe opens the session URL in one window.open call with no blank tab and no fallback link');
+    throwing = true; await click('Subscribe'); await wait(() => !!link('Open payment page'));
+    check(tabs.length === before + 1 && link('Open payment page').href === sessionUrl, 'In the desktop app a window.open that throws falls back to the Open payment page link');
+    throwing = false; delete navigator.userAgent; check(navigator.userAgent === realAgent, 'The desktop stub is removed again');
+    window.fetch = originalFetch;
     document.querySelector('.license-identity').open = true;
     await click('Download activation request'); await wait(() => downloads.length === 1);
     const request = JSON.parse(await downloads[0].text);
@@ -133,8 +146,8 @@
     const history = (await api('/license/history')).events;
     check(history.some((e) => e.kind === 'device_removed') && history.some((e) => e.kind === 'device_renamed') && history.every((e) => e.actorName === 'QA Admin'), 'History records activation and device changes with the acting administrator');
     check(!!button('Manage plan') && !button('Subscribe') && !panel().innerText.includes('Pro trial'), 'A paid plan offers Manage plan instead of Subscribe');
-    await click('Manage plan'); await wait(() => tabs.length === 3 && tabs[2].location.href !== '');
-    check(tabs[2].location.href === sessionUrl && tabs[2].opener === null, 'Manage plan opens the checkout page through a session link too');
+    const manageTab = tabs.length; await click('Manage plan'); await wait(() => tabs.length === manageTab + 1 && tabs[manageTab].location.href !== '');
+    check(tabs[manageTab].location.href === sessionUrl && tabs[manageTab].opener === null, 'Manage plan opens the checkout page through a session link too');
     await post('/__fake-service/queue', { licenses: [fixtures.trialFromService] });
     await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && panel().innerText.includes('Pro trial — ends'));
     check((await api('/license')).revision === 4 && !!button('Subscribe') && !button('Manage plan'), 'Check for renewal installs the licence the service has queued and a trial offers Subscribe');

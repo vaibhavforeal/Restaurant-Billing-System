@@ -3,6 +3,7 @@ import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview,
 import { featureSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
 import { downloadText } from "../download";
+import { isDesktopShell, openInDesktopShell, showPendingMessage } from "../checkout-window";
 import { useNavigationGuard } from "../navigation-guard";
 import { SystemSettings } from "./SystemSettings";
 import "../license-settings.css";
@@ -116,16 +117,20 @@ export function LicenseSettings() {
       setLicense(text); setMessage(`Loaded ${file.name}. Preview it before applying.`);
     }, false);
   }
-  // The blank tab is opened inside the click so the browser allows it; the payment page is sent there once the counter has a session link.
+  // In a browser the blank tab is opened inside the click so the popup blocker allows it; the payment page is sent there once the counter has a session link.
+  // The desktop app denies blank windows and sends http(s) windows to the system browser, so there it opens the page directly once the link arrives.
   // The session request can take ~30 s when the counter has to register with the service first, hence the longer timeout.
   function openCheckout(kind: "subscribe" | "manage") {
     if (lock.current) return;
-    const tab = window.open("", "_blank");
+    const desktop = isDesktopShell(navigator.userAgent);
+    const tab = desktop ? null : window.open("", "_blank");
+    if (tab) showPendingMessage(tab);
     setCheckout(kind);
     void run(async () => {
       try {
         const { url } = await apiFetch<{ url: string }>("/api/license/subscribe-session", { method: "POST", signal: AbortSignal.timeout(45_000) });
-        if (tab && !tab.closed) { tab.opener = null; tab.location.href = url; } else if (mounted.current) setPaymentUrl(url);
+        if (desktop) { if (!openInDesktopShell(url, (target, name) => window.open(target, name)) && mounted.current) setPaymentUrl(url); }
+        else if (tab && !tab.closed) { tab.opener = null; tab.location.href = url; } else if (mounted.current) setPaymentUrl(url);
       } catch (e) { tab?.close(); throw e; }
       finally { if (mounted.current) setCheckout(null); }
     }, false);
@@ -145,7 +150,7 @@ export function LicenseSettings() {
         <button disabled={busy || loading} onClick={() => { void run(async () => {}, true); }}>Refresh plan</button></div></div>
     {(error || loadError || statusError) && <p role="alert" className="error-message">{error || loadError || statusError}</p>}
     {message && <p role="status" className="license-message">{message}</p>}
-    {paymentUrl && <p role="status" className="license-message">Your browser blocked the new tab. <a className="license-link" href={paymentUrl} target="_blank" rel="noopener noreferrer">Open payment page</a></p>}
+    {paymentUrl && <p role="status" className="license-message">The payment page didn't open automatically. <a className="license-link" href={paymentUrl} target="_blank" rel="noopener noreferrer">Open payment page</a></p>}
     {status?.mode === "development" && <p>{status.message}</p>}
     {status?.mode === "commercial" && <>
       <div className="license-summary">
