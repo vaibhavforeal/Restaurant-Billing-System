@@ -24,6 +24,19 @@ An installation id alone is not proof of who is asking: it appears in activation
   ```
 
   (Use `forkflow-licensing-test --env test` for the test database.) Do this only for an installation you have verified is the customer's; until the counter makes its next request, whoever asks first becomes its owner.
+- **If someone else registered this installation id first** (the real counter gets `401` on **Check for renewal** and "The licensing service doesn't recognise this installation", and you have not re-paired it): another caller made first contact and now owns the row, so clearing the hash would only let the next caller take it again. Verify the customer first, then delete the hijacked row so the real counter registers fresh on its next start. Check that nothing was paid on it:
+
+  ```powershell
+  npx wrangler@4 d1 execute forkflow-licensing --remote --command "SELECT reason, razorpay_payment_id FROM licenses WHERE installation_id = '<installation id>'; SELECT razorpay_subscription_id, status FROM subscriptions WHERE installation_id = '<installation id>'"
+  ```
+
+  **Stop if any licence has reason `charge`, or any subscription exists beyond an unpaid attempt.** That installation has paid: contact the customer and Razorpay before touching it. Otherwise delete the dependents first (they reference `installations`), then the row itself:
+
+  ```powershell
+  npx wrangler@4 d1 execute forkflow-licensing --remote --command "DELETE FROM subscribe_sessions WHERE installation_id = '<installation id>'; DELETE FROM licenses WHERE installation_id = '<installation id>'; DELETE FROM subscriptions WHERE installation_id = '<installation id>'; DELETE FROM installations WHERE installation_id = '<installation id>'"
+  ```
+
+  The installation's trial is deleted with its row, so the real counter gets a fresh 14-day trial when it registers (the trial was spent by the hijacker, not the customer). Then restart the real counter or press **Check for renewal**, and make sure it is the one that registers.
 - **Upgrading an existing deployment:** migration `0002_installation_secret.sql` adds `secret_hash` and the checkout-session table. Apply it **before** deploying the Worker that needs it, test first:
 
   ```powershell
@@ -32,7 +45,15 @@ An installation id alone is not proof of who is asking: it appears in activation
   ```
 
   Counters already in the field have no hash on their row, so each one claims it with its first request after it updates. Counters on the previous build send no secret and get `401` from the new Worker until they are updated to a build that does.
-- **Checkout sessions:** `POST /v1/subscribe-sessions` (with the secret header and `{ "installationId": "..." }`) returns `{ "session": "<43-character token>", "expiresAt": <ms> }`. The Worker keeps only the token's SHA-256. `GET /subscribe?session=` and `POST /v1/subscriptions` identify the installation from the session; an installation id in the address or body is ignored. An unknown or expired session gets a 404 page (or `401 { "error": "session_expired" }` from the form's POST) saying "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again."
+
+  **Rollout check.** After the migration and deploy, every installation that existed before has `secret_hash` NULL, so the first caller to present a well-formed id and secret claims it, and that caller is not necessarily the customer. Once the counters have updated, run:
+
+  ```powershell
+  npx wrangler@4 d1 execute forkflow-licensing --remote --command "SELECT installation_id FROM installations WHERE secret_hash IS NULL"
+  ```
+
+  Any installation still listed has not been claimed by its counter. Investigate each one you recognise as a customer (is the counter on the new build and online?) before it is claimed by someone else; if it was already claimed by the wrong party, use the hijacked-installation procedure above.
+- **Checkout sessions:** `POST /v1/subscribe-sessions` (with the secret header and `{ "installationId": "..." }`) returns `{ "session": "<43-character token>", "expiresAt": <ms> }`. The Worker keeps only the token's SHA-256. `GET /subscribe?session=` and `POST /v1/subscriptions` identify the installation from the session; an installation id in the address is ignored, and one in the request body is rejected with `400` (the body schema is strict). An unknown or expired session gets a 404 page (or `401 { "error": "session_expired" }` from the form's POST) saying "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again."
 
 ## What you need
 

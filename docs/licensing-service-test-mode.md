@@ -44,6 +44,7 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 - [ ] Open `https://<test-worker>/subscribe` with no session, and again with `?session=<a random 43-character string>`. Each answers `404` with the expired copy (below) and no form. An installation id in the address is ignored.
 - [ ] An expired payment link shows the expired copy. Press **Subscribe** (or **Manage plan**) and leave the new tab untouched for 30 minutes (or delete the row from `subscribe_sessions` in D1 to skip the wait), then fill in the form and continue. The form disappears and the page says "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again." Pressing the button again opens a fresh link that works.
 - [ ] Sign in as a cashier or waiter: **Subscribe** and **Manage plan** are not available, and `POST /api/license/subscribe-session` answers `403`.
+- [ ] From the ForkFlow desktop app, press **Subscribe**: the payment page opens in the system browser in one click.
 - [ ] Optional: with a second disposable counter, copy the first counter's installation id into its `installation.json` (keep the second counter's own secret) and press **Check for renewal**. It reports "The licensing service doesn't recognise this installation. Contact ForkFlow support." and the first counter's licence is unchanged.
 
 ## 5. A plan change cancels the old subscription
