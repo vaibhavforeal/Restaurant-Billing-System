@@ -45,7 +45,7 @@ Success means:
 | `POST /v1/subscriptions` | The subscribe page | Body: `{ installationId, plan, period, email }`. Creates the Razorpay subscription with `notes: { installationId, plan, period }`, records it, returns the subscription id and the public Razorpay key id |
 | `POST /webhooks/razorpay` | Razorpay | Verifies the signature, records the event, issues a licence on a successful charge |
 
-`/v1/activate` and `/v1/subscriptions` are unauthenticated. That is acceptable because a licence names its installation id and the counter rejects any other; both are rate limited per IP.
+`/v1/activate` and `/v1/subscriptions` are rate limited per IP (failing open if the limiter binding errors). **Superseded by the installation-secret addendum** (`2026-10-11-installation-secret-design.md`): the original "unauthenticated is acceptable" reasoning did not hold, because a licence naming the victim's installation still harms the victim; those endpoints now require the installation secret or a subscribe session.
 
 ### 3.2 D1 tables
 
@@ -82,17 +82,18 @@ CREATE TABLE webhook_events (
 2. Reject with 409 if `verificationKeyFingerprint` differs from the fingerprint of the Worker's signing key (a build pointed at the wrong service).
 3. **Unknown installation, no licence in the request** (`licenseId` null): create the `installations` row with fresh identifiers, set `trial_started_at`, and issue revision 1 as a Pro licence expiring 14 days later with `graceUntil = expiresAt`.
 4. **Unknown installation that already holds a licence** (issued by hand): adopt the request's identifiers and store a placeholder floor so the next issued revision is `currentRevision + 1`. No trial.
-5. **Known installation:** never issue anything; just look up the latest licence.
-6. Return the latest envelope if `revision > currentRevision`, else `null`. Repeat calls are idempotent: one trial per installation, ever.
+5. **Known installation:** no new trial, ever. If the request's identifiers match the stored ones and `currentRevision` is above the stored floor (a licence was hand-issued since the service last saw this counter), raise the floor to `currentRevision`; then, if the latest stored licence is a current (`expires_at > now`) `charge` licence with `revision <= currentRevision`, re-sign the same terms at the next revision so the paid licence is not shadowed by the hand-issued one. Trials are never re-signed. Mismatched identifiers are logged and nothing is issued.
+6. Return the latest envelope if `revision > currentRevision`, else `null`, and raise the floor to the revision handed out. Repeat calls are idempotent: one trial per installation, ever, and no re-sign loop (a counter reporting the revision it was handed never raises the floor).
+7. `currentRevision` above 1,000,000 → 400.
 
-For step 4 the floor is the only time a client-reported revision is trusted; afterwards revisions come from the `licenses` table alone.
+Client-reported revisions only ever raise the floor (adoption in step 4, hand-issued licences in step 5); the issued revision is always `max(latest licence, floor) + 1`.
 
 ### 3.4 Webhook
 
 1. Verify the `X-Razorpay-Signature` HMAC-SHA256 over the raw body with the webhook secret, compared in constant time. Bad signature → 400, nothing written.
 2. Take the event id (Razorpay's event id header). If it already exists in `webhook_events`, return 200 and do nothing.
 3. Read `notes.installationId` from the subscription entity. Unknown installation → record the event as `unmatched`, log it, return 200 (a 5xx would make Razorpay retry for ever).
-4. On a **successful charge** event: compute `expiresAt` from the subscription's current period end and `graceUntil = expiresAt + 7 days`. If the payment id was already used, or `expiresAt` is not later than the latest licence issued **for the same subscription**, record `ignored` and stop; this absorbs late, duplicate or out-of-order deliveries without blocking a plan change to a shorter period. Otherwise build claims at `latest revision + 1` with the installation's identifiers and the subscription's plan, sign, and in **one D1 batch** insert the licence, update the subscription row and record the event as `issued`. If the installation has another active subscription, cancel it through the Razorpay API after the batch commits (a failed cancel is logged for manual follow-up, not retried by failing the webhook).
+4. On a **successful charge** event: compute `expiresAt` from the subscription's current period end and `graceUntil = expiresAt + 7 days`. If the payment id was already used, or `expiresAt` is not later than the latest licence issued **for the same subscription**, record `ignored` and stop; this absorbs late, duplicate or out-of-order deliveries without blocking a plan change to a shorter period. If `expiresAt` is not after now, record `ignored` (claims could never validate). If the installation has a **newer** subscription (later `created_at`) that already has a charge licence, this charge belongs to a superseded subscription: record `superseded`, issue nothing, and retry cancelling this subscription (failure logged). Otherwise build claims at the next revision with the installation's identifiers and the subscription's plan, sign, and in **one D1 batch** insert the licence, update the subscription row and record the event as `issued`. On a subscription's **first** charge only, cancel the installation's **older** open subscriptions (any status except cancelled, completed, expired) through the Razorpay API after the batch commits (a failed cancel is logged; a later charge on the old subscription is caught as `superseded` above). A subscription row missing locally is created from `notes`, using the Razorpay entity's `created_at` when present.
 5. On **activated / halted / cancelled / completed** events: update `subscriptions.status` and record the event. No licence change.
 6. A D1 or signing failure returns 5xx so Razorpay retries.
 
