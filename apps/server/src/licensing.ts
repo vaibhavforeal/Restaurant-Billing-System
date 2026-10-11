@@ -37,6 +37,7 @@ const CHECK_MESSAGES = {
   disabled: "Automatic renewal is not set up for this installation.",
 } as const;
 const NOT_RECOGNISED = "The licensing service doesn't recognise this installation. Contact ForkFlow support.";
+const SESSION_BUSY = "The licensing service is busy. Try again in a minute.";
 const SESSION_UNREACHABLE = "Couldn't reach the licensing service. Check the internet connection and try again.";
 const serviceReply = z.object({ license: z.string().max(16_384).nullable() });
 const sessionReply = z.object({ session: z.string().regex(/^[A-Za-z0-9_-]{20,128}$/) });
@@ -257,11 +258,14 @@ export class Licensing {
     let reply = await this.mintSession();
     if ("status" in reply && reply.status === 404) {
       // First contact can issue a trial licence; announce it like every other licence change.
-      if ((await this.fetchLatest()).outcome === "installed") this.announceChange();
+      const registered = await this.fetchLatest();
+      if (registered.outcome === "installed") this.announceChange();
+      if (registered.outcome === "rejected") return { error: registered.message, status: 409 };
       reply = await this.mintSession();
     }
     if ("session" in reply) return { url: `${serviceUrl}/subscribe?session=${reply.session}` };
-    return reply.status === 401 ? { error: NOT_RECOGNISED, status: 409 } : { error: SESSION_UNREACHABLE, status: 503 };
+    if (reply.status === 401) return { error: NOT_RECOGNISED, status: 409 };
+    return { error: reply.status === 429 ? SESSION_BUSY : SESSION_UNREACHABLE, status: 503 };
   }
   private async mintSession(): Promise<{ session: string } | { status: number }> {
     try {

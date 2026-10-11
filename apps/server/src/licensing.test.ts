@@ -635,6 +635,20 @@ describe("checkout sessions from the licensing service", () => {
     expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate", "/v1/subscribe-sessions"]);
   });
 
+  it("a rate-limited session request says the service is busy, not that the internet is down", async () => {
+    const s = service(() => reply(429, { error: "rate_limited" }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ error: "The licensing service is busy. Try again in a minute.", status: 503 });
+    expect(s.spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("a rejected registration check is reported as it is instead of retrying into a second 404", async () => {
+    const s = service((url) => url.endsWith("/v1/activate") ? reply(401, { error: "unauthorized" }) : reply(404, { error: "unknown_installation" }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ error: notRecognised, status: 409 });
+    expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate"]);
+  });
+
   it("a 401 means the installation is not recognised", async () => {
     const s = service(() => reply(401, { error: "unauthorized" }));
     const f = await fixture({ serviceUrl, fetch: s.fetch });
@@ -648,7 +662,7 @@ describe("checkout sessions from the licensing service", () => {
     for (const failure of [
       () => { throw new TypeError("fetch failed"); },
       () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); },
-      () => reply(500, { error: "internal" }), () => reply(429, "slow down"), () => reply(400, { error: "bad_request" }),
+      () => reply(500, { error: "internal" }), () => reply(400, { error: "bad_request" }),
       () => reply(200, "<html>captive portal</html>"), () => reply(200, { session: 42 }), () => reply(200, { expiresAt: 1 }),
       () => reply(200, { session: "has spaces & symbols", expiresAt: 1 }),
     ]) { next = failure; expect(await f.app.licensing.subscribeSession()).toEqual({ error: unreachable, status: 503 }); }
