@@ -44,8 +44,8 @@ export interface LicenseStatus {
   revision: number | null;
   registeredDevices: number;
   trial: boolean;
-  /** Where an administrator buys or manages a plan; null when this build has no licensing service. */
-  subscribeUrl: string | null;
+  /** Whether an administrator can start checkout (this build has a licensing service); the checkout URL itself is minted per click. */
+  subscriptionAvailable: boolean;
 }
 export interface LicensedDevice {
   id: string; name: string; createdAt: number; current: boolean; allowed: boolean;

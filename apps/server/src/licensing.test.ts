@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
+import type { LicensingOptions } from "./licensing.js";
 import { buildServer } from "./server.js";
 import { SETUP, freshApp } from "./test-helpers.js";
 
@@ -17,10 +18,13 @@ function signed(input: LicenseClaims, privateKey = keys.privateKey) {
   const message = `ff1.${Buffer.from(JSON.stringify(input)).toString("base64url")}`;
   return `${message}.${sign(null, Buffer.from(message), privateKey).toString("base64url")}`;
 }
-async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch } = {}) {
+const installationSecret = "0123456789abcdef".repeat(4);
+async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?: string[] } = {}) {
   let now = Date.now();
   const db = openDb(":memory:"); migrate(db, MIGRATIONS);
-  const app = buildServer({ db, licensing: { publicKey, installationId, now: () => now, ...extra } });
+  const { logs, ...service } = extra;
+  const app = buildServer({ db, ...(logs ? { logger: { level: "trace", stream: { write: (line: string) => { logs.push(line); } } } } : {}),
+    licensing: { publicKey, installationId, installationSecret, now: () => now, ...service } });
   // Exercise the same permission + entitlement guard that future paid routes use.
   app.get("/api/test-recipes", { preHandler: [app.requirePermission("stock.manage"), app.requireFeature("recipes")] }, async () => ({ allowed: true }));
   app.get("/api/test-kds", { preHandler: [app.requirePermission("kots.read"), app.requireFeature("kds")] }, async () => ({ allowed: true }));
@@ -365,8 +369,8 @@ describe("licence renewal from the licensing service", () => {
   const unreachable = "Couldn't reach the licensing service. Billing continues on your current licence.";
   const reply = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
   // A fake service whose next answer the test chooses; every call is recorded by the spy.
-  function service(answer: () => Response | Promise<Response> = () => reply(200, { license: null })) {
-    const spy = vi.fn(async (_url: unknown, _init?: RequestInit) => answer());
+  function service(answer: (url: string, init?: RequestInit) => Response | Promise<Response> = () => reply(200, { license: null })) {
+    const spy = vi.fn(async (url: unknown, init?: RequestInit) => answer(String(url), init));
     return { spy, fetch: spy as unknown as typeof fetch };
   }
   afterEach(() => { vi.useRealTimers(); });
@@ -382,9 +386,17 @@ describe("licence renewal from the licensing service", () => {
     expect(f.app.licensing.history().events[0]).toMatchObject({ kind: "license_activated", actorName: "Automatic renewal", revision: 2 });
     const [url, init] = s.spy.mock.calls[0]!;
     expect(url).toBe(`${serviceUrl}/v1/activate`);
-    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json" } });
+    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json", "X-ForkFlow-Installation-Secret": installationSecret } });
     expect(init!.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(init!.body as string)).toMatchObject({ format: "forkflow-activation-request", installationId, currentRevision: 1, licenseId: scope.licenseId });
+    expect(init!.body).not.toContain(installationSecret);
+  });
+
+  it("a 401 from the service means the installation is not recognised", async () => {
+    const f = await fixture({ serviceUrl, fetch: service(() => reply(401, { error: "unauthorized" })).fetch }); await f.activate(); await f.register();
+    const before = f.app.licensing.status(device);
+    expect(await f.app.licensing.fetchLatest()).toEqual({ outcome: "rejected", message: "The licensing service doesn't recognise this installation. Contact ForkFlow support." });
+    expect(f.app.licensing.status(device)).toEqual(before);
   });
 
   it("equal revision is up to date", async () => {
@@ -519,7 +531,7 @@ describe("licence renewal from the licensing service", () => {
     expect((await f.app.inject({ method: "POST", url: "/api/license/check", headers: cashier })).statusCode).toBe(403);
     const ok = await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers });
     expect(ok.statusCode, ok.body).toBe(200);
-    expect(ok.json()).toMatchObject({ outcome: "up_to_date", message: "Your licence is up to date.", status: { revision: 1, state: "active", subscribeUrl: `${serviceUrl}/subscribe?installation=${installationId}` } });
+    expect(ok.json()).toMatchObject({ outcome: "up_to_date", message: "Your licence is up to date.", status: { revision: 1, state: "active", subscriptionAvailable: true } });
     next = `${signed({ ...f.claims, revision: 2 })}\n`;
     expect(broadcast).not.toHaveBeenCalled(); // nothing changed, so nobody is told
     const installed = await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers });
@@ -527,12 +539,151 @@ describe("licence renewal from the licensing service", () => {
     expect(broadcast).toHaveBeenCalledWith("license.changed", {});
   });
 
-  it("status exposes the subscribe URL", async () => {
+  it("status says whether a subscription can be started, without exposing a URL or the secret", async () => {
     const f = await fixture({ serviceUrl });
-    expect(f.app.licensing.status().subscribeUrl).toBe(`${serviceUrl}/subscribe?installation=${installationId}`);
-    expect((await f.app.inject({ url: "/api/license", headers: f.headers })).json().subscribeUrl).toBe(`${serviceUrl}/subscribe?installation=${installationId}`);
-    const without = await fixture(); expect(without.app.licensing.status().subscribeUrl).toBeNull();
+    expect(f.app.licensing.status().subscriptionAvailable).toBe(true);
+    const body = (await f.app.inject({ url: "/api/license", headers: f.headers })).json();
+    expect(body.subscriptionAvailable).toBe(true);
+    expect(body).not.toHaveProperty("subscribeUrl");
+    expect(JSON.stringify(body)).not.toContain(installationSecret);
+    const without = await fixture(); expect(without.app.licensing.status().subscriptionAvailable).toBe(false);
     const dev = freshApp(); apps.push(dev);
-    expect(dev.licensing.status().subscribeUrl).toBeNull();
+    expect(dev.licensing.status().subscriptionAvailable).toBe(false);
+  });
+
+  it("refuses to start without a well-formed secret when a service URL is set", () => {
+    const build = (options: Partial<LicensingOptions>) => { const db = openDb(":memory:"); migrate(db, MIGRATIONS); return buildServer({ db, licensing: { publicKey, installationId, ...options } }); };
+    for (const bad of [undefined, "", "short", "A".repeat(64), "g".repeat(64)]) {
+      expect(() => build({ serviceUrl, ...(bad === undefined ? {} : { installationSecret: bad }) }), String(bad)).toThrow();
+    }
+    apps.push(build({ serviceUrl, installationSecret }));
+    apps.push(build({}));
+  });
+});
+
+describe("checkout sessions from the licensing service", () => {
+  const serviceUrl = "https://license.example.com";
+  const notRecognised = "The licensing service doesn't recognise this installation. Contact ForkFlow support.";
+  const unreachable = "Couldn't reach the licensing service. Check the internet connection and try again.";
+  const session = "s".repeat(43);
+  const reply = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
+  const sessionReply = () => reply(200, { session, expiresAt: Date.now() + 1_800_000 });
+  function service(answer: (url: string, init?: RequestInit) => Response | Promise<Response>) {
+    const spy = vi.fn(async (url: unknown, init?: RequestInit) => answer(String(url), init));
+    return { spy, fetch: spy as unknown as typeof fetch };
+  }
+  const paths = (spy: ReturnType<typeof service>["spy"]) => spy.mock.calls.map(([url]) => String(url).replace(serviceUrl, ""));
+
+  it("returns the checkout URL for a session minted with the installation secret", async () => {
+    const s = service(() => sessionReply());
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
+    expect(s.spy).toHaveBeenCalledTimes(1);
+    const [url, init] = s.spy.mock.calls[0]!;
+    expect(url).toBe(`${serviceUrl}/v1/subscribe-sessions`);
+    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json", "X-ForkFlow-Installation-Secret": installationSecret } });
+    expect(JSON.parse(init!.body as string)).toEqual({ installationId });
+    expect(init!.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("registers the installation with one renewal check and retries once when the service does not know it yet", async () => {
+    let known = false;
+    const s = service((url) => url.endsWith("/v1/activate") ? (known = true, reply(200, { license: null })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
+    expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate", "/v1/subscribe-sessions"]);
+    const [, activate] = s.spy.mock.calls[1]!;
+    expect(activate).toMatchObject({ headers: { "X-ForkFlow-Installation-Secret": installationSecret } });
+  });
+
+  it("gives up after a second 404", async () => {
+    const s = service((url) => url.endsWith("/v1/activate") ? reply(200, { license: null }) : reply(404, { error: "unknown_installation" }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ error: unreachable, status: 503 });
+    expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate", "/v1/subscribe-sessions"]);
+  });
+
+  it("a 401 means the installation is not recognised", async () => {
+    const s = service(() => reply(401, { error: "unauthorized" }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ error: notRecognised, status: 409 });
+    expect(s.spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("an unreachable or confused service is a 503", async () => {
+    let next: () => Response | Promise<Response> = () => { throw new TypeError("fetch failed"); };
+    const f = await fixture({ serviceUrl, fetch: service(() => next()).fetch });
+    for (const failure of [
+      () => { throw new TypeError("fetch failed"); },
+      () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); },
+      () => reply(500, { error: "internal" }), () => reply(429, "slow down"), () => reply(400, { error: "bad_request" }),
+      () => reply(200, "<html>captive portal</html>"), () => reply(200, { session: 42 }), () => reply(200, { expiresAt: 1 }),
+      () => reply(200, { session: "has spaces & symbols", expiresAt: 1 }),
+    ]) { next = failure; expect(await f.app.licensing.subscribeSession()).toEqual({ error: unreachable, status: 503 }); }
+  });
+
+  it("without a service URL it is a 409 and nothing is fetched", async () => {
+    const s = service(() => sessionReply());
+    const f = await fixture({ fetch: s.fetch });
+    expect(await f.app.licensing.subscribeSession()).toEqual({ error: "Automatic renewal is not set up for this installation.", status: 409 });
+    const dev = freshApp(); apps.push(dev);
+    expect(await dev.licensing.subscribeSession()).toEqual({ error: "Automatic renewal is not set up for this installation.", status: 409 });
+    expect(s.spy).not.toHaveBeenCalled();
+  });
+
+  it("the route needs settings.manage, is never cached, and keeps working on an expired licence", async () => {
+    const s = service(() => sessionReply());
+    const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
+    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", pin: "2345" } });
+    const cashier = await f.login(device, "2345");
+    expect((await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: cashier })).statusCode).toBe(403);
+    expect((await f.app.inject({ method: "POST", url: "/api/license/subscribe-session" })).statusCode).toBe(401);
+    expect(s.spy).not.toHaveBeenCalled();
+    const ok = await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers });
+    expect(ok.statusCode, ok.body).toBe(200);
+    expect(ok.json()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
+    expect(ok.headers["cache-control"]).toBe("no-store");
+    f.setNow(f.claims.graceUntil);
+    expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(403);
+    expect((await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers })).statusCode).toBe(200);
+  });
+
+  it("the route reports 409 and 503 with the error copy", async () => {
+    let next: () => Response = () => reply(401, { error: "unauthorized" });
+    const f = await fixture({ serviceUrl, fetch: service(() => next()).fetch });
+    const post = () => f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers });
+    let res = await post();
+    expect([res.statusCode, res.json(), res.headers["cache-control"]]).toEqual([409, { error: notRecognised }, "no-store"]);
+    next = () => reply(500, {});
+    res = await post();
+    expect([res.statusCode, res.json(), res.headers["cache-control"]]).toEqual([503, { error: unreachable }, "no-store"]);
+    const without = await fixture();
+    res = await without.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: without.headers });
+    expect([res.statusCode, res.json()]).toEqual([409, { error: "Automatic renewal is not set up for this installation." }]);
+  });
+
+  it("never lets the secret reach a browser response or a log line", async () => {
+    const logs: string[] = [];
+    let mode: "ok" | "unauthorized" = "ok";
+    const f = await fixture({ serviceUrl, logs, fetch: service((url) => mode === "unauthorized" ? reply(401, { error: "unauthorized" })
+      : url.endsWith("/v1/activate") ? reply(200, { license: null }) : sessionReply()).fetch });
+    await f.activate(); await f.register();
+    const responses = [
+      await f.app.inject({ url: "/api/license", headers: f.headers }),
+      await f.app.inject({ url: "/api/license/activation-request", headers: f.headers }),
+      await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers }),
+      await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers }),
+      await f.app.inject({ url: "/api/license/history", headers: f.headers }),
+      await f.app.inject({ url: "/api/license/devices", headers: f.headers }),
+    ];
+    mode = "unauthorized";
+    responses.push(await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers }),
+      await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers }));
+    const stop = f.app.licensing.startRenewalChecks((m) => f.app.log.warn(m));
+    await new Promise<void>((resolve) => setImmediate(resolve)); await new Promise<void>((resolve) => setImmediate(resolve)); stop();
+    for (const r of responses) { expect(r.statusCode).toBeLessThan(500); expect(r.body).not.toContain(installationSecret); expect(JSON.stringify(r.headers)).not.toContain(installationSecret); }
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.join("\n")).not.toContain(installationSecret);
+    expect(logs.join("\n")).toContain(notRecognised);
   });
 });

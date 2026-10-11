@@ -115,14 +115,13 @@ export function LicenseSettings() {
     }, false);
   }
   const timezone = status?.timezone;
-  const showBilling = status?.mode === "commercial" && !!status.subscribeUrl;
+  // Subscribe and Manage plan return as buttons once the checkout session flow lands in the UI.
+  const showBilling = status?.mode === "commercial" && status.subscriptionAvailable;
   const current = devices?.find((d) => d.current);
   const canRegister = status && ["active", "grace"].includes(status.state) && !current && devices !== null && devices.length < (status.maxDevices ?? 0);
   return <section className="panel license-settings" aria-label="Plan and devices">
     <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>
       <div className="license-actions">
-        {showBilling && (!status.plan || status.trial) && <a className="license-link primary" href={status.subscribeUrl!} target="_blank" rel="noopener noreferrer">Subscribe</a>}
-        {showBilling && status.plan && !status.trial && <a className="license-link" href={status.subscribeUrl!} target="_blank" rel="noopener noreferrer">Manage plan</a>}
         {showBilling && <button disabled={busy || loading} onClick={() => { void run(async () => {
           setMessage((await apiFetch<{ message: string }>("/api/license/check", { method: "POST" })).message);
         }, true); }}>Check for renewal</button>}

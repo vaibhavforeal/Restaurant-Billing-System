@@ -38,6 +38,7 @@ await new Promise<void>((resolveListen) => service.listen(4129, "127.0.0.1", res
 const db = openDb(join(dataDir, "forkflow.db")); migrate(db, MIGRATIONS);
 const app = buildServer({ db, backups: new Backups(db, dataDir), port: 4128, logger: { level: "warn" }, licensing: {
   publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId, serviceUrl,
+  installationSecret: "0123456789abcdef".repeat(4), // fixed test secret
   now: () => Date.now() + Number(readFileSync(clockFile, "utf8").trim().replace(/^\uFEFF/, "")),
 } });
 app.post("/__fake-service/queue", async (req) => { queued.push(...(req.body as { licenses: string[] }).licenses); return { queued: queued.length }; });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { licenseConfig } from "./license-config.js";
@@ -49,6 +49,53 @@ describe("customer build license configuration", () => {
     vi.stubGlobal("__FORKFLOW_LICENSE_PUBLIC_KEY__", undefined);
     vi.stubEnv("FORKFLOW_LICENSE_PUBLIC_KEY", publicKey);
     expect(licenseConfig(directory())?.publicKey).toBe(publicKey);
+  });
+});
+
+describe("installation secret", () => {
+  const dev = () => {
+    vi.stubGlobal("__FORKFLOW_COMMERCIAL__", undefined);
+    vi.stubGlobal("__FORKFLOW_LICENSE_PUBLIC_KEY__", undefined);
+    vi.stubEnv("FORKFLOW_LICENSE_PUBLIC_KEY", publicKey);
+  };
+
+  it("gives a new installation an id and a 64 hex character secret", () => {
+    dev();
+    const path = directory();
+    const config = licenseConfig(path)!;
+    expect(config.installationSecret).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(readFileSync(join(path, "installation.json"), "utf8"))).toEqual({ installationId: config.installationId, installationSecret: config.installationSecret });
+    expect(licenseConfig(directory())!.installationSecret).not.toBe(config.installationSecret);
+  });
+
+  it("adds a secret to an older file that only has the id, keeping the id and the secret across starts", () => {
+    dev();
+    const path = directory(), installationId = randomUUID();
+    writeFileSync(join(path, "installation.json"), JSON.stringify({ installationId }));
+    const first = licenseConfig(path)!;
+    expect(first.installationId).toBe(installationId);
+    expect(first.installationSecret).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(readFileSync(join(path, "installation.json"), "utf8"))).toEqual({ installationId, installationSecret: first.installationSecret });
+    expect(licenseConfig(path)).toEqual(first);
+  });
+
+  it("replaces a malformed secret and keeps the id", () => {
+    dev();
+    for (const bad of ["short", "A".repeat(64), "g".repeat(64), 42, null]) {
+      const path = directory(), installationId = randomUUID();
+      writeFileSync(join(path, "installation.json"), JSON.stringify({ installationId, installationSecret: bad }));
+      const config = licenseConfig(path)!;
+      expect(config.installationId).toBe(installationId);
+      expect(config.installationSecret).toMatch(/^[a-f0-9]{64}$/);
+      expect(licenseConfig(path)!.installationSecret).toBe(config.installationSecret);
+    }
+  });
+
+  it("keeps a valid secret as it is", () => {
+    dev();
+    const path = directory(), installationId = randomUUID(), installationSecret = "ab".repeat(32);
+    writeFileSync(join(path, "installation.json"), JSON.stringify({ installationId, installationSecret }));
+    expect(licenseConfig(path)).toMatchObject({ installationId, installationSecret });
   });
 });
 

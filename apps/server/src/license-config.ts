@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { atomicJson } from "./backups.js";
-import type { LicensingOptions } from "./licensing.js";
+import { INSTALLATION_SECRET_PATTERN, type LicensingOptions } from "./licensing.js";
 
 // Replaced by esbuild. Packaged builds cannot switch off licensing via env vars.
 declare const __FORKFLOW_LICENSE_PUBLIC_KEY__: string;
@@ -34,7 +34,12 @@ export function licenseConfig(dataDir: string): LicensingOptions | undefined {
     ? __FORKFLOW_LICENSE_SERVICE_URL__ : process.env["FORKFLOW_LICENSE_SERVICE_URL"],
     typeof __FORKFLOW_COMMERCIAL__ !== "undefined" && __FORKFLOW_COMMERCIAL__);
   const path = join(dataDir, "installation.json");
-  if (!existsSync(path)) atomicJson(path, { installationId: randomUUID() });
-  const { installationId } = JSON.parse(readFileSync(path, "utf8")) as { installationId: string };
-  return { publicKey, installationId, ...(serviceUrl ? { serviceUrl } : {}) };
+  // The secret is created with the id and added to older files that lack it; the id is never replaced.
+  const saved = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as { installationId: string; installationSecret?: unknown } : null;
+  const installationId = saved ? saved.installationId : randomUUID();
+  const kept = saved?.installationSecret;
+  const valid = typeof kept === "string" && INSTALLATION_SECRET_PATTERN.test(kept);
+  const installationSecret = valid ? kept : randomBytes(32).toString("hex");
+  if (!valid) atomicJson(path, { ...saved, installationId, installationSecret });
+  return { publicKey, installationId, installationSecret, ...(serviceUrl ? { serviceUrl } : {}) };
 }

@@ -13,9 +13,13 @@ export interface LicensingOptions {
   now?: () => number;
   /** Base URL of the licensing service (no trailing slash); without it nothing is ever fetched. */
   serviceUrl?: string;
+  /** 64 lowercase hex characters proving to the service that this is the same installation; required with `serviceUrl`, never sent anywhere else. */
+  installationSecret?: string;
   /** Tests inject a fake; defaults to the global fetch. */
   fetch?: typeof fetch;
 }
+export const INSTALLATION_SECRET_PATTERN = /^[a-f0-9]{64}$/;
+const SECRET_HEADER = "X-ForkFlow-Installation-Secret";
 export interface LicenseCheckResult {
   outcome: "installed" | "up_to_date" | "unreachable" | "rejected" | "disabled";
   message: string;
@@ -32,7 +36,10 @@ const CHECK_MESSAGES = {
   rejected: "The licensing service returned a licence this installation can't use.",
   disabled: "Automatic renewal is not set up for this installation.",
 } as const;
+const NOT_RECOGNISED = "The licensing service doesn't recognise this installation. Contact ForkFlow support.";
+const SESSION_UNREACHABLE = "Couldn't reach the licensing service. Check the internet connection and try again.";
 const serviceReply = z.object({ license: z.string().max(16_384).nullable() });
+const sessionReply = z.object({ session: z.string().regex(/^[A-Za-z0-9_-]{20,128}$/) });
 interface SavedLicense {
   envelope: string | null; revision: number; last_seen_at: number;
   license_id: string | null; organization_id: string | null; outlet_id: string | null;
@@ -51,6 +58,9 @@ export class Licensing {
     if (options) {
       z.string().uuid().parse(options.installationId);
       if (createPublicKey(options.publicKey).asymmetricKeyType !== "ed25519") throw new Error("License key must use Ed25519");
+      if ((options.serviceUrl || options.installationSecret !== undefined) && !INSTALLATION_SECRET_PATTERN.test(options.installationSecret ?? "")) {
+        throw new Error("Installation secret must be 64 lowercase hex characters");
+      }
     }
   }
   get enabled() { return this.options !== undefined; }
@@ -82,7 +92,7 @@ export class Licensing {
       features: { recipes: false, qrOrdering: false, kds: false }, expiresAt: null, graceUntil: null,
       deviceRegistered: false, canOperate: false, message: "Activate this installation to start billing.",
       serverTime: now, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, revision: null, registeredDevices: 0, trial: false,
-      subscribeUrl: this.options?.serviceUrl ? `${this.options.serviceUrl}/subscribe?installation=${this.options.installationId}` : null,
+      subscriptionAvailable: !!this.options?.serviceUrl,
     };
     if (!this.enabled) return { ...base, state: "development", canOperate: true, deviceRegistered: true,
       features: { recipes: true, qrOrdering: true, kds: true }, message: "Development build. Commercial license checks are not enabled." };
@@ -205,6 +215,8 @@ export class Licensing {
       organizationId: saved.organization_id, outletId: saved.outlet_id, currentRevision: saved.revision, generatedAt: this.now(),
       verificationKeyFingerprint: createHash("sha256").update(createPublicKey(this.options.publicKey).export({ type: "spki", format: "der" })).digest("hex") };
   }
+  /** Every request to the licensing service carries the installation secret; this is the only place it is read. */
+  private serviceHeaders() { return { "content-type": "application/json", [SECRET_HEADER]: this.options!.installationSecret! }; }
   private inflight: Promise<LicenseCheckResult> | null = null;
   /**
    * Asks the licensing service for this installation's latest licence. Never throws, and never touches
@@ -221,12 +233,13 @@ export class Licensing {
     let license: string | null;
     try {
       const response = await (this.options?.fetch ?? fetch)(`${serviceUrl}/v1/activate`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(this.activationRequest()),
+        method: "POST", headers: this.serviceHeaders(), body: JSON.stringify(this.activationRequest()),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (response.status === 409 && (await response.json() as { error?: unknown } | null)?.error === "wrong_key") {
         return result("rejected", "The licensing service signs with a different key than this build trusts");
       }
+      if (response.status === 401) return { outcome: "rejected", message: NOT_RECOGNISED };
       if (!response.ok) return result("unreachable");
       license = serviceReply.parse(await response.json()).license;
     } catch { return result("unreachable"); }
@@ -236,6 +249,24 @@ export class Licensing {
       this.activate(license.trim(), AUTOMATIC_ACTOR);
       return result(this.saved().revision === revision ? "up_to_date" : "installed");
     } catch (error) { return result("rejected", error instanceof Error ? error.message : "The licence could not be installed"); }
+  }
+  /** Asks the service for a checkout session URL, never throws. A 404 means the service has not met this installation yet, so one renewal check registers it and the request is retried once. */
+  async subscribeSession(): Promise<{ url: string } | { error: string; status: 409 | 503 }> {
+    const serviceUrl = this.options?.serviceUrl;
+    if (!serviceUrl) return { error: CHECK_MESSAGES.disabled, status: 409 };
+    let reply = await this.mintSession();
+    if ("status" in reply && reply.status === 404) { await this.fetchLatest(); reply = await this.mintSession(); }
+    if ("session" in reply) return { url: `${serviceUrl}/subscribe?session=${reply.session}` };
+    return reply.status === 401 ? { error: NOT_RECOGNISED, status: 409 } : { error: SESSION_UNREACHABLE, status: 503 };
+  }
+  private async mintSession(): Promise<{ session: string } | { status: number }> {
+    try {
+      const response = await (this.options!.fetch ?? fetch)(`${this.options!.serviceUrl}/v1/subscribe-sessions`, {
+        method: "POST", headers: this.serviceHeaders(), body: JSON.stringify({ installationId: this.options!.installationId }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      return response.ok ? { session: sessionReply.parse(await response.json()).session } : { status: response.status };
+    } catch { return { status: 0 }; }
   }
   /** Checks now and every 6 hours; failures are only logged. Returns a function that stops the checks. */
   startRenewalChecks(log: (message: string) => void): () => void {
@@ -311,6 +342,12 @@ export function registerLicensing(app: FastifyInstance) {
     const result = await app.licensing.fetchLatest();
     if (result.outcome === "installed") licenseChanged();
     reply.header("Cache-Control", "no-store"); return { ...result, status: app.licensing.status(req.headers["x-forkflow-device"]) };
+  });
+  app.post("/api/license/subscribe-session", { preHandler: manage }, async (_req, reply) => {
+    const result = await app.licensing.subscribeSession();
+    reply.header("Cache-Control", "no-store");
+    if ("error" in result) return reply.status(result.status).send({ error: result.error });
+    return { url: result.url };
   });
   app.get("/api/license/activation-request", { preHandler: manage }, async (_req, reply) => {
     reply.header("Cache-Control", "no-store"); return app.licensing.activationRequest();
