@@ -218,10 +218,20 @@ Playwright MCP browser if agent-browser is not installed: navigate to the server
 add the fixtures file and the script with `page.addScriptTag({ path })`, then
 `waitForFunction` on `window.__licenseChecks`.
 
-Require 29 passing checks: activation request download, the Subscribe link, file
-limits, signatures, verified previews, interrupted activation and safe retry,
+The fake service requires the `X-ForkFlow-Installation-Secret` header on
+`/v1/activate` and `/v1/subscribe-sessions` and serves the Worker's real checkout
+page at `/subscribe?session=<token>` (the token is `fixtures.sessionToken`). Before
+running `licensing.js`, navigate a tab to that page and run
+`tools/e2e/licensing-expired-link.js` there (wait for
+`window.__licenseExpiredLinkChecks`, 3 checks): it submits the form and requires the
+form to disappear and the expired copy to show when the payment request answers 401.
+
+Require 36 passing checks: the Subscribe and Manage plan buttons (busy state,
+session link sent to a new tab, failed request, blocked-tab fallback link),
+a cashier being refused a checkout session, the installation secret staying out of
+responses, activation request download, file limits, signatures, verified previews, interrupted activation and safe retry,
 device registration, remote rename/removal, downgrade impact, stale previews,
-already-installed grants, upgrades, history, failed-refresh recovery, Manage plan,
+already-installed grants, upgrades, history, failed-refresh recovery,
 Check for renewal installing a trial and then a paid renewal, the up-to-date and
 unreachable-service messages, and billing pages loading with the service down.
 

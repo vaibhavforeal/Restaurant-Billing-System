@@ -67,6 +67,8 @@ export function LicenseSettings() {
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checkout, setCheckout] = useState<"subscribe" | "manage" | null>(null);
+  const [paymentUrl, setPaymentUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const lock = useRef(false), sequence = useRef(0), mounted = useRef(false);
   const dirty = !!license.trim() || !!name.trim() || (!!renaming && renaming.name !== renaming.device.name);
@@ -97,7 +99,7 @@ export function LicenseSettings() {
   }, [status?.mode, status?.revision, reload]);
   async function run(action: () => Promise<void>, update = true) {
     if (lock.current) return;
-    lock.current = true; setBusy(true); setError(""); setMessage("");
+    lock.current = true; setBusy(true); setError(""); setMessage(""); setPaymentUrl("");
     try {
       await action();
       if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("forkflow:license-changed")); }
@@ -114,20 +116,36 @@ export function LicenseSettings() {
       setLicense(text); setMessage(`Loaded ${file.name}. Preview it before applying.`);
     }, false);
   }
+  // The blank tab is opened inside the click so the browser allows it; the payment page is sent there once the counter has a session link.
+  // The session request can take ~30 s when the counter has to register with the service first, hence the longer timeout.
+  function openCheckout(kind: "subscribe" | "manage") {
+    if (lock.current) return;
+    const tab = window.open("", "_blank");
+    setCheckout(kind);
+    void run(async () => {
+      try {
+        const { url } = await apiFetch<{ url: string }>("/api/license/subscribe-session", { method: "POST", signal: AbortSignal.timeout(45_000) });
+        if (tab && !tab.closed) { tab.opener = null; tab.location.href = url; } else if (mounted.current) setPaymentUrl(url);
+      } catch (e) { tab?.close(); throw e; }
+      finally { if (mounted.current) setCheckout(null); }
+    }, false);
+  }
   const timezone = status?.timezone;
-  // Subscribe and Manage plan return as buttons once the checkout session flow lands in the UI.
   const showBilling = status?.mode === "commercial" && status.subscriptionAvailable;
   const current = devices?.find((d) => d.current);
   const canRegister = status && ["active", "grace"].includes(status.state) && !current && devices !== null && devices.length < (status.maxDevices ?? 0);
   return <section className="panel license-settings" aria-label="Plan and devices">
     <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>
       <div className="license-actions">
+        {showBilling && (!status.plan || status.trial) && <button className="primary" disabled={busy} onClick={() => { openCheckout("subscribe"); }}>{checkout === "subscribe" ? "Opening payment page…" : "Subscribe"}</button>}
+        {showBilling && status.plan && !status.trial && <button disabled={busy} onClick={() => { openCheckout("manage"); }}>{checkout === "manage" ? "Opening payment page…" : "Manage plan"}</button>}
         {showBilling && <button disabled={busy || loading} onClick={() => { void run(async () => {
           setMessage((await apiFetch<{ message: string }>("/api/license/check", { method: "POST" })).message);
         }, true); }}>Check for renewal</button>}
         <button disabled={busy || loading} onClick={() => { void run(async () => {}, true); }}>Refresh plan</button></div></div>
     {(error || loadError || statusError) && <p role="alert" className="error-message">{error || loadError || statusError}</p>}
     {message && <p role="status" className="license-message">{message}</p>}
+    {paymentUrl && <p role="status" className="license-message">Your browser blocked the new tab. <a className="license-link" href={paymentUrl} target="_blank" rel="noopener noreferrer">Open payment page</a></p>}
     {status?.mode === "development" && <p>{status.message}</p>}
     {status?.mode === "commercial" && <>
       <div className="license-summary">

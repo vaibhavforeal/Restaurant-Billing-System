@@ -15,6 +15,13 @@
   const post = (path, body) => originalFetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const messageIs = (text) => panel().querySelector('.license-message')?.textContent === text;
   const alertHas = (text) => [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes(text));
+  // window.open is stubbed throughout: each call records a fake tab (its URL, target and the location it is later sent to), or returns null while `blocked`.
+  const tabs = [], sessionUrl = 'http://127.0.0.1:4129/subscribe?session=' + fixtures.sessionToken, originalOpen = window.open;
+  let blocked = false;
+  window.open = (url, target) => {
+    if (blocked) return null;
+    const tab = { url, target, closed: false, opener: 'page', location: { href: '' }, close() { this.closed = true; } }; tabs.push(tab); return tab;
+  };
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
   const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' });
   const api = async (path, method = 'GET', body, as = headers()) => {
@@ -34,13 +41,32 @@
     await wait(() => panel() && !button('Refresh plan').disabled);
     check((await api('/license')).state === 'unactivated' && !!button('Back up now'), 'Unactivated installation provides activation and backup recovery');
     check((await originalFetch('/api/products', { headers: headers() })).status === 403, 'Commercial operations require activation');
-    const subscribe = link('Subscribe');
-    check(!!subscribe && subscribe.href === 'http://127.0.0.1:4129/subscribe?installation=' + fixtures.installationId && subscribe.target === '_blank' && subscribe.rel.includes('noopener') && !link('Manage plan'),
-      'Subscribe opens the checkout for this installation in a new tab');
+    check(!!button('Subscribe') && !button('Manage plan') && !panel().querySelector('a[href*="installation="]'), 'Subscribe is a button; no payment link carries the installation id');
+    // The held request shows the busy state; the first Subscribe also makes the counter register with the fake service (404 then retry).
+    let releaseSession = () => {}, onSession = null;
+    const sessionGate = new Promise((r) => { releaseSession = r; });
+    window.fetch = (...args) => String(args[0]) === '/api/license/subscribe-session' && onSession ? onSession(args) : originalFetch(...args);
+    onSession = async (args) => { await sessionGate; return originalFetch(...args); };
+    await click('Subscribe'); await wait(() => tabs.length === 1 && !!button('Opening payment page…'));
+    check(button('Opening payment page…').disabled && button('Refresh plan').disabled && tabs[0].location.href === '' && tabs[0].url === '' && !tabs[0].closed,
+      'While the session link is fetched the button reads Opening payment page… and is disabled, and the new tab stays blank');
+    releaseSession(); await wait(() => tabs[0].location.href !== '' && !!button('Subscribe') && !button('Subscribe').disabled);
+    check(tabs[0].location.href === sessionUrl && tabs[0].opener === null && tabs[0].target === '_blank' && !tabs[0].closed,
+      'Subscribe sends a new tab to the Worker checkout page with a session link and detaches its opener');
+    onSession = async () => new Response(JSON.stringify({ error: "Couldn't reach the licensing service. Check the internet connection and try again." }), { status: 503, headers: { 'content-type': 'application/json' } });
+    await click('Subscribe'); await wait(() => alertHas("Couldn't reach the licensing service. Check the internet connection and try again."));
+    check(tabs.length === 2 && tabs[1].closed && tabs[1].location.href === '' && !button('Subscribe').disabled, 'A failed session request closes the new tab and shows the message');
+    onSession = null; blocked = true;
+    await click('Subscribe'); await wait(() => !!link('Open payment page'));
+    const fallback = link('Open payment page');
+    check(tabs.length === 2 && fallback.href === sessionUrl && fallback.target === '_blank' && fallback.rel === 'noopener noreferrer' && panel().innerText.includes('blocked the new tab'),
+      'A blocked tab falls back to an Open payment page link with the session URL');
+    blocked = false; window.fetch = originalFetch;
     document.querySelector('.license-identity').open = true;
     await click('Download activation request'); await wait(() => downloads.length === 1);
     const request = JSON.parse(await downloads[0].text);
     check(request.installationId === fixtures.installationId && request.currentRevision === 0 && !('envelope' in request), 'Activation request download contains this installation and no signed grant');
+    check(![JSON.stringify(request), JSON.stringify(await api('/license')), sessionUrl].some((text) => text.includes(fixtures.installationSecret)), 'The installation secret appears in neither the activation request nor the license status');
     await choose('x'.repeat(16385)); await wait(() => alertHas('16 KB'));
     check(!input('Signed license').value, 'Oversized license files are rejected before upload');
     await choose('ff1.bad.bad'); await click('Preview license'); await wait(() => alertHas('License is invalid'));
@@ -68,6 +94,11 @@
     await set(input('Device name'), 'Main counter'); await click('Register this device');
     await wait(() => document.body.innerText.includes('Dashboard'));
     check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
+    await api('/users', 'POST', { name: 'QA Cashier', pin: '2468', role: 'cashier' });
+    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' });
+    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' };
+    check((await originalFetch('/api/license/subscribe-session', { method: 'POST', headers: asCashier })).status === 403 && (await originalFetch('/api/license/subscribe-session', { method: 'POST' })).status === 401,
+      'A cashier or an unauthenticated caller cannot create a checkout session');
     document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     await registerOther('b'.repeat(64), 'Kitchen'); const phoneHeaders = await registerOther('c'.repeat(64), 'Waiter phone');
     await click('Refresh plan'); await wait(() => panel().innerText.includes('Waiter phone'));
@@ -101,12 +132,14 @@
     check(!alertHas('Device list unavailable'), 'Device management recovers after a failed refresh');
     const history = (await api('/license/history')).events;
     check(history.some((e) => e.kind === 'device_removed') && history.some((e) => e.kind === 'device_renamed') && history.every((e) => e.actorName === 'QA Admin'), 'History records activation and device changes with the acting administrator');
-    check(!!link('Manage plan') && !link('Subscribe') && !panel().innerText.includes('Pro trial'), 'A paid plan offers Manage plan instead of Subscribe');
+    check(!!button('Manage plan') && !button('Subscribe') && !panel().innerText.includes('Pro trial'), 'A paid plan offers Manage plan instead of Subscribe');
+    await click('Manage plan'); await wait(() => tabs.length === 3 && tabs[2].location.href !== '');
+    check(tabs[2].location.href === sessionUrl && tabs[2].opener === null, 'Manage plan opens the checkout page through a session link too');
     await post('/__fake-service/queue', { licenses: [fixtures.trialFromService] });
     await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && panel().innerText.includes('Pro trial — ends'));
-    check((await api('/license')).revision === 4 && !!link('Subscribe') && !link('Manage plan'), 'Check for renewal installs the licence the service has queued and a trial offers Subscribe');
+    check((await api('/license')).revision === 4 && !!button('Subscribe') && !button('Manage plan'), 'Check for renewal installs the licence the service has queued and a trial offers Subscribe');
     await post('/__fake-service/queue', { licenses: [fixtures.renewalFromService] });
-    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && !panel().innerText.includes('Pro trial') && !!link('Manage plan'));
+    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && !panel().innerText.includes('Pro trial') && !!button('Manage plan'));
     check((await api('/license')).revision === 5 && (await api('/license/history')).events.some((e) => e.actorName === 'Automatic renewal'), 'A paid renewal replaces the trial and is recorded as automatic');
     await click('Check for renewal'); await wait(() => messageIs('Your licence is up to date.'));
     check((await api('/license')).revision === 5, 'Nothing queued means the licence is up to date');
@@ -118,5 +151,5 @@
     document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     window.__licenseChecks = { status: 'passed', checks };
     return window.__licenseChecks;
-  } finally { release(); window.fetch = originalFetch; URL.createObjectURL = originalUrl; HTMLAnchorElement.prototype.click = originalClick; window.confirm = originalConfirm; window.alert = originalAlert; }
+  } finally { release(); window.open = originalOpen; window.fetch = originalFetch; URL.createObjectURL = originalUrl; HTMLAnchorElement.prototype.click = originalClick; window.confirm = originalConfirm; window.alert = originalAlert; }
 })();
