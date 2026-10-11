@@ -14,9 +14,11 @@ export async function sha256Hex(text: string): Promise<string> {
 
 /**
  * Decides whether `secret` belongs to the installation. Trust on first use: a row without a hash is claimed by this caller and re-read, so racing
- * claimants settle on one winner. Returns the row as it now stands, or null when the secret does not match (nothing is written in that case).
+ * claimants settle on one winner. Returns the row as it now stands, or null when the secret is malformed or does not match (nothing is written in
+ * that case, so a NULL-hash row can only ever be claimed by a well-formed secret).
  */
-export async function verifyInstallationSecret(db: D1Like, installation: InstallationRow, secret: string): Promise<InstallationRow | null> {
+export async function verifyInstallationSecret(db: D1Like, installation: InstallationRow, secret: string | null): Promise<InstallationRow | null> {
+  if (!isWellFormedSecret(secret)) return null;
   const secretHash = await sha256Hex(secret);
   let row: InstallationRow | null = installation;
   if (row.secretHash === null) {

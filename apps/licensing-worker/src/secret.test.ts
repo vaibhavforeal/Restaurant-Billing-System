@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { constantTimeEqual, isWellFormedSecret, SECRET_HEADER, sha256Hex } from "./secret.js";
+import { randomUUID } from "node:crypto";
+import { constantTimeEqual, isWellFormedSecret, SECRET_HEADER, sha256Hex, verifyInstallationSecret } from "./secret.js";
+import { createInstallation, getInstallation } from "./store.js";
+import { memoryD1 } from "./testing/d1.js";
+import { TEST_SECRET } from "./testing/secret.js";
 
 describe("installation secret helpers", () => {
   it("the header name is lowercase", () => { expect(SECRET_HEADER).toBe("x-forkflow-installation-secret"); });
@@ -22,5 +26,18 @@ describe("installation secret helpers", () => {
     expect(constantTimeEqual("abc", "abcd")).toBe(false);
     expect(constantTimeEqual("abcd", "abc")).toBe(false);
     expect(constantTimeEqual("", "a")).toBe(false);
+  });
+
+  it("verifyInstallationSecret never claims a NULL-hash row for a malformed, empty or missing secret", async () => {
+    const db = memoryD1();
+    const installationId = randomUUID();
+    await createInstallation(db, { installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), trialStartedAt: 0, revisionFloor: 0, createdAt: 0, secretHash: null });
+    for (const bad of [null, "", "nope", "A".repeat(64), "a".repeat(63)]) {
+      const row = (await getInstallation(db, installationId))!;
+      expect(await verifyInstallationSecret(db, row, bad)).toBeNull();
+      expect((await getInstallation(db, installationId))!.secretHash).toBeNull();
+    }
+    const row = (await getInstallation(db, installationId))!;
+    expect((await verifyInstallationSecret(db, row, TEST_SECRET))?.secretHash).toBe(await sha256Hex(TEST_SECRET));
   });
 });
