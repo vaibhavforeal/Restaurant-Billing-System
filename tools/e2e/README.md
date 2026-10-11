@@ -226,8 +226,8 @@ running `licensing.js`, navigate a tab to that page and run
 `window.__licenseExpiredLinkChecks`, 3 checks): it submits the form and requires the
 form to disappear and the expired copy to show when the payment request answers 401.
 
-Require 36 passing checks: the Subscribe and Manage plan buttons (busy state,
-session link sent to a new tab, failed request, blocked-tab fallback link),
+Require 40 passing checks: the Subscribe and Manage plan buttons (busy state,
+session link sent to a new tab, failed request, blocked-tab fallback link, desktop-app one-click open),
 a cashier being refused a checkout session, the installation secret staying out of
 responses, activation request download, file limits, signatures, verified previews, interrupted activation and safe retry,
 device registration, remote rename/removal, downgrade impact, stale previews,
