@@ -8,6 +8,7 @@ import type { D1Like } from "./env.js";
 import type { RazorpayApi } from "./razorpay.js";
 import { getSubscription, latestLicense } from "./store.js";
 import { memoryD1 } from "./testing/d1.js";
+import { TEST_SECRET } from "./testing/secret.js";
 import { handleWebhook, type WebhookDeps } from "./webhook.js";
 
 const DAY = 86_400_000;
@@ -67,7 +68,7 @@ const activate = async (currentRevision = 0) => {
   const res = await handleActivate(deps, {
     format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
     currentRevision, generatedAt: now, verificationKeyFingerprint: signer.fingerprint,
-  });
+  }, TEST_SECRET);
   return (await res.json() as { license: string | null }).license;
 };
 const claimsOf = (envelope: string) => LicenseClaims.parse(verifyLicenseSignature(envelope.trim(), publicPem));
@@ -175,7 +176,7 @@ describe("POST /v1/webhook", () => {
     await handleActivate(deps, {
       format: "forkflow-activation-request", version: 1, installationId: other, licenseId: null, organizationId: null, outletId: null,
       currentRevision: 0, generatedAt: now, verificationKeyFingerprint: signer.fingerprint,
-    });
+    }, TEST_SECRET);
     await send(charged({ subId: "sub_other", notes: otherNotes }));
     await send(charged({ subId: "sub_done" }));
     await send(subscriptionEvent({ event: "subscription.completed", subId: "sub_done", status: "completed", paymentId: "pay_done", currentEnd: null }));

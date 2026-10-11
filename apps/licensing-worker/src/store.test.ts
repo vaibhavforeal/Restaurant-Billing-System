@@ -3,7 +3,7 @@ import type { D1Like } from "./env.js";
 import { createInstallation, getInstallation, insertLicenseStatement, latestLicense, nextRevision, recordEventStatement, type LicenseRow } from "./store.js";
 import { memoryD1 } from "./testing/d1.js";
 
-const install = (id: string, revisionFloor = 0) => ({ installationId: id, licenseId: `lic-${id}`, organizationId: "org", outletId: "out", trialStartedAt: null, revisionFloor, createdAt: 1 });
+const install = (id: string, revisionFloor = 0) => ({ installationId: id, licenseId: `lic-${id}`, organizationId: "org", outletId: "out", trialStartedAt: null, revisionFloor, createdAt: 1, secretHash: null });
 const licence = (installationId: string, revision: number, over: Partial<LicenseRow> = {}): LicenseRow => ({
   installationId, revision, plan: "pro", issuedAt: 1, expiresAt: 2, graceUntil: 3, envelope: `env-${revision}`, reason: "charge",
   razorpaySubscriptionId: null, razorpayPaymentId: null, ...over,
@@ -26,6 +26,14 @@ describe("licensing store", () => {
     await createInstallation(db, { ...install("i1"), licenseId: "other", organizationId: "other-org" });
     expect(await getInstallation(db, "i1")).toMatchObject({ licenseId: "lic-i1", organizationId: "org" });
     expect((await db.prepare("SELECT COUNT(*) AS n FROM installations").first<{ n: number }>())?.n).toBe(1);
+  });
+
+  it("createInstallation stores the secret hash and a retry keeps the first one", async () => {
+    await createInstallation(db, { ...install("i1"), secretHash: "h1" });
+    await createInstallation(db, { ...install("i1"), secretHash: "h2" });
+    expect((await getInstallation(db, "i1"))!.secretHash).toBe("h1");
+    await createInstallation(db, install("i2"));
+    expect((await getInstallation(db, "i2"))!.secretHash).toBeNull();
   });
 
   it("a batch that fails writes nothing", async () => {

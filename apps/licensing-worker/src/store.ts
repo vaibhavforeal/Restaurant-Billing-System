@@ -3,7 +3,7 @@ import type { D1Like, D1StatementLike, Period } from "./env.js";
 
 export interface InstallationRow {
   installationId: string; licenseId: string; organizationId: string; outletId: string;
-  trialStartedAt: number | null; contactEmail: string | null; createdAt: number; revisionFloor: number;
+  trialStartedAt: number | null; contactEmail: string | null; createdAt: number; revisionFloor: number; secretHash: string | null;
 }
 export interface LicenseRow {
   installationId: string; revision: number; plan: Plan; issuedAt: number; expiresAt: number; graceUntil: number;
@@ -15,7 +15,7 @@ export interface SubscriptionRow {
 }
 
 const INSTALLATION_COLUMNS = `installation_id AS installationId, license_id AS licenseId, organization_id AS organizationId, outlet_id AS outletId,
-  trial_started_at AS trialStartedAt, contact_email AS contactEmail, created_at AS createdAt, revision_floor AS revisionFloor`;
+  trial_started_at AS trialStartedAt, contact_email AS contactEmail, created_at AS createdAt, revision_floor AS revisionFloor, secret_hash AS secretHash`;
 const LICENSE_COLUMNS = `installation_id AS installationId, revision, plan, issued_at AS issuedAt, expires_at AS expiresAt, grace_until AS graceUntil,
   envelope, reason, razorpay_subscription_id AS razorpaySubscriptionId, razorpay_payment_id AS razorpayPaymentId`;
 const SUBSCRIPTION_COLUMNS = `razorpay_subscription_id AS razorpaySubscriptionId, installation_id AS installationId, plan, period, status,
@@ -24,11 +24,15 @@ const SUBSCRIPTION_COLUMNS = `razorpay_subscription_id AS razorpaySubscriptionId
 export const getInstallation = (db: D1Like, installationId: string) =>
   db.prepare(`SELECT ${INSTALLATION_COLUMNS} FROM installations WHERE installation_id = ?`).bind(installationId).first<InstallationRow>();
 
-export async function createInstallation(db: D1Like, row: Pick<InstallationRow, "installationId" | "licenseId" | "organizationId" | "outletId" | "trialStartedAt" | "revisionFloor" | "createdAt">): Promise<void> {
-  await db.prepare(`INSERT INTO installations (installation_id, license_id, organization_id, outlet_id, trial_started_at, created_at, revision_floor)
-    VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(installation_id) DO NOTHING`)
-    .bind(row.installationId, row.licenseId, row.organizationId, row.outletId, row.trialStartedAt, row.createdAt, row.revisionFloor).run();
+export async function createInstallation(db: D1Like, row: Pick<InstallationRow, "installationId" | "licenseId" | "organizationId" | "outletId" | "trialStartedAt" | "revisionFloor" | "createdAt" | "secretHash">): Promise<void> {
+  await db.prepare(`INSERT INTO installations (installation_id, license_id, organization_id, outlet_id, trial_started_at, created_at, revision_floor, secret_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(installation_id) DO NOTHING`)
+    .bind(row.installationId, row.licenseId, row.organizationId, row.outletId, row.trialStartedAt, row.createdAt, row.revisionFloor, row.secretHash).run();
 }
+
+/** Trust on first use: sets the hash only while it is still NULL, so a claim never overwrites an existing secret. */
+export const claimSecretStatement = (db: D1Like, installationId: string, secretHash: string): D1StatementLike =>
+  db.prepare(`UPDATE installations SET secret_hash = ? WHERE installation_id = ? AND secret_hash IS NULL`).bind(secretHash, installationId);
 
 /** The floor only ever rises: it records the highest revision the counter is known to hold (reported by it, or handed to it). */
 export const raiseRevisionFloorStatement = (db: D1Like, installationId: string, revision: number): D1StatementLike =>

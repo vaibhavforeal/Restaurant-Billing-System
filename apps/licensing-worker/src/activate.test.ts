@@ -6,8 +6,10 @@ import { webCryptoSigner } from "@forkflow/license-issuer";
 import { handleActivate, type ActivateDeps, type Deps } from "./activate.js";
 import type { D1Like } from "./env.js";
 import { issueLicense } from "./issue.js";
-import { getInstallation } from "./store.js";
+import { sha256Hex } from "./secret.js";
+import { claimSecretStatement, getInstallation } from "./store.js";
 import { memoryD1 } from "./testing/d1.js";
+import { OTHER_SECRET, TEST_SECRET } from "./testing/secret.js";
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 9, 10, 10, 0, 0);
@@ -33,8 +35,8 @@ const request = (over: Record<string, unknown> = {}) => ({
   format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
   currentRevision: 0, generatedAt: T0, verificationKeyFingerprint: signer.fingerprint, ...over,
 });
-const activate = async (over: Record<string, unknown> = {}) => {
-  const res = await handleActivate(deps, request(over));
+const activate = async (over: Record<string, unknown> = {}, secret: string | null = TEST_SECRET) => {
+  const res = await handleActivate(deps, request(over), secret);
   return { status: res.status, type: res.headers.get("content-type"), body: await res.json() as { license?: string | null; error?: string } };
 };
 const claimsOf = (envelope: string) => LicenseClaims.parse(verifyLicenseSignature(envelope.trim(), publicPem));
@@ -70,12 +72,23 @@ describe("POST /v1/activate", () => {
   it("concurrent first contacts create one installation", async () => {
     let n = 0;
     const racing: ActivateDeps = { ...deps, now: () => T0 + n++, uuid: () => randomUUID() };
-    const [a, b] = await Promise.all([handleActivate(racing, request()), handleActivate(racing, request())]);
+    const [a, b] = await Promise.all([handleActivate(racing, request(), TEST_SECRET), handleActivate(racing, request(), TEST_SECRET)]);
     const [x, y] = [await a.json() as { license: string }, await b.json() as { license: string }];
     expect(x.license).toBeTruthy();
     expect(y.license).toBe(x.license);
     expect(await count("installations")).toBe(1);
     expect(await count("licenses")).toBe(1);
+  });
+
+  it("two racing first contacts with different secrets: one 200, one 401, one row", async () => {
+    let n = 0;
+    const racing: ActivateDeps = { ...deps, now: () => T0 + n++, uuid: () => randomUUID() };
+    const responses = await Promise.all([handleActivate(racing, request(), TEST_SECRET), handleActivate(racing, request(), OTHER_SECRET)]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(await count("installations")).toBe(1);
+    expect(await count("licenses")).toBe(1);
+    const winner = responses[0]!.status === 200 ? TEST_SECRET : OTHER_SECRET;
+    expect((await getInstallation(db, installationId))!.secretHash).toBe(await sha256Hex(winner));
   });
 
   it("a hand-issued installation is adopted without a trial", async () => {
@@ -99,8 +112,8 @@ describe("POST /v1/activate", () => {
   });
 
   it("malformed request is refused", async () => {
-    expect((await handleActivate(deps, {})).status).toBe(400);
-    expect((await handleActivate(deps, null)).status).toBe(400);
+    expect((await handleActivate(deps, {}, TEST_SECRET)).status).toBe(400);
+    expect((await handleActivate(deps, null, TEST_SECRET)).status).toBe(400);
     expect(await count("installations")).toBe(0);
   });
 
@@ -190,5 +203,95 @@ describe("POST /v1/activate after a hand-issued licence", () => {
     expect((await getInstallation(db, installationId))!.revisionFloor).toBeLessThan(2);
     expect(logs).toEqual([`activate: installation ${installationId} reported identifiers that differ from the stored ones; nothing issued`]);
     expect((await activate({ licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), currentRevision: 1 })).body.license).toBeTruthy();
+  });
+});
+
+describe("POST /v1/activate installation secret", () => {
+  const rows = async () => ({
+    installations: (await db.prepare(`SELECT * FROM installations ORDER BY installation_id`).all()).results,
+    licenses: (await db.prepare(`SELECT * FROM licenses ORDER BY installation_id, revision`).all()).results,
+  });
+
+  it("first contact stores the SHA-256 of the secret and never the secret itself", async () => {
+    expect((await activate()).status).toBe(200);
+    const row = await getInstallation(db, installationId);
+    expect(row!.secretHash).toBe(await sha256Hex(TEST_SECRET));
+    expect(row!.secretHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(await rows())).not.toContain(TEST_SECRET);
+    expect(logs).toEqual([]);
+  });
+
+  it("no secret is 401 with the exact body, JSON, and no row, even for a first contact", async () => {
+    const res = await activate({}, null);
+    expect(res).toMatchObject({ status: 401, body: { error: "unauthorized" } });
+    expect(res.type).toContain("application/json");
+    expect(JSON.stringify(res.body)).toBe(`{"error":"unauthorized"}`);
+    expect(await count("installations")).toBe(0);
+    expect(await count("licenses")).toBe(0);
+  });
+
+  it("a malformed secret is 401 and creates nothing", async () => {
+    for (const bad of ["", "short", "A".repeat(64), "a".repeat(65), "g".repeat(64)]) expect(await activate({}, bad)).toMatchObject({ status: 401, body: { error: "unauthorized" } });
+    expect(await count("installations")).toBe(0);
+  });
+
+  it("a malformed secret is also refused for a known installation", async () => {
+    await activate();
+    expect((await activate({}, "nope")).status).toBe(401);
+    expect((await activate({}, null)).status).toBe(401);
+  });
+
+  it("checks run in order: bad body (400), wrong key (409), then secret (401)", async () => {
+    expect((await handleActivate(deps, {}, null)).status).toBe(400);
+    expect((await activate({ verificationKeyFingerprint: "0".repeat(64) }, null)).status).toBe(409);
+    expect((await activate({}, null)).status).toBe(401);
+  });
+
+  it("a wrong secret leaves the floor, licences and installation row byte for byte unchanged", async () => {
+    await activate();
+    const installation = (await getInstallation(db, installationId))!;
+    const expiresAt = T0 + 30 * DAY;
+    const { statement } = await issueLicense(deps, { installation, plan: "basic", expiresAt, graceUntil: expiresAt + 7 * DAY, trial: false, reason: "charge", subscriptionId: "sub_A", paymentId: "pay_1" });
+    await statement.run();
+    const before = await rows();
+    const held = { licenseId: installation.licenseId, organizationId: installation.organizationId, outletId: installation.outletId };
+    now += DAY;
+    // Each would raise the floor, re-sign, adopt or hand out a licence if the secret were right.
+    for (const over of [{ ...held, currentRevision: 2 }, { ...held, currentRevision: 9 }, { currentRevision: 0 }, { licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), currentRevision: 5 }])
+      expect(await activate(over, OTHER_SECRET)).toMatchObject({ status: 401, body: { error: "unauthorized" } });
+    expect(await rows()).toEqual(before);
+    expect(logs).toEqual([]);
+  });
+
+  it("a wrong secret creates no trial for an installation that has none", async () => {
+    await activate({ licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), currentRevision: 3 });
+    const before = await rows();
+    expect((await activate({ currentRevision: 0 }, OTHER_SECRET)).status).toBe(401);
+    expect(await rows()).toEqual(before);
+  });
+
+  it("the right secret keeps the existing behaviour on a known installation", async () => {
+    const first = await activate();
+    expect((await activate({ currentRevision: 0 })).body.license).toBe(first.body.license);
+    expect((await activate({ currentRevision: 1 })).body).toEqual({ license: null });
+    expect(await count("licenses")).toBe(1);
+  });
+
+  it("a row with a NULL hash is claimed by the first well-formed secret; a later wrong one gets 401", async () => {
+    await db.prepare(`INSERT INTO installations (installation_id, license_id, organization_id, outlet_id, trial_started_at, created_at, revision_floor) VALUES (?, ?, ?, ?, ?, ?, 0)`)
+      .bind(installationId, randomUUID(), randomUUID(), randomUUID(), T0, T0).run();
+    expect((await getInstallation(db, installationId))!.secretHash).toBeNull();
+    const claimed = await activate();
+    expect(claimed.status).toBe(200);
+    expect(claimed.body.license).toMatch(/^ff1\./);
+    expect((await getInstallation(db, installationId))!.secretHash).toBe(await sha256Hex(TEST_SECRET));
+    expect((await activate({}, OTHER_SECRET)).status).toBe(401);
+    expect((await activate()).status).toBe(200);
+  });
+
+  it("claimSecretStatement only sets a NULL hash", async () => {
+    await activate();
+    expect((await claimSecretStatement(db, installationId, await sha256Hex(OTHER_SECRET)).run()).meta.changes).toBe(0);
+    expect((await getInstallation(db, installationId))!.secretHash).toBe(await sha256Hex(TEST_SECRET));
   });
 });

@@ -1,6 +1,7 @@
 import { ActivationRequest } from "@forkflow/license-issuer";
 import { issueLicense, type Deps } from "./issue.js";
-import { createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";
+import { constantTimeEqual, isWellFormedSecret, sha256Hex } from "./secret.js";
+import { claimSecretStatement, createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";
 
 export type { Deps } from "./issue.js";
 export type ActivateDeps = Deps & { log: (msg: string) => void };
@@ -10,13 +11,15 @@ const TRIAL_MS = 14 * 86_400_000;
 const MAX_REPORTED_REVISION = 1_000_000;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-export async function handleActivate(deps: ActivateDeps, body: unknown): Promise<Response> {
+export async function handleActivate(deps: ActivateDeps, body: unknown, secret: string | null): Promise<Response> {
   const parsed = ActivationRequest.safeParse(body);
   if (!parsed.success || parsed.data.currentRevision > MAX_REPORTED_REVISION) return json({ error: "bad_request" }, 400);
   const request = parsed.data;
   if (request.verificationKeyFingerprint !== deps.signer.fingerprint) return json({ error: "wrong_key" }, 409);
+  if (!isWellFormedSecret(secret)) return json({ error: "unauthorized" }, 401);
   const { db } = deps;
   const held = request.licenseId !== null && request.organizationId !== null && request.outletId !== null;
+  const secretHash = await sha256Hex(secret);
 
   let installation = await getInstallation(db, request.installationId);
   const known = installation !== null;
@@ -25,11 +28,17 @@ export async function handleActivate(deps: ActivateDeps, body: unknown): Promise
     await createInstallation(db, {
       installationId: request.installationId,
       licenseId: held ? request.licenseId! : deps.uuid(), organizationId: held ? request.organizationId! : deps.uuid(), outletId: held ? request.outletId! : deps.uuid(),
-      trialStartedAt: held ? null : deps.now(), revisionFloor: held ? request.currentRevision : 0, createdAt: deps.now(),
+      trialStartedAt: held ? null : deps.now(), revisionFloor: held ? request.currentRevision : 0, createdAt: deps.now(), secretHash,
     });
+    installation = await getInstallation(db, request.installationId);
+  } else if (installation.secretHash === null) {
+    // Trust on first use: a row without a secret (the operator's reset path) is claimed by the first caller; the re-read decides a race.
+    await claimSecretStatement(db, request.installationId, secretHash).run();
     installation = await getInstallation(db, request.installationId);
   }
   if (!installation) return json({ error: "unavailable" }, 500);
+  // Nothing is written past this point for a caller that does not hold the secret (this also settles two first contacts that raced).
+  if (installation.secretHash === null || !constantTimeEqual(installation.secretHash, secretHash)) return json({ error: "unauthorized" }, 401);
   const { installationId } = installation;
   const mismatched = held && (request.licenseId !== installation.licenseId || request.organizationId !== installation.organizationId || request.outletId !== installation.outletId);
 

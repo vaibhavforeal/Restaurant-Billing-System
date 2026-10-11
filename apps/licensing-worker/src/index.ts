@@ -4,6 +4,7 @@ import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
 import type { Deps } from "./issue.js";
 import { razorpayApi } from "./razorpay.js";
+import { SECRET_HEADER } from "./secret.js";
 import { subscribePage } from "./subscribe-page.js";
 import { handleCreateSubscription } from "./subscriptions.js";
 import { getInstallation } from "./store.js";
@@ -45,7 +46,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);
-    return body.ok ? handleActivate({ ...(await deps()), log: (message) => console.warn(message) }, body.body) : json({ error: "bad_request" }, 400);
+    return body.ok ? handleActivate({ ...(await deps()), log: (message) => console.warn(message) }, body.body, request.headers.get(SECRET_HEADER)) : json({ error: "bad_request" }, 400);
   }
   if (method === "POST" && url.pathname === "/v1/subscriptions") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);

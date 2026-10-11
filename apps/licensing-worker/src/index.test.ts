@@ -3,6 +3,8 @@ import { generateKeyPairSync } from "node:crypto";
 import { webCryptoSigner } from "@forkflow/license-issuer";
 import type { Env } from "./env.js";
 import worker from "./index.js";
+import { OTHER_SECRET, TEST_SECRET } from "./testing/secret.js";
+import { SECRET_HEADER, sha256Hex } from "./secret.js";
 import { getInstallation, getSubscription } from "./store.js";
 import { memoryD1 } from "./testing/d1.js";
 // Test-only: the Worker source never imports the counter server or the domain index.
@@ -52,16 +54,32 @@ const activationRequest = async (over: Record<string, unknown> = {}) => ({
   currentRevision: 0, generatedAt: T0, verificationKeyFingerprint: fingerprint, ...over,
 });
 const checkout = (over: Record<string, unknown> = {}) => ({ installationId, plan: "pro", period: "yearly", email: "owner@example.com", ...over });
-const knownInstallation = async () => { expect((await send("POST", "/v1/activate", await activationRequest())).status).toBe(200); };
+const withSecret = (headers: Record<string, string> = {}) => ({ [SECRET_HEADER]: TEST_SECRET, ...headers });
+const knownInstallation = async () => { expect((await send("POST", "/v1/activate", await activationRequest(), withSecret())).status).toBe(200); };
 
 describe("routing", () => {
   it("routes activate and returns a trial", async () => {
-    const res = await send("POST", "/v1/activate", await activationRequest(), { "cf-connecting-ip": "203.0.113.7" });
+    const res = await send("POST", "/v1/activate", await activationRequest(), withSecret({ "cf-connecting-ip": "203.0.113.7" }));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/json");
     expect((await res.json() as { license: string }).license).toMatch(/^ff1\./);
     expect(limited).toEqual(["203.0.113.7"]);
-    expect(await getInstallation(env.DB, installationId)).toMatchObject({ trialStartedAt: T0 });
+    expect(await getInstallation(env.DB, installationId)).toMatchObject({ trialStartedAt: T0, secretHash: await sha256Hex(TEST_SECRET) });
+  });
+
+  it("activate without the secret header is 401, with a wrong one 401, and neither writes", async () => {
+    for (const headers of [{}, { [SECRET_HEADER]: "not-a-secret" }]) {
+      const res = await send("POST", "/v1/activate", await activationRequest(), headers);
+      expect(res.status).toBe(401);
+      expect(res.headers.get("content-type")).toBe("application/json");
+      expect(await res.json()).toEqual({ error: "unauthorized" });
+    }
+    expect(await getInstallation(env.DB, installationId)).toBeNull();
+    await knownInstallation();
+    const before = await getInstallation(env.DB, installationId);
+    const wrong = await send("POST", "/v1/activate", await activationRequest({ currentRevision: 5 }), { [SECRET_HEADER]: OTHER_SECRET });
+    expect(wrong.status).toBe(401);
+    expect(await getInstallation(env.DB, installationId)).toEqual(before);
   });
 
   it("unknown route is 404", async () => {
@@ -72,7 +90,7 @@ describe("routing", () => {
 
   it("rate limit returns 429", async () => {
     allowed = false;
-    expect((await send("POST", "/v1/activate", await activationRequest())).status).toBe(429);
+    expect((await send("POST", "/v1/activate", await activationRequest(), withSecret())).status).toBe(429);
     expect((await send("POST", "/v1/subscriptions", checkout())).status).toBe(429);
     expect(limited).toEqual(["unknown", "unknown"]);
     expect(await getInstallation(env.DB, installationId)).toBeNull();
@@ -82,7 +100,7 @@ describe("routing", () => {
     const logged: unknown[][] = [];
     vi.spyOn(console, "error").mockImplementation((...args) => { logged.push(args); });
     env.LIMITER = { limit: async () => { throw new Error("internal error; reference = abc"); } };
-    const activate = await send("POST", "/v1/activate", await activationRequest(), { "cf-connecting-ip": "203.0.113.9", "x-secret": "hunter2" });
+    const activate = await send("POST", "/v1/activate", await activationRequest(), withSecret({ "cf-connecting-ip": "203.0.113.9", "x-secret": "hunter2" }));
     expect(activate.status).toBe(200);
     expect((await activate.json() as { license: string }).license).toMatch(/^ff1\./);
     const subscribe = await send("POST", "/v1/subscriptions", checkout(), { "cf-connecting-ip": "203.0.113.9" });
@@ -96,12 +114,12 @@ describe("routing", () => {
   it("a rate limiter that throws synchronously also fails open", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     env.LIMITER = { limit: () => { throw new Error("sync failure"); } };
-    expect((await send("POST", "/v1/activate", await activationRequest())).status).toBe(200);
+    expect((await send("POST", "/v1/activate", await activationRequest(), withSecret())).status).toBe(200);
   });
 
   it("invalid JSON or schema is 400", async () => {
     for (const body of ["{not json", "[]"]) {
-      const res = await send("POST", "/v1/activate", body);
+      const res = await send("POST", "/v1/activate", body, withSecret());
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: "bad_request" });
     }
@@ -112,7 +130,7 @@ describe("routing", () => {
     const logged: unknown[][] = [];
     vi.spyOn(console, "error").mockImplementation((...args) => { logged.push(args); });
     env.DB = { prepare: () => { throw new Error("db exploded"); }, batch: async () => [] };
-    const res = await send("POST", "/v1/activate", await activationRequest({ currentRevision: 424242 }));
+    const res = await send("POST", "/v1/activate", await activationRequest({ currentRevision: 424242 }), withSecret());
     expect(res.status).toBe(500);
     expect(res.headers.get("content-type")).toBe("application/json");
     expect(await res.json()).toEqual({ error: "internal" });
@@ -126,8 +144,8 @@ describe("routing", () => {
     env.LICENSE_SIGNING_KEY = other;
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(crypto.subtle, "importKey").mockRejectedValueOnce(new Error("transient"));
-    expect((await send("POST", "/v1/activate", await activationRequest({ verificationKeyFingerprint: otherFingerprint }))).status).toBe(500);
-    expect((await send("POST", "/v1/activate", await activationRequest({ verificationKeyFingerprint: otherFingerprint }))).status).toBe(200);
+    expect((await send("POST", "/v1/activate", await activationRequest({ verificationKeyFingerprint: otherFingerprint }), withSecret())).status).toBe(500);
+    expect((await send("POST", "/v1/activate", await activationRequest({ verificationKeyFingerprint: otherFingerprint }), withSecret())).status).toBe(200);
   });
 });
 
@@ -225,7 +243,7 @@ describe("POST /webhooks/razorpay", () => {
 describe("counter clock skew", () => {
   it("a licence from a fast service clock is rejected by a counter 10 minutes behind, and the saved state is untouched", async () => {
     // The counter's route trims the pasted/fetched text before it reaches Licensing.activate.
-    const envelope = (await (await send("POST", "/v1/activate", await activationRequest())).json() as { license: string }).license.trim();
+    const envelope = (await (await send("POST", "/v1/activate", await activationRequest(), withSecret())).json() as { license: string }).license.trim();
     const db = openDb(":memory:"); migrate(db, MIGRATIONS);
     let counterNow = T0 - 10 * 60_000;
     const app = buildServer({ db, licensing: { publicKey: publicPem, installationId, now: () => counterNow } });
