@@ -23,6 +23,15 @@ const toUser = (r: UserRow) => ({
 export function registerUsers(app: FastifyInstance): void {
   const manage = app.requirePermission("users.manage");
 
+  // PIN uniqueness requires async verification of salted hashes. Keep all staff
+  // mutations in one instance-local queue, without holding SQLite across awaits.
+  let tail: Promise<void> = Promise.resolve();
+  function serializeUserMutation<T>(work: () => Promise<T>): Promise<T> {
+    const next = tail.then(work, work);
+    tail = next.then(() => undefined, () => undefined);
+    return next;
+  }
+
   const getUser = (id: string) =>
     app.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
 
@@ -45,43 +54,55 @@ export function registerUsers(app: FastifyInstance): void {
 
   app.post("/api/users", { preHandler: manage }, async (req, reply) => {
     const body = UserCreate.parse(req.body);
-    if (await pinInUse(body.pin)) throw httpError(409, "PIN already in use");
-    const id = uuidv7();
-    app.db
-      .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?)")
-      .run(id, body.name, await hashPassword(body.pin), body.role, Date.now());
-    return reply.status(201).send({ user: toUser(getUser(id)!) });
+    const user = await serializeUserMutation(async () => {
+      app.assertPermission(req, "users.manage");
+      if (await pinInUse(body.pin)) throw httpError(409, "PIN already in use");
+      const pinHash = await hashPassword(body.pin);
+      return app.db.transaction(() => {
+        app.assertPermission(req, "users.manage");
+        const id = uuidv7();
+        app.db
+          .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?)")
+          .run(id, body.name, pinHash, body.role, Date.now());
+        return toUser(getUser(id)!);
+      })();
+    });
+    return reply.status(201).send({ user });
   });
 
   app.patch("/api/users/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
     const body = UserUpdate.parse(req.body);
-    const row = getUser(id);
-    if (!row) throw httpError(404, "user not found");
+    return serializeUserMutation(async () => {
+      app.assertPermission(req, "users.manage");
+      if (!getUser(id)) throw httpError(404, "user not found");
+      if (body.pin && (await pinInUse(body.pin, id))) throw httpError(409, "PIN already in use");
+      const pinHash = body.pin ? await hashPassword(body.pin) : undefined;
 
-    // Lockout guard: the last active admin can be neither deactivated nor demoted.
-    const wasActiveAdmin = row.role === "admin" && row.is_active === 1;
-    const staysActiveAdmin = (body.role ?? row.role) === "admin" && (body.isActive ?? row.is_active === 1);
-    if (wasActiveAdmin && !staysActiveAdmin) {
-      const others = app.db
-        .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1 AND id != ?")
-        .get(id) as { n: number };
-      if (others.n === 0) throw httpError(409, "cannot remove the last admin");
-    }
+      const result = app.db.transaction(() => {
+        // Authority and target fields can change while password work is pending.
+        // Keep the final checks and write synchronous in the same transaction.
+        app.assertPermission(req, "users.manage");
+        const row = getUser(id);
+        if (!row) throw httpError(404, "user not found");
+        const role = body.role ?? row.role;
+        const isActive = body.isActive ?? row.is_active === 1;
+        if (row.role === "admin" && row.is_active === 1 && (role !== "admin" || !isActive)) {
+          const others = app.db
+            .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1 AND id != ?")
+            .get(id) as { n: number };
+          if (others.n === 0) throw httpError(409, "cannot remove the last admin");
+        }
 
-    if (body.pin && (await pinInUse(body.pin, id))) throw httpError(409, "PIN already in use");
-    const pinHash = body.pin ? await hashPassword(body.pin) : row.pin_hash;
+        app.db
+          .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ? WHERE id = ?")
+          .run(body.name ?? row.name, role, isActive ? 1 : 0, pinHash ?? row.pin_hash, id);
+        return { user: toUser(getUser(id)!), deactivated: row.is_active === 1 && !isActive };
+      })();
 
-    app.db
-      .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash, id);
-
-    // Close WS sockets if user was deactivated
-    if (row.is_active === 1 && body.isActive === false) {
-      app.wsRevalidate();
-    }
-    if (body.isActive === false || (body.role !== undefined && body.role !== "waiter")) app.broadcast("table.changed", {});
-
-    return { user: toUser(getUser(id)!) };
+      if (result.deactivated) app.wsRevalidate();
+      if (body.isActive === false || (body.role !== undefined && body.role !== "waiter")) app.broadcast("table.changed", {});
+      return { user: result.user };
+    });
   });
 }

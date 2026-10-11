@@ -3,7 +3,7 @@ productName: ForkFlow Kitchen
 directories:
   app: build/desktop/kitchen
   output: dist/kitchen
-electronVersion: 43.4.0
+electronVersion: 43.7.9
 npmRebuild: false
 asar: true
 files: ["**/*"]

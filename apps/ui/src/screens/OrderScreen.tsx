@@ -13,7 +13,7 @@ import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { queuedRequests, reliablePost, subscribeQueue } from "../retry-queue";
+import { PRINT_UNKNOWN, QueueReconciliationRequiredError, queuedRequests, recoveryRequests, reliablePost, subscribeQueue } from "../retry-queue";
 import { useNavigationGuard } from "../navigation-guard";
 import "../product-editor.css";
 import "../order-screen.css";
@@ -57,6 +57,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const actionLock = useRef(false);
   const billingLock = useRef(false);
   const reloadRevision = useRef(0);
+  const actionEpoch = useRef(0);
+  const printRequests = useRef(new Set<string>());
   const [billingBusy, setBillingBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<"menu" | "cart">("menu");
@@ -128,13 +130,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   async function reload() {
     const revision = ++reloadRevision.current;
+    const token = session.token, generation = localStorage.getItem("forkflow.generation");
     const [o, c, p, staff] = await Promise.all([
       apiFetch<{ order: Order }>(`/api/orders/${orderId}`),
       apiFetch<{ categories: Category[] }>("/api/categories"),
       apiFetch<{ products: Product[] }>("/api/products"),
       apiFetch<{ captains: Array<{ id: string; name: string }> }>("/api/captains"),
     ]);
-    if (revision !== reloadRevision.current) return;
+    if (revision !== reloadRevision.current || session.token !== token || localStorage.getItem("forkflow.generation") !== generation) return;
     setOrder(o.order);
     setCaptains(staff.captains);
     setCategories(c.categories.filter((cat) => cat.isActive));
@@ -151,6 +154,20 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     const unsub = subscribeQueue(refresh);
     const acknowledged = () => { refresh(); void reload().catch(() => {}); };
     window.addEventListener("forkflow:ack", acknowledged);
+    const review = (event: Event) => {
+      const detail = (event as CustomEvent<{ path: string; message: string }>).detail;
+      if (!detail?.path.startsWith(`/api/orders/${orderId}/`)) return;
+      actionEpoch.current++; actionLock.current = false; billingLock.current = false; setPending(false); setBillingBusy(false);
+      setError(detail.message); refresh(); void reload().catch(() => {});
+    };
+    const feedback = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestId: string; response: { printErrors?: string[] } }>).detail;
+      if (!detail || !printRequests.current.has(detail.requestId)) return;
+      const failures = detail.response?.printErrors;
+      setMessage(Array.isArray(failures) && failures.length ? `Order saved. Not printed: ${failures.join("; ")}. Check the printer before printing again.` : "Order saved; the printer job was reported. Check the paper before printing again.");
+    };
+    window.addEventListener("forkflow:queue-review", review);
+    window.addEventListener("forkflow:queue-feedback", feedback);
     const dispose = connectWs({
       onEvent: (event, data) => {
         if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -162,7 +179,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
       onAuthFail: () => session.clear(),
     });
-    return () => { reloadRevision.current++; dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+    return () => { actionEpoch.current++; reloadRevision.current++; printRequests.current.clear(); dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); window.removeEventListener("forkflow:queue-review", review); window.removeEventListener("forkflow:queue-feedback", feedback); };
   }, [orderId, draftKey, captain]);
 
   function saveDraft(next: DraftItem[]): boolean {
@@ -175,13 +192,18 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   async function run(action: () => Promise<unknown>) {
     if (actionLock.current || billingLock.current) return;
+    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
+    const current = () => actionEpoch.current === epoch && session.token === token && localStorage.getItem("forkflow.generation") === generation;
     actionLock.current = true; setPending(true); setError(""); setMessage("");
     try {
       await action();
+      if (!current()) return;
       await reload();
     } catch (e) {
+      if (!current()) return;
       setError(e instanceof Error ? e.message : "Request failed");
-    } finally { actionLock.current = false; setPending(false); }
+      if (e instanceof QueueReconciliationRequiredError) await reload().catch(() => {});
+    } finally { if (actionEpoch.current === epoch) { actionLock.current = false; setPending(false); } }
   }
 
   function chooseCaptain(captainId: string | null) {
@@ -242,7 +264,9 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       note: d.note || undefined,
     }));
     if (!saveDraft(current)) throw new Error("Cart could not be saved");
+    const valid = actionFence();
     await reliablePost(`/api/orders/${orderId}/items`, { items }, `Punch ${items.length} cart rows`, draftKey);
+    valid();
     setDraft(readDraft());
   }
 
@@ -254,20 +278,28 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   async function prepareCheckout() {
     if (actionLock.current) throw new Error("Wait for the order to finish saving");
     actionLock.current = true; setPending(true); setError("");
+    const valid = actionFence();
+    const epoch = actionEpoch.current;
     try {
-      if (queuedRequests(user.id).some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
+      if ([...queuedRequests(user.id), ...recoveryRequests(user.id).map((record) => record.entry)].some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
         throw new Error("A saved action needs to finish or be reviewed before checkout. Check Saved actions above.");
       }
       await punchDraft();
+      valid();
       const [{ order: current }, { products: latestProducts }] = await Promise.all([
         apiFetch<{ order: Order }>(`/api/orders/${orderId}`), apiFetch<{ products: Product[] }>("/api/products"),
       ]);
+      valid();
       if (current.type !== "parcel" || current.status !== "open") throw new Error("This takeaway is no longer open. Reopen it to check its bill.");
       const kitchenProducts = new Set(latestProducts.filter((p) => p.kotStationId).map((p) => p.id));
       const itemIds = current.items.filter((item) => item.status === "pending" && kitchenProducts.has(item.productId)).map((item) => item.id);
-      if (itemIds.length) await reliablePost(`/api/orders/${orderId}/send`, { clientRef: uuid(), itemIds }, "Send takeaway to kitchen");
+      if (itemIds.length) {
+        const result = await reliablePost(`/api/orders/${orderId}/send`, { clientRef: uuid(), itemIds }, "Send takeaway to kitchen");
+        valid(); printRequests.current.add(result.queueMeta.requestId);
+        if (result.queueMeta.printOutcome === "unknown") setMessage(PRINT_UNKNOWN);
+      }
       await reload();
-    } finally { actionLock.current = false; setPending(false); }
+    } finally { if (actionEpoch.current === epoch) { actionLock.current = false; setPending(false); } }
   }
 
   function cancelItem(item: OrderItem) {
@@ -285,20 +317,29 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   function sendToKitchen() {
     void run(async () => {
-      if (queuedRequests(user.id).some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
+      const valid = actionFence();
+      if ([...queuedRequests(user.id), ...recoveryRequests(user.id).map((record) => record.entry)].some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
         throw new Error("A saved action needs to finish or be reviewed before sending. Check the connection status above.");
       }
       await punchDraft();
+      valid();
       const [{ order: current }, { products: currentProducts }] = await Promise.all([
         apiFetch<{ order: Order }>(`/api/orders/${orderId}`), apiFetch<{ products: Product[] }>("/api/products"),
       ]);
+      valid();
       if (current.status !== "open") throw new Error("This order is no longer open. Return to tables to check its status.");
       const routedProducts = new Set(currentProducts.filter((product) => product.kotStationId).map((product) => product.id));
       const itemIds = current.items.filter((item) => item.status === "pending" && routedProducts.has(item.productId)).map((item) => item.id);
       if (!itemIds.length) { setMessage("Order saved. No items are waiting for a kitchen ticket."); return; }
       const result = await reliablePost<{ kots: Array<{ id: string }>; printErrors?: string[] }>(`/api/orders/${orderId}/send`, { clientRef: uuid(), itemIds }, "Send to kitchen");
-      setMessage(`Sent to kitchen · ${result.kots.length} ${result.kots.length === 1 ? "ticket" : "tickets"}${result.printErrors?.length ? `. Not printed: ${result.printErrors.join("; ")}` : ""}`);
+      valid(); printRequests.current.add(result.queueMeta.requestId);
+      setMessage(result.queueMeta.printOutcome === "unknown" ? PRINT_UNKNOWN : `Sent to kitchen · ${result.kots.length} ${result.kots.length === 1 ? "ticket" : "tickets"}${result.printErrors?.length ? `. Not printed: ${result.printErrors.join("; ")}` : ""}`);
     });
+  }
+
+  function actionFence() {
+    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
+    return () => { if (actionEpoch.current !== epoch || session.token !== token || localStorage.getItem("forkflow.generation") !== generation) throw new QueueReconciliationRequiredError(); };
   }
 
   async function newSplit() {

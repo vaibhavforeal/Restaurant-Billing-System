@@ -8,7 +8,7 @@ import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
-import { reliablePost } from "../retry-queue";
+import { PRINT_UNKNOWN, QueueReconciliationRequiredError, reliablePost } from "../retry-queue";
 import { SegmentedControl } from "../PosControls";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
@@ -64,6 +64,8 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const createRequest = useRef<BillCreateInput | null>(null);
   const settlement = useRef<{ clientRef: string; fingerprint: string } | null>(null);
   const billRevision = useRef(0);
+  const actionEpoch = useRef(0);
+  const printRequests = useRef(new Set<string>());
   const [job, setJob] = useState<PrintJobInfo | null>(null);
   const [creditKind, setCreditKind] = useState<"void" | "refund" | null>(null);
   const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(preferredPayment);
@@ -100,14 +102,37 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     setBill(value);
     if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: preferredPayment(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
   }
+  function actionFence() {
+    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
+    return () => { if (actionEpoch.current !== epoch || session.token !== token || localStorage.getItem("forkflow.generation") !== generation) throw new QueueReconciliationRequiredError(); };
+  }
+  useEffect(() => {
+    const review = (event: Event) => {
+      const detail = (event as CustomEvent<{ path: string; message: string }>).detail;
+      if (!detail || !(detail.path.startsWith(`/api/orders/${order.id}/`) || (bill && detail.path === `/api/bills/${bill.id}/settle`))) return;
+      actionEpoch.current++; lock.current = false; setBusy(false); onBusyChange?.(false);
+      setPreview(null); createRequest.current = null; setError(detail.message); void reloadBill();
+    };
+    const feedback = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestId: string; response: { job?: PrintJobInfo | null; printError?: string | null } }>).detail;
+      if (!detail || !printRequests.current.has(detail.requestId)) return;
+      setMessage(detail.response?.printError ? `Order saved. ${detail.response.printError}. Check the printer before printing again.` : "Order saved; the printer job was reported. Check the paper before printing again.");
+      if (detail.response?.job) setJob(detail.response.job);
+    };
+    window.addEventListener("forkflow:queue-review", review); window.addEventListener("forkflow:queue-feedback", feedback);
+    return () => { window.removeEventListener("forkflow:queue-review", review); window.removeEventListener("forkflow:queue-feedback", feedback); };
+  }, [order.id, bill?.id]);
+  useEffect(() => () => { actionEpoch.current++; printRequests.current.clear(); }, [order.id]);
   useEffect(() => {
     let active = true;
     const revision = billRevision.current;
+    const valid = actionFence();
     Promise.all([
       apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`),
       apiFetch<{ printers: Array<{ id: string; name: string }> }>("/api/billing-printers"),
     ]).then(([b, p]) => {
       if (!active) return;
+      valid();
       if (revision === billRevision.current) acceptBill(b.bill);
       setPrinters(p.printers);
       setPrinterId((id) => p.printers.some((printer) => printer.id === id) ? id : "");
@@ -140,39 +165,49 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
 
   async function run(action: () => Promise<void>) {
     if (lock.current || disabled) return;
+    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
+    const current = () => actionEpoch.current === epoch && session.token === token && localStorage.getItem("forkflow.generation") === generation;
     openDialog();
     lock.current = true; setBusy(true); onBusyChange?.(true); setError(""); setMessage("");
     try { await action(); }
     catch (e) {
+      if (!current()) return;
       setError(e instanceof Error ? e.message : "Request failed");
       // Resolve an ambiguous response from the persisted bill before another attempt.
-      try { acceptBill((await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`)).bill); } catch { /* retain the retryable request */ }
+      try { const result = await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`); if (!current()) return; acceptBill(result.bill); } catch { /* retain the retryable request */ }
+      if (!current()) return;
       try { await onChanged(); } catch { /* preserve the last confirmed view until reconnect */ }
-    } finally { lock.current = false; setBusy(false); onBusyChange?.(false); }
+    } finally { if (actionEpoch.current === epoch) { lock.current = false; setBusy(false); onBusyChange?.(false); } }
   }
   async function getPreview() {
+    const valid = actionFence();
     const discountPaise = rupeesToPaise(discount);
     if (discountPaise === null) throw new Error("Enter a valid discount amount");
     if (discountPaise > 0 && !reason.trim()) throw new Error("Enter a discount reason");
     if (onPrepare) {
       setMessage("Saving your takeaway and sending kitchen items…");
       await onPrepare();
+      valid();
     }
     const { preview: value } = await apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
       method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason }),
     });
+    valid();
     setPreview(value);
     setMessage(""); setCashReceived("");
     createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null };
   }
   async function issue() {
+    const valid = actionFence();
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
-    const { bill: value, job: printJob, printError } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>(`/api/orders/${order.id}/bill`, createRequest.current, "Issue bill");
+    const { bill: value, job: printJob, printError, queueMeta } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>(`/api/orders/${order.id}/bill`, createRequest.current, "Issue bill");
+    valid(); printRequests.current.add(queueMeta.requestId);
     acceptBill(value); setPreview(null); setJob(printJob);
-    setMessage(`Bill #${value.billNo} issued. Record payment below.${printError ? ` ${printError}. Use Print receipt to try again.` : ""}`);
+    setMessage(`Bill #${value.billNo} issued. Record payment below.${queueMeta.printOutcome === "unknown" ? ` ${PRINT_UNKNOWN}` : printError ? ` ${printError}. Check the printer before printing again.` : ""}`);
     await onChanged();
   }
   async function issueAndPay() {
+    const valid = actionFence();
     const request = createRequest.current;
     if (!request || !preview || hasDraft) throw new Error("Review the takeaway total first");
     const received = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview.totalPaise;
@@ -180,23 +215,28 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     const rows = preview.totalPaise ? [{ mode: quickMode, amountPaise: preview.totalPaise, refNote: "" }] : [];
     // Print after recording payment so the quick-flow receipt includes payment.
     const { bill: issued } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null }>(`/api/orders/${order.id}/bill`, { ...request, printerId: null }, "Issue takeaway bill");
+    valid();
     acceptBill(issued); setPreview(null);
     setPayments(rows.map((row) => ({ id: uuid(), mode: row.mode, amount: paiseToRupees(row.amountPaise), refNote: row.refNote })));
     const fingerprint = JSON.stringify(rows);
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
     const { bill: paid } = await reliablePost<{ bill: Bill }>(`/api/bills/${issued.id}/settle`, { clientRef: settlement.current.clientRef, payments: rows }, "Record takeaway payment");
+    valid();
     acceptBill(paid);
     setMessage(`Payment recorded.${quickMode === "cash" && received !== null && received > paid.totalPaise ? ` Change: ${money(received - paid.totalPaise)}.` : ""}`);
     try { await onChanged(); }
     catch { setError("Payment is recorded. Reopen the order if its status has not refreshed."); }
+    valid();
     if (printerId) {
       try {
         const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${paid.id}/print`, { method: "POST", body: JSON.stringify({ printerId }) });
+        valid();
         setJob(result.job);
       } catch { setError("Payment is recorded. Receipt printing was not confirmed; check the printer before printing again."); }
     }
   }
   async function settle() {
+    const valid = actionFence();
     if (!bill) return;
     const rows = payments.map((p) => {
       const amountPaise = rupeesToPaise(p.amount);
@@ -207,6 +247,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     const fingerprint = JSON.stringify(rows);
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
     const { bill: value } = await reliablePost<{ bill: Bill }>(`/api/bills/${bill.id}/settle`, { clientRef: settlement.current.clientRef, payments: rows }, "Record payment");
+    valid();
     acceptBill(value); setMessage("Payment recorded. This group is settled."); await onChanged();
   }
   function creditIssued(result: { bill: Bill }) {
@@ -225,7 +266,8 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     if (status === "picked_up") onClosed?.();
   }
   async function reloadBill() {
-    try { acceptBill((await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`)).bill); } catch { /* keep the last confirmed bill */ }
+    const valid = actionFence(), revision = billRevision.current;
+    try { const result = await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`); valid(); if (revision === billRevision.current) acceptBill(result.bill); } catch { /* keep the last confirmed bill */ }
     try { await onChanged(); } catch { /* keep the last confirmed order */ }
   }
   async function viewReceipt() {
@@ -285,6 +327,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       </header>
       <div className="billing-dialog-body">
         {error && <p className="billing-error" role="alert">{error}</p>}
+        {error && <button onClick={() => void reloadBill()}>Review current order and bill</button>}
         {message && <p className="billing-message" role="status">{message}</p>}
         <div className={`billing-dialog-grid${totals ? "" : " billing-awaiting-preview"}`}>
           <div className="billing-review">

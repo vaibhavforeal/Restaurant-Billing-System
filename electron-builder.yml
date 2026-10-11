@@ -4,7 +4,7 @@ directories:
   app: build/desktop/commercial
   output: dist/commercial
 beforePack: ./tools/verify-desktop-package.mjs
-electronVersion: 43.4.0
+electronVersion: 43.7.9
 npmRebuild: false
 asar: true
 asarUnpack:

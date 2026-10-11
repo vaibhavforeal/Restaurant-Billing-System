@@ -26,7 +26,7 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
   }, [today]);
   const { ready, isEnabled } = useIntegrations();
   const zomatoEnabled = isEnabled("zomato");
-  const { analytics, dayEnd, sales, orders, error, loading, updatedAt, refresh } = useDashboard(date, zomatoEnabled);
+  const { analytics, dayEnd, sales, orders, error, loading, updatedAt, refresh } = useDashboard(date);
   const aggregator = useAggregatorOrders(zomatoEnabled);
 
   const cards = useMemo(() => analytics ? channelCards(analytics.dineIn.comparison, zomatoEnabled) : null, [analytics, zomatoEnabled]);

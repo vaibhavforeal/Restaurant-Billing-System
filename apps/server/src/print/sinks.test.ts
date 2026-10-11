@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeFakeSink } from "./sinks.js";
+import { makeFakeSink, realSend } from "./sinks.js";
 
 describe("makeFakeSink", () => {
   it("captures sent bytes", async () => {
@@ -34,5 +34,13 @@ describe("makeFakeSink", () => {
     // Second send should succeed
     await fake.send({ kind: "network", connection: "test" }, Buffer.from("data"));
     expect(fake.sent).toHaveLength(1);
+  });
+});
+
+describe("Bluetooth target validation", () => {
+  it("rejects device paths and non-COM names before invoking a transport", async () => {
+    for (const connection of ["COM0", "COM10/other", "\\\\.\\COM3", "LPT1", "COM10000"]) {
+      await expect(realSend({ kind: "bluetooth", connection }, Buffer.from([0x1b]))).rejects.toThrow("Use a Bluetooth COM port");
+    }
   });
 });

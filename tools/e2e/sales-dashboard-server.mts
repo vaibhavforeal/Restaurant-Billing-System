@@ -60,7 +60,25 @@ await post("/api/zomato/settings", { restaurantId: "123456", restaurantName: "De
 await post("/api/integrations/zomato", { enabled: true }, "PATCH");
 const zomatoOrder = (await post("/api/orders", { clientRef: uuidv7(), type: "zomato", zomatoOrderId: "000201" })).order;
 await post(`/api/orders/${zomatoOrder.id}/items`, { items: [{ clientRef: uuidv7(), productId: product.id, qty: 1 }] });
+// Recorded Zomato revenue on a separate historical day must remain reportable with the integration OFF.
+const historicalDay = "2019-01-01";
+const { product: historicalProduct } = await post("/api/products", { name: "Historical Zomato meal", categoryId: category.id, pricePaise: 20000, gstRate: 0, kotStationId: null });
+const { order: historicalOrder } = await post("/api/orders", { clientRef: uuidv7(), type: "zomato", zomatoOrderId: "HISTORY-200" });
+await post(`/api/orders/${historicalOrder.id}/items`, { items: [{ clientRef: uuidv7(), productId: historicalProduct.id, qty: 1 }] });
+await post(`/api/orders/${historicalOrder.id}/zomato-status`, { clientRef: uuidv7(), status: "ready" });
+const { bill: historicalBill } = await post(`/api/orders/${historicalOrder.id}/zomato-status`, { clientRef: uuidv7(), status: "picked_up" });
+const historicalAt = new Date(`${historicalDay}T20:00:00+05:30`).getTime();
+app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(historicalAt, historicalBill.id);
+app.db.prepare("UPDATE payments SET created_at = ? WHERE bill_id = ?").run(historicalAt, historicalBill.id);
 await post("/api/integrations/zomato", { enabled: false }, "PATCH");
+// More than two API pages of unpaid history for the live-history browser gate. Keep these outside report date fixtures.
+for (let index = 0; index < 225; index++) {
+  const { order } = await post("/api/orders", { clientRef: uuidv7(), type: "parcel" });
+  await post(`/api/orders/${order.id}/items`, { items: [{ clientRef: uuidv7(), productId: product.id, qty: 1 }] });
+  const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
+  const { bill } = await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
+  app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(new Date("2019-01-02T12:00:00+05:30").getTime(), bill.id);
+}
 mkdirSync("output/sales-dashboard", { recursive: true }); mkdirSync(".e2e-scratch", { recursive: true });
 const expected = (await app.inject({ url: "/api/reports/sales", headers: auth(admin.token) })).json().report;
 writeFileSync(".e2e-scratch/sales-dashboard-expected.json", JSON.stringify(expected, null, 2));

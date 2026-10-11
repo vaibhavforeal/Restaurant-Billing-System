@@ -55,6 +55,29 @@ describe("users admin", () => {
       headers: auth(admin.token),
     });
     expect(dup2.statusCode).toBe(409);
+    const patchDup = await app.inject({ method: "PATCH", url: `/api/users/${admin.user.id}`,
+      payload: { pin: "5678" }, headers: auth(admin.token) });
+    expect(patchDup.statusCode).toBe(409);
+    expect(patchDup.json()).toEqual({ error: "PIN already in use" });
+  });
+
+  it("edits ordinary staff fields and reactivates them without changing their stored credential", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const staff = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
+    const original = app.db.prepare("SELECT pin_hash FROM users WHERE id = ?").get(staff.id);
+    const edited = await app.inject({ method: "PATCH", url: `/api/users/${staff.id}`, headers: auth(admin.token),
+      payload: { name: "Wren Patel", role: "cashier", isActive: false } });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().user).toMatchObject({ name: "Wren Patel", role: "cashier", isActive: false });
+    const activated = await app.inject({ method: "PATCH", url: `/api/users/${staff.id}`, headers: auth(admin.token),
+      payload: { isActive: true } });
+    expect(activated.statusCode).toBe(200);
+    expect(activated.json().user).toMatchObject({ name: "Wren Patel", role: "cashier", isActive: true });
+    expect(app.db.prepare("SELECT pin_hash FROM users WHERE id = ?").get(staff.id)).toEqual(original);
+    const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "5678" } });
+    expect(login.statusCode).toBe(200);
+    expect(login.json().user.id).toBe(staff.id);
   });
 
   it("changes a PIN (uniqueness enforced, self excluded) and the new PIN logs in", async () => {

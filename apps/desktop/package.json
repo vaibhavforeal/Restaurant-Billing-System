@@ -10,6 +10,6 @@
     "start": "electron ../../build/desktop/app"
   },
   "devDependencies": {
-    "electron": "^43.4.0"
+    "electron": "^43.7.9"
   }
 }

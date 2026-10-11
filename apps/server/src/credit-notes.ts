@@ -1,5 +1,5 @@
 import { verifyPassword } from "@forkflow/core";
-import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
+import { BillPrint, CreditHistoryError, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, validateCreditHistory, voidRemainder,
   type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
@@ -92,6 +92,12 @@ export function draftCredit(db: Database, billId: string, kind: "void" | "refund
   refuseZomatoBill(db, billId);
   if (bill.status === "void") throw httpError(409, kind === "void" ? "This bill is already void" : "Nothing left to refund on this bill");
   const credit = loadBillCredit(db, billId);
+  try {
+    validateCreditHistory(credit.lines, credit.credited);
+  } catch (err) {
+    if (err instanceof CreditHistoryError) throw httpError(409, err.message, "credit_history_inconsistent");
+    throw err;
+  }
   if (kind === "refund") {
     if (bill.status !== "paid") throw httpError(409, "Only paid bills can be refunded");
     if (credit.lines.length === 0) throw httpError(409, "This older bill can only be voided");
@@ -110,6 +116,7 @@ export function draftCredit(db: Database, billId: string, kind: "void" | "refund
   try {
     return { bill, credit, draft: kind === "void" ? voidRemainder(credit.lines, credit.credited) : creditFor(credit.lines, credit.credited, requested) };
   } catch (err) {
+    if (err instanceof CreditHistoryError) throw httpError(409, err.message, "credit_history_inconsistent");
     const message = err instanceof Error ? err.message : "Invalid credit";
     throw httpError(message === "Nothing left to refund on this bill" ? 409 : 400, message);
   }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { execFile, type ChildProcess, type ExecFileOptions } from "node:child_process";
 import { promises as fsp, readFileSync, existsSync } from "node:fs";
 import { realSend, PrintOutcomeUnknown } from "./sinks.js";
+import { PrintQueue } from "./queue.js";
 
 vi.mock("node:child_process", () => ({ execFile: vi.fn() }));
 afterEach(() => vi.resetAllMocks());
@@ -62,14 +63,88 @@ describe("Windows RAW transport", () => {
 });
 
 describe("Bluetooth transport", () => {
-  it("treats a port that cannot be opened as a failure and any later write error as unknown", async () => {
-    const write = vi.spyOn(fsp, "writeFile");
-    write.mockRejectedValueOnce(Object.assign(new Error("ENOENT: no such file"), { syscall: "open", code: "ENOENT" }));
-    const missing = await realSend({ kind: "bluetooth", connection: "COM9" }, Buffer.from("x")).catch((e: unknown) => e);
-    expect(missing).toBeInstanceOf(Error);
-    expect(missing).not.toBeInstanceOf(PrintOutcomeUnknown);
-    write.mockRejectedValueOnce(Object.assign(new Error("EIO"), { syscall: "write", code: "EIO" }));
-    await expect(realSend({ kind: "bluetooth", connection: "COM9" }, Buffer.from("x"))).rejects.toBeInstanceOf(PrintOutcomeUnknown);
-    write.mockRestore();
+  it("dispatches validated COM payloads through the Windows helper without opening a filesystem port", async () => {
+    const realWriteFile = fsp.writeFile.bind(fsp);
+    const write = vi.spyOn(fsp, "writeFile").mockImplementation(async (path, ...rest) => {
+      if (String(path).startsWith("\\\\.\\")) throw new Error("test blocked physical COM access");
+      return realWriteFile(path, ...rest);
+    });
+    vi.mocked(execFile).mockImplementation(((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "", "");
+      return {} as ChildProcess;
+    }) as typeof execFile);
+    try {
+      await realSend({ kind: "bluetooth", connection: "COM10" }, Buffer.from([0, 0x1b, 0xff]));
+      expect(execFile).toHaveBeenCalledOnce();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("allows a normal retry after an unsent serial failure", async () => {
+    let calls = 0;
+    vi.mocked(execFile).mockImplementation(((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      if (++calls === 1) callback(Object.assign(new Error("exit 20"), { code: 20 }), "", "NOTSENT: port busy");
+      else callback(null, "", "");
+      return {} as ChildProcess;
+    }) as typeof execFile);
+    const queue = new PrintQueue(realSend, () => {});
+    try {
+      const job = queue.enqueue({ id: "serial", name: "Serial", kind: "bluetooth", connection: "COM10" }, "test", "Test", Buffer.from([0x1b]));
+      await vi.waitFor(() => expect(queue.jobs()[0]?.status).toBe("failed"));
+      expect(queue.retry(job.id)?.attempts).toBe(1);
+      await vi.waitFor(() => expect(queue.jobs()[0]?.status).toBe("done"));
+      expect(calls).toBe(2);
+    } finally { await queue.close(); }
+  });
+
+  it("requires a paper check after an uncertain serial write", async () => {
+    let calls = 0;
+    vi.mocked(execFile).mockImplementation(((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      if (++calls === 1) callback(Object.assign(new Error("exit 21"), { code: 21 }), "", "MAYBESENT: write failed");
+      else callback(null, "", "");
+      return {} as ChildProcess;
+    }) as typeof execFile);
+    const queue = new PrintQueue(realSend, () => {});
+    try {
+      const job = queue.enqueue({ id: "serial", name: "Serial", kind: "bluetooth", connection: "COM10" }, "test", "Test", Buffer.from([0x1b]));
+      await vi.waitFor(() => expect(queue.jobs()[0]?.status).toBe("unknown"));
+      expect(queue.retry(job.id)).toBeNull();
+      expect(queue.retry(job.id, true)?.attempts).toBe(1);
+      await vi.waitFor(() => expect(queue.jobs()[0]?.status).toBe("done"));
+      expect(calls).toBe(2);
+    } finally { await queue.close(); }
+  });
+
+  it("releases the per-printer queue lock after a killed helper", async () => {
+    let calls = 0;
+    vi.mocked(execFile).mockImplementation(((...args: unknown[]) => {
+      const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
+      if (++calls === 1) callback(Object.assign(new Error("timed out"), { code: null, killed: true }), "", "");
+      else callback(null, "", "");
+      return {} as ChildProcess;
+    }) as typeof execFile);
+    const queue = new PrintQueue(realSend, () => {});
+    try {
+      const printer = { id: "serial", name: "Serial", kind: "bluetooth" as const, connection: "COM10" };
+      queue.enqueue(printer, "test", "First", Buffer.from([0x1b]));
+      queue.enqueue(printer, "test", "Second", Buffer.from([0x1b]));
+      await vi.waitFor(() => expect(queue.jobs().map(job => job.status).sort()).toEqual(["done", "unknown"]));
+      expect(calls).toBe(2);
+    } finally { await queue.close(); }
+  });
+  it("maps explicit serial pre-write failures to retryable errors and uncertain exits to paper checks", async () => {
+    for (const [code, unknown] of [[20, false], [21, true], [1, true], [null, true]] as const) {
+      vi.mocked(execFile).mockImplementation(((...args: unknown[]) => {
+        (args[3] as (error: Error, stdout: string, stderr: string) => void)(Object.assign(new Error("Command failed"), { code, killed: code === null }), "", code === 20 ? "NOTSENT: port busy" : "MAYBESENT: write failed");
+        return {} as ChildProcess;
+      }) as typeof execFile);
+      const error = await realSend({ kind: "bluetooth", connection: "COM9" }, Buffer.from("x")).catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(Error);
+      expect(error instanceof PrintOutcomeUnknown).toBe(unknown);
+    }
   });
 });

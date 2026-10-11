@@ -4,12 +4,21 @@ import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandl
 import { randomBytes } from "node:crypto";
 import { deviceHash } from "./licensing.js";
 import { createPinThrottle } from "./pin-throttle.js";
+import { httpError } from "./http-error.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export interface AuthedUser {
   id: string;
   name: string;
   role: RoleName;
+}
+
+/** Permission denials retain their public metadata through the error handler. */
+export class PermissionError extends Error {
+  readonly statusCode = 403;
+  constructor(readonly permission: string) {
+    super("forbidden");
+  }
 }
 
 interface SessionRow {
@@ -73,15 +82,17 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
   };
 
   app.decorate("requireAuth", requireAuth);
+  app.decorate("assertPermission", (req: FastifyRequest, slug: string): AuthedUser => {
+    const user = authenticate(req);
+    if (!user) throw httpError(401, "unauthenticated");
+    if (!can(roleFor(user.role), slug)) throw new PermissionError(slug);
+    req.user = user;
+    app.licensing.assertAccess(req);
+    return user;
+  });
   app.decorate("requirePermission", (slug: string): preHandlerHookHandler => {
-    return async (req, reply) => {
-      const user = authenticate(req);
-      if (!user) return reply.status(401).send({ error: "unauthenticated" });
-      if (!can(roleFor(user.role), slug)) {
-        return reply.status(403).send({ error: "forbidden", permission: slug });
-      }
-      req.user = user;
-      app.licensing.assertAccess(req);
+    return async (req) => {
+      app.assertPermission(req, slug);
     };
   });
 
@@ -163,6 +174,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
 declare module "fastify" {
   interface FastifyInstance {
     requireAuth: preHandlerHookHandler;
+    assertPermission(req: FastifyRequest, slug: string): AuthedUser;
     requirePermission(slug: string): preHandlerHookHandler;
   }
   interface FastifyRequest {

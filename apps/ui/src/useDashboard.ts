@@ -30,10 +30,10 @@ export function useNow(intervalMs: number): number {
 
 /**
  * Everything the Home dashboard shows for one bill date. A refresh of the same date keeps the previous figures on
- * screen until the new ones arrive; a failed request sets `error` and keeps whatever else loaded. The Zomato sales
- * series is requested only while `zomatoEnabled`.
+ * screen until the new ones arrive; a failed request sets `error` and keeps whatever else loaded. Historical Zomato
+ * sales are always part of the report, independently of whether live integration polling is enabled.
  */
-export function useDashboard(date: string, zomatoEnabled = false) {
+export function useDashboard(date: string) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,7 @@ export function useDashboard(date: string, zomatoEnabled = false) {
     void Promise.allSettled([
       get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=dine_in`),
       get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=parcel`),
-      zomatoEnabled ? get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=zomato`) : Promise.resolve(null),
+      get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=zomato`),
       get<{ report: DashboardDayEnd }>(`/api/reports/day-end?date=${day}`),
       get<{ report: SalesReport }>(`/api/reports/sales?from=${day}&to=${day}`),
       get<{ orders: Order[] }>("/api/orders"),
@@ -67,7 +67,7 @@ export function useDashboard(date: string, zomatoEnabled = false) {
           analytics: dineIn.status === "fulfilled" && takeaway.status === "fulfilled"
             ? {
               dineIn: dineIn.value.report, takeaway: takeaway.value.report,
-              zomato: zomato.status === "fulfilled" ? zomato.value?.report ?? null : zomatoEnabled ? kept?.analytics?.zomato ?? null : null,
+              zomato: zomato.status === "fulfilled" ? zomato.value.report : kept?.analytics?.zomato ?? null,
             } : kept?.analytics ?? null,
           dayEnd: dayEnd.status === "fulfilled" ? dayEnd.value.report : kept?.dayEnd ?? null,
           sales: sales.status === "fulfilled" ? sales.value.report : kept?.sales ?? null,
@@ -79,7 +79,7 @@ export function useDashboard(date: string, zomatoEnabled = false) {
       setLoading(false);
     });
     return () => { revision.current++; controller.abort(); };
-  }, [date, version, zomatoEnabled]);
+  }, [date, version]);
 
   useEffect(() => {
     let scheduled: ReturnType<typeof setTimeout> | undefined;

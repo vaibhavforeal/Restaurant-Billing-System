@@ -125,19 +125,19 @@ describe("reports net of credit notes", () => {
 
   it("subtracts a partial refund today from today's net sales, GST and collections by method", async () => {
     const b = await bill("upi");
-    await refund(b.id, 1, [{ mode: "upi", amountPaise: 3499 }]);
+    await refund(b.id, 1, [{ mode: "upi", amountPaise: 3500 }]);
     const report = await dayEnd(today);
     expect(report.sales).toMatchObject({ billCount: 1, totalPaise: 10500 });
     expect(report.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
-    expect(report.creditNotes).toEqual({ count: 1, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83, totalPaise: 3499,
+    expect(report.creditNotes).toEqual({ count: 1, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83, totalPaise: 3500,
       taxes: [{ gstRate: 5, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83 }] });
-    expect(report.net).toEqual({ totalPaise: 7001, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167 });
+    expect(report.net).toEqual({ totalPaise: 7000, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167 });
     expect(report.payments).toEqual([{ mode: "upi", amountPaise: 10500 }]);
-    expect(report.refunds).toEqual([{ mode: "upi", amountPaise: 3499 }]);
-    expect(report.netPayments).toEqual([{ mode: "upi", amountPaise: 7001 }]);
+    expect(report.refunds).toEqual([{ mode: "upi", amountPaise: 3500 }]);
+    expect(report.netPayments).toEqual([{ mode: "upi", amountPaise: 7000 }]);
 
     const day = (await sales(today, today)).daily[0];
-    expect(day).toMatchObject({ creditNotePaise: 3499, netTotalPaise: 7001, collections: { upiPaise: 7001, refundPaise: 3499, totalPaise: 7001 } });
+    expect(day).toMatchObject({ creditNotePaise: 3500, netTotalPaise: 7000, collections: { upiPaise: 7000, refundPaise: 3500, totalPaise: 7000 } });
   });
 
   it("counts void bills as issued on their date and nets a same-day void to zero", async () => {
@@ -152,36 +152,36 @@ describe("reports net of credit notes", () => {
 
   it("nets item and category quantities and sales after a partial refund", async () => {
     const b = await bill("cash");
-    await refund(b.id, 1, [{ mode: "cash", amountPaise: 3499 }]);
+    await refund(b.id, 1, [{ mode: "cash", amountPaise: 3500 }]);
     const [items, categories] = (await operations("items")).tables;
-    expect(items!.rows).toEqual([expect.objectContaining({ name: "Thali", category: "Food", qty: 3, bills: 1, total: 10500, creditQty: 1, credit: 3499, netQty: 2, netTotal: 7001 })]);
-    expect(items!.totals).toMatchObject({ qty: 3, creditQty: 1, netQty: 2, total: 10500, credit: 3499, netTotal: 7001, bills: 1 });
-    expect(categories!.rows).toEqual([expect.objectContaining({ category: "Food", netQty: 2, netTotal: 7001 })]);
+    expect(items!.rows).toEqual([expect.objectContaining({ name: "Thali", category: "Food", qty: 3, bills: 1, total: 10500, creditQty: 1, credit: 3500, netQty: 2, netTotal: 7000 })]);
+    expect(items!.totals).toMatchObject({ qty: 3, creditQty: 1, netQty: 2, total: 10500, credit: 3500, netTotal: 7000, bills: 1 });
+    expect(categories!.rows).toEqual([expect.objectContaining({ category: "Food", netQty: 2, netTotal: 7000 })]);
     const result = await analytics();
-    expect(result.totals).toEqual({ orderCount: 1, qty: 2, totalPaise: 7001 });
-    expect(result.items[0]).toMatchObject({ name: "Thali", qty: 2, totalPaise: 7001, takeawayQty: 2 });
-    expect(result.categories[0]).toMatchObject({ name: "Food", qty: 2, totalPaise: 7001 });
-    expect(result.daily.reduce((n, d) => n + d.totalPaise, 0)).toBe(7001);
-    expect(result.hourly.reduce((n, h) => n + h.totalPaise, 0)).toBe(7001);
-    expect((await operations("hourly")).tables[0]!.totals).toMatchObject({ bills: 1, credit: 3499, total: 7001 });
+    expect(result.totals).toEqual({ orderCount: 1, qty: 2, totalPaise: 7000 });
+    expect(result.items[0]).toMatchObject({ name: "Thali", qty: 2, totalPaise: 7000, takeawayQty: 2 });
+    expect(result.categories[0]).toMatchObject({ name: "Food", qty: 2, totalPaise: 7000 });
+    expect(result.daily.reduce((n, d) => n + d.totalPaise, 0)).toBe(7000);
+    expect(result.hourly.reduce((n, h) => n + h.totalPaise, 0)).toBe(7000);
+    expect((await operations("hourly")).tables[0]!.totals).toMatchObject({ bills: 1, credit: 3500, total: 7000 });
   });
 
   it("subtracts refunds from the requesting cashier's collections", async () => {
     const b = await bill("cash", cashier.token);
-    await refund(b.id, 1, [{ mode: "cash", amountPaise: 3499 }]);
+    await refund(b.id, 1, [{ mode: "cash", amountPaise: 3500 }]);
     const other = await bill("card", cashier.token);
-    await refund(other.id, 1, [{ mode: "card", amountPaise: 3499 }], admin.token);
+    await refund(other.id, 1, [{ mode: "card", amountPaise: 3500 }], admin.token);
     const table = (await operations("cashiers")).tables[0]!;
     expect(table.rows).toEqual([
-      { cashier: "Cara", bills: 2, cash: 7001, upi: 0, card: 10500, refunds: 3499, total: 17501 },
-      { cashier: "Asha", bills: 0, cash: 0, upi: 0, card: -3499, refunds: 3499, total: -3499 },
+      { cashier: "Cara", bills: 2, cash: 7000, upi: 0, card: 10500, refunds: 3500, total: 17500 },
+      { cashier: "Asha", bills: 0, cash: 0, upi: 0, card: -3500, refunds: 3500, total: -3500 },
     ]);
-    expect(table.totals).toMatchObject({ cashier: "Total", bills: 2, cash: 7001, card: 7001, refunds: 6998, total: 14002 });
+    expect(table.totals).toMatchObject({ cashier: "Total", bills: 2, cash: 7000, card: 7000, refunds: 7000, total: 14000 });
   });
 
   it("lists every credit note in the credit-notes report with both names", async () => {
     const b = await bill("cash");
-    await refund(b.id, 1, [{ mode: "cash", amountPaise: 3499 }]);
+    await refund(b.id, 1, [{ mode: "cash", amountPaise: 3500 }]);
     const unpaid = await bill(false);
     await voidBill(unpaid.id, []);
     const report = await operations("credit-notes");
@@ -189,10 +189,10 @@ describe("reports net of credit notes", () => {
     const table = report.tables[0]!;
     expect(table.columns.map((c) => c.key)).toEqual(["cnNo", "date", "billNo", "kind", "reason", "requestedBy", "approvedBy", "refundModes", "taxable", "gst", "total"]);
     expect(table.rows).toEqual([
-      { cnNo: "CN-1", date: expect.any(Number), billNo: b.billNo, kind: "Refund", reason: "Cold food", requestedBy: "Cara", approvedBy: "Asha", refundModes: "Cash", taxable: 3333, gst: 166, total: 3499 },
+      { cnNo: "CN-1", date: expect.any(Number), billNo: b.billNo, kind: "Refund", reason: "Cold food", requestedBy: "Cara", approvedBy: "Asha", refundModes: "Cash", taxable: 3333, gst: 166, total: 3500 },
       { cnNo: "CN-2", date: expect.any(Number), billNo: unpaid.billNo, kind: "Void", reason: "Wrong bill", requestedBy: "Asha", approvedBy: "Asha", refundModes: "None", taxable: 10000, gst: 500, total: 10500 },
     ]);
-    expect(table.totals).toMatchObject({ cnNo: "Total", taxable: 13333, gst: 666, total: 13999 });
+    expect(table.totals).toMatchObject({ cnNo: "Total", taxable: 13333, gst: 666, total: 14000 });
     expect((await operations("credit-notes", yesterday, yesterday)).tables[0]!.rows).toEqual([]);
   });
 });

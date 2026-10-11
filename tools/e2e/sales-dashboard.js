@@ -79,7 +79,9 @@
     // Alerts with Zomato switched off in the Marketplace
     const alerts = document.querySelector('.dash-alerts');
     check(alerts.textContent.includes('Turn on Zomato or Swiggy in the Marketplace') && !alerts.querySelector('.dash-alert-row')
-      && !performance.getEntriesByType('resource').some(e => e.name.includes('type=zomato')) && !document.querySelector('.dash-channel-zomato, .dash-swatch.zomato'), 'Alerts explain how to enable Zomato, and no Zomato sales are requested or drawn while it is off');
+      && performance.getEntriesByType('resource').some(e => e.name.includes('/api/reports/analytics?') && e.name.includes('type=zomato'))
+      && !performance.getEntriesByType('resource').some(e => e.name.includes('/api/zomato/orders'))
+      && !document.querySelector('.dash-channel-zomato, .dash-swatch.zomato'), 'Disabled Zomato permits historical analytics reads, hides unused sales series, and keeps operational alerts and provider polling off');
     check(billed >= 1 && alerts.querySelector('.dash-operational').textContent.includes(`${billed} billed ${billed === 1 ? 'order' : 'orders'} awaiting payment`) && alerts.querySelector('.dash-badge').textContent.trim() === String(alerts.querySelectorAll('.dash-alert-row').length + (billed > 0 ? 1 : 0)),
       'Billed-but-unpaid orders appear as an operational alert and the badge counts them');
     const navLabels = [...document.querySelectorAll('.nav-item')].map(e => e.getAttribute('aria-label'));
@@ -103,6 +105,25 @@
     chart.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
     await wait(() => document.querySelector('.dash-slot-detail').textContent.includes(labels[4]));
     check(true, 'Keyboard ArrowLeft moves to the previous slot');
+
+    // Historical Zomato sales stay visible after the live integration is disabled.
+    const historicalRequests = [];
+    window.fetch = (path, init) => { historicalRequests.push(String(path)); return nativeFetch(path, init); };
+    setValue(dateInput, '2019-01-01');
+    await wait(() => dashboardLoaded() && document.querySelector('.dash-channel-zomato .dash-channel-amount')?.textContent === money(20000));
+    const historical = (await api('/api/reports/analytics?from=2019-01-01&to=2019-01-01&type=zomato')).report;
+    const historicalSlots = sums(historical.hourly);
+    check(historical.totals.totalPaise === 20000 && historical.totals.orderCount === 1
+      && card('total')[0] === money(20000) && card('total')[1] === '1 Order' && card('zomato')[0] === money(20000)
+      && card('dine-in')[0] === money(0) && card('takeaway')[0] === money(0)
+      && document.querySelector('.dash-slot-chart desc').textContent === labels.map((label, i) => `${label}: dine in ${money(0)}, takeaway ${money(0)}, Zomato ${money(historicalSlots[i])}`).join('; ') + '.'
+      && document.querySelectorAll('.dash-bar.zomato').length === 1, 'Disabled integration retains the 20,000-paise historical Zomato sale in channel cards and hourly bars');
+    check(historicalRequests.filter(path => path === '/api/orders').length === 1
+      && historicalRequests.some(path => path.includes('type=zomato'))
+      && !historicalRequests.some(path => path.startsWith('/api/zomato/'))
+      && !document.querySelector('.dash-alert-row, .nav-item[aria-label="zomato"]')
+      && document.querySelector('.dash-alerts').textContent.includes('Turn on Zomato'), 'Historical date change makes only the dashboard order read and no operational Zomato requests');
+    window.fetch = nativeFetch;
 
     // Another date: an empty day shows zeros and no NaN; a future date is refused
     setValue(dateInput, '2020-01-01');

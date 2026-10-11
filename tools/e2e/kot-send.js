@@ -16,9 +16,11 @@
     if (!response.ok) throw new Error(path + ": " + response.status);
     return response.json();
   };
-  const button = name => [...document.querySelectorAll("button")].find(e => e.textContent.trim() === name);
+  const button = name => name === "Punch"
+    ? document.querySelector('button[data-shortcut="save_items"]')
+    : [...document.querySelectorAll("button")].find(e => e.textContent.trim().replace(/\s*·\s*F\d+\s*$/, "") === name);
   const click = async name => { (await wait(() => { const b = button(name); return b && !b.disabled && b; }, name)).click(); await pause(); };
-  const kotButton = () => document.querySelector('[data-shortcut="F9"]');
+  const kotButton = () => document.querySelector('[data-shortcut="send_kitchen"]');
   const queues = () => Object.keys(localStorage).filter(key => key.startsWith("forkflow.queue.v1.")).map(key => JSON.parse(localStorage.getItem(key)));
   const openTable = async name => {
     if (document.querySelector(".order-screen")) await click("← Tables");
@@ -77,7 +79,7 @@
       return nativeFetch(url, init);
     };
     kotButton().click();
-    await wait(() => lost && !queues().length && document.querySelector(".captain-message")?.textContent.includes("Sent to kitchen"), "lost-response recovery");
+    await wait(() => lost && !queues().length && document.querySelector(".captain-message")?.textContent.includes("Order saved; printing could not be confirmed. Check the printer before printing again."), "lost-response recovery with explicit printing uncertainty");
     const recovered = await orderAtTable(firstTable);
     check(retryBodies.length >= 2 && new Set(retryBodies).size === 1 && recovered.kots.length === 3 && recovered.items.length === 4, "Lost response retries the same KOT without duplicate items or tickets");
 

@@ -79,6 +79,20 @@ describe("channelCards", () => {
     });
   });
 
+  it("reconciles a 20,000-paise historical Zomato sale across cards and hourly slots while live controls are off", () => {
+    const comparison: OrderTypeAnalytics[] = [
+      { type: "parcel", orderCount: 0, qty: 0, totalPaise: 0 },
+      { type: "dine_in", orderCount: 0, qty: 0, totalPaise: 0 },
+      { type: "zomato", orderCount: 1, qty: 1, totalPaise: 20_000 },
+    ];
+    const zomato = { hourly: hours(hour => hour === 20 ? 20_000 : 0) } as OrderAnalyticsReport;
+    const cards = channelCards(comparison, false);
+    const bars = slotBars(hours(() => 0), hours(() => 0), zomato);
+    expect(cards).toMatchObject({ total: { amountPaise: 20_000, orderCount: 1 }, zomato: { amountPaise: 20_000, orderCount: 1 } });
+    expect(bars[4]).toMatchObject({ zomatoPaise: 20_000, totalPaise: 20_000 });
+    expect(bars.reduce((sum, bar) => sum + bar.totalPaise, 0)).toBe(20_000);
+  });
+
   it("shows a zero Zomato card while Zomato is on, and none when it is off and unused", () => {
     const zero: OrderTypeAnalytics[] = [{ type: "zomato", orderCount: 0, qty: 0, totalPaise: 0 }];
     expect(channelCards(zero)).not.toHaveProperty("zomato");

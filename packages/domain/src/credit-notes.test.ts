@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  CreditPreview, RefundBill, VoidBill, creditFor, refundState, refundableByMode, voidRemainder,
+  CreditHistoryError, CreditPreview, RefundBill, VoidBill, creditFor, refundState, refundableByMode, validateCreditHistory, voidRemainder,
   type BillLine, type Credited,
 } from "./credit-notes.js";
+import { calculateBill } from "./billing.js";
 
 type MoneyFields = Pick<BillLine, "taxablePaise" | "cgstPaise" | "sgstPaise" | "roundingPaise" | "totalPaise">;
 const FIELDS = ["taxablePaise", "cgstPaise", "sgstPaise", "roundingPaise", "totalPaise"] as const;
@@ -26,6 +27,95 @@ const addCredit = (credited: Record<string, Credited>, draft: ReturnType<typeof 
 describe("credit math", () => {
   const dosa = line({ orderItemId: "i1", qty: 3, taxablePaise: 30001, cgstPaise: 750, sgstPaise: 750, roundingPaise: -1, totalPaise: 31500 });
 
+  it("returns ten heavily discounted units without exhausting tax or payment before the last unit", () => {
+    const billed = line({ orderItemId: "tiny", qty: 10, gstRate: 18, taxablePaise: 55, cgstPaise: 5, sgstPaise: 5, roundingPaise: 35, totalPaise: 100 });
+    const credited: Record<string, Credited> = {};
+    for (let n = 0; n < 10; n++) {
+      const draft = creditFor([billed], credited, [{ orderItemId: "tiny", qty: 1 }]);
+      expect(draft.totals.totalPaise).toBe(10);
+      for (const field of ["taxablePaise", "cgstPaise", "sgstPaise", "totalPaise"] as const) expect(draft.totals[field]).toBeGreaterThanOrEqual(0);
+      addCredit(credited, draft);
+      expect(credited.tiny!.cgstPaise).toBeLessThanOrEqual(5);
+      expect(credited.tiny!.totalPaise).toBeLessThanOrEqual(100);
+    }
+    expect(credited.tiny).toEqual({ qty: 10, ...money(billed) });
+  });
+
+  it("keeps both one-unit returns at zero when negative rounding offsets all taxable and tax amounts", () => {
+    const billed = line({ orderItemId: "zero", qty: 2, taxablePaise: 12, cgstPaise: 1, sgstPaise: 1, roundingPaise: -14, totalPaise: 0 });
+    const credited: Record<string, Credited> = {};
+    for (let n = 0; n < 2; n++) {
+      const draft = creditFor([billed], credited, [{ orderItemId: "zero", qty: 1 }]);
+      expect(draft.totals.totalPaise).toBe(0);
+      addCredit(credited, draft);
+    }
+    expect(credited.zero).toEqual({ qty: 2, ...money(billed) });
+  });
+
+  it.each([
+    { qty: 0.5 }, { qty: -1 }, { qty: 11 }, { taxablePaise: 1.5 }, { taxablePaise: -1 },
+    { cgstPaise: 8 }, { sgstPaise: -1 }, { totalPaise: -1 }, { totalPaise: 101 },
+    { roundingPaise: 0.5 }, { roundingPaise: 1 }, { qty: 10 }, { qty: 0 },
+  ])("refuses inconsistent history before allocating a new credit: %j", (invalid) => {
+    const billed = line({ orderItemId: "tiny", qty: 10, taxablePaise: 55, cgstPaise: 5, sgstPaise: 5, roundingPaise: 35, totalPaise: 100 });
+    const prior: Credited = { qty: 1, taxablePaise: 6, cgstPaise: 1, sgstPaise: 1, roundingPaise: 4, totalPaise: 12, ...invalid };
+    expect(() => voidRemainder([billed], { tiny: prior })).toThrow(/earlier refunds require review/i);
+    expect(() => creditFor([billed], { tiny: prior }, [{ orderItemId: "tiny", qty: 1 }])).toThrow(CreditHistoryError);
+  });
+
+  it("continues a valid older allocation ahead of the cumulative schedule without reversing earlier amounts", () => {
+    const billed = line({ orderItemId: "tiny", qty: 10, taxablePaise: 55, cgstPaise: 5, sgstPaise: 5, roundingPaise: 35, totalPaise: 100 });
+    const previous = Object.freeze({ qty: 4, taxablePaise: 36, cgstPaise: 5, sgstPaise: 5, roundingPaise: 26, totalPaise: 72 });
+    const credited = { tiny: previous };
+    const first = creditFor([billed], credited, [{ orderItemId: "tiny", qty: 1 }]);
+    expect(money(first.totals)).toEqual({ taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0 });
+    addCredit(credited, first);
+    const next = creditFor([billed], credited, [{ orderItemId: "tiny", qty: 4 }]);
+    expect(next.totals).toEqual({ taxablePaise: 14, cgstPaise: 0, sgstPaise: 0, roundingPaise: 4, totalPaise: 18 });
+    addCredit(credited, next);
+    addCredit(credited, voidRemainder([billed], credited));
+    expect(credited.tiny).toEqual({ qty: 10, ...money(billed) });
+    expect(previous).toEqual({ qty: 4, taxablePaise: 36, cgstPaise: 5, sgstPaise: 5, roundingPaise: 26, totalPaise: 72 });
+  });
+
+  it.each(Array.from({ length: 99 }, (_, n) => n + 1))("conserves every field for quantity %i across deterministic partitions, grouped requests and final voids", (qty) => {
+    const bills = (["included", "none"] as const).map((mode, i) => {
+      const totals = calculateBill([{ pricePaise: i ? 1000 : 7, gstRate: i ? 5 : 18, qty }], i ? qty * 973 : qty % 3, mode);
+      return line({ orderItemId: mode, qty, ...totals.taxes[0]!, roundingPaise: totals.roundingPaise, totalPaise: totals.totalPaise });
+    });
+    // Saved exclusive invoices already contain their tax calculation; credits must use those immutable amounts.
+    const taxablePaise = qty * 103 - 17, cgstPaise = Math.round(taxablePaise * 0.06), sgstPaise = cgstPaise;
+    const beforeRounding = taxablePaise + cgstPaise + sgstPaise;
+    const totalPaise = Math.round(beforeRounding / 100) * 100;
+    bills.push(line({ orderItemId: "legacy-exclusive", qty, gstRate: 12, taxablePaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - beforeRounding, totalPaise }));
+    const originals = structuredClone(bills);
+    for (const singles of [true, false]) {
+      const credited: Record<string, Credited> = {};
+      let left = qty, step = 0;
+      while (left > 1) {
+        const q = singles ? 1 : Math.min(left - 1, 1 + (qty * 17 + step * 11) % 7);
+        const requested = bills.flatMap((b) => q === 1 ? [{ orderItemId: b.orderItemId, qty: 1 }]
+          : [{ orderItemId: b.orderItemId, qty: 1 }, { orderItemId: b.orderItemId, qty: q - 1 }]);
+        const draft = creditFor(bills, credited, requested);
+        for (const l of draft.lines) {
+          expect(l.qty).toBe(q);
+          for (const f of ["taxablePaise", "cgstPaise", "sgstPaise", "totalPaise"] as const) expect(l[f]).toBeGreaterThanOrEqual(0);
+          expect(l.totalPaise).toBe(l.taxablePaise + l.cgstPaise + l.sgstPaise + l.roundingPaise);
+        }
+        addCredit(credited, draft);
+        expect(() => validateCreditHistory(bills, credited)).not.toThrow();
+        left -= q;
+        step++;
+      }
+      const last = voidRemainder(bills, credited);
+      for (const l of last.lines) for (const f of ["taxablePaise", "cgstPaise", "sgstPaise", "totalPaise"] as const) expect(l[f]).toBeGreaterThanOrEqual(0);
+      expect(last.taxes.map((t) => t.gstRate)).toEqual([5, 12, 18]);
+      addCredit(credited, last);
+      for (const b of bills) expect(credited[b.orderItemId]).toEqual({ qty, ...money(b) });
+      expect(bills).toEqual(originals);
+    }
+  });
+
   it("credits proportional shares and gives the last units the remainder", () => {
     const credited: Record<string, Credited> = {};
     const first = creditFor([dosa], credited, [{ orderItemId: "i1", qty: 1 }]);
@@ -34,10 +124,10 @@ describe("credit math", () => {
     expect(money(first.lines[0]!)).toEqual({ taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 });
     addCredit(credited, first);
     const second = creditFor([dosa], credited, [{ orderItemId: "i1", qty: 1 }]);
-    expect(money(second.lines[0]!)).toEqual({ taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 });
+    expect(money(second.lines[0]!)).toEqual({ taxablePaise: 10001, cgstPaise: 250, sgstPaise: 250, roundingPaise: -1, totalPaise: 10500 });
     addCredit(credited, second);
     const third = creditFor([dosa], credited, [{ orderItemId: "i1", qty: 1 }]);
-    expect(money(third.lines[0]!)).toEqual({ taxablePaise: 10001, cgstPaise: 250, sgstPaise: 250, roundingPaise: -1, totalPaise: 10500 });
+    expect(money(third.lines[0]!)).toEqual({ taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 });
     addCredit(credited, third);
     expect(money(credited["i1"]!)).toEqual(money(dosa));
   });
@@ -110,10 +200,10 @@ describe("credit math", () => {
     expect(() => creditFor([dosa], credited, [{ orderItemId: "i1", qty: 1 }])).toThrow(/Dosa/);
   });
 
-  it("rounds half away from zero", () => {
-    const l = line({ orderItemId: "x", qty: 2, taxablePaise: 5, cgstPaise: -5, sgstPaise: 0, roundingPaise: 0, totalPaise: 0 });
+  it("rounds positive half paise upwards and balances the credit with a negative rounding residual", () => {
+    const l = line({ orderItemId: "x", qty: 2, taxablePaise: 5, cgstPaise: 5, sgstPaise: 0, roundingPaise: -10, totalPaise: 0 });
     const d = creditFor([l], {}, [{ orderItemId: "x", qty: 1 }]);
-    expect(d.lines[0]).toMatchObject({ taxablePaise: 3, cgstPaise: -3 });
+    expect(d.lines[0]).toMatchObject({ taxablePaise: 3, cgstPaise: 3, roundingPaise: -6, totalPaise: 0 });
   });
 });
 

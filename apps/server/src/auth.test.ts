@@ -1,6 +1,8 @@
 import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "./server.js";
+import { commercialApp } from "./test-helpers.js";
+import { httpError } from "./http-error.js";
 
 function freshApp() {
   const db = openDb(":memory:");
@@ -137,6 +139,43 @@ describe("login / me / logout", () => {
 });
 
 describe("requirePermission", () => {
+  it.each(["hook", "assertion"] as const)("preserves permission response contracts and req.user through the %s", async (mode) => {
+    app = freshApp();
+    app.get("/api/_test-permission", { preHandler: mode === "hook" ? app.requirePermission("users.manage") : [] }, async (req) => {
+      const user = mode === "assertion" ? app.assertPermission(req, "users.manage") : req.user;
+      return { user, requestUser: req.user };
+    });
+    const request = (token?: string) => app.inject({ url: "/api/_test-permission", headers: token ? { authorization: `Bearer ${token}` } : {} });
+    expect((await request()).json()).toEqual({ error: "unauthenticated" });
+    expect((await request("garbage")).statusCode).toBe(401);
+    const admin = await setup(app);
+    const allowed = await request(admin.token);
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toEqual({ user: admin.user, requestUser: admin.user });
+    app.db.prepare("UPDATE users SET role = 'cashier' WHERE id = ?").run(admin.user.id);
+    const denied = await request(admin.token);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toEqual({ error: "forbidden", permission: "users.manage" });
+    app.db.prepare("UPDATE users SET is_active = 0 WHERE id = ?").run(admin.user.id);
+    const inactive = await request(admin.token);
+    expect(inactive.statusCode).toBe(401);
+    expect(inactive.json()).toEqual({ error: "unauthenticated" });
+  });
+
+  it("preserves licensing and device checks on permission-gated routes", async () => {
+    const fixture = await commercialApp("basic");
+    app = fixture.app;
+    const allowed = await app.inject({ url: "/api/users", headers: fixture.headers });
+    expect(allowed.statusCode).toBe(200);
+    const wrongDevice = await app.inject({ url: "/api/users", headers: { ...fixture.headers, "x-forkflow-device": "x".repeat(64) } });
+    expect(wrongDevice.statusCode).toBe(401);
+    expect(wrongDevice.json()).toEqual({ error: "unauthenticated" });
+    app.db.prepare("UPDATE license_state SET envelope = NULL WHERE id = 1").run();
+    const restricted = await app.inject({ url: "/api/users", headers: fixture.headers });
+    expect(restricted.statusCode).toBe(403);
+    expect(restricted.json()).toEqual({ error: app.licensing.status(fixture.headers["x-forkflow-device"]).message });
+  });
+
   it("admin passes, waiter is 403", async () => {
     app = freshApp();
     // a scratch admin-gated route, registered before ready()
@@ -167,6 +206,21 @@ describe("requirePermission", () => {
 });
 
 describe("error handling", () => {
+  it("preserves the credit history diagnostic code", async () => {
+    app = freshApp();
+    app.get("/api/_test-credit-history", async () => { throw httpError(409, "Credit history requires review", "credit_history_inconsistent"); });
+    const res = await app.inject({ url: "/api/_test-credit-history" });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "Credit history requires review", code: "credit_history_inconsistent" });
+  });
+
+  it("does not expose arbitrary permission metadata on unrelated errors", async () => {
+    app = freshApp();
+    app.get("/api/_test-metadata", async () => { throw Object.assign(httpError(403, "Denied", "private"), { permission: "private" }); });
+    const res = await app.inject({ url: "/api/_test-metadata" });
+    expect(res.json()).toEqual({ error: "Denied" });
+  });
+
   it("hides 500 error messages from clients", async () => {
     app = freshApp();
     // register a scratch route that throws

@@ -15,7 +15,7 @@
   };
   const visible = value => !!value && value.getClientRects().length > 0 && getComputedStyle(value).visibility !== 'hidden' && !value.closest('[hidden],[inert]');
   const actionScope = () => document.querySelector('dialog[open]') || document;
-  const button = label => [...actionScope().querySelectorAll('button')].find(b => visible(b) && (b.textContent.trim() === label || b.getAttribute('aria-label') === label));
+  const button = label => [...actionScope().querySelectorAll('button')].find(b => visible(b) && (b.textContent.trim().replace(/ · F\d+$/, '') === label || b.getAttribute('aria-label') === label));
   const click = async label => { (await wait(() => { const b = button(label); return b && !b.matches(':disabled') ? b : null; }, label)).click(); await pause(); };
   async function closeBilling() {
     if (!document.querySelector('dialog.billing-dialog[open]')) return;
@@ -38,23 +38,20 @@
     await closeBilling();
     if (!(await wait(() => button('home'), 'home navigation')).disabled) await click('home');
     await click('Takeaway');
-    await wait(() => document.querySelector('.order-screen select[aria-label="Menu category"]') && takeaway()?.orderId, 'empty takeaway');
-    check(document.querySelector('.order-workspace .order-screen .menu-toolbar select[aria-label="Menu category"]') && document.querySelector('.order-cart .billing-footer') && document.querySelector('body > dialog.billing-dialog'), 'Current compact order layout and portaled billing dialog loaded');
+    await wait(() => document.querySelector('.order-screen [aria-label="Menu categories"]') && takeaway()?.orderId, 'empty takeaway');
+    check(document.querySelector('.order-workspace .order-screen [aria-label="Menu categories"]') && document.querySelector('.order-cart .billing-footer') && document.querySelector('body > dialog.billing-dialog'), 'Current compact order layout and portaled billing dialog loaded');
     await showPane('menu');
     const category = await wait(() => {
-      const select = actionScope().querySelector('select[aria-label="Menu category"]');
-      return visible(select) && !select.disabled && [...select.options].some(option => option.value === fixtures.category.id) ? select : null;
+      return [...actionScope().querySelectorAll('[aria-label="Menu categories"] button')].find(button => visible(button) && !button.disabled && button.textContent.trim() === fixtures.category.name);
     }, 'menu category');
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(category, fixtures.category.id);
-    category.dispatchEvent(new Event('change', { bubbles: true }));
+    category.click();
     await pause();
     (await wait(() => [...actionScope().querySelectorAll('button.menu-card')].find(b => visible(b) && b.textContent.includes(fixtures.water.name) && !b.disabled), 'bottle menu item')).click();
     await pause();
     await showPane('cart');
-    await click('Checkout');
-    const method = await wait(() => [...actionScope().querySelectorAll('label')].filter(label => label.textContent.startsWith('Payment method')).map(label => label.querySelector('select')).find(visible), 'payment method');
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(method, 'upi');
-    method.dispatchEvent(new Event('change', { bubbles: true }));
+    await click('Pay');
+    const method = await wait(() => [...actionScope().querySelectorAll('[role="group"][aria-label="Payment method"] button')].find(button => visible(button) && !button.disabled && button.textContent.trim() === 'UPI'), 'payment method');
+    method.click();
     await pause();
     result.orderId = takeaway().orderId;
     const failedPath = '/api/orders/' + result.orderId;
@@ -64,7 +61,7 @@
       if (path === failedPath && method === 'GET') { result.failedOrderReads++; throw new TypeError('M10 controlled order refresh failure'); }
       return nativeFetch(url, init);
     };
-    await click('Issue bill & record UPI payment');
+    await click('Record payment');
     await wait(() => document.body.innerText.includes('Payment is recorded. Reopen the order if its status has not refreshed.'), 'paid refresh guidance');
     const bill = (await api('/orders/' + result.orderId + '/bill')).bill;
     result.billId = bill.id;

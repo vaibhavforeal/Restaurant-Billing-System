@@ -22,6 +22,8 @@
   const visible = value => !!value && value.getClientRects().length > 0 && getComputedStyle(value).visibility !== 'hidden' && !value.closest('[hidden],[inert]');
   const actionScope = () => document.querySelector('dialog[open]') || document;
   const button = label => [...actionScope().querySelectorAll('button')].find(value => visible(value) && (value.textContent.trim().replace(/ · F\d+$/, '') === label || value.getAttribute('aria-label') === label));
+  // Reports & Analytics: everyday reports are tabs; the rest are under "More reports".
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const s = document.querySelector('select[aria-label="More reports"]'); if (!s) throw new Error('Report tabs missing'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, value); s.dispatchEvent(new Event('change', { bubbles: true })); } await new Promise(r => setTimeout(r, 80)); };
   const click = async (label, twice = false) => {
     const value = await wait(() => { const b = button(label); return b && !b.matches(':disabled') ? b : null; }, 'enabled ' + label);
     value.click(); if (twice) value.click(); await pause();

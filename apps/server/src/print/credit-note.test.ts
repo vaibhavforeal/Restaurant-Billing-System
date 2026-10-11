@@ -33,7 +33,7 @@ describe("credit note slip", () => {
     expect(paid.statusCode).toBe(200);
     const orderItemId = (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(billId) as { id: string }).id;
     const refund = await app.inject({ method: "POST", url: `/api/bills/${billId}/refund`, headers: auth(token),
-      payload: { clientRef: uuidv7(), reason, lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] } });
+      payload: { clientRef: uuidv7(), reason, lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3500 }] } });
     expect(refund.statusCode, refund.body).toBe(201);
     return { bill: refund.json().bill as Bill, noteId: refund.json().creditNote.id as string };
   }
@@ -49,7 +49,7 @@ describe("credit note slip", () => {
       expect(rendered).toContain("Thali");
       expect(rendered).toContain("CGST 2.5%"); expect(rendered).toContain("SGST 2.5%"); expect(rendered).not.toContain("@ 2.5%");
       expect(rendered).toContain("TOTAL REFUNDED");
-      expect(rendered).toContain("34.99");
+      expect(rendered).toContain("35.00");
       expect(rendered).toContain("CASH");
       expect(rendered).toContain("Cold food");
       expect(rendered).toContain("Approved by Asha");
@@ -99,7 +99,7 @@ describe("credit note slip", () => {
     expect(res.headers["content-security-policy"]).toBe("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
     expect(res.body).toContain("CN-1");
     expect(res.body).toContain("5%");
-    expect(res.body).toContain("34.99");
+    expect(res.body).toContain("35.00");
     expect((await app.inject({ url: `/api/credit-notes/${uuidv7()}/receipt`, headers: auth(token) })).statusCode).toBe(404);
     expect((await app.inject({ url: `/api/credit-notes/${noteId}/receipt` })).statusCode).toBe(401);
   });

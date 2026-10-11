@@ -4,21 +4,23 @@ import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serialPowerShell } from "./serial-helper.js";
 
 /** The transport accepted some or all of the bytes, or may have: staff must check the paper before retrying. */
 export class PrintOutcomeUnknown extends Error {}
 
-// Exit codes from the Windows helper script. 1 is PowerShell's own failure before the helper ran (compile or file read).
+// Exit codes from the Windows helpers. Legacy spooler exit 1 is a known pre-submission PowerShell failure;
+// the serial helper explicitly returns 20 for those failures.
 const EXIT_NOT_SENT = 20;
 const EXIT_MAYBE_SENT = 21;
 
-/** Only failures that provably happened before any byte reached the spooler are plain, safely retryable errors. */
-function windowsFailure(error: Error & { code?: unknown; killed?: boolean }, stderr: string): Error {
+/** Only failures proven to precede submission are plain, safely retryable errors. */
+function windowsFailure(error: Error & { code?: unknown; killed?: boolean }, stderr: string, transport: "windows" | "bluetooth"): Error {
   const message = (stderr || error.message).trim();
-  if (error.code === "ENOENT" || error.code === 1 || error.code === EXIT_NOT_SENT) {
-    return new Error(`Windows printer was not reached: ${message.replace(/^NOTSENT:\s*/, "")}`);
+  if (!error.killed && (error.code === "ENOENT" || error.code === EXIT_NOT_SENT || (transport === "windows" && error.code === 1))) {
+    return new Error(`${transport === "windows" ? "Windows printer" : "Bluetooth printer"} was not reached: ${message.replace(/^NOTSENT:\s*/, "")}`);
   }
-  return new PrintOutcomeUnknown(`Windows printer submission was not confirmed: ${message}`);
+  return new PrintOutcomeUnknown(`${transport === "windows" ? "Windows printer" : "Bluetooth printer"} submission was not confirmed: ${message}`);
 }
 
 export interface PrinterTarget {
@@ -81,12 +83,6 @@ async function sendToNetwork(connection: string, bytes: Buffer): Promise<void> {
 }
 
 async function sendToWindows(printerName: string, bytes: Buffer): Promise<void> {
-  const directory = await fs.mkdtemp(join(tmpdir(), "forkflow-print-"));
-  const bytesPath = join(directory, "payload.bin");
-  const scriptPath = join(directory, "send.ps1");
-  try {
-    await fs.writeFile(bytesPath, bytes);
-
   // Embedded PowerShell script with RawPrinterHelper
   const psScript = `
 $ErrorActionPreference = 'Stop'
@@ -164,28 +160,39 @@ $printerName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64Strin
 try {
     [RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)
 } catch {
-    [Console]::Error.WriteLine($_.Exception.Message)
-    if ($_.Exception.Message -like 'NOTSENT:*') { exit ${EXIT_NOT_SENT} } else { exit ${EXIT_MAYBE_SENT} }
+    $message = $_.Exception.GetBaseException().Message
+    [Console]::Error.WriteLine($message)
+    if ($message -like 'NOTSENT:*') { exit ${EXIT_NOT_SENT} } else { exit ${EXIT_MAYBE_SENT} }
 }
 `;
 
-  await fs.writeFile(scriptPath, psScript, "utf8");
+  await runWindowsHelper({ script: psScript, target: printerName, bytes, timeoutMs: 15000, transport: "windows" });
+}
 
-  await new Promise<void>((resolve, reject) => {
-    execFile(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
-      { timeout: 15000, windowsHide: true, env: { ...process.env,
-        FORKFLOW_PRINT_PAYLOAD: bytesPath, FORKFLOW_PRINT_NAME: Buffer.from(printerName, "utf8").toString("base64") } },
-      (err, stdout, stderr) => {
-        if (err) {
-          reject(windowsFailure(err, stderr));
-        } else {
-          resolve();
+async function runWindowsHelper({ script, target, bytes, timeoutMs, transport }: {
+  script: string; target: string; bytes: Buffer; timeoutMs: number; transport: "windows" | "bluetooth";
+}): Promise<void> {
+  const directory = await fs.mkdtemp(join(tmpdir(), "forkflow-print-"));
+  const bytesPath = join(directory, "payload.bin");
+  const scriptPath = join(directory, "send.ps1");
+  try {
+    await fs.writeFile(bytesPath, bytes);
+    await fs.writeFile(scriptPath, script, "utf8");
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
+        { timeout: timeoutMs, windowsHide: true, env: { ...process.env,
+          FORKFLOW_PRINT_PAYLOAD: bytesPath, FORKFLOW_PRINT_NAME: Buffer.from(target, "utf8").toString("base64") } },
+        (err, stdout, stderr) => {
+          if (err) {
+            reject(windowsFailure(err, stderr, transport));
+          } else {
+            resolve();
+          }
         }
-      }
-    );
-  });
+      );
+    });
   } finally {
     // Cleanup cannot turn an accepted submission into an apparent print failure.
     await fs.rm(directory, { recursive: true, force: true }).catch(error => console.error("Print temporary-file cleanup failed", error));
@@ -194,15 +201,7 @@ try {
 
 async function sendToBluetooth(connection: string, bytes: Buffer): Promise<void> {
   if (!/^COM[1-9]\d{0,3}$/i.test(connection)) throw new Error("Use a Bluetooth COM port such as COM3");
-  const portPath = `\\\\.\\${connection}`;
-  try {
-    await fs.writeFile(portPath, bytes);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    // Failing to open the port (missing, in use, access denied) means nothing was written.
-    if ((err as NodeJS.ErrnoException | undefined)?.syscall === "open") throw new Error(`Bluetooth printer could not be opened: ${message}`);
-    throw new PrintOutcomeUnknown(`Bluetooth printer submission was not confirmed: ${message}`);
-  }
+  await runWindowsHelper({ script: serialPowerShell, target: connection, bytes, timeoutMs: 15000, transport: "bluetooth" });
 }
 
 /**

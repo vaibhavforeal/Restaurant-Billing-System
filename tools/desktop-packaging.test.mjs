@@ -1,15 +1,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { desktopBuildConfig } from "./desktop-build-config.mjs";
 import verifyDesktopPackage from "./verify-desktop-package.mjs";
+import { fileURLToPath } from "node:url";
+import { getConfig } from "app-builder-lib/out/util/config/config.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const env = { FORKFLOW_LICENSE_PUBLIC_KEY: publicKey };
+
+test("every installer ships the Electron runtime selected by the lockfile", async () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
+  const version = lock.packages["node_modules/electron"].version;
+  for (const file of ["electron-builder.yml", "electron-builder.dev.yml", "electron-builder.demo.yml", "electron-builder.kitchen.yml"]) {
+    const config = await getConfig(root, file, undefined);
+    assert.equal(config.electronVersion, version, `${file} must ship the audited runtime`);
+  }
+});
 
 test("demo and licensed customer builds have different stages and licensing", () => {
   const demo = desktopBuildConfig(["--demo"], env);

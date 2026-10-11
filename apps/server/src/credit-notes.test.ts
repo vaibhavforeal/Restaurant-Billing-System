@@ -63,6 +63,148 @@ describe("credit preview, approval and bill credit data", () => {
     return id;
   }
   const orderItemOf = (billId: string) => (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(billId) as { id: string }).id;
+  async function tinyBill(zero = false): Promise<Bill> {
+    const headers = auth(admin.token);
+    const product = await app.inject({ method: "POST", url: "/api/products", headers,
+      payload: { name: "Tiny dish", categoryId, pricePaise: zero ? 7 : 1000, gstRate: 18 } });
+    expect(product.statusCode, product.body).toBe(201);
+    const created = await app.inject({ method: "POST", url: "/api/orders", headers, payload: { clientRef: uuidv7(), type: "parcel" } });
+    const orderId = created.json().order.id as string;
+    const added = await app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers,
+      payload: { items: [{ productId: product.json().product.id, qty: zero ? 2 : 10, clientRef: uuidv7() }] } });
+    expect(added.statusCode, added.body).toBe(200);
+    const discount = zero ? {} : { discountPaise: 9935, discountNote: "Discount" };
+    const proposed = await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill-preview`, headers, payload: discount });
+    const issued = await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill`, headers,
+      payload: { clientRef: uuidv7(), previewKey: proposed.json().preview.previewKey, ...discount } });
+    expect(issued.statusCode, issued.body).toBe(201);
+    const b = issued.json().bill as Bill;
+    expect(b.totalPaise).toBe(zero ? 0 : 100);
+    const paid = await app.inject({ method: "POST", url: `/api/bills/${b.id}/settle`, headers,
+      payload: { clientRef: uuidv7(), payments: zero ? [] : [{ mode: "cash", amountPaise: 100 }] } });
+    expect(paid.statusCode, paid.body).toBe(200);
+    return paid.json().bill as Bill;
+  }
+
+  describe("cumulative refund allocation", () => {
+    it.each([false, true])("returns the exact discounted bill through one-unit refunds (final void: %s)", async (finalVoid) => {
+      const b = await tinyBill();
+      const original = app.db.prepare("SELECT * FROM bills WHERE id = ?").get(b.id);
+      const originalLines = app.db.prepare("SELECT * FROM bill_report_lines WHERE bill_id = ?").all(b.id);
+      expect(originalLines[0]).toMatchObject({ qty: 10, taxable_paise: 55, cgst_paise: 5, sgst_paise: 5, rounding_paise: 35, total_paise: 100 });
+      for (let n = 0; n < (finalVoid ? 9 : 10); n++) {
+        const kind = finalVoid && n === 8 ? "void" : "refund";
+        const lines = kind === "refund" ? [{ orderItemId: orderItemOf(b.id), qty: 1 }] : undefined;
+        const p = await preview(b.id, { kind, ...(lines ? { lines } : {}) });
+        expect(p.statusCode, p.body).toBe(200);
+        const draft = p.json().preview;
+        expect(draft.totals.totalPaise).toBe(kind === "void" ? 20 : 10);
+        expect(draft.totals.totalPaise).toBeLessThanOrEqual(draft.refundable.total);
+        for (const field of ["taxablePaise", "cgstPaise", "sgstPaise", "totalPaise"]) expect(draft.totals[field]).toBeGreaterThanOrEqual(0);
+        const payload = { clientRef: uuidv7(), reason: "Return", ...(lines ? { lines } : {}), refunds: [{ mode: "cash", amountPaise: draft.totals.totalPaise }] };
+        const res = await app.inject({ method: "POST", url: `/api/bills/${b.id}/${kind}`, headers: auth(admin.token), payload });
+        expect(res.statusCode, res.body).toBe(201);
+        const noteId = res.json().creditNote.id;
+        expect(app.db.prepare("SELECT taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise FROM credit_notes WHERE id = ?").get(noteId))
+          .toEqual({ taxable_paise: draft.totals.taxablePaise, cgst_paise: draft.totals.cgstPaise, sgst_paise: draft.totals.sgstPaise,
+            rounding_paise: draft.totals.roundingPaise, total_paise: draft.totals.totalPaise });
+        const again = await app.inject({ method: "POST", url: `/api/bills/${b.id}/${kind}`, headers: auth(admin.token), payload });
+        expect(again.statusCode, again.body).toBe(200);
+        expect(again.json().creditNote).toEqual(res.json().creditNote);
+      }
+      expect(app.db.prepare("SELECT SUM(qty) AS qty, SUM(taxable_paise) AS taxable, SUM(cgst_paise) AS cgst, SUM(sgst_paise) AS sgst, SUM(rounding_paise) AS rounding, SUM(total_paise) AS total FROM credit_note_lines").get())
+        .toEqual({ qty: 10, taxable: 55, cgst: 5, sgst: 5, rounding: 35, total: 100 });
+      expect(app.db.prepare("SELECT SUM(amount_paise) AS total FROM refund_payments").get()).toEqual({ total: 100 });
+      expect(app.db.prepare("SELECT * FROM bill_report_lines WHERE bill_id = ?").all(b.id)).toEqual(originalLines);
+      expect(app.db.prepare("SELECT * FROM bills WHERE id = ?").get(b.id)).toEqual({ ...original as object, status: finalVoid ? "void" : "paid" });
+    });
+
+    it("accepts empty refunds for both zero-total one-unit credits", async () => {
+      const b = await tinyBill(true);
+      expect(loadBillCredit(app.db, b.id).lines[0]).toMatchObject({ qty: 2, taxablePaise: 12, cgstPaise: 1, sgstPaise: 1, roundingPaise: -14, totalPaise: 0 });
+      for (let n = 0; n < 2; n++) {
+        const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
+        const p = await preview(b.id, { kind: "refund", lines });
+        expect(p.statusCode, p.body).toBe(200);
+        expect(p.json().preview.totals.totalPaise).toBe(0);
+        const res = await app.inject({ method: "POST", url: `/api/bills/${b.id}/refund`, headers: auth(admin.token),
+          payload: { clientRef: uuidv7(), reason: "Return", lines, refunds: [] } });
+        expect(res.statusCode, res.body).toBe(201);
+        expect(res.json().creditNote).toMatchObject({ totalPaise: 0, refunds: [] });
+      }
+      expect(loadBillCredit(app.db, b.id).credited[orderItemOf(b.id)]).toEqual({ qty: 2, taxablePaise: 12, cgstPaise: 1, sgstPaise: 1, roundingPaise: -14, totalPaise: 0 });
+    });
+
+    it.each([false, true])("rejects inconsistent earlier credits in previews and writes without side effects (finalized: %s)", async (finalized) => {
+      const b = await tinyBill();
+      priorCredit(b.id, finalized ? 10 : 8, finalized ? [54, 5, 5, 35, 99] : [48, 8, 8, 32, 96], [["cash", finalized ? 99 : 96]]);
+      const tables = ["bills", "bill_report_lines", "credit_notes", "credit_note_lines", "credit_note_taxes", "refund_payments", "payments", "stock_moves", "orders", "order_items", "order_table_events", "sequences"];
+      const snapshot = () => tables.map((table) => app.db.prepare(`SELECT * FROM ${table}`).all());
+      const before = snapshot();
+      for (const kind of ["refund", "void"] as const) {
+        const lines = kind === "refund" ? { lines: [{ orderItemId: orderItemOf(b.id), qty: 1 }] } : {};
+        const p = await preview(b.id, { kind, ...lines });
+        expect(p.statusCode, p.body).toBe(409);
+        expect(p.json()).toMatchObject({ code: "credit_history_inconsistent", error: expect.stringMatching(/earlier refunds require review/i) });
+        const write = await app.inject({ method: "POST", url: `/api/bills/${b.id}/${kind}`, headers: auth(admin.token),
+          payload: { clientRef: uuidv7(), reason: "Return", ...lines, refunds: [{ mode: "cash", amountPaise: finalized ? 1 : 4 }] } });
+        expect(write.statusCode, write.body).toBe(409);
+        expect(write.json().code).toBe("credit_history_inconsistent");
+      }
+      expect(snapshot()).toEqual(before);
+    });
+
+    it("replays a successful reference before attempting a draft against inconsistent later history", async () => {
+      const b = await tinyBill();
+      const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
+      const p = await preview(b.id, { kind: "refund", lines });
+      const payload = { clientRef: uuidv7(), reason: "Return", lines, refunds: [{ mode: "cash", amountPaise: p.json().preview.totals.totalPaise }] };
+      const request = () => app.inject({ method: "POST", url: `/api/bills/${b.id}/refund`, headers: auth(admin.token), payload });
+      const first = await request();
+      expect(first.statusCode, first.body).toBe(201);
+      priorCredit(b.id, 7, [42, 7, 7, 28, 84], [["cash", 84]]);
+      const replay = await request();
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json().creditNote).toEqual(first.json().creditNote);
+      expect((await preview(b.id, { kind: "refund", lines })).statusCode).toBe(409);
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM credit_notes").get()).toEqual({ n: 2 });
+    });
+
+    it("continues a valid older allocation with a zero credit and a final exact void without editing history", async () => {
+      const b = await tinyBill();
+      priorCredit(b.id, 4, [36, 5, 5, 26, 72], [["cash", 72]]);
+      const originals = app.db.prepare("SELECT * FROM credit_notes").all();
+      const originalLines = app.db.prepare("SELECT * FROM credit_note_lines").all();
+      const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
+      const p = await preview(b.id, { kind: "refund", lines });
+      expect(p.statusCode, p.body).toBe(200);
+      expect(p.json().preview.totals).toEqual({ taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0 });
+      const returned = await app.inject({ method: "POST", url: `/api/bills/${b.id}/refund`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), reason: "Return", lines, refunds: [] } });
+      expect(returned.statusCode, returned.body).toBe(201);
+      const remaining = await preview(b.id, { kind: "void" });
+      expect(remaining.json().preview.totals).toEqual({ taxablePaise: 19, cgstPaise: 0, sgstPaise: 0, roundingPaise: 9, totalPaise: 28 });
+      const voided = await app.inject({ method: "POST", url: `/api/bills/${b.id}/void`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), reason: "Return remainder", refunds: [{ mode: "cash", amountPaise: 28 }] } });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect(loadBillCredit(app.db, b.id).credited[orderItemOf(b.id)]).toEqual({ qty: 10, taxablePaise: 55, cgstPaise: 5, sgstPaise: 5, roundingPaise: 35, totalPaise: 100 });
+      expect(app.db.prepare("SELECT * FROM credit_notes ORDER BY cn_no LIMIT 1").all()).toEqual(originals);
+      expect(app.db.prepare("SELECT * FROM credit_note_lines ORDER BY rowid LIMIT 1").all()).toEqual(originalLines);
+    });
+
+    it("serializes concurrent valid final credits after asynchronous approval and enforces the remaining payment cap", async () => {
+      const b = await tinyBill();
+      priorCredit(b.id, 8, [44, 4, 4, 28, 80], [["cash", 80]]);
+      const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
+      const request = () => app.inject({ method: "POST", url: `/api/bills/${b.id}/refund`, headers: auth(cashier.token),
+        payload: { clientRef: uuidv7(), reason: "Return", approverPin: "1234", lines, refunds: [{ mode: "cash", amountPaise: 10 }] } });
+      const results = await Promise.all([request(), request(), request()]);
+      expect(results.map((res) => res.statusCode).sort()).toEqual([201, 201, 409]);
+      expect(loadBillCredit(app.db, b.id).credited[orderItemOf(b.id)]).toEqual({ qty: 10, taxablePaise: 55, cgstPaise: 5, sgstPaise: 5, roundingPaise: 35, totalPaise: 100 });
+      expect(app.db.prepare("SELECT SUM(amount_paise) AS total FROM refund_payments").get()).toEqual({ total: 100 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM credit_notes").get()).toEqual({ n: 3 });
+    });
+  });
   /** An earlier credit note written straight to the tables (the refund route arrives later); keeps the CN sequence in step. */
   function priorCredit(billId: string, qty: number, t: [number, number, number, number, number], refunds: Array<[PayMode, number]>, kind = "refund"): void {
     const cnNo = (app.db.prepare("UPDATE sequences SET value = value + 1 WHERE name = 'credit_note_no' RETURNING value").get() as { value: number }).value;
@@ -82,10 +224,10 @@ describe("credit preview, approval and bill credit data", () => {
       const res = await preview(b.id, { kind: "refund", lines: [{ orderItemId, qty: 1 }] });
       expect(res.statusCode, res.body).toBe(200);
       const { preview: p } = res.json();
-      expect(p.totals).toEqual({ taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83, roundingPaise: 0, totalPaise: 3499 });
+      expect(p.totals).toEqual({ taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83, roundingPaise: 1, totalPaise: 3500 });
       expect(p.taxes).toEqual([{ gstRate: 5, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83 }]);
       expect(p.lines).toHaveLength(1);
-      expect(p.lines[0]).toMatchObject({ orderItemId, qty: 1, name: item.name, gstRate: 5, totalPaise: 3499 });
+      expect(p.lines[0]).toMatchObject({ orderItemId, qty: 1, name: item.name, gstRate: 5, totalPaise: 3500 });
       expect(p.refundable).toEqual({ cash: 10500, upi: 0, card: 0, total: 10500 });
     });
 
@@ -221,9 +363,9 @@ describe("credit preview, approval and bill credit data", () => {
       expect(order).toMatchObject({ id: b.orderId, status: "cancelled" });
       expect(order.closedAt).toEqual(expect.any(Number));
 
-      const row = app.db.prepare("SELECT kind, rounding_paise, requested_by, approved_by, request_json FROM credit_notes WHERE id = ?").get(creditNote.id) as Record<string, unknown>;
+      const row = app.db.prepare("SELECT kind, rounding_paise, requested_by, approved_by, request_json FROM credit_notes WHERE id = ?").get(creditNote.id) as Record<string, unknown> & { request_json: string };
       expect(row).toMatchObject({ kind: "void", rounding_paise: 0, requested_by: cashier.id, approved_by: admin.user.id });
-      expect(row.request_json).not.toContain("1234");
+      expect(JSON.parse(row.request_json)).not.toHaveProperty("approverPin");
       expect(app.db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM credit_note_taxes WHERE credit_note_id = ?").all(creditNote.id))
         .toEqual([{ gst_rate: 5, taxable_paise: 10000, cgst_paise: 250, sgst_paise: 250 }]);
       expect(count("SELECT COUNT(*) AS n FROM refund_payments")).toBe(0);
@@ -438,28 +580,28 @@ describe("credit preview, approval and bill credit data", () => {
       const b = await bill();
       const orderItemId = orderItemOf(b.id);
       const stockMovesBefore = count("SELECT COUNT(*) AS n FROM stock_moves");
-      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499, refNote: "paid back" }] });
+      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3500, refNote: "paid back" }] });
       expect(res.statusCode, res.body).toBe(201);
       const { bill: after, creditNote, order } = res.json() as { bill: Bill; creditNote: BillCreditNote; order: { id: string; status: string } };
-      expect(creditNote).toMatchObject({ cnNo: 1, kind: "refund", reason: "Cold food", totalPaise: 3499, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83,
-        requestedByName: "Cara", approvedByName: "Asha", refunds: [{ mode: "cash", amountPaise: 3499, refNote: "paid back" }],
-        lines: [{ orderItemId, name: "Thali", qty: 1, totalPaise: 3499 }] });
+      expect(creditNote).toMatchObject({ cnNo: 1, kind: "refund", reason: "Cold food", totalPaise: 3500, taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83,
+        requestedByName: "Cara", approvedByName: "Asha", refunds: [{ mode: "cash", amountPaise: 3500, refNote: "paid back" }],
+        lines: [{ orderItemId, name: "Thali", qty: 1, totalPaise: 3500 }] });
       expect(after).toMatchObject({ id: b.id, status: "paid", totalPaise: 10500, refundState: "partly_refunded", refundedQty: { [orderItemId]: 1 } });
       expect(after.creditNotes).toEqual([creditNote]);
       expect(order).toMatchObject({ id: b.orderId, status: "settled" });
       expect(app.db.prepare("SELECT status, total_paise FROM bills WHERE id = ?").get(b.id)).toEqual({ status: "paid", total_paise: 10500 });
       const row = app.db.prepare("SELECT request_json FROM credit_notes WHERE id = ?").get(creditNote.id) as { request_json: string };
-      expect(row.request_json).not.toContain("1234");
+      expect(JSON.parse(row.request_json)).not.toHaveProperty("approverPin");
       expect(count("SELECT COUNT(*) AS n FROM stock_moves")).toBe(stockMovesBefore);
     });
 
     it("refunding the rest takes the exact remainder and makes the bill refunded", async () => {
       const b = await bill();
       const orderItemId = orderItemOf(b.id);
-      expect((await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(201);
-      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
+      expect((await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3500 }] })).statusCode).toBe(201);
+      const res = await refundBill(b.id, { lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7000 }] });
       expect(res.statusCode, res.body).toBe(201);
-      expect(res.json().creditNote).toMatchObject({ cnNo: 2, kind: "refund", totalPaise: 7001, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167 });
+      expect(res.json().creditNote).toMatchObject({ cnNo: 2, kind: "refund", totalPaise: 7000, taxablePaise: 6667, cgstPaise: 167, sgstPaise: 167 });
       const after = res.json().bill as Bill;
       expect(after).toMatchObject({ status: "paid", refundState: "refunded", refundedQty: { [orderItemId]: 3 } });
       expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(after.totalPaise);
@@ -483,7 +625,7 @@ describe("credit preview, approval and bill credit data", () => {
     it("refuses refund amounts that do not equal the credit note total", async () => {
       const b = await bill();
       const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
-      for (const refunds of [[{ mode: "cash", amountPaise: 3498 }], [{ mode: "cash", amountPaise: 3500 }], []]) {
+      for (const refunds of [[{ mode: "cash", amountPaise: 3498 }], [{ mode: "cash", amountPaise: 3501 }], []]) {
         const res = await refundBill(b.id, { lines, refunds });
         expect(res.statusCode).toBe(400);
         expect(res.json().error).toBe("Refund amounts must equal the credit note total");
@@ -494,13 +636,13 @@ describe("credit preview, approval and bill credit data", () => {
     it("keeps each method within what it paid: a cash refund on an all-UPI bill is refused", async () => {
       const b = await bill(3, "upi");
       const lines = [{ orderItemId: orderItemOf(b.id), qty: 1 }];
-      const byCash = await refundBill(b.id, { lines, refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      const byCash = await refundBill(b.id, { lines, refunds: [{ mode: "cash", amountPaise: 3500 }] });
       expect(byCash.statusCode).toBe(400);
       expect(byCash.json().error).toBe("Refund by cash cannot exceed what was paid by cash");
-      const byUpi = await refundBill(b.id, { lines, refunds: [{ mode: "upi", amountPaise: 3499 }] });
+      const byUpi = await refundBill(b.id, { lines, refunds: [{ mode: "upi", amountPaise: 3500 }] });
       expect(byUpi.statusCode, byUpi.body).toBe(201);
       const rest = [{ orderItemId: orderItemOf(b.id), qty: 2 }];
-      const split = await refundBill(b.id, { lines: rest, refunds: [{ mode: "upi", amountPaise: 7000 }, { mode: "card", amountPaise: 1 }] });
+      const split = await refundBill(b.id, { lines: rest, refunds: [{ mode: "upi", amountPaise: 6999 }, { mode: "card", amountPaise: 1 }] });
       expect(split.statusCode).toBe(400);
       expect(split.json().error).toBe("Refund by card cannot exceed what was paid by card");
       expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
@@ -512,9 +654,9 @@ describe("credit preview, approval and bill credit data", () => {
         payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: 6000 }, { mode: "card", amountPaise: 4500 }] } });
       expect(paid.statusCode, paid.body).toBe(200);
       const lines = [{ orderItemId: orderItemOf(issued.id), qty: 1 }];
-      const res = await refundBill(issued.id, { lines, refunds: [{ mode: "card", amountPaise: 2000 }, { mode: "cash", amountPaise: 1499 }] });
+      const res = await refundBill(issued.id, { lines, refunds: [{ mode: "card", amountPaise: 2000 }, { mode: "cash", amountPaise: 1500 }] });
       expect(res.statusCode, res.body).toBe(201);
-      expect(res.json().creditNote.refunds).toEqual([{ mode: "card", amountPaise: 2000, refNote: null }, { mode: "cash", amountPaise: 1499, refNote: null }]);
+      expect(res.json().creditNote.refunds).toEqual([{ mode: "card", amountPaise: 2000, refNote: null }, { mode: "cash", amountPaise: 1500, refNote: null }]);
     });
 
     it("refuses more cash than the cash still held on a split bill, even within the bill's remaining total", async () => {
@@ -523,12 +665,12 @@ describe("credit preview, approval and bill credit data", () => {
         payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: 6000 }, { mode: "card", amountPaise: 4500 }] } });
       expect(paid.statusCode, paid.body).toBe(200);
       const lines = [{ orderItemId: orderItemOf(issued.id), qty: 1 }];
-      expect((await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(201);
-      // 2501 cash and 4500 card are left (7001 in all); 3499 more by cash is within the total but over the cash
-      const over = await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      expect((await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 3500 }] })).statusCode).toBe(201);
+      // 2500 cash and 4500 card are left (7000 in all); 3500 more by cash is within the total but over the cash
+      const over = await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 3500 }] });
       expect(over.statusCode).toBe(400);
       expect(over.json().error).toBe("Refund by cash cannot exceed what was paid by cash");
-      const fits = await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 2501 }, { mode: "card", amountPaise: 998 }] });
+      const fits = await refundBill(issued.id, { lines, refunds: [{ mode: "cash", amountPaise: 2500 }, { mode: "card", amountPaise: 1000 }] });
       expect(fits.statusCode, fits.body).toBe(201);
       expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(2);
     });
@@ -571,7 +713,7 @@ describe("credit preview, approval and bill credit data", () => {
 
     it("needs admin approval, refusing a missing or wrong PIN and a waiter, and lets an admin approve themselves", async () => {
       const b = await bill();
-      const body = { lines: [{ orderItemId: orderItemOf(b.id), qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] };
+      const body = { lines: [{ orderItemId: orderItemOf(b.id), qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3500 }] };
       expect((await refundBill(b.id, { ...body, approverPin: undefined })).statusCode).toBe(403);
       const wrong = await refundBill(b.id, { ...body, approverPin: "0000" });
       expect(wrong.statusCode).toBe(401);
@@ -590,7 +732,7 @@ describe("credit preview, approval and bill credit data", () => {
       const events: string[] = [];
       const original = app.broadcast;
       app.broadcast = ((event: string, data: unknown) => { events.push(event); return original.call(app, event, data as never); }) as typeof app.broadcast;
-      const payload = { clientRef: "refund-ref-0001", lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] };
+      const payload = { clientRef: "refund-ref-0001", lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3500 }] };
       const first = await refundBill(b.id, payload);
       expect(first.statusCode, first.body).toBe(201);
       expect(events).toContain("order.updated");
@@ -602,25 +744,25 @@ describe("credit preview, approval and bill credit data", () => {
       expect(events).toEqual([]);
       expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
 
-      const otherQty = await refundBill(b.id, { ...payload, lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7001 }] });
+      const otherQty = await refundBill(b.id, { ...payload, lines: [{ orderItemId, qty: 2 }], refunds: [{ mode: "cash", amountPaise: 7000 }] });
       expect(otherQty.statusCode).toBe(409);
       expect(otherQty.json().error).toBe("Credit note reference already used for a different request");
       // the same reference used for a void of the same bill is a different request too
-      const asVoid = await app.inject({ method: "POST", url: `/api/bills/${b.id}/void`, headers: auth(admin.token), payload: { clientRef: "refund-ref-0001", reason: "Cold food", refunds: [{ mode: "cash", amountPaise: 7001 }] } });
+      const asVoid = await app.inject({ method: "POST", url: `/api/bills/${b.id}/void`, headers: auth(admin.token), payload: { clientRef: "refund-ref-0001", reason: "Cold food", refunds: [{ mode: "cash", amountPaise: 7000 }] } });
       expect(asVoid.statusCode).toBe(409);
       expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(1);
     });
 
     it("rejects a request with no lines", async () => {
       const b = await bill();
-      expect((await refundBill(b.id, { lines: [], refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(400);
-      expect((await refundBill(b.id, { refunds: [{ mode: "cash", amountPaise: 3499 }] })).statusCode).toBe(400);
+      expect((await refundBill(b.id, { lines: [], refunds: [{ mode: "cash", amountPaise: 3500 }] })).statusCode).toBe(400);
+      expect((await refundBill(b.id, { refunds: [{ mode: "cash", amountPaise: 3500 }] })).statusCode).toBe(400);
     });
 
     it("shows the refund on the bill view", async () => {
       const b = await bill();
       const orderItemId = orderItemOf(b.id);
-      await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] });
+      await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3500 }] });
       expect(await billJson(b.id)).toMatchObject({ status: "paid", refundState: "partly_refunded", refundedQty: { [orderItemId]: 1 } });
     });
   });

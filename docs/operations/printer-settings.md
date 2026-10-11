@@ -10,7 +10,12 @@ Open **Settings > Printers** as an administrator.
   The list loads automatically; **Refresh printers** reloads it. Manual name
   entry remains available. This is the server computer's printer list, even
   when Settings is opened from another counter or phone.
-- **Bluetooth:** use the Windows paired COM port, such as `COM3`.
+- **Bluetooth:** pair the printer in Windows and use its **outgoing** serial COM
+  port, such as `COM3` or `COM10`. In Windows Bluetooth or Device Manager
+  settings, configure that port's baud rate, data bits, parity, stop bits, and
+  flow control for the printer model. ForkFlow reads the existing port setup;
+  it requires binary, eight-bit mode and does not choose a universal baud rate.
+  An occupied or unsupported port fails before a print is sent.
 
 Select 58 mm or 80 mm paper. These paths send ESC/POS thermal printer data;
 discovering a laser printer or PDF printer does not make it ESC/POS compatible.
@@ -47,7 +52,8 @@ printer name and copy number. A retry resends only that copy.
   printer that cannot be opened, or a Bluetooth COM port that cannot be opened.
   Check the printer, then retry.
 - **Check paper:** the physical outcome is uncertain. This covers a failure
-  after data started to be sent, a timeout, and any Windows spooler error that
+  after data started to be sent, a timeout, a Bluetooth serial write/drain
+  failure, and any Windows spooler error that
   cannot be shown to have happened before sending. Check **I checked the
   paper**, then either **Retry this copy** or **Mark as already printed**.
 

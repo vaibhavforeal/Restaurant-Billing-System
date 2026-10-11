@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditReason, defaultRefundRows, refundRowsError, refundableQty } from "./credit-note-form";
+import { creditFor, type Credited } from "@forkflow/domain";
 
 describe("defaultRefundRows", () => {
   it("refunds a single payment method in full", () => {
@@ -43,6 +44,20 @@ describe("refundRowsError", () => {
     expect(refundRowsError([{ mode: "upi", amountPaise: 2500 }], 2500, held)).toBe("Refund by upi cannot exceed what was paid by upi");
     expect(refundRowsError([{ mode: "upi", amountPaise: 1500 }, { mode: "upi", amountPaise: 1000 }], 2500, held)).toBe("Refund by upi cannot exceed what was paid by upi");
     expect(refundRowsError([{ mode: "card", amountPaise: 1 }], 1, held)).toBe("Refund by card cannot exceed what was paid by card");
+  });
+  it("allows both zero-value returns without requiring a positive payment row", () => {
+    const line = { orderItemId: "zero", qty: 2, name: "Tiny dish", categoryId: null, categoryName: "Food", gstRate: 18,
+      taxablePaise: 12, cgstPaise: 1, sgstPaise: 1, roundingPaise: -14, totalPaise: 0 };
+    const credited: Record<string, Credited> = {};
+    for (let n = 0; n < 2; n++) {
+      const draft = creditFor([line], credited, [{ orderItemId: line.orderItemId, qty: 1 }]);
+      const held = { cash: 0, upi: 0, card: 0 };
+      const rows = defaultRefundRows([], held, draft.totals.totalPaise);
+      expect(draft.totals.totalPaise).toBe(0);
+      expect(rows).toEqual([]);
+      expect(refundRowsError(rows, draft.totals.totalPaise, held)).toBeNull();
+      if (n === 0) credited.zero = draft.lines[0]!;
+    }
   });
 });
 

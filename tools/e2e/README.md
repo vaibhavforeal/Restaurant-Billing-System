@@ -101,6 +101,11 @@ without discarding carts, other users' requests or real/ambiguous actions.
 
 ## Sales dashboard
 
+The current gate also checks historical Zomato sales while the integration is
+disabled (44 checks including the original 42). The fixture includes a paid
+Zomato bill on 2019-01-01; new ordering and operational polling remain governed
+by the Marketplace switch.
+
 Build the UI, then run `node --import tsx tools/e2e/sales-dashboard-server.mts`.
 It creates an in-memory restaurant with 30 days of API-issued bills, split
 payments, later collections, unpaid bills and a zero-activity date. Today also has
@@ -314,12 +319,25 @@ overflow; page errors were empty. The accompanying full suite passed 364 tests.
 
 ## M10 quick takeaway gate
 
-Use a fresh, signed-Pro disposable server on `http://127.0.0.1:4121` (the gate turns the
-Kitchen Display add-on on itself and sets GST to Prices include GST, default 5%) with the
-latest UI. Sign in as admin and register the test browser. Provide a higher
-revision Basic grant for that same disposable installation in
-`window.__m10BasicLicense` before the first run; the gate verifies Basic billing.
-Do not use restaurant data or port 4100.
+Build the latest UI with `npm run build -w @forkflow/ui`, then start
+`node --import tsx tools/e2e/m10-server.mts` in a terminal. It creates a unique
+scratch data directory and serves `http://127.0.0.1:4121/` with signed Pro
+revision 1, a pre-registered disposable browser device, and a fake kitchen
+printer. The signing key exists only in server memory; no licensing service or
+provider is contacted. The gate seeds its own menu/settings and enables Kitchen
+Display. Do not use restaurant data or port 4100.
+
+Open the URL in a fresh test browser profile. Before signing in, evaluate the
+printed `browser-setup.js` file in that page; it sets the registered device
+credential and `window.__m10BasicLicense` to the same installation's signed
+Basic revision 2 grant. It contains no admin session token or private key.
+Sign in as `QA Admin` with PIN `1234`, then run the gate without reloading first.
+For agent-browser, load the setup file before signing in:
+
+```powershell
+Get-Content -Raw -Encoding utf8 '<printed browser-setup.js path>' |
+  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session takeaway-qa eval --stdin
+```
 
 ```powershell
 Get-Content -Raw -Encoding utf8 tools/e2e/m10-takeaway.js |
@@ -341,6 +359,9 @@ After the main gate completes, run `m10-takeaway-get-failure.js` in the same
 registered browser on the latest build. Its eight checks force order-refresh
 GET failures during payment confirmation and verify that payment, receipt,
 and saved-request recovery remain correct.
+Stop the fixture with Ctrl+C in its terminal and close the test browser profile.
+Each fixture launch uses a new scratch directory and grants; do not reuse a
+previous launch's browser setup file.
 
 ## M9 menu, preparation, and table-service gates
 
@@ -584,6 +605,15 @@ click protection, persisted assignment/removal, and table-card updates.
 Use only this disposable fixture. Also verify mouse opening, Escape/Enter and
 Tab navigation, and the 390px light/dark layout.
 
+## Captain KOT send gate
+
+Build the UI and start `node --import tsx tools/e2e/captain-server.mts` for the
+disposable fixture on `http://127.0.0.1:4139/`. Sign in on `/` as admin (1234)
+or cashier (2345), then evaluate `tools/e2e/kot-send.js` in that page. Require
+`status: "passed"` with all 12 checks, including the F9 shortcut, exact KOT
+contents, double-click protection, fake-printer output, and lost-response retry.
+Restart the fixture for a fresh run and stop it with Ctrl+C afterward.
+
 ## Return to tables after settlement
 
 Build the UI, then run `node --import tsx tools/e2e/operational-reports-server.mts`
@@ -600,6 +630,32 @@ the billing dialog and opens Tables. It checks that a fully settled table is
 free and that another unpaid split keeps it occupied. It reports 10 checks
 and saves the result to `window.__settleTablesResult`. Use only the disposable
 fixture: the gate creates menu items, orders and payments.
+
+## Two-window queue recovery
+
+Build the current UI and start `node --import tsx tools/e2e/captain-server.mts`.
+Open the disposable desktop fixture on `http://127.0.0.1:4139/`, sign in as
+admin (1234), allow one same-origin popup, and evaluate
+`tools/e2e/queue-cross-window.js`. Require `status: "passed"`. The gate pauses
+both queue workers, completes each Punch/KOT/bill/settlement request in the
+second window, and checks that the originating window unlocks with exactly one
+persisted operation. It closes its second window afterward. All printing uses
+the fixture's fake sink.
+
+All old desktop and LAN windows must reload after this update. Old workers can
+remove queued work without writing completion records; new producers show an
+explicit review message in that case. Review current saved orders and bills
+before attempting another action. Printing uncertainty means checking the
+printer before requesting another copy.
+
+## Bill-history refresh
+
+Use a fresh sales-dashboard fixture on `http://127.0.0.1:4145/`, signed in as
+admin (1234), and evaluate `tools/e2e/bills-history.js`. The fixture includes
+225 older unpaid bills. The gate verifies loaded ranges and scroll anchors
+through new bills, settlements, refresh errors, recovery, and filter changes.
+Require `window.__billsHistoryResult.status === "passed"`. Restart the fixture
+before unrelated gates because this gate creates and settles fixture bills.
 
 ## Running gates through the Playwright MCP
 

@@ -16,8 +16,47 @@ export interface CreditDraft {
   totals: Money;
 }
 
-type Field = "taxablePaise" | "cgstPaise" | "sgstPaise" | "roundingPaise";
-const FIELDS: readonly Field[] = ["taxablePaise", "cgstPaise", "sgstPaise", "roundingPaise"];
+const ALLOCATED_FIELDS = ["taxablePaise", "cgstPaise", "sgstPaise", "totalPaise"] as const;
+const FIELDS = [...ALLOCATED_FIELDS, "roundingPaise"] as const;
+
+export interface CreditHistoryViolation { orderItemId: string; invariant: string; field?: keyof Credited }
+
+/** Existing financial records must be reviewed separately, never repaired by a negative new credit. */
+export class CreditHistoryError extends Error {
+  constructor(readonly violations: CreditHistoryViolation[]) {
+    super("This bill's earlier refunds require review before another credit can be issued");
+    this.name = "CreditHistoryError";
+  }
+}
+
+/** Validate cumulative history against immutable originals, including lines already fully returned. */
+export function validateCreditHistory(lines: readonly (Money & { orderItemId: string; qty: number })[], credited: Readonly<Record<string, Credited>>): void {
+  const violations: CreditHistoryViolation[] = [];
+  const byId = new Map(lines.map((line) => [line.orderItemId, line]));
+  for (const orderItemId of Object.keys(credited)) {
+    if (!byId.has(orderItemId)) violations.push({ orderItemId, invariant: "credit_line_not_on_bill" });
+  }
+  for (const line of lines) {
+    const add = (invariant: string, field?: keyof Credited) => violations.push({ orderItemId: line.orderItemId, invariant, ...(field ? { field } : {}) });
+    if (!Number.isSafeInteger(line.qty) || line.qty < 1) add("invalid_billed_quantity", "qty");
+    for (const field of FIELDS) {
+      if (!Number.isSafeInteger(line[field])) add("nonintegral_billed_amount", field);
+      if (field !== "roundingPaise" && line[field] < 0) add("negative_billed_amount", field);
+    }
+    if (line.totalPaise !== line.taxablePaise + line.cgstPaise + line.sgstPaise + line.roundingPaise) add("billed_components_do_not_sum");
+    const prior = credited[line.orderItemId];
+    if (!prior) continue;
+    if (!Number.isSafeInteger(prior.qty) || prior.qty < 0 || prior.qty > line.qty) add("credited_quantity_out_of_bounds", "qty");
+    for (const field of FIELDS) {
+      if (!Number.isSafeInteger(prior[field])) add("nonintegral_credited_amount", field);
+      if (field !== "roundingPaise" && (prior[field] < 0 || prior[field] > line[field])) add("credited_amount_out_of_bounds", field);
+      if (prior.qty === 0 && prior[field] !== 0) add("money_without_credited_quantity", field);
+      if (prior.qty === line.qty && prior[field] !== line[field]) add("fully_credited_quantity_has_money_remaining", field);
+    }
+    if (prior.totalPaise !== prior.taxablePaise + prior.cgstPaise + prior.sgstPaise + prior.roundingPaise) add("credited_components_do_not_sum");
+  }
+  if (violations.length) throw new CreditHistoryError(violations);
+}
 
 /** round(value x q / n), half away from zero, in exact integer arithmetic. */
 function proportion(value: number, q: number, n: number): number {
@@ -31,17 +70,21 @@ function sumMoney(parts: readonly Money[]): Money {
   const out: Money = { taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0 };
   for (const p of parts) {
     for (const f of FIELDS) out[f] += p[f];
-    out.totalPaise += p.totalPaise;
   }
   return out;
 }
 
 function creditOne(line: BillLine, already: Credited | undefined, q: number): BillLine {
-  const lastUnits = (already?.qty ?? 0) + q === line.qty;
-  const credit: Record<Field, number> = { taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0 };
-  for (const f of FIELDS) credit[f] = lastUnits ? line[f] - (already?.[f] ?? 0) : proportion(line[f], q, line.qty);
-  const totalPaise = credit.taxablePaise + credit.cgstPaise + credit.sgstPaise + credit.roundingPaise;
-  return { ...line, qty: q, ...credit, totalPaise };
+  const afterQty = (already?.qty ?? 0) + q;
+  const credit: Money = { taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0 };
+  for (const field of ALLOCATED_FIELDS) {
+    const previous = already?.[field] ?? 0;
+    // Valid older credits may be ahead of the cumulative schedule; wait for it to catch up.
+    const target = afterQty === line.qty ? line[field] : Math.max(previous, proportion(line[field], afterQty, line.qty));
+    credit[field] = target - previous;
+  }
+  credit.roundingPaise = credit.totalPaise - credit.taxablePaise - credit.cgstPaise - credit.sgstPaise;
+  return { ...line, qty: q, ...credit };
 }
 
 function groupTaxes(lines: readonly BillLine[]): CreditDraft["taxes"] {
@@ -56,12 +99,13 @@ function groupTaxes(lines: readonly BillLine[]): CreditDraft["taxes"] {
   return [...byRate.values()].sort((a, b) => a.gstRate - b.gstRate);
 }
 
-/** Credit for the requested quantities; the last units of a line take the exact remainder so a bill's credits always sum to the bill. */
+/** Cumulative credit for the requested quantities; the last units take the exact remainder of every amount. */
 export function creditFor(
   lines: BillLine[],
   credited: Record<string, Credited>,
   requested: Array<{ orderItemId: string; qty: number }>,
 ): CreditDraft {
+  validateCreditHistory(lines, credited);
   const wanted = new Map<string, number>();
   for (const r of requested) wanted.set(r.orderItemId, (wanted.get(r.orderItemId) ?? 0) + r.qty);
   const byId = new Map(lines.map((l) => [l.orderItemId, l]));

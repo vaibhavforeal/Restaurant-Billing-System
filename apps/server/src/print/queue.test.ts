@@ -1,8 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { PrintQueue } from "./queue.js";
 import { makeFakeSink } from "./sinks.js";
+import { realSend } from "./sinks.js";
+import { randomUUID } from "node:crypto";
 
 describe("PrintQueue", () => {
+  it.skipIf(process.platform !== "win32")("makes a missing Windows printer job normally retryable", async () => {
+    const queue = new PrintQueue(realSend, () => {});
+    try {
+      const job = queue.enqueue({ id: "missing", name: "Missing", kind: "windows", connection: `ForkFlow-missing-${randomUUID()}` }, "test", "Missing printer", Buffer.from([0x1b, 0x40]));
+      await vi.waitFor(() => expect(queue.jobs().find(item => item.id === job.id)?.status).toBe("failed"), { timeout: 18_000 });
+      expect(queue.retry(job.id)?.attempts).toBe(1);
+      await vi.waitFor(() => expect(queue.jobs().find(item => item.id === job.id)?.status).toBe("failed"), { timeout: 18_000 });
+    } finally {
+      await queue.close();
+    }
+  }, 60_000);
   it("processes job through queued → printing → done", async () => {
     const fake = makeFakeSink();
     const changes: string[] = [];
