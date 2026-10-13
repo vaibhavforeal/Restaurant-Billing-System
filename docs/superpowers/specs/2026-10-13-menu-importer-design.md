@@ -35,10 +35,11 @@ Catalog screen -> "Import from menu" -> upload file
 ### Reader (server)
 
 - Accepts JPEG, PNG, WebP and PDF. Limits: 10 MB, 10 pages. Password-protected or corrupt files are rejected up front.
-- PDF: `pdfjs-dist` returns words with coordinates. A page with almost no embedded text is treated as scanned: it is
-  rendered to an image and sent to OCR.
-- Image: grayscale, upscale and contrast clean-up, then `tesseract.js` with the `eng` language data bundled in the
-  installer (about 10 MB).
+- PDF: `pdfjs-dist` returns words with coordinates. A page with almost no embedded text is treated as scanned: its
+  embedded page image is extracted from the PDF (no canvas or native rendering module is needed) and sent to OCR.
+- Image: `tesseract.js` with the `eng` language data bundled in the installer (about 14 MB). No separate clean-up
+  step in version 1 (the OCR engine binarises internally, and no image library ships in the app); add one only if real
+  menus show it is needed.
 - Output of both paths is the same: `{ page, words: { text, x, y, w, h, confidence }[] }[]`.
 - A page with no text or no price-like numbers yields a page warning ("couldn't read this page, try a clearer
   photo") and the other pages continue. The whole request is capped at about 60 seconds.
@@ -70,12 +71,14 @@ Never guessed: an item with no readable price keeps `null` and is highlighted.
 ### Review grid (UI)
 
 - A full-width panel over the Catalog screen, styled like `CatalogTransfer`, using its `busy` / `run` pattern.
-- Left: page preview, highlighting the source line of the selected row. Right: the editable grid with Category,
-  Name, Price, Variants, Description and a status chip (OK, Check price, Missing price, Possible duplicate).
+- Left: for photos, a preview that highlights the source line of the selected row; for PDFs, the source text line
+  only (the UI has no PDF renderer). Right: the editable grid with Category, Name, Price, Variants, Description and
+  a status chip (OK, Check price, Missing price, Possible duplicate).
 - Actions: delete row, add row, merge two rows, and "set GST for all" (one control; the CSV `gst_rate` column is
   left blank otherwise, which the importer treats as the restaurant default).
-- Add or Update labels for each row come from the existing import preview. Matching is by category and name, as
-  today.
+- Add or Update labels come from the existing import preview, which the admin runs from the grid ("Preview import")
+  before the final import. Matching is by category and name, as today. Two grid rows with the same category and name
+  are flagged "Possible duplicate" and block the import, because the importer rejects duplicate rows.
 - "Import N items" stays disabled until no row has a missing or invalid price.
 
 ### Commit
