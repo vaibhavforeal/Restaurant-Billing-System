@@ -1,0 +1,6 @@
+{
+  "name": "@forkflow/contracts", "version": "0.1.0", "private": true, "type": "module",
+  "description": "Browser-safe contracts for ForkFlow outlet and cloud communication.",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "zod": "^4.4.3" }
+}

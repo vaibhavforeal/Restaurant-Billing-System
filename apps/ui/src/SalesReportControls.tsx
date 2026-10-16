@@ -26,7 +26,7 @@ export function SalesPeriodControls({ period, today = localDay(), loading, onCha
 
 export function SalesMetrics({ report }: { report: SalesReport }) {
   const metrics = salesMetrics(report);
-  return <div className={`sales-metrics${metrics.length === 5 ? " sales-metrics-5" : ""}`}>{metrics.map((metric) => <div className={`sales-metric${metric.label === "Collections received" ? " sales-metric-collections" : ""}`} key={metric.label}><p>{metric.label}</p><strong style={{ "--sales-value-length": metric.value.length } as CSSProperties}>{metric.value}</strong><small>{metric.note}</small></div>)}</div>;
+  return <div className={`sales-metrics${metrics.length === 5 ? " sales-metrics-5" : ""}`}>{metrics.map((metric) => <div className={`sales-metric${metric.label === "Collections received" ? " sales-metric-collections" : ""}`} key={metric.label} title={metric.note}><p>{metric.label}</p><strong style={{ "--sales-value-length": metric.value.length } as CSSProperties}>{metric.value}</strong><small>{metric.note}</small></div>)}</div>;
 }
 
 export function SalesRangeCaption({ report }: { report: Pick<SalesReport, "from" | "to" | "timezone" | "generatedAt"> }) {

@@ -1,0 +1,13 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /source
+COPY . .
+RUN npm ci --ignore-scripts && node tools/build-cloud.mjs
+
+FROM node:24-bookworm-slim
+ENV NODE_ENV=production
+WORKDIR /app
+RUN npm init -y && npm install --omit=dev pg@8.23.1 argon2@0.44.0 @aws-sdk/client-s3@3.1149.0 @aws-sdk/s3-request-presigner@3.1149.0 @azure/storage-blob@12.34.0 @azure/communication-email@1.1.0 @azure/core-auth@1.10.1
+COPY --from=build /source/build/cloud /app/runtime
+USER node
+EXPOSE 4200
+CMD ["node", "runtime/src/main.mjs"]

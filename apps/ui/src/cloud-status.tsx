@@ -1,0 +1,24 @@
+import { useEffect, useState } from "react";
+import { apiFetch, ApiError } from "./api";
+import { cloudBackupLabel, cloudConnectionLabel } from "./cloud-status-model";
+import type { CloudBackupStatus, CloudStatus } from "./cloud-status-model";
+import { usePosPwa } from "./pos-pwa";
+import "./cloud-status.css";
+
+/** Owner/admin panel. Embed inside the existing Settings page permission boundary. */
+export function CloudStatusPanel({ canPair = true }: { canPair?: boolean }) {
+  const [status, setStatus] = useState<CloudStatus | null>(null), [unreachable, setUnreachable] = useState(false), [error, setError] = useState(""), [busy, setBusy] = useState(false), [code, setCode] = useState(""), [cloudUrl, setCloudUrl] = useState(""), [notice, setNotice] = useState("");
+  const pwa = usePosPwa();
+  const [backup, setBackup] = useState<CloudBackupStatus | null>(null), [backupError, setBackupError] = useState("");
+  async function refresh() {
+    const [connection, storage] = await Promise.allSettled([apiFetch<CloudStatus>("/api/cloud/status"), apiFetch<CloudBackupStatus>("/api/cloud/storage/status")]);
+    if (connection.status === "fulfilled") { setStatus(connection.value); setUnreachable(false); setError(""); }
+    else { setStatus(null); setUnreachable(!(connection.reason instanceof ApiError)); setError(connection.reason instanceof Error ? connection.reason.message : "Unable to read outlet cloud status."); }
+    if (storage.status === "fulfilled") { setBackup(storage.value); setBackupError(""); }
+    else { setBackup(null); setBackupError(storage.reason instanceof Error ? storage.reason.message : "Unable to read cloud backup status."); }
+  }
+  useEffect(() => { void refresh(); const timer = setInterval(() => void refresh(), 30_000); return () => clearInterval(timer); }, []);
+  const label = cloudConnectionLabel(status, unreachable);
+  const backupLabel = cloudBackupLabel(backup);
+  return <section className="outlet-cloud-panel"><div className="outlet-cloud-heading"><div><h2>Owner cloud connection</h2><p>Local billing and printing stay on this outlet computer.</p></div><button type="button" onClick={() => void refresh()}>Refresh</button></div><div className={`outlet-cloud-banner ${label.severity}`} role="status"><strong>{label.title}</strong><p>{label.detail}</p></div>{error && <p className="outlet-cloud-error" role="alert">{error}</p>}{status && <dl className="outlet-cloud-details"><div><dt>Last cloud contact</dt><dd>{status.lastContact ? new Date(status.lastContact).toLocaleString() : "Not yet connected"}</dd></div><div><dt>Changes waiting to upload</dt><dd>{status.pendingUploads}</dd></div><div><dt>Initial upload</dt><dd>{status.initialSyncComplete ? "Complete" : "Pending"}</dd></div><div><dt>Uploaded through</dt><dd>Sequence {status.acknowledgedSequence}</dd></div><div><dt>Outlet service version</dt><dd>{status.serviceVersion}</dd></div></dl>}{status?.lastError && <p className="outlet-cloud-error">Last cloud issue: {status.lastError}</p>}<div className={`outlet-cloud-banner ${backupLabel.severity}`} role="status"><strong>{backupLabel.title}</strong><p>Last successful cloud backup: {backupLabel.age}{backup?.lastBackupAt ? ` · ${new Date(backup.lastBackupAt).toLocaleString()}` : ""}</p></div>{(backupError || backup?.lastError) && <p className="outlet-cloud-error" role="alert">Backup issue: {backupError || backup?.lastError}</p>}{pwa.updateReady && <p className="outlet-cloud-notice">A browser update is ready. Finish active work, then close all cashier windows and reopen to use it.</p>}{pwa.error && <p className="outlet-cloud-notice">{pwa.error}</p>}{canPair && <details open={status?.state === "not_paired"}><summary>{status?.outletId ? "Pair with another outlet" : "Pair with owner portal"}</summary><p>Generate a pairing code in the owner portal, then enter it here with the cloud service address.</p><form onSubmit={event => { event.preventDefault(); setBusy(true); setError(""); setNotice(""); void apiFetch("/api/cloud/pair", { method: "POST", body: JSON.stringify({ code: code.trim(), cloudUrl: cloudUrl.trim() }) }).then(async () => { setCode(""); setNotice("Pairing completed. The outlet will upload its records automatically."); await refresh(); }).catch(caught => setError(caught instanceof Error ? caught.message : "Pairing failed.")).finally(() => setBusy(false)); }}><label>Cloud service address<input type="url" required placeholder="https://cloud.your-restaurant.example" value={cloudUrl} onChange={event => setCloudUrl(event.target.value)} /></label><label>One-time pairing code<input required autoComplete="off" value={code} onChange={event => setCode(event.target.value)} /></label><button type="submit" disabled={busy || unreachable}>{busy ? "Pairing…" : "Pair outlet"}</button></form></details>}{notice && <p className="outlet-cloud-notice" role="status">{notice}</p>}</section>;
+}

@@ -1,6 +1,14 @@
 // Run with agent-browser eval --stdin against disposable fixtures on :4136/:4137.
 // UI actions only; read-only API inspection verifies persisted totals and print output.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (!/^http:\/\/127\.0\.0\.1:413[67]$/.test(location.origin)) throw new Error("Disposable compact UI fixture required");
   const pause = (ms = 80) => new Promise(resolve => setTimeout(resolve, ms));
   const visible = e => e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
@@ -8,7 +16,8 @@
   const scope = () => document.querySelector("dialog[open]") || document;
   const button = text => [...scope().querySelectorAll("button")].find(e => visible(e) && !e.disabled && (e.textContent.trim() === text || e.getAttribute("aria-label") === text));
   const click = async text => { (await wait(() => button(text), text)).click(); await pause(); };
-  const fill = (input, value) => { Object.getOwnPropertyDescriptor(input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value").set.call(input, value); input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? "change" : "input", { bubbles: true })); };
+  const fill = (input, value) => { if (chooseTile(input, value)) return;
+    Object.getOwnPropertyDescriptor(input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value").set.call(input, value); input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? "change" : "input", { bubbles: true })); };
   const check = (value, label) => { if (!value) throw new Error(label); return label; };
   const measurements = () => {
     const names = [".menu-results", ".cart-items", ".billing-dialog-body", ".order-screen"];
@@ -20,7 +29,7 @@
   if (!saved) {
     if (button("Takeaway")) await click("Takeaway");
     await wait(() => document.querySelector(".menu-card"), "menu tiles");
-    const select = document.querySelector('select[aria-label="Menu category"]');
+    const select = document.querySelector("[role=radiogroup][aria-label=\"Menu category\"]");
     if (select) { fill(select, "all"); await pause(); } else await click("All items");
     const names = ["Paneer tikka", "Crispy corn", "Dal tadka", "Jeera rice", "Butter naan", "Masala tea", "Gulab jamun", "Sweet lassi"];
     for (const name of names) {
@@ -33,11 +42,11 @@
   }
   if (saved.phase === "cart") {
     await click(after ? "Discount · F4" : "Bill options");
-    const printer = await wait(() => scope().querySelector("select"), "printer selector");
-    const option = [...printer.options].find(e => e.textContent === "Counter receipt");
+    const printer = await wait(() => scope().querySelector("[role=radiogroup]"), "printer selector");
+    const option = [...printer.querySelectorAll("label, .choice-field")].find(e => e.textContent.trim() === "Counter receipt")?.querySelector("input");
     fill(printer, option.value); await pause();
-    const discount = [...scope().querySelectorAll("label")].find(e => e.textContent.includes("Discount ("))?.querySelector("input");
-    const reason = [...scope().querySelectorAll("label")].find(e => e.textContent.includes("Discount reason"))?.querySelector("input");
+    const discount = [...scope().querySelectorAll("label, .choice-field")].find(e => e.textContent.includes("Discount ("))?.querySelector("input");
+    const reason = [...scope().querySelectorAll("label, .choice-field")].find(e => e.textContent.includes("Discount reason"))?.querySelector("input");
     fill(discount, "25"); fill(reason, "Fixture discount"); await pause();
     await click("Close billing");
     await click(after ? "Pay · F10" : "Checkout");

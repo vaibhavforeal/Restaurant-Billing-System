@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import type { StockItem, StockLink, StockUnit } from "@forkflow/domain";
 import { ApiError, apiFetch } from "../api";
@@ -6,6 +7,7 @@ import { useNavigationGuard } from "../navigation-guard";
 import { Icon } from "../Icon";
 import { defaultRecipeUnit, displayRecipeAmount, recipeAmount, recipeIsDirty, recipeUnits, recipeWrite, switchRecipeUnit, type RecipeDraftRow } from "../recipe-quantities";
 import { RecipeIngredientPicker } from "./RecipeIngredientPicker";
+import { useFeatures } from "../features";
 
 interface Recipe { version: number; links: StockLink[] }
 interface Props {
@@ -17,6 +19,7 @@ const draftRows = (recipe: Recipe): RecipeDraftRow[] => recipe.links.map((link) 
   displayUnit: defaultRecipeUnit(link.unit), quantity: displayRecipeAmount(link.qtyPerSale, link.unit, defaultRecipeUnit(link.unit)) }));
 
 export function RecipeEditor({ productId, items, canManage, fullRecipe, refresh, onDirtyChange, onBusyChange, onStockCreated }: Props) {
+  const recipesEnabled = useFeatures().isActive("recipes");
   const [base, setBase] = useState<Recipe | null>(null);
   const [rows, setRows] = useState<RecipeDraftRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +41,7 @@ export function RecipeEditor({ productId, items, canManage, fullRecipe, refresh,
   const id = useId();
   const unitFor = (stockId: string) => items.find((item) => item.id === stockId)?.unit ?? base?.links.find((link) => link.stockItemId === stockId)?.unit;
   const dirty = base !== null && recipeIsDirty(rows, base.links, unitFor);
-  const editable = canManage && (fullRecipe || (base !== null && base.links.length <= 1));
+  const editable = canManage && recipesEnabled && (fullRecipe || (base !== null && base.links.length <= 1));
   const working = busy || stockBusy;
   const disabled = working || loading || loadFailed || !editable;
 
@@ -152,9 +155,9 @@ export function RecipeEditor({ productId, items, canManage, fullRecipe, refresh,
             <label className="recipe-amount"><span className="recipe-mobile-label">Amount</span><input ref={(element) => { if (element) amountRefs.current.set(row.key, element); else amountRefs.current.delete(row.key); }}
               aria-label={`Quantity for ingredient ${index + 1}`} aria-invalid={!!fieldErrors[row.key]} aria-describedby={`${hintId}${fieldErrors[row.key] ? ` ${errorId}` : ""}`}
               type="number" inputMode="decimal" step="any" placeholder="Amount" value={row.quantity} disabled={disabled} onChange={(event) => changeRow(row.key, { quantity: event.target.value })} /></label>
-            <label className="recipe-unit"><span className="recipe-mobile-label">Unit</span>{unit && recipeUnits(unit).length > 1 ? <select aria-label={`Unit for ingredient ${index + 1}`} disabled={disabled} value={row.displayUnit} onChange={(event) => {
-              const displayUnit = event.target.value as StockUnit; changeRow(row.key, { displayUnit, quantity: switchRecipeUnit(row.quantity, unit, row.displayUnit, displayUnit) });
-            }}>{recipeUnits(unit).map((choice) => <option key={choice}>{choice}</option>)}</select> : <span className="recipe-unit-fixed">{unit ?? "—"}</span>}</label>
+            <div className="choice-field recipe-unit"><span className="recipe-mobile-label">Unit</span>{unit && recipeUnits(unit).length > 1 ? <ChoiceTiles aria-label={`Unit for ingredient ${index + 1}`} disabled={disabled} value={row.displayUnit} onChange={(choiceValue) => {
+              const displayUnit = choiceValue as StockUnit; changeRow(row.key, { displayUnit, quantity: switchRecipeUnit(row.quantity, unit, row.displayUnit, displayUnit) });
+            }}>{recipeUnits(unit).map((choice) => <option key={choice}>{choice}</option>)}</ChoiceTiles> : <span className="recipe-unit-fixed">{unit ?? "—"}</span>}</div>
             {editable && <button className="recipe-remove" type="button" aria-label={`Remove ingredient ${index + 1}`} disabled={disabled} onClick={() => {
               const nextFocus = rows[index + 1]?.key ?? rows[index - 1]?.key;
               setRows((old) => old.filter((entry) => entry.key !== row.key)); setMessage("");

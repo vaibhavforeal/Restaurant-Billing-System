@@ -2,6 +2,14 @@
 // Sign in and register this browser with a signed Pro license first.
 // This gate creates only uniquely named fixtures and refuses all other origins.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4120') throw new Error('Use only the disposable menu QA server on 127.0.0.1:4120');
   const checks = [], writes = [], declined = [], alerts = [];
   const originalFetch = window.fetch, originalConfirm = window.confirm, originalAlert = window.alert;
@@ -21,11 +29,12 @@
   };
   const click = (scope, label) => clickElement(() => btn(scope, label), label);
   const editor = () => document.querySelector('[aria-label="Product editor"]');
-  const field = (scope, label) => [...scope.querySelectorAll('label')].find((value) => value.textContent.trim().startsWith(label))?.querySelector('input,textarea,select');
+  const field = (scope, label) => [...scope.querySelectorAll("label, .choice-field")].find((value) => value.textContent.trim().startsWith(label))?.querySelector("input,textarea,[role=radiogroup]");
   const fillElement = async (find, value, label) => {
-    const input = await wait(() => { const input = find(); return input && !input.disabled ? input : null; }, label);
+    const input = await wait(() => { const input = find(); return input && !input.disabled && input.getAttribute('aria-disabled') !== 'true' ? input : null; }, label);
     const view = input.ownerDocument.defaultView;
     const prototype = input.tagName === 'SELECT' ? view.HTMLSelectElement.prototype : input.tagName === 'TEXTAREA' ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, value);
     input.dispatchEvent(new view.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
     await pause();
@@ -100,7 +109,7 @@
     const fixture = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!fixture || fixture.size > 10 * 1024 * 1024) throw new Error('Could not create the bounded PNG fixture');
     const upload = async (blob, filename, type) => {
-      const input = await wait(() => { const input = editor()?.querySelector('input[type="file"]'); return input && !input.disabled ? input : null; }, 'photo upload input');
+      const input = await wait(() => { const input = editor()?.querySelector('input[type="file"]'); return input && !input.disabled && input.getAttribute('aria-disabled') !== 'true' ? input : null; }, 'photo upload input');
       const transfer = new DataTransfer(); transfer.items.add(new File([blob], filename, { type }));
       input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
       await wait(() => editor()?.querySelector('.product-photo-preview')?.src.startsWith('data:image/jpeg;base64,') && !btn(editor(), 'Save product').disabled, 'normalized photo in the unsaved draft');

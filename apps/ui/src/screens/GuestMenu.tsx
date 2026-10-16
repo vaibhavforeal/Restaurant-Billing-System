@@ -1,3 +1,5 @@
+import { outletStorage } from "../outlet-identity";
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useRef, useState } from "react";
 import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "@forkflow/domain";
 import { uuid } from "../uuid";
@@ -40,7 +42,7 @@ function validRequest(request: SavedRequest) {
 
 function readSaved(token: string): SavedState {
   try {
-    const value = JSON.parse(localStorage.getItem(storageKey(token)) ?? "null") as SavedState | null;
+    const value = JSON.parse(outletStorage.getItem(storageKey(token)) ?? "null") as SavedState | null;
     if (!value || value.version !== 1 || !Array.isArray(value.cart) || value.cart.length > 30 ||
       value.cart.some((item) => typeof item.key !== "string" || typeof item.productId !== "string" ||
         (item.variantId !== null && typeof item.variantId !== "string") || typeof item.name !== "string" ||
@@ -104,7 +106,7 @@ function GuestMenuContent({ token }: { token: string }) {
   function save(next: SavedState) {
     savedRef.current = next;
     setSaved(next);
-    try { localStorage.setItem(storageKey(token), JSON.stringify(next)); setStorageWarning(false); }
+    try { outletStorage.setItem(storageKey(token), JSON.stringify(next)); setStorageWarning(false); }
     catch { setStorageWarning(true); }
   }
 
@@ -137,7 +139,10 @@ function GuestMenuContent({ token }: { token: string }) {
   useEffect(() => {
     mounted.current = true;
     void loadMenu();
-    return () => { mounted.current = false; };
+    const refreshAvailability = () => { if (!sendingRef.current) void loadMenu(); };
+    window.addEventListener("focus", refreshAvailability);
+    const timer = window.setInterval(refreshAvailability, 30000);
+    return () => { mounted.current = false; window.removeEventListener("focus", refreshAvailability); window.clearInterval(timer); };
   }, [token]);
 
   const receipt = saved.request?.receipt;
@@ -239,8 +244,8 @@ function GuestMenuContent({ token }: { token: string }) {
     // Store the immutable request before sending: a lost response or reload must reuse its identity.
     try {
       const encoded = JSON.stringify(frozen);
-      localStorage.setItem(storageKey(token), encoded);
-      if (localStorage.getItem(storageKey(token)) !== encoded) throw new Error("Storage is unavailable");
+      outletStorage.setItem(storageKey(token), encoded);
+      if (outletStorage.getItem(storageKey(token)) !== encoded) throw new Error("Storage is unavailable");
     } catch {
       setStorageWarning(true);
       setError("Your browser could not save this request safely. Enable website storage, or ask staff to take your order.");
@@ -307,7 +312,7 @@ function GuestMenuContent({ token }: { token: string }) {
       </div>}
       {storageWarning && <p className="guest-menu-message" role="status">Browser storage is unavailable. Your selections may not survive a reload.</p>}
       {notice && <p className="guest-menu-announcement" role="status">{notice}</p>}
-      <GuestServices token={token} available={menu?.orderingAvailable ?? false} />
+      <GuestServices token={token} available={menu?.servicesAvailable ?? menu?.orderingAvailable ?? false} />
       {saved.history.length > 0 && <EarlierRequests requests={saved.history} errors={historyErrors} truncated={saved.historyTruncated} />}
       {saved.request?.receipt && <ReceiptCard receipt={saved.request.receipt} error={statusError} onNew={startAnother} orderingAvailable={menu?.orderingAvailable ?? false} />}
       {saved.request && !saved.request.receipt && <section className="guest-menu-request" aria-label="Unconfirmed request">
@@ -364,7 +369,7 @@ function ProductCard({ product, orderingAvailable, locked, onAdd }: { product: M
     <h3>{product.name}</h3>
     {product.description && <p className="guest-menu-product-description">{product.description}</p>}
     {product.isSoldOut && <p className="guest-menu-soldout">Sold out</p>}
-    {product.variants.length > 0 && <label className="guest-menu-variant">Choose an option<select value={variantId ?? ""} onChange={(event) => setVariantId(event.target.value)} aria-label={`Option for ${product.name}`}>{product.variants.map((item) => <option key={item.id} value={item.id}>{item.name} · {money(item.pricePaise)}</option>)}</select></label>}
+    {product.variants.length > 0 && <div className="choice-field guest-menu-variant">Choose an option<ChoiceTiles value={variantId ?? ""} onChange={(choiceValue) => setVariantId(choiceValue)} aria-label={`Option for ${product.name}`}>{product.variants.map((item) => <option key={item.id} value={item.id}>{item.name} · {money(item.pricePaise)}</option>)}</ChoiceTiles></div>}
     <div className="guest-menu-product-bottom"><strong>{money(variant?.pricePaise ?? product.pricePaise)}</strong>{orderingAvailable && <button disabled={locked || product.isSoldOut} onClick={() => onAdd(product, variantId)} aria-label={`Add ${product.name}${variant ? `, ${variant.name}` : ""}`}>Add <span aria-hidden="true">+</span></button>}</div>
   </article>;
 }

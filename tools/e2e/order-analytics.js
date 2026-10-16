@@ -1,5 +1,13 @@
 // Run via agent-browser eval --stdin, signed in to the disposable analytics fixture.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== "http://127.0.0.1:4163") throw new Error("Disposable analytics fixture only");
   const checks = [], downloads = [];
   const check = (ok, name) => { if (!ok) throw new Error(name); checks.push(name); };
@@ -7,6 +15,8 @@
   const root = () => document.querySelector(".order-analytics");
   const button = (text, scope = document) => [...scope.querySelectorAll("button")].find((e) => e.textContent.trim() === text);
   const click = async (text, scope = document) => { const e = button(text, scope); if (!e || e.disabled) throw new Error("Missing enabled button: " + text); e.click(); await new Promise((r) => setTimeout(r, 30)); };
+  // Reports & Analytics: everyday reports are tabs; detailed reports are visible tiles.
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
   const loaded = () => root() && button("Export analytics CSV", root()) && !button("Export analytics CSV", root()).disabled;
   const nativeFetch = window.fetch, nativeCreate = URL.createObjectURL, nativeClick = HTMLAnchorElement.prototype.click;
   const api = async (query = "") => {
@@ -23,11 +33,10 @@
     return nativeClick.call(this);
   };
   try {
-    if (!root()) { if (!button("Analytics")) await click("Reports & Analytics"); await click("Analytics"); }
+    if (!root()) { if (!document.querySelector('[aria-label="Report"]')) await click("Reports & Analytics"); await pickReport("analytics"); }
     await wait(loaded);
     check(document.querySelector('.sales-reports h2').textContent === "Reports & Analytics", "Page heading identifies Reports & Analytics");
-    check(document.querySelector('[aria-label="Reports and analytics"]').querySelectorAll("button").length === 2, "Top switch offers Reports and Analytics");
-    check(!document.querySelector('[aria-label="Report type"], [aria-label="Detailed report"]'), "Analytics view hides report-only choices");
+    check(document.querySelector('[aria-label="Detailed reports"] input:checked')?.value === "analytics" && !document.querySelector('[aria-label="Report"] [aria-pressed="true"]'), "Report tiles show Order analytics and no everyday tab is selected");
     const all = await api();
     check(JSON.stringify(metrics()) === JSON.stringify([String(all.totals.orderCount), money(all.totals.totalPaise), String(all.totals.qty), money(Math.round(all.totals.totalPaise / all.totals.orderCount))]), "All metrics reconcile with stored bill data");
     check(all.comparison.every((row) => root().querySelector(".analytics-comparison").textContent.includes(money(row.totalPaise))), "Both service comparisons show exact issued sales");
@@ -62,22 +71,19 @@
     await click("Today", root()); await wait(loaded);
     const today = await api(`?from=${all.today}&to=${all.today}`);
     check(metrics()[0] === String(today.totals.orderCount) && dates().every((date) => date === all.today), "Today preset applies to all analytics sections");
-    await click("Reports", document.querySelector('[aria-label="Reports and analytics"]'));
-    await click("Sales", document.querySelector('[aria-label="Report type"]'));
+    await pickReport("sales");
     await wait(() => document.querySelector('.sales-report-table[aria-label="Sales daily data"]'));
     check([...document.querySelectorAll('input[type="date"]')].every((e) => e.value === all.today), "Analytics date range is retained in Sales");
-    await click("Collections", document.querySelector('[aria-label="Report type"]'));
+    await pickReport("collections");
     await wait(() => document.querySelector('.sales-report-table[aria-label="Collections daily data"]'));
-    await click("Analytics"); await wait(loaded);
-    await click("Reports", document.querySelector('[aria-label="Reports and analytics"]'));
-    await wait(() => document.querySelector('.sales-report-table[aria-label="Collections daily data"]'));
-    check(button("Collections", document.querySelector('[aria-label="Report type"]')).getAttribute("aria-pressed") === "true", "Top switch remembers the selected report");
-    await click("Analytics"); await wait(loaded);
+    check(document.querySelector('[aria-label="Report"] [data-report="collections"]').getAttribute("aria-pressed") === "true" && !document.querySelector('[aria-label="Detailed reports"] input:checked'), "Collections tab is selected and detailed report tiles reset");
+    await pickReport("analytics"); await wait(loaded);
     check(dates().every((date) => date === all.today), "Returning to Analytics retains the report date range");
     await click("30 days", root()); await wait(loaded);
     check(new Date(dates()[1]) - new Date(dates()[0]) === 29 * 86400000, "30-day preset updates the date range");
     const inputs = root().querySelectorAll('input[type="date"]');
-    const setValue = (e, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, value); e.dispatchEvent(new Event("input", { bubbles: true })); };
+    const setValue = (e, value) => { if (chooseTile(e, value)) return;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, value); e.dispatchEvent(new Event("input", { bubbles: true })); };
     setValue(inputs[0], "2020-01-01"); setValue(inputs[1], "2020-01-01"); await new Promise((r) => setTimeout(r, 30));
     await click("Apply dates", root()); await wait(loaded);
     check(JSON.stringify(metrics()) === JSON.stringify(["0", "₹0.00", "0", "₹0.00"]) && root().textContent.includes("No billed orders"), "Empty date range shows zero metrics and helpful empty state");

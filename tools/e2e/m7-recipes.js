@@ -1,5 +1,13 @@
 // Run with UTF-8 stdin via agent-browser against tools/e2e/recipes-server.mts.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4155') throw new Error('Use the isolated recipes fixture on port 4155');
   const checks = [], writes = [];
   const originalFetch = window.fetch, originalConfirm = window.confirm, originalAlert = window.alert;
@@ -8,12 +16,13 @@
   const wait = async (fn, message) => { const end = Date.now() + 10000; while (Date.now() < end) { if (fn()) return; await delay(40); } throw new Error(`Timed out: ${message}`); };
   const button = text => [...document.querySelectorAll('button')].find(element => element.textContent.trim() === text || element.getAttribute('aria-label') === text);
   const click = async text => { await wait(() => button(text) && !button(text).disabled, text); button(text).click(); await delay(); };
-  const field = text => [...document.querySelectorAll('label')].find(label => label.textContent.trim().startsWith(text))?.querySelector('input,select');
+  const field = text => [...document.querySelectorAll("label, .choice-field")].find(label => label.textContent.trim().startsWith(text))?.querySelector("input,[role=radiogroup]");
   const quantity = index => document.querySelector(`[aria-label="Quantity for ingredient ${index}"]`);
   const unit = index => document.querySelector(`[aria-label="Unit for ingredient ${index}"]`);
   const rows = () => [...document.querySelectorAll('.recipe-ingredient')];
   const fill = async (element, value) => {
     if (!element || element.disabled) throw new Error('Missing/enabled field');
+    if (chooseTile(element, value)) return;
     Object.getOwnPropertyDescriptor(element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(element, value);
     element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await delay();
   };
@@ -53,7 +62,7 @@
     await click('inventory');
     check(document.querySelector('[role="tab"][aria-selected="true"]').textContent === 'Stock', 'Stock is the default Inventory tab');
     await click('Recipes'); await choose(dish.name);
-    check(quantity(1).value === '250' && unit(1).value === 'g' && quantity(2).value === '15' && unit(2).value === 'ml', 'Saved kg/L recipes load in g/ml');
+    check(quantity(1).value === '250' && unit(1).querySelector("input:checked")?.value === 'g' && quantity(2).value === '15' && unit(2).querySelector("input:checked")?.value === 'ml', 'Saved kg/L recipes load in g/ml');
     await fill(unit(1), 'kg'); check(quantity(1).value === '0.25' && button('Save recipe')?.disabled, 'Unit switching preserves amount and clean state');
     await fill(unit(1), 'g');
     await fill(quantity(1), '1.5'); await click('Save recipe');

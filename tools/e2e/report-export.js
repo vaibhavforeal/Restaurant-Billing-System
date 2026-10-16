@@ -1,5 +1,13 @@
 // Run via agent-browser eval --stdin, signed in as admin on the disposable port-4126 server.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4126') throw new Error('Use the disposable report QA server on port 4126.');
   const checks = [], downloads = [], blobs = new Map();
   const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
@@ -8,6 +16,7 @@
     while (Date.now() < until) { if (fn()) return; await new Promise((resolve) => setTimeout(resolve, 30)); }
     throw new Error('Timed out: ' + document.body.innerText.slice(-1400));
   };
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
   const button = (name) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === name);
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click;
   const api = async (path, method = 'GET', body) => {
@@ -19,6 +28,7 @@
   };
   const setDate = (value) => {
     const input = document.querySelector('input[type="date"]');
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   };
@@ -39,7 +49,7 @@
       if (paid) await api('/bills/' + bill.id + '/settle', 'POST', { clientRef: crypto.randomUUID(), payments: [{ mode: 'cash', amountPaise: 2000 }, { mode: 'upi', amountPaise: bill.totalPaise - 2000 }] });
     }
     document.querySelector('nav button[aria-label="Reports & Analytics"]').click();
-    await wait(() => button('Day-end / GST')); button('Day-end / GST').click();
+    await pickReport('day-end');
     await wait(() => button('Export CSV') && !button('Export CSV').disabled);
     button('Refresh report').click();
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -85,7 +95,7 @@
     button('Download template').click(); await wait(() => downloads.length === 3);
     check((await downloads[2].text).includes('variant_price'), 'Catalog downloads still work with the shared download helper');
     document.querySelector('nav button[aria-label="Reports & Analytics"]').click();
-    await wait(() => button('Day-end / GST')); button('Day-end / GST').click();
+    await pickReport('day-end');
     await wait(() => button('Export CSV') && !button('Export CSV').disabled);
     window.__reportExportChecks = { status: 'passed', checks };
     return window.__reportExportChecks;

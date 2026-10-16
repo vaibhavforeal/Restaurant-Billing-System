@@ -1,8 +1,8 @@
 import { createPublicKey, verify } from "node:crypto";
 
 /** Verify exact encoded bytes; never trust claims until the signature passes. */
-export function verifyLicenseSignature(envelope: string, publicKeyPem: string): unknown {
-  if (envelope.length > 16_384) throw new Error("License is too large");
+export function verifyLicenseSignature(envelope: string, publicKeyPem: string, maxLength = 16_384): unknown {
+  if (envelope.length > maxLength) throw new Error("License is too large");
   const parts = envelope.split(".");
   if (parts.length !== 3 || parts[0] !== "ff1" || !parts[1] || !parts[2]
     || !/^[A-Za-z0-9_-]+$/.test(parts[1]) || !/^[A-Za-z0-9_-]+$/.test(parts[2])) throw new Error("Invalid license format");

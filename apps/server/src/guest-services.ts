@@ -3,6 +3,7 @@ import { ServiceSubmission, uuidv7, type ServiceReceipt, type ServiceRequest } f
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { assertFeatureActive } from "./features.js";
 
 const TTL = 10 * 60 * 1000;
 const COOLDOWN = 60 * 1000;
@@ -62,6 +63,7 @@ export function registerGuestServices(app: FastifyInstance) {
         return { id: existing.id, created: false };
       }
       requireGuestPlan();
+      assertFeatureActive(app, "guestServices");
       const table = token ? db.prepare(`SELECT t.id, t.name FROM dining_tables t JOIN table_qr q ON q.table_id = t.id
         WHERE q.token = ? AND q.enabled = 1 AND t.is_active = 1`).get(token) as { id: string; name: string } | undefined : undefined;
       if (!table) throw httpError(404, "This table is unavailable. Please ask a member of staff.");

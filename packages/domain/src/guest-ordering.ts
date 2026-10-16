@@ -15,6 +15,7 @@ export interface GuestMenu {
   restaurantName: string;
   table: { id: string; name: string; area: string | null };
   orderingAvailable: boolean;
+  servicesAvailable?: boolean;
   menuVersion: string;
   categories: Array<{ id: string; name: string }>;
   products: Array<{ id: string; categoryId: string; name: string; description: string; isSoldOut: boolean; photoUrl: string | null; pricePaise: number; gstRate: number; isVeg: boolean;

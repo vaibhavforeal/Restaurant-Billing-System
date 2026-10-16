@@ -34,6 +34,5 @@ html[data-theme] .analytics-hour.selected { border-color: var(--pos-accent); bac
 .analytics-hour-track > span { width: 100%; background: var(--pos-accent); }
 .analytics-hour small { min-height: 16px; font-size: 10px; color: var(--muted); margin-top: 4px; }
 .analytics-sr-only { position: absolute; width: 1px; height: 1px; padding: 0 !important; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.sales-reports > .sales-presets { flex-wrap: wrap; }
 @media (max-width: 900px) { .analytics-grid { grid-template-columns: minmax(0, 1fr); } .analytics-items { grid-column: auto; } .analytics-trend .sales-chart svg { max-height: none; } }
-@media (max-width: 760px) { .sales-reports > .sales-presets button { flex: 1 1 auto; } .analytics-heading { align-items: start; } .analytics-heading > button { width: 100%; } .analytics-filter .pos-segments { width: 100%; } .analytics-filter .pos-segments button { flex: 1; padding-inline: var(--space-3); } }
+@media (max-width: 760px) { .analytics-heading { align-items: start; } .analytics-heading > button { width: 100%; } .analytics-filter .pos-segments { width: 100%; } .analytics-filter .pos-segments button { flex: 1; padding-inline: var(--space-3); } }

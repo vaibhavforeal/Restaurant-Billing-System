@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import { localMinute } from './reservation-rules.js';
 
 /** Uses normal business APIs. Never call against a restaurant database. */
 export async function seedDemo(app: FastifyInstance) {
@@ -19,13 +20,17 @@ export async function seedDemo(app: FastifyInstance) {
     return response.json();
   }
   token = (await request("/api/setup", { restaurantName: "ForkFlow Demo Restaurant", adminName: "Demo Admin", pin: "1234" })).token;
+  await request('/api/settings',{restaurantName:'ForkFlow Demo Restaurant',address:'24 Market Road, Pune — sample address',receiptFooter:'Thank you! Sample bill for demonstration only.'},'PUT');
   await request("/api/users", { name: "Demo Cashier", pin: "2345", role: "cashier" });
   const captain = (await request("/api/users", { name: "Suraj (demo)", pin: "3456", role: "waiter" })).user;
   await request("/api/users", { name: "Demo Kitchen", pin: "4567", role: "kitchen" });
   await request("/api/integrations/kds", { enabled: true }, "PATCH");
   const station = db.prepare("SELECT id FROM kot_stations ORDER BY id LIMIT 1").get() as { id: string };
+  const receiptPrinter = (await request('/api/printers', {name:'Demo receipt printer',kind:'network',connection:'127.0.0.1:19100',paperWidth:80})).printer;
+  await request('/api/printers', {name:'Demo kitchen printer',kind:'network',connection:'127.0.0.1:19101',paperWidth:80});
   const tables: Array<{ id: string }> = [];
   for (let n = 1; n <= 8; n++) tables.push((await request("/api/tables", { name: `T${String(n).padStart(2, "0")}`, area: n <= 4 ? "Main dining" : "Garden", sortOrder: n })).table);
+  for (let n=0;n<3;n++) await request('/api/reservations',{clientRef:randomUUID(),tableId:tables[n+4]!.id,customerName:['Mehta family','Office lunch group','Anita birthday dinner'][n],phone:'9990001234',partySize:n+2,startsLocal:localMinute(Date.now()+(n+1)*3600000),durationMinutes:90,notes:'Sample booking'});
   const menu = [
     { category: "Starters", dishes: [["Paneer tikka", 22000], ["Crispy corn", 16000], ["Veg kebab", 18000]] },
     { category: "Main course", dishes: [["Vegetable biryani", 24000], ["Paneer butter masala", 26000], ["Dal tadka", 18000], ["Jeera rice", 14000]] },
@@ -35,11 +40,15 @@ export async function seedDemo(app: FastifyInstance) {
   const products: Array<{ id: string; name: string }> = [];
   for (const section of menu) {
     const category = (await request("/api/categories", { name: section.category })).category;
-    for (const [name, pricePaise] of section.dishes) products.push((await request("/api/products", { name, pricePaise, categoryId: category.id, isVeg: true, kotStationId: station.id })).product);
+    for (const [name, pricePaise] of section.dishes) products.push((await request("/api/products", { name, pricePaise, acPricePaise:Number(pricePaise)+1000,takeawayPricePaise:Number(pricePaise)+500,description:`Freshly prepared ${String(name).toLowerCase()} — sample menu.`,categoryId: category.id, isVeg: true, kotStationId: station.id })).product);
   }
   const stocks: Array<{ id: string }> = [];
   for (const [name, unit, openingQty, lowStockThreshold] of [["Rice", "kg", 25, 5], ["Oil", "L", 8, 2], ["Paneer", "kg", 6, 2], ["Flour", "kg", 20, 5], ["Milk", "L", 2, 3]] as const) {
     stocks.push((await request("/api/stock-items", { clientRef: randomUUID(), name, unit, openingQty, lowStockThreshold })).item);
+  }
+  for (let n=0;n<stocks.length;n++) {
+    const stock = db.prepare('SELECT version FROM stock_items WHERE id=?').get(stocks[n]!.id) as {version:number};
+    await request(`/api/stock-items/${stocks[n]!.id}/movements`,{clientRef:randomUUID(),expectedVersion:stock.version,reason:'purchase',quantity:1,costPaise:[8000,15000,32000,4500,6000][n],note:'Sample supplier delivery'});
   }
   for (const [productIndex, stockIndex, qty] of [[0, 2, .2], [3, 0, .25], [4, 2, .2], [6, 0, .15], [7, 3, .1], [10, 4, .1]] as const) {
     await request(`/api/products/${products[productIndex]!.id}/recipe`, { expectedVersion: 0, ingredients: [{ stockItemId: stocks[stockIndex]!.id, qtyPerSale: qty }, { stockItemId: stocks[1]!.id, qtyPerSale: .01 }] }, "PUT");
@@ -56,6 +65,8 @@ export async function seedDemo(app: FastifyInstance) {
     const preview = (await request(`/api/orders/${sample.order.id}/bill-preview`, { discountPaise: 0 })).preview;
     const bill = (await request(`/api/orders/${sample.order.id}/bill`, { clientRef: randomUUID(), previewKey: preview.previewKey })).bill;
     await request(`/api/bills/${bill.id}/settle`, { clientRef: randomUUID(), payments: [{ mode: ["cash", "card", "upi"][i % 3], amountPaise: bill.totalPaise }] });
+    if(i===0) await request(`/api/bills/${bill.id}/print`,{clientRef:randomUUID(),printerId:receiptPrinter.id});
+    if(i===1) await request(`/api/bills/${bill.id}/void`,{clientRef:randomUUID(),reason:'Sample cancelled bill',refunds:[{mode:'card',amountPaise:bill.totalPaise}]});
   }
   await order(0, 0);
   await order(2, 3);

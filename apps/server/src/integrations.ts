@@ -4,9 +4,13 @@ import { httpError } from "./http-error.js";
 import { integrationLicensed } from "./kds.js";
 
 interface StateRow { id: string; enabled: number; updated_at: number }
+const ownerIntegrations = new WeakMap<Database, () => Record<string, boolean> | null>();
+export function provideOwnerIntegrations(db: Database, lookup: () => Record<string, boolean> | null): void { ownerIntegrations.set(db, lookup); }
 
 /** True only when the Marketplace has an `enabled = 1` row for this integration (no row means off). */
 export function integrationEnabled(db: Database, id: IntegrationId): boolean {
+  const owner = ownerIntegrations.get(db)?.();
+  if (owner) return owner[id] === true;
   const row = db.prepare("SELECT enabled FROM integration_state WHERE id=?").get(id) as { enabled: number } | undefined;
   return row?.enabled === 1;
 }
@@ -15,11 +19,11 @@ function listIntegrations(db: Database): IntegrationInfo[] {
   const rows = new Map((db.prepare("SELECT id, enabled, updated_at FROM integration_state").all() as StateRow[]).map((r) => [r.id, r]));
   return INTEGRATIONS.map((def) => {
     const row = rows.get(def.id);
-    return { ...def, enabled: row?.enabled === 1, licensed: integrationLicensed(db, def), updatedAt: row?.updated_at ?? null };
+    return { ...def, enabled: integrationEnabled(db, def.id), licensed: integrationLicensed(db, def), updatedAt: row?.updated_at ?? null };
   });
 }
 
-export function registerIntegrations(app: FastifyInstance): void {
+export function registerIntegrations(app: FastifyInstance, allowFixtureWrites = false): void {
   const read = app.requirePermission("integrations.read");
   const configure = app.requirePermission("integrations.configure");
 
@@ -29,6 +33,7 @@ export function registerIntegrations(app: FastifyInstance): void {
   });
 
   app.patch<{ Params: { id: string } }>("/api/integrations/:id", { preHandler: configure }, async (req, reply) => {
+    if (!allowFixtureWrites || app.licensing.enabled) throw httpError(403, "Integrations are controlled by the ForkFlow owner.");
     const { id } = req.params;
     if (!isIntegrationId(id)) throw httpError(404, "Unknown integration");
     const body = IntegrationToggle.parse(req.body);

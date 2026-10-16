@@ -58,7 +58,7 @@ function billNumbers(value: any): number[] {
 }
 function findElement(value: any, type: string): any {
   if (!value || typeof value !== "object") return null;
-  if (value.type === type) return value;
+  if (type === "history-filter" ? value.props?.["aria-label"] === "Show" : value.type === type) return value;
   const children = value.props?.children;
   for (const child of Array.isArray(children) ? children : [children]) {
     const found = findElement(child, type);
@@ -123,10 +123,10 @@ describe("Bills history screen wiring", () => {
       expect(billNumbers(render(Bills))).toHaveLength(100);
       findLoadOlder(render(Bills)).props.onClick();
       await vi.advanceTimersByTimeAsync(14_999);
-      expect(findElement(render(Bills), "select").props.disabled).toBe(true);
+      expect(findElement(render(Bills), "history-filter").props.disabled).toBe(true);
       await vi.advanceTimersByTimeAsync(1);
       const timedOut = render(Bills);
-      expect(findElement(timedOut, "select").props.disabled).toBe(false);
+      expect(findElement(timedOut, "history-filter").props.disabled).toBe(false);
       expect(findElement(timedOut, "p").props.children).toBe("Bill request timed out");
       expect(billNumbers(timedOut)).toHaveLength(100);
       expect(findLoadOlder(timedOut).props.disabled).toBe(false);
@@ -151,11 +151,11 @@ describe("Bills history screen wiring", () => {
     render(Bills);
     const cleanup = harness.effects[0]!() as () => void;
     try {
-      findElement(render(Bills), "select").props.onChange({ target: { value: "paid" } });
+      findElement(render(Bills), "history-filter").props.onChange("paid");
       expect(pendingSignal?.aborted).toBe(true);
       await tick();
       expect(billNumbers(render(Bills))).toEqual([9]);
-      expect(findElement(render(Bills), "select").props.disabled).toBe(false);
+      expect(findElement(render(Bills), "history-filter").props.disabled).toBe(false);
       expect(findElement(render(Bills), "p").props.children).toBe("");
     } finally { cleanup(); }
   });

@@ -13,13 +13,14 @@ import { loadCaptainHttps, startCaptainHttps } from "./captain-https.js";
 
 // Use Fastify's existing ws dependency; only this integration test needs a client.
 const WebSocket = createRequire(import.meta.url)("ws") as new (url: string, options: ConnectionOptions) => EventEmitter & { send(data: string): void; terminate(): void };
+const windowsPowerShellEnv = Object.fromEntries([...Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath'), ['PSModulePath', `${process.env['SystemRoot']}\\System32\\WindowsPowerShell\\v1.0\\Modules`]]);
 
 describe.skipIf(process.platform !== "win32")("Captain local HTTPS", () => {
   const directory = mkdtempSync(join(tmpdir(), "forkflow-captain-test-"));
   let generated = false;
   function configuration() {
     if (!generated) {
-      execFileSync("powershell.exe", ["-NoProfile", "-File", resolve("tools/setup-captain-https.ps1"), "-ServerAddress", "127.0.0.1", "-DataDirectory", directory, "-Port", "4443"], { stdio: "pipe" });
+      execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", resolve("tools/setup-captain-https.ps1"), "-ServerAddress", "127.0.0.1", "-DataDirectory", directory, "-Port", "4443"], { stdio: "pipe", env: Object.fromEntries([...Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "psmodulepath"), ["PSModulePath", `${process.env['SystemRoot']}\\System32\\WindowsPowerShell\\v1.0\\Modules`]]) });
       generated = true;
     }
     return loadCaptainHttps(directory)!;
@@ -31,7 +32,7 @@ describe.skipIf(process.platform !== "win32")("Captain local HTTPS", () => {
     // Remove only the two certificates this test created in CurrentUser/My.
     for (const thumbprint of [config.caThumbprint, leaf]) {
       if (!/^[A-F0-9]{40}$/.test(thumbprint)) throw new Error("Invalid test certificate thumbprint");
-      execFileSync("powershell.exe", ["-NoProfile", "-Command", `Remove-Item -LiteralPath 'Cert:\\CurrentUser\\My\\${thumbprint}' -ErrorAction SilentlyContinue`], { stdio: "pipe" });
+      execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Remove-Item -LiteralPath 'Cert:\\CurrentUser\\My\\${thumbprint}' -ErrorAction SilentlyContinue`], { stdio: "pipe", env: windowsPowerShellEnv });
     }
   });
   it("is optional and validates certificate address coverage", () => {

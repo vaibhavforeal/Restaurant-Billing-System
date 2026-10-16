@@ -4,6 +4,8 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useIntegrations } from "./integrations";
 import { navTabVisible } from "./integrations-model";
 import { readPreference, useShortcutLabels } from "./pos-shortcuts";
+import { useFeatures } from "./features";
+import { usePermissions } from "./permissions";
 
 export type Page =
   | { name: "home" }
@@ -34,7 +36,9 @@ export function NavBar({
   beforeLogout?: () => boolean;
 }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
+  const { allows } = usePermissions(user.role);
   const { isEnabled } = useIntegrations();
+  const { isActive } = useFeatures();
   async function logout() {
     if (beforeLogout && !beforeLogout()) return;
     try {
@@ -47,37 +51,18 @@ export function NavBar({
     }
   }
 
-  // Role→tab matrix per contracts
-  const roleTabs: Array<{ page: Page; label: string }> =
-    user.role === "admin"
-      ? [
-          { page: { name: "home" }, label: "home" },
-          { page: { name: "tables" }, label: "tables" },
-          { page: { name: "reports" }, label: "reports" },
-          { page: { name: "inventory" }, label: "inventory" },
-          { page: { name: "kitchen" }, label: "kitchen" },
-          { page: { name: "catalog" }, label: "catalog" },
-          { page: { name: "users" }, label: "users" },
-          { page: { name: "marketplace" }, label: "marketplace" },
-          { page: { name: "settings" }, label: "settings" },
-        ]
-      : user.role === "cashier"
-        ? [
-            { page: { name: "home" }, label: "home" },
-            { page: { name: "tables" }, label: "tables" },
-            { page: { name: "reports" }, label: "reports" },
-            { page: { name: "inventory" }, label: "inventory" },
-            { page: { name: "kitchen" }, label: "kitchen" },
-            { page: { name: "marketplace" }, label: "marketplace" },
-          ]
-        : user.role === "waiter"
-          ? [
-              { page: { name: "home" }, label: "home" },
-              { page: { name: "tables" }, label: "tables" },
-            ]
-          : [{ page: { name: "kitchen" }, label: "kitchen" }]; // kitchen role
-
-  const tabs = roleTabs.filter((t) => navTabVisible(t.page.name, user.role, isEnabled));
+  const roleTabs: Array<{ page: Page; label: string }> = [
+    { page: { name: "home" }, label: "home" },
+    { page: { name: "tables" }, label: "tables" },
+    { page: { name: "reports" }, label: "reports" },
+    { page: { name: "inventory" }, label: "inventory" },
+    { page: { name: "kitchen" }, label: "kitchen" },
+    { page: { name: "catalog" }, label: "catalog" },
+    { page: { name: "users" }, label: "users" },
+    { page: { name: "marketplace" }, label: "marketplace" },
+    { page: { name: "settings" }, label: "settings" },
+  ].filter(tab => tab.label === "home" || allows(({ tables: "tables.read", reports: "reports.read", inventory: "stock.read", kitchen: "kots.read", catalog: "products.read", users: "users.read", marketplace: "integrations.read", settings: "settings.read" } as Record<string,string>)[tab.label] ?? "")) as Array<{ page: Page; label: string }>;
+  const tabs = roleTabs.filter((t) => navTabVisible(t.page.name, user.role, isEnabled) && (t.page.name !== "inventory" || isActive("inventory")));
 
   // Order and takeaway pages belong to tables and orders.
   const activeTab = page.name === "order" || page.name === "takeaway" ? "tables" : page.name === "bills" ? "reports" : page.name;
@@ -85,7 +70,7 @@ export function NavBar({
   return (
     <nav className="sidebar" aria-label="Main navigation">
       <Brand />
-      {user.role !== "kitchen" && <button className="pos-new-order" {...shortcutProps("new_order")} title={shortcut("new_order", "New order")} onClick={() => onNavigate({ name: user.role !== "waiter" && readPreference("forkflow.order-type") === "parcel" ? "takeaway" : "tables" })}><Icon name="plus" size={16} /><span>New</span></button>}
+      {user.role !== "kitchen" && <button className="pos-new-order" {...shortcutProps("new_order")} title={shortcut("new_order", "New order")} onClick={() => onNavigate({ name: isActive("takeaway") && user.role !== "waiter" && readPreference("forkflow.order-type") === "parcel" ? "takeaway" : "tables" })}><Icon name="plus" size={16} /><span>New</span></button>}
       <div className="nav-items">
       {tabs.map((t) => (
         <button

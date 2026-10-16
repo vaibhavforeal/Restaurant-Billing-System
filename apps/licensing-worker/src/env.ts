@@ -12,6 +12,10 @@ export interface D1Like {
 export interface RateLimiter { limit(options: { key: string }): Promise<{ success: boolean }> }
 export type Period = "monthly" | "yearly";
 export interface Env {
+  /** Private cloud API service credential; never shipped to outlet or browser. */
+  CLOUD_SERVICE_TOKEN?: string;
+  /** Private owner panel login, configured as a Worker secret. */
+  OWNER_PASSWORD?: string;
   DB: D1Like;
   LIMITER: RateLimiter;
   RAZORPAY_KEY_ID: string;

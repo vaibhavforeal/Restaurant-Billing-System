@@ -30,6 +30,8 @@ import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
 import { canReconcileZomato } from "./zomato-desk";
 import "./compact-workspace.css";
+import { FeaturesProvider } from "./features";
+import { PermissionsProvider, PermissionWorkspace } from "./permissions";
 
 type State =
   | { kind: "loading" }
@@ -123,7 +125,7 @@ function StaffApp() {
       const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
       const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
       return (
-        <NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
+        <NavigationGuardContext.Provider value={navigationGuard}><PermissionsProvider key={user.id} user={user}><FeaturesProvider key={user.id}><IntegrationsProvider key={user.id} user={user}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
@@ -136,18 +138,18 @@ function StaffApp() {
           {page.name === "takeaway" && canQuickBill && <QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} />}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
-          {page.name === "catalog" && <Catalog />}
-          {page.name === "users" && <Users />}
-          {page.name === "settings" && <Settings key={page.section ?? ""} section={page.section} />}
+          {page.name === "catalog" && <PermissionWorkspace permission="products.read"><Catalog /></PermissionWorkspace>}
+          {page.name === "users" && <PermissionWorkspace permission="users.read"><Users /></PermissionWorkspace>}
+          {page.name === "settings" && <PermissionWorkspace permission="settings.read"><Settings key={page.section ?? ""} section={page.section} /></PermissionWorkspace>}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} onOpenOrder={onOpenOrder} />}
-          {page.name === "inventory" && <Inventory user={user} />}
-          {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
+          {page.name === "inventory" && <PermissionWorkspace permission="stock.read"><Inventory user={user} /></PermissionWorkspace>}
+          {page.name === "marketplace" && <PermissionWorkspace permission="integrations.read"><Marketplace user={user} onNavigate={go} /></PermissionWorkspace>}
           </main>
           </QrNotifications>
           </LicenseGate>
           </div>
-        </div></IntegrationsProvider></NavigationGuardContext.Provider>
+        </div></IntegrationsProvider></FeaturesProvider></PermissionsProvider></NavigationGuardContext.Provider>
       );
     }
   }

@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type { GuestRequest, QrTable } from "@forkflow/domain";
@@ -172,11 +173,11 @@ function RequestCard({ request, table, canAccept, busy, saving, onReview, onOpen
       <p className="qr-help">Expires {when(request.expiresAt)}.</p>
       {error && <p role="alert">{error}</p>}
       {!rejecting ? <form onSubmit={(event) => { event.preventDefault(); if (targetValid && canAccept && !busy) void submit({ orderId: target === "new" ? null : target }); }}>
-        <label>Bill group for {request.tableName}<select required value={target} disabled={busy || !canAccept} onChange={(event) => { setTarget(event.target.value); setError(""); }}>
+        <div className="choice-field">Bill group for {request.tableName}<ChoiceTiles aria-label="Bill group for" required value={target} disabled={busy || !canAccept} onChange={(choiceValue) => { setTarget(choiceValue); setError(""); }}>
           <option value="">Choose a bill group</option><option value="new">New bill group</option>
           {target && !targetValid && <option value={target} disabled>Selected bill group is no longer open</option>}
           {groupOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select></label>
+        </ChoiceTiles></div>
         {target && !targetValid && <p role="status">Review the available bill groups before accepting.</p>}
         <div className="qr-card-actions"><button className="primary" disabled={busy || !canAccept || !targetValid}>{saving ? "Saving…" : "Accept & open order"}</button><button type="button" disabled={busy} onClick={() => setRejecting(true)}>Reject…</button></div>
       </form> : <form onSubmit={(event) => { event.preventDefault(); if (reason.trim() && !busy) void submit({ reason: reason.trim() }); }}>
@@ -267,8 +268,8 @@ export function QrTableManager({ disabled, onBusyChange }: { disabled: boolean; 
     <div className="qr-inbox-heading"><div><h3>Table QR codes</h3><p>Guests scan at their table using the restaurant’s Wi-Fi.</p></div><button disabled={busy || loading} onClick={() => setRefresh((value) => value + 1)}>{loading ? "Loading…" : "Refresh codes"}</button></div>
     <p className="qr-help">Basic includes menu browsing; Pro also allows order requests for staff review. Guest phones do not use registered staff-device slots.</p>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
-    <div className="qr-manager-fields"><label>Table<select value={tableId} disabled={busy || loading} onChange={(event) => { setTableId(event.target.value); setMessage(""); }}><option value="">Choose a table</option>{tables.map((value) => <option value={value.id} key={value.id}>{value.name}{value.area ? ` · ${value.area}` : ""}{value.isActive ? "" : " (inactive)"}</option>)}</select></label>
-      <label>Restaurant network address<select value={origin} disabled={busy || loading || origins.length === 0} onChange={(event) => { setOrigin(event.target.value); setMessage(""); }}><option value="">Choose an address</option>{origins.map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+    <div className="qr-manager-fields"><div className="choice-field">Table<ChoiceTiles aria-label="Table" value={tableId} disabled={busy || loading} onChange={(choiceValue) => { setTableId(choiceValue); setMessage(""); }}><option value="">Choose a table</option>{tables.map((value) => <option value={value.id} key={value.id}>{value.name}{value.area ? ` · ${value.area}` : ""}{value.isActive ? "" : " (inactive)"}</option>)}</ChoiceTiles></div>
+      <div className="choice-field">Restaurant network address<ChoiceTiles aria-label="Restaurant network address" value={origin} disabled={busy || loading || origins.length === 0} onChange={(choiceValue) => { setOrigin(choiceValue); setMessage(""); }}><option value="">Choose an address</option>{origins.map((value) => <option key={value} value={value}>{value}</option>)}</ChoiceTiles></div></div>
     {origins.length === 0 && !loading && <p role="status">No restaurant network address is available. Connect the main PC to the restaurant network, then refresh codes.</p>}
     {isLoopbackOrigin(origin) && <p className="qr-plan-note" role="status">This address works only on the main PC. Choose a restaurant network address for guest phones before printing.</p>}
     {table && <>

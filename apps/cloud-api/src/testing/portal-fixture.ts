@@ -1,0 +1,18 @@
+import {Pool} from 'pg';
+import argon2 from 'argon2';
+import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {testPostgres} from './postgres.js';
+import {createCloudApi} from '../server.js';
+const database=await testPostgres(),admin=new Pool({connectionString:database.url});
+await admin.query(await readFile(new URL('../../migrations/001-platform.sql',import.meta.url),'utf8'));
+const accountId=randomUUID(),organizationId=randomUUID(),outletId=randomUUID();
+await admin.query('INSERT INTO accounts(id,email,password_hash,created_at) VALUES($1,$2,$3,$4)',[accountId,'owner@fixture.example',await argon2.hash('disposable portal password'),Date.now()]);
+await admin.query('INSERT INTO organizations(id,name,created_at) VALUES($1,$2,$3)',[organizationId,'Fixture Restaurant',Date.now()]);
+await admin.query("INSERT INTO memberships(organization_id,account_id,role) VALUES($1,$2,'owner')",[organizationId,accountId]);
+await admin.query('INSERT INTO outlets(id,organization_id,name,created_at,bootstrapped,last_seen_at) VALUES($1,$2,$3,$4,true,$4)',[outletId,organizationId,'Fixture Outlet',Date.now()]);
+await admin.query('INSERT INTO projections(organization_id,outlet_id,entity_table,entity_key,row_data,revision) VALUES($1,$2,$3,$4,$5,0)',[organizationId,outletId,'products',{id:randomUUID()},{name:'Masala Tea',price_paise:2500,is_active:1}]);
+const pool=new Pool({connectionString:database.url,options:'-c role=forkflow_cloud'});
+const api=await createCloudApi({pool,portalOrigin:'http://localhost:4300',secureCookies:false,mailer:{async deliver(){}}});
+await api.listen({port:4200,host:'127.0.0.1'});console.log('Disposable portal fixture listening on 4200. owner@fixture.example / disposable portal password');
+const stop=async()=>{await api.close();await pool.end();await admin.end();await database.stop();process.exit();};process.once('SIGINT',stop);process.once('SIGTERM',stop);

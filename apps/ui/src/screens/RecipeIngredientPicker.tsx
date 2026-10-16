@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useRef, useState } from "react";
 import type { StockItem, StockUnit } from "@forkflow/domain";
 import { apiFetch } from "../api";
@@ -49,7 +50,7 @@ export function RecipeIngredientPicker({ items, selectedIds, canCreate, onSelect
     {creating ? <form className="recipe-stock-form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <p className="muted">The stock item is created immediately. Save the recipe to start using it.</p>
       <label>Stock name<input autoFocus required maxLength={120} value={form.name} disabled={busy || !canCreate} onChange={(event) => update({ ...form, name: event.target.value })} /></label>
-      <label>Stock unit<select value={form.unit} disabled={busy || !canCreate} onChange={(event) => update({ ...form, unit: event.target.value as StockUnit })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select><small className="muted">This unit cannot be changed later.</small></label>
+      <div className="choice-field">Stock unit<ChoiceTiles aria-label="Stock unit" value={form.unit} disabled={busy || !canCreate} onChange={(choiceValue) => update({ ...form, unit: choiceValue as StockUnit })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</ChoiceTiles><small className="muted">This unit cannot be changed later.</small></div>
       <div className="recipe-stock-amounts">
         <label>Opening quantity ({form.unit})<input required type="number" min="0" max="1000000000" step="0.001" value={form.opening} disabled={busy || !canCreate} onChange={(event) => update({ ...form, opening: event.target.value })} /></label>
         <label>Low-stock threshold ({form.unit})<input type="number" min="0" max="1000000000" step="0.001" placeholder="Optional" value={form.threshold} disabled={busy || !canCreate} onChange={(event) => update({ ...form, threshold: event.target.value })} /></label>

@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.git
+build
+dist
+**/dist
+.env
+.env.*
+*.db
+**/*.db
+.e2e-scratch
+Screenshots
+output

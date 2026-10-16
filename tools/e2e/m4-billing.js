@@ -1,6 +1,14 @@
 // Run with agent-browser eval --stdin on an isolated test DB, signed in as admin.
 // Uses actual DOM events for checkout; HTTP calls only create fixtures and verify persisted data.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (!/^https?:\/\/(localhost|127\.0\.0\.1):/.test(location.origin)) throw new Error('Local test server required');
   const steps = [];
   const check = (ok, message) => { if (!ok) throw new Error(message); steps.push(message); };
@@ -11,7 +19,9 @@
   };
   const button = (text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().replace(/ · F\d+$/, '') === text);
   const click = async (text) => { const b = await waitFor(() => button(text), `button ${text}`); if (b.disabled) throw new Error(`Disabled: ${text}`); b.click(); await new Promise((resolve) => setTimeout(resolve, 80)); };
-  const field = (text) => [...document.querySelectorAll('label')].find((label) => label.textContent.trim().startsWith(text) && (text !== 'GST' || label.querySelector('select')))?.querySelector('input,select');
+  // Reports & Analytics: everyday reports are tabs; detailed reports are visible tiles.
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
+  const field = (text) => [...document.querySelectorAll("label, .choice-field")].find((label) => label.textContent.trim().startsWith(text) && (text !== 'GST' || label.querySelector("[role=radiogroup]")))?.querySelector("input,[role=radiogroup]");
   const nav = async (text) => {
     const open = document.querySelector('dialog[open]');
     if (open) { [...open.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Close')?.click(); await waitFor(() => !document.querySelector('dialog[open]'), 'dialog closed'); }
@@ -21,6 +31,7 @@
   const fill = async (text, value) => {
     const input = await waitFor(() => field(text), `field ${text}`);
     const prototype = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, value);
     input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 60));
@@ -77,14 +88,14 @@
   await waitFor(() => document.querySelector('iframe')?.contentDocument?.body?.innerText.includes('Restaurant bill'), 'no-GST receipt');
   const plain = document.querySelector('iframe').contentDocument.body.innerText;
   check(!/Tax invoice|Includes GST|CGST|SGST|Bill of supply/.test(plain), 'No-GST receipt without a GSTIN is a plain Restaurant bill with no GST lines');
-  await nav('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid');
+  await nav('Reports & Analytics'); await pickReport('bills'); await fill('Show', 'paid');
   await click(`Open bill #${included.billNo}`);
   await waitFor(() => button('View receipt') || button('View bill'), 'bill actions');
   if (!button('View receipt')) await click('View bill');
   await click('View receipt');
   await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Includes GST') && html.includes('Tax invoice'); }, 'old receipt');
   check((await api(`/bills/${included.id}`)).bill.receipt.gstMode === 'included', 'Old GST bill keeps its mode and receipt after the switch');
-  await nav('tables'); await nav('Reports & Analytics'); await click('Day-end / GST');
+  await nav('tables'); await nav('Reports & Analytics'); await pickReport('day-end');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');
   check(document.body.innerText.includes('105.00') || document.body.innerText.includes('110.00'), 'Day-end payment breakdown rendered');
   const report = (await api('/reports/day-end')).report;

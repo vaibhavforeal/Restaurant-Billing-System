@@ -1,4 +1,5 @@
 export { uuidv7 } from "./id.js";
+export { FEATURES, FeatureToggle, RestaurantFeaturePolicy, type FeatureDefinition, type FeatureInfo, type FeatureCatalog } from "./features.js";
 export { RECEIPT_STYLES, resolveReceiptStyle, type ReceiptStyle } from "./receipt-styles.js";
 export * from "./zomato.js";
 export { INTEGRATIONS, IntegrationToggle, isIntegrationId, type IntegrationId, type IntegrationStatus, type IntegrationDef, type IntegrationInfo, type IntegrationToggleInput } from "./integrations.js";

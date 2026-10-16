@@ -4,6 +4,8 @@ import { can } from "@forkflow/core";
 import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7, roleFor,
   type StockRow, type StockLink, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { httpError } from "./http-error.js";
+import { assertFeatureActive } from "./features.js";
+import { staffCan } from "./staff-permissions.js";
 
 /** Publish only after the caller has committed the transaction. */
 export function publishStock(app: FastifyInstance, ids: string[]) {
@@ -71,7 +73,7 @@ export function registerStock(app: FastifyInstance) {
     const requestJson = JSON.stringify({ stockItemId: id, ...body });
     // Priced receiving needs the cost permission and the recipes plan; refuse before anything is written.
     if (body.costPaise !== undefined) {
-      if (!can(roleFor(req.user.role), "costs.read")) throw httpError(403, "Not allowed to record cost");
+      if (!staffCan(app, req.user, "costs.read")) throw httpError(403, "Not allowed to record cost");
       app.licensing.assertFeature("recipes", req.headers["x-forkflow-device"]);
     }
     const result = db.transaction(() => {
@@ -98,7 +100,7 @@ export function registerStock(app: FastifyInstance) {
     const { id } = req.params as { id: string }; item(id);
     const { before } = z.object({ before: z.string().min(1).max(64).optional() }).parse(req.query);
     // Cost is admin-only and part of the recipes plan; everyone else gets no cost keys at all.
-    const showCost = can(roleFor(req.user.role), "costs.read") && app.licensing.status(req.headers["x-forkflow-device"]).features.recipes;
+    const showCost = staffCan(app, req.user, "costs.read") && app.licensing.status(req.headers["x-forkflow-device"]).features.recipes;
     const moves = db.prepare(`SELECT m.id, m.stock_item_id AS stockItemId, m.delta, m.reason, m.note,
       m.order_item_id AS orderItemId, oi.order_id AS orderId, m.reversal_of AS reversalOf,
       m.created_at AS createdAt, u.name AS createdByName, m.balance_after AS balanceAfter${showCost ? ", m.cost_paise AS costPaise" : ""}
@@ -133,6 +135,7 @@ export function registerStock(app: FastifyInstance) {
       if (previous.length > 1) throw httpError(409, "This product has multiple stock links. Use the recipe editor to change them.");
       const unchanged = body.stockItemId === null ? previous.length === 0 : previous[0]?.stockItemId === body.stockItemId && previous[0].qtyPerSale === body.qtyPerSale;
       if (unchanged) return [];
+      assertFeatureActive(app, "recipes");
       versionCheck(product.stock_version, body.expectedVersion);
       if (body.stockItemId && !item(body.stockItemId).is_active) throw httpError(400, "Choose an active stock item");
       db.prepare("DELETE FROM product_stock_links WHERE product_id = ?").run(id);
@@ -156,6 +159,7 @@ export function registerStock(app: FastifyInstance) {
       const unchanged = previous.length === body.ingredients.length && previous.every((old) =>
         body.ingredients.some((next) => next.stockItemId === old.stockItemId && next.qtyPerSale === old.qtyPerSale));
       if (unchanged) return [];
+      assertFeatureActive(app, "recipes");
       if (product.stock_version !== body.expectedVersion) throw httpError(409, "Recipe changed on another counter. Reload the recipe and review before saving.");
       // Validate the entire replacement before changing any saved link.
       for (const ingredient of body.ingredients) {

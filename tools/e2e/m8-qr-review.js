@@ -1,5 +1,13 @@
 // Follow m8-qr.js in the same registered browser on the disposable QA server.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4117' || window.__m8Report?.status !== 'passed') throw new Error('Run m8-qr.js first');
   const { tableId, orderId, link } = window.__m8Report;
   const checks = [], originalConfirm = window.confirm;
@@ -25,8 +33,9 @@
   };
   const openStaffDialog = async (label) => { await closeDialogs(); await click(document, label); return wait(() => activeModal(document), label + ' dialog'); };
   const fill = async (doc, name, value) => {
-    const input = await wait(() => { const el = [...doc.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith(name) && available(l))?.querySelector('select,textarea,input'); return el && !el.disabled ? el : null; }, name);
+    const input = await wait(() => { const el = [...doc.querySelectorAll("label, .choice-field")].find((l) => l.textContent.trim().startsWith(name) && available(l))?.querySelector("[role=radiogroup],textarea,input"); return el && !el.disabled && el.getAttribute('aria-disabled') !== 'true' ? el : null; }, name);
     const view = doc.defaultView, proto = input.tagName === 'SELECT' ? view.HTMLSelectElement.prototype : input.tagName === 'TEXTAREA' ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value);
     input.dispatchEvent(new view.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await pause();
   };
@@ -78,7 +87,7 @@
     await wait(() => document.querySelector('.qr-code-preview img'), 'QR ready for rotation');
     const oldToken = new URL(link).hash.slice(1);
     window.confirm = () => true; await click(document, 'Replace QR code');
-    await wait(() => { const input = [...document.querySelectorAll('label')].find((l) => l.textContent === 'Guest menu link')?.querySelector('input'); return input?.value && new URL(input.value).hash.slice(1) !== oldToken; }, 'rotated QR image');
+    await wait(() => { const input = [...document.querySelectorAll("label, .choice-field")].find((l) => l.textContent === 'Guest menu link')?.querySelector('input'); return input?.value && new URL(input.value).hash.slice(1) !== oldToken; }, 'rotated QR image');
     const oldMenu = await fetch('/api/guest/menu', { headers: { 'x-qr-token': oldToken } });
     check(oldMenu.status === 404, 'Rotating the QR invalidates the old printed link');
     iframe.contentWindow.location.reload();

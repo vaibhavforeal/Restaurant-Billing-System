@@ -6,11 +6,13 @@ import { ThemeToggle } from "./ThemeToggle";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { CaptainInstall } from "./CaptainInstall";
 import { useShortcutLabels } from "./pos-shortcuts";
+import { usePermissions } from "./permissions";
 
 export function CaptainNav({ user, onNavigate, onLogout, beforeLogout }: {
   user: User; onNavigate: (page: Page) => void; onLogout: () => void; beforeLogout: () => boolean;
 }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
+  const { allows } = usePermissions(user.role);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   async function logout() {
@@ -28,6 +30,9 @@ export function CaptainNav({ user, onNavigate, onLogout, beforeLogout }: {
       <div className="captain-account-actions">
         <button {...shortcutProps("tables")} title={shortcut("tables", "Tables")} onClick={() => { setOpen(false); onNavigate({ name: "tables" }); }}>Tables & orders</button>
         <button onClick={() => { setOpen(false); onNavigate({ name: "home" }); }}>Service overview</button>
+        {allows("products.read") && <button onClick={() => { setOpen(false); onNavigate({ name: "catalog" }); }}>Catalog</button>}
+        {allows("stock.read") && <button onClick={() => { setOpen(false); onNavigate({ name: "inventory" }); }}>Inventory</button>}
+        {allows("users.read") && <button onClick={() => { setOpen(false); onNavigate({ name: "users" }); }}>Staff accounts</button>}
         <ThemeToggle />
         {user.role !== "waiter" && <button onClick={() => { if (beforeLogout()) window.location.assign("/"); }}>Open full POS</button>}
       </div>

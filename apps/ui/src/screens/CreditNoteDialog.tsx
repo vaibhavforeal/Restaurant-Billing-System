@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useId, useRef, useState } from "react";
 import type { Bill, BillCreditNote } from "@forkflow/domain";
 import { receiptGstMode } from "@forkflow/domain/gst";
@@ -57,9 +58,9 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
   });
   return <div className="credit-note-actions">
     <div className="credit-note-buttons">
-      {selectable && printers.length > 0 && <label htmlFor={printerField}>Printer <select id={printerField} value={chosen} disabled={busy} onChange={(e) => setChosen(e.target.value)}>
+      {selectable && printers.length > 0 && <div className="choice-field" >Printer <ChoiceTiles aria-label="Printer" id={printerField} value={chosen} disabled={busy} onChange={(choiceValue) => setChosen(choiceValue)}>
         <option value="">Choose a printer</option>{printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select></label>}
+      </ChoiceTiles></div>}
       {target && <button type="button" className={selectable ? "primary" : ""} disabled={busy} aria-label={`${printLabel} CN-${note.cnNo}`} onClick={() => void print()}>{printLabel}</button>}
       <button type="button" disabled={busy} aria-label={`View CN-${note.cnNo}`} onClick={() => void view()}>View</button>
       {html && <button type="button" disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
@@ -266,7 +267,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
 
     {preview && !unpaid && refundTotal > 0 && <fieldset disabled={busy} className="credit-note-refunds"><legend>Refund to guest</legend>
       {rows.map((row, index) => <div key={row.id} className="credit-note-refund-row">
-        <label>Method {index + 1}<select value={row.mode} onChange={(e) => setRow(row.id, { mode: e.target.value as PayMode })}>{PAY_MODES.map((m) => <option key={m} value={m}>{modeLabel(m)} (up to {money(preview.refundable[m])})</option>)}</select></label>
+        <div className="choice-field">Method {index + 1}<ChoiceTiles aria-label="Method" value={row.mode} onChange={(choiceValue) => setRow(row.id, { mode: choiceValue as PayMode })}>{PAY_MODES.map((m) => <option key={m} value={m}>{modeLabel(m)} (up to {money(preview.refundable[m])})</option>)}</ChoiceTiles></div>
         <label>Amount {index + 1} (₹)<input type="number" min="0.01" step="0.01" value={row.amount} onChange={(e) => setRow(row.id, { amount: e.target.value })} /></label>
         <button type="button" aria-label={`Remove refund method ${index + 1}`} onClick={() => setRows((all) => all.filter((r) => r.id !== row.id))}>Remove</button>
       </div>)}

@@ -1,0 +1,40 @@
+services:
+ api:
+  environment:
+   HOSTED_POS_EMAIL: ${HOSTED_POS_EMAIL:?Set the owner allowed to access this restaurant}
+ ui:
+  build:
+   args:
+    CLOUD_UI_BASE: /owner/
+ pos:
+  image: forkflow-pos:${RELEASE_TAG:-local}
+  build: {context: ../.., dockerfile: deploy/cloud/Dockerfile.pos}
+  restart: unless-stopped
+  environment:
+   FORKFLOW_RUNTIME: hosted-pos
+   FORKFLOW_HOST: 0.0.0.0
+   FORKFLOW_PORT: '4100'
+   FORKFLOW_DATA_DIR: /data/restaurant
+   FORKFLOW_UI_DIR: /app/ui
+   FORKFLOW_APP_VERSION: 0.7.0-hosted
+  volumes: [pos_data:/data]
+  networks: [backend]
+  healthcheck:
+   test: [CMD, node, -e, 'fetch("http://127.0.0.1:4100/api/health").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))']
+   interval: 15s
+   timeout: 5s
+   retries: 6
+  logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+ gateway:
+  image: nginx:1.28-alpine
+  restart: unless-stopped
+  volumes: ['./nginx.pos.conf:/etc/nginx/conf.d/default.conf:ro']
+  networks: [backend, edge]
+  depends_on: {api: {condition: service_healthy},pos: {condition: service_healthy},ui: {condition: service_started}}
+  logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+ caddy:
+  volumes:
+   - ./Caddyfile.pos:/etc/caddy/Caddyfile:ro
+  depends_on: [gateway]
+volumes:
+ pos_data:

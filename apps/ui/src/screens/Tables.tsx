@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
@@ -18,8 +19,10 @@ import { ZomatoPanel } from "../ZomatoPanel";
 import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
 import "../tables-overview.css";
+import { useFeatures } from "../features";
 
 export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false }: { user: User; qrInbox?: number | undefined; onOpenOrder: (orderId: string) => void; onTakeaway: () => void; captain?: boolean }) {
+  const features = useFeatures();
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [filter, setFilter] = useState<"all" | TableInfo["status"]>("all");
   const [search, setSearch] = useState("");
@@ -231,10 +234,10 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     <div className="page-header tables-header"><div className="tables-heading"><h2>{captain ? "Tables" : "Tables & orders"}</h2><p><span className="tables-available-dot" aria-hidden="true" />{active.filter((table) => table.status === "free").length} available <span aria-hidden="true">·</span> {active.length} tables across {areas.length} {areas.length === 1 ? "area" : "areas"}</p></div><div className="actions">
       <button disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>Reservations</button>
       {isAdmin && <><button disabled={busy} aria-haspopup="dialog" onClick={() => setManagingQr(true)}>Table QR codes</button><button disabled={busy} aria-haspopup="dialog" onClick={() => setManaging(true)}>Manage tables</button></>}
-      <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => {
+      <button className="primary button-icon" {...shortcutProps("takeaway")} onClick={() => {
         if (busy || actionLock.current || qrLock.current || qrManagerLock.current || serviceLock.current || reservationLock.current) return;
         if (canQuickBill) onTakeaway(); else newParcel();
-      }} disabled={busy}><Icon name="bag" size={15} />{shortcut("takeaway", "Takeaway")}</button>
+      }} disabled={busy || !features.isActive("takeaway")} title={!features.isActive("takeaway") ? "Takeaway is disabled in Marketplace" : shortcut("takeaway", "Takeaway")}><Icon name="bag" size={15} />{shortcut("takeaway", "Takeaway")}</button>
     </div></div>
     <div className="error-message" role="alert">{error}</div>
     <div className="tables-request-strip">
@@ -249,7 +252,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     <div className="filter-bar tables-filter-bar"><div className="tabs" aria-label="Table status">
         {(["all", "free", "occupied", "reserved", "billed"] as const).map((status) => <button key={status} className={filter === status ? "selected" : ""} aria-pressed={filter === status} onClick={() => setFilter(status)}>{({ all: "All tables", free: "Available", reserved: "Reserved", occupied: "Occupied", billed: "Billed" })[status]}<span className="count">{status === "all" ? active.length : active.filter((t) => t.status === status).length}</span></button>)}
       </div><div className="tables-search-controls"><div className="search-field"><Icon name="search" size={15} /><input aria-label="Search tables" placeholder="Find a table or area…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-        <select aria-label="Table area" value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}><option value="">All areas</option>{areaFilter && !areas.includes(areaFilter) && <option value={areaFilter}>{areaFilter}</option>}{areas.map((area) => <option value={area} key={area}>{area}</option>)}</select>
+        <ChoiceTiles aria-label="Table area" value={areaFilter} onChange={(choiceValue) => setAreaFilter(choiceValue)}><option value="">All areas</option>{areaFilter && !areas.includes(areaFilter) && <option value={areaFilter}>{areaFilter}</option>}{areas.map((area) => <option value={area} key={area}>{area}</option>)}</ChoiceTiles>
       </div></div>
     <div className={`tables-layout ${hasSide ? "has-parcels" : ""} show-${visiblePane}`}>
       <div className="table-list" id="table-list" role="region" aria-label="Dining tables" tabIndex={0}>
@@ -292,13 +295,13 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       {error && <p className="error-message" role="alert">{error}</p>}
       <form className="table-add-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addTable(); }}>
         <label>Table name<input required disabled={busy} placeholder="e.g. Table 12" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} /></label>
-        <label>Pricing<select disabled={busy} value={newTable.priceTier} onChange={(e) => setNewTable({ ...newTable, priceTier: e.target.value as "ac" | "non_ac" })}><option value="non_ac">Non-AC</option><option value="ac">AC</option></select></label>
+        <div className="choice-field">Pricing<ChoiceTiles aria-label="Pricing" disabled={busy} value={newTable.priceTier} onChange={(choiceValue) => setNewTable({ ...newTable, priceTier: choiceValue as "ac" | "non_ac" })}><option value="non_ac">Non-AC</option><option value="ac">AC</option></ChoiceTiles></div>
         <label>Area<input disabled={busy} placeholder="Optional" value={newTable.area} onChange={(e) => setNewTable({ ...newTable, area: e.target.value })} /></label>
         <button className="primary" disabled={busy || !newTable.name.trim()}>Add</button>
       </form>
       <h3>All tables · {tables.length}</h3><ul className="table-manager-list">{tables.map((table, index) => <li key={table.id} className={table.isActive ? "" : "inactive"}>
         <span><strong>{table.name}</strong><small>{table.area ?? "Main"} · {table.priceTier === "ac" ? "AC" : "Non-AC"}{!table.isActive ? " · Inactive" : ""}</small></span>
-        <div className="actions"><select aria-label={`Pricing for ${table.name}`} title={table.activeOrders.length ? "Close all orders before changing pricing" : "Table pricing"} disabled={busy || table.activeOrders.length > 0} value={table.priceTier} onChange={(e) => patchTable(table.id, { priceTier: e.target.value as "ac" | "non_ac" })}><option value="non_ac">Non-AC</option><option value="ac">AC</option></select><button disabled={busy || index === 0} onClick={() => move(table, -1)} title="Move up" aria-label={`Move ${table.name} up`}>▲</button><button disabled={busy || index === tables.length - 1} onClick={() => move(table, 1)} title="Move down" aria-label={`Move ${table.name} down`}>▼</button><button disabled={busy} onClick={() => rename(table)} aria-label={`Rename ${table.name}`}>Rename</button><button disabled={busy} onClick={() => patchTable(table.id, { isActive: !table.isActive })} aria-label={`${table.isActive ? "Deactivate" : "Activate"} ${table.name}`}>{table.isActive ? "Deactivate" : "Activate"}</button></div>
+        <div className="actions"><ChoiceTiles aria-label={`Pricing for ${table.name}`} title={table.activeOrders.length ? "Close all orders before changing pricing" : "Table pricing"} disabled={busy || table.activeOrders.length > 0} value={table.priceTier} onChange={(choiceValue) => patchTable(table.id, { priceTier: choiceValue as "ac" | "non_ac" })}><option value="non_ac">Non-AC</option><option value="ac">AC</option></ChoiceTiles><button disabled={busy || index === 0} onClick={() => move(table, -1)} title="Move up" aria-label={`Move ${table.name} up`}>▲</button><button disabled={busy || index === tables.length - 1} onClick={() => move(table, 1)} title="Move down" aria-label={`Move ${table.name} down`}>▼</button><button disabled={busy} onClick={() => rename(table)} aria-label={`Rename ${table.name}`}>Rename</button><button disabled={busy} onClick={() => patchTable(table.id, { isActive: !table.isActive })} aria-label={`${table.isActive ? "Deactivate" : "Activate"} ${table.name}`}>{table.isActive ? "Deactivate" : "Activate"}</button></div>
       </li>)}</ul>
     </WorkspaceDialog>}
     {isAdmin && <WorkspaceDialog open={managingQr} title="Table QR codes" onClose={() => { if (!busy) setManagingQr(false); }} busy={busy} className="table-qr-dialog">

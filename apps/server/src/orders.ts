@@ -14,6 +14,7 @@ import { bestEffortPrint } from "./print/best-effort.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { integrationEnabled } from "./integrations.js";
+import { assertFeatureActive } from "./features.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -52,6 +53,7 @@ export function registerOrders(app: FastifyInstance): void {
       return reply.status(200).send({ order: orderWithDetails(existing.id) });
     }
 
+    if (body.type === "parcel") assertFeatureActive(app, "takeaway");
     if (body.type === "zomato") {
       // Only creating is gated: Ready and Picked up keep working for open orders when Zomato is turned off.
       if (!integrationEnabled(app.db, "zomato")) throw httpError(409, "Zomato is turned off in the Marketplace.");

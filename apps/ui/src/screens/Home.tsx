@@ -7,10 +7,12 @@ import { connectWs } from "../ws";
 import { SalesDashboard } from "../SalesDashboard";
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
+import { useFeatures, FeatureWorkspace } from "../features";
 
 export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const { isEnabled } = useIntegrations();
+  const { isActive } = useFeatures();
   const financial = user.role === "admin" || user.role === "cashier";
   const [stats, setStats] = useState<{ free: number; orders: number; billed: number } | null>(null);
   const [error, setError] = useState("");
@@ -41,11 +43,11 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
       <h2>Dashboard</h2>
       <div className="actions">
         <button className="button-icon" onClick={() => onNavigate({ name: "tables" })}><Icon name="plus" size={17} />New order</button>
-        {(user.role === "admin" || user.role === "cashier") && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => onNavigate({ name: "takeaway" })}><Icon name="bag" size={17} />{shortcut("takeaway", "Takeaway")}</button>}
+        {isActive("takeaway") && (user.role === "admin" || user.role === "cashier") && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => onNavigate({ name: "takeaway" })}><Icon name="bag" size={17} />{shortcut("takeaway", "Takeaway")}</button>}
       </div>
     </div>
     {!financial && error && <p className="alert" role="status">{error}</p>}
-    {financial && <SalesDashboard onNavigate={onNavigate} canManage={user.role === "admin"} />}
+    {financial && <FeatureWorkspace id="dashboard"><SalesDashboard onNavigate={onNavigate} canManage={user.role === "admin"} /></FeatureWorkspace>}
     {!financial && <div className="stat-grid" aria-label="Live service counts">
       {[
         { label: "Open orders", value: stats?.orders },

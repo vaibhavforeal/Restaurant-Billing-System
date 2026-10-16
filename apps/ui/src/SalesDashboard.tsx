@@ -46,7 +46,7 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
           : <section className="dash-panel dash-slots" aria-label="Sales by time slot"><header className="dash-panel-head"><h3>Sales</h3></header>
             <p className="sales-report-empty" role="status">{loading ? "Loading sales by time slot…" : "Sales by time slot are unavailable. Use Retry to try again."}</p></section>}
       </div>
-      <aside className="dash-side" aria-label="Alerts and statistics">
+      <aside className="dash-side" aria-label="Alerts and statistics" tabIndex={0}>
         <AlertsPanel rows={aggregator.rows} operational={operational} ready={ready} loaded={aggregator.loaded} zomatoEnabled={zomatoEnabled}
           canManage={canManage} error={aggregator.error} onOpenTables={() => onNavigate({ name: "tables" })} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />
         <OrderStatistics stats={dayEnd ? counts : null} />

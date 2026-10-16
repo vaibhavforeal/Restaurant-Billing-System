@@ -1,0 +1,113 @@
+name: forkflow
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forkflow
+      POSTGRES_USER: forkflow_migration
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the migration database password}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U forkflow_migration -d forkflow']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  migrate:
+    profiles: [setup]
+    image: forkflow-cloud-api:${RELEASE_TAG:-local}
+    build: {context: ../.., dockerfile: deploy/cloud/Dockerfile.api}
+    command: [node, runtime/src/migrate.mjs]
+    environment:
+      CLOUD_MIGRATION_DATABASE_URL: postgresql://forkflow_migration:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/forkflow
+      CLOUD_APP_PASSWORD: ${CLOUD_APP_PASSWORD:?Set the restricted application password}
+    networks: [backend]
+    depends_on: {postgres: {condition: service_healthy}}
+    logging: *logging
+
+  bootstrap-admin:
+    profiles: [setup]
+    image: forkflow-cloud-api:${RELEASE_TAG:-local}
+    command: [node, runtime/src/bootstrap-admin.mjs]
+    environment:
+      CLOUD_MIGRATION_DATABASE_URL: postgresql://forkflow_migration:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/forkflow
+      CLOUD_ADMIN_EMAIL: ${CLOUD_ADMIN_EMAIL:-}
+      CLOUD_ADMIN_PASSWORD: ${CLOUD_ADMIN_PASSWORD:-}
+    networks: [backend]
+    depends_on: {postgres: {condition: service_healthy}}
+    logging: *logging
+
+  api:
+    image: forkflow-cloud-api:${RELEASE_TAG:-local}
+    build: {context: ../.., dockerfile: deploy/cloud/Dockerfile.api}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '4200'
+      DATABASE_URL: postgresql://forkflow_cloud_app:${CLOUD_APP_PASSWORD:?Set CLOUD_APP_PASSWORD}@postgres:5432/forkflow
+      PORTAL_ORIGIN: https://${PORTAL_DOMAIN:?Set the portal hostname}
+      # Empty values allow database-only setup; API startup rejects missing integrations.
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-http}
+      AZURE_EMAIL_ENDPOINT: ${AZURE_EMAIL_ENDPOINT:-}
+      AZURE_EMAIL_ACCESS_KEY: ${AZURE_EMAIL_ACCESS_KEY:-}
+      AZURE_EMAIL_SENDER: ${AZURE_EMAIL_SENDER:-}
+      MAIL_DELIVERY_URL: ${MAIL_DELIVERY_URL:-}
+      MAIL_DELIVERY_TOKEN: ${MAIL_DELIVERY_TOKEN:-}
+      S3_REGION: ${S3_REGION:-auto}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3}
+      AZURE_STORAGE_ACCOUNT: ${AZURE_STORAGE_ACCOUNT:-}
+      AZURE_STORAGE_KEY: ${AZURE_STORAGE_KEY:-}
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-}
+      AZURE_STORAGE_ENDPOINT: ${AZURE_STORAGE_ENDPOINT:-}
+      LICENSING_BASE_URL: ${LICENSING_BASE_URL:-}
+      LICENSING_SERVICE_TOKEN: ${LICENSING_SERVICE_TOKEN:-}
+    networks: [backend]
+    depends_on: {postgres: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:4200/health").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))']
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging: *logging
+
+  ui:
+    image: forkflow-cloud-ui:${RELEASE_TAG:-local}
+    build: {context: ../.., dockerfile: deploy/cloud/Dockerfile.ui}
+    restart: unless-stopped
+    networks: [backend, edge]
+    depends_on: {api: {condition: service_healthy}}
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment: {PORTAL_DOMAIN: '${PORTAL_DOMAIN:?Set PORTAL_DOMAIN}'}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [backend, edge]
+    depends_on: [ui]
+    logging: *logging
+
+networks:
+  backend:
+  edge:
+volumes:
+  postgres:
+  caddy_data:
+  caddy_config:

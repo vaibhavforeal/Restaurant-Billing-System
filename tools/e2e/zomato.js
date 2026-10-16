@@ -1,5 +1,13 @@
 // Run in the disposable zomato-server fixture, signed in as admin.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== "http://127.0.0.1:4177") throw new Error("Disposable Zomato fixture required");
   const checks = [];
   const check = (ok, message) => { if (!ok) throw new Error(message); checks.push(message); };
@@ -11,6 +19,7 @@
   const button = text => [...document.querySelectorAll("button")].find(b => b.textContent.trim() === text);
   const set = (element, value) => {
     const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    if (chooseTile(element, value)) return;
     Object.getOwnPropertyDescriptor(prototype, "value").set.call(element, value);
     element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
   };
@@ -20,17 +29,19 @@
     return response.json();
   };
   const nav = label => document.querySelector(`.nav-item[aria-label="${label}"]`);
+  // Reports & Analytics: everyday reports are tabs; detailed reports are visible tiles.
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
   const openReconciliation = async () => {
     if (document.querySelector(".zomato-screen")) return;
     await wait(() => nav("Reports & Analytics"), "reports nav"); if (!nav("Reports & Analytics").disabled) nav("Reports & Analytics").click();
-    await wait(() => button("Zomato reconciliation"), "Zomato reconciliation tab"); button("Zomato reconciliation").click();
+    await pickReport("zomato");
     await wait(() => document.querySelector(".zomato-screen"), "reconciliation screen");
   };
   await openReconciliation();
   await wait(() => document.querySelectorAll(".zomato-table tbody tr").length === 6 && !button("Refresh").disabled, "seeded reconciliation");
   check(document.querySelector(".zomato-status").textContent.includes("Live activation pending"), "Unconfigured live status is explicit");
   check(document.querySelector(".zomato-metrics").textContent.includes("₹1144.01"), "Exact statement net is shown");
-  set(document.querySelector('input[type="search"]'), "000102");
+  set(document.querySelector('.zomato-screen input[type="search"]'), "000102");
   await wait(() => document.querySelectorAll(".zomato-table tbody tr").length === 1, "order search");
   check(document.querySelector(".zomato-table tbody").textContent.includes("₹-20.00"), "Underpayment is visible after searching");
   const createUrl = URL.createObjectURL;
@@ -40,8 +51,8 @@
   finally { URL.createObjectURL = createUrl; }
   const exported = await downloaded.text();
   check(exported.includes('"000102"') && !exported.includes('"000101"') && exported.includes('"-20"'), "Filtered CSV preserves order ID and numeric payout difference");
-  set(document.querySelector('input[type="search"]'), "");
-  const show = [...document.querySelectorAll("label")].find(label => label.textContent.startsWith("Show")).querySelector("select");
+  set(document.querySelector('.zomato-screen input[type="search"]'), "");
+  const show = [...document.querySelectorAll("label, .choice-field")].find(label => label.textContent.startsWith("Show")).querySelector("[role=radiogroup]");
   set(show, "awaiting_statement");
   await wait(() => document.querySelectorAll(".zomato-table tbody tr").length === 2, "status filter");
   check(true, "Status filter isolates awaiting statements"); set(show, "all");
@@ -49,7 +60,7 @@
   await wait(() => [...document.querySelectorAll(".marketplace-card")].some(card => card.querySelector("h3").textContent === "Zomato" && [...card.querySelectorAll("button")].some(b => b.textContent === "Settings")), "Zomato card Settings");
   [...document.querySelectorAll(".marketplace-card")].find(card => card.querySelector("h3").textContent === "Zomato").querySelectorAll("button").forEach(b => { if (b.textContent === "Settings") b.click(); });
   await wait(() => document.querySelector("dialog[open] .zomato-connection"), "connection form");
-  const name = [...document.querySelectorAll("label")].find(label => label.textContent === "Restaurant name").querySelector("input");
+  const name = [...document.querySelectorAll("label, .choice-field")].find(label => label.textContent === "Restaurant name").querySelector("input");
   set(name, "QA Zomato restaurant"); await wait(() => !button("Save connection").disabled, "connection edit"); button("Save connection").click();
   await wait(() => document.body.textContent.includes("Connection details saved"), "connection save");
   check((await api("/api/zomato/settings")).restaurantName === "QA Zomato restaurant", "Connection settings persist through the API");
@@ -60,7 +71,7 @@
   await wait(() => document.querySelector(".zomato-import"), "import form");
   const inputCsv = async (kind, csv) => {
     const root = document.querySelector(".zomato-import");
-    set(root.querySelector("select"), kind);
+    set(root.querySelector("[role=radiogroup]"), kind);
     await new Promise(resolve => setTimeout(resolve, 60));
     const details = root.querySelector("details"); if (!details.open) details.querySelector("summary").click();
     set(root.querySelector("textarea"), csv);

@@ -1,5 +1,13 @@
 // Run after m7-recipes.js on the isolated recipes-server.mts fixture.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4155') throw Error('Use recipe fixture');
   const checks = [], originalFetch = window.fetch, originalConfirm = window.confirm;
   const pause = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
@@ -7,9 +15,10 @@
   const check = (ok, text) => { if (!ok) throw Error(text); checks.push(text); };
   const button = text => [...document.querySelectorAll('button')].find(element => element.textContent.trim() === text || element.getAttribute('aria-label') === text);
   const click = async text => { button(text).click(); await pause(); };
-  const field = text => [...document.querySelectorAll('label')].find(label => label.textContent.trim().startsWith(text))?.querySelector('input,select');
+  const field = text => [...document.querySelectorAll("label, .choice-field")].find(label => label.textContent.trim().startsWith(text))?.querySelector("input,[role=radiogroup]");
   const quantity = () => document.querySelector('[aria-label="Quantity for ingredient 1"]');
-  const fill = async (element, value) => { Object.getOwnPropertyDescriptor(element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(element, value); element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await pause(); };
+  const fill = async (element, value) => { if (chooseTile(element, value)) return;
+    Object.getOwnPropertyDescriptor(element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(element, value); element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await pause(); };
   const fixture = await (await originalFetch('/__qa/recipes')).json(), dish = fixture.products[0];
   const api = async (path, method = 'GET', payload) => { const response = await originalFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' }, ...(payload === undefined ? {} : { body: JSON.stringify(payload) }) }); const json = await response.json(); if (!response.ok) throw Error(JSON.stringify(json)); return json; };
   let failRead = false, failCreation = false, loseCreation = false, created, creationBodies = [], mockLimit = false, emptyStock = false, emptyCatalog = false;

@@ -29,7 +29,7 @@ async function fixture() {
   const device = "a".repeat(64);
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
-  enableIntegration(app, "kds");
+
   const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
   const api = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
@@ -45,6 +45,9 @@ async function fixture() {
     return response.json();
   }
   await activate("pro", 1);
+  const policyBody = { kind: "restaurant-features", version: 1, installationId, organizationId: claims.organizationId, outletId: claims.outletId, revision: 1, enabled: { kds: true } };
+  const policyMessage = `ff1.${Buffer.from(JSON.stringify(policyBody)).toString("base64url")}`;
+  db.prepare("INSERT INTO owner_feature_policy VALUES (1,?,?)").run(`${policyMessage}.${sign(null, Buffer.from(policyMessage), keys.privateKey).toString("base64url")}`, now);
   const registered = await api("POST", "/api/license/devices", { name: "Main counter" });
   expect(registered.statusCode, registered.body).toBe(200);
   const categoryResponse = await api("POST", "/api/categories", { name: "Meals" });
@@ -251,7 +254,7 @@ describe("guest QR ordering", () => {
     expect(hiddenProduct.statusCode).toBe(201);
     expect((await f.api("PATCH", `/api/categories/${hiddenCategory.json().category.id}`, { isActive: false })).statusCode).toBe(200);
     const menu = await f.menu();
-    expect(Object.keys(menu).sort()).toEqual(["categories", "menuVersion", "orderingAvailable", "products", "restaurantName", "table"]);
+    expect(Object.keys(menu).sort()).toEqual(["categories", "menuVersion", "orderingAvailable", "products", "restaurantName", "servicesAvailable", "table"]);
     expect(menu).toMatchObject({ restaurantName: SETUP.restaurantName, table: { id: f.diningTable.id, name: "T1", area: "Patio" }, orderingAvailable: true });
     expect(menu).not.toHaveProperty("taxInclusive");
     expect(menu.menuVersion).toMatch(/^[a-f0-9]{64}$/);

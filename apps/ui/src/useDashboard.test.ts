@@ -28,6 +28,7 @@ const harness = vi.hoisted(() => {
 vi.mock("react", () => ({ useState: harness.useState, useRef: harness.useRef, useCallback: harness.useCallback, useEffect: harness.useEffect }));
 vi.mock("./api", () => ({ apiFetch: harness.apiFetch, session: { clear: vi.fn() } }));
 vi.mock("./ws", () => ({ connectWs: harness.connectWs }));
+vi.mock("./features", () => ({ useFeatures: () => ({ isActive: () => true }) }));
 
 import type { AnalyticsHour, OrderAnalyticsReport, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
 import { useDashboard } from "./useDashboard";

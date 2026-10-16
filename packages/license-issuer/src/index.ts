@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { LicenseClaims, PLANS, type Plan } from "@forkflow/domain/licensing";
 import { fromBase64, toBase64Url } from "./base64url.js";
+import { RestaurantFeaturePolicy } from "@forkflow/domain/features";
 
 export const ActivationRequest = z.object({
   format: z.literal("forkflow-activation-request"),
@@ -49,6 +50,11 @@ export function buildClaims(request: ActivationRequest, terms: ClaimTerms, now: 
 }
 
 export type Signer = (message: Uint8Array) => Promise<Uint8Array>;
+
+export async function encodeFeaturePolicy(policy: RestaurantFeaturePolicy, sign: Signer): Promise<string> {
+  const message = `ff1.${toBase64Url(new TextEncoder().encode(JSON.stringify(RestaurantFeaturePolicy.parse(policy))))}`;
+  return `${message}.${toBase64Url(await sign(new TextEncoder().encode(message)))}`;
+}
 
 export async function encodeEnvelope(claims: LicenseClaims, sign: Signer): Promise<string> {
   const message = `ff1.${toBase64Url(new TextEncoder().encode(JSON.stringify(LicenseClaims.parse(claims))))}`;

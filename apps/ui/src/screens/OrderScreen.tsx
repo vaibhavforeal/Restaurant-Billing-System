@@ -1,3 +1,5 @@
+import { outletStorage } from "../outlet-identity";
+import { usePermissions } from "../permissions";
 import { useEffect, useRef, useState } from "react";
 import { priceForTier, PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
 import { ApiError, apiFetch, session, type User } from "../api";
@@ -39,9 +41,10 @@ interface DraftItem {
 
 export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling = false, onNextTakeaway, onHold, captain = false }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void; quickBilling?: boolean; onNextTakeaway?: () => void; onHold?: () => void; captain?: boolean }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
+  const { allows } = usePermissions(user.role);
   const draftKey = `forkflow.draft.${user.id}.${orderId}`;
   function readDraft(): DraftItem[] {
-    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+    try { return JSON.parse(outletStorage.getItem(draftKey) ?? outletStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
   }
   const [order, setOrder] = useState<Order | null>(null);
   const [captains, setCaptains] = useState<Array<{ id: string; name: string }>>([]);
@@ -86,7 +89,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       const text = lostCart
         ? `This bill was merged into ${label}. Your unsaved items were not added — add them again on the combined bill.`
         : `Merged into ${label}`;
-      if (lostCart) { localStorage.removeItem(draftKey); localStorage.removeItem(`forkflow.draft.${orderId}`); }
+      if (lostCart) { outletStorage.removeItem(draftKey); outletStorage.removeItem(`forkflow.draft.${orderId}`); }
       setMessage(text);
       carryStatus(mergedInto, text, false);
       onOpenOrder(mergedInto);
@@ -130,14 +133,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   async function reload() {
     const revision = ++reloadRevision.current;
-    const token = session.token, generation = localStorage.getItem("forkflow.generation");
+    const token = session.token, generation = outletStorage.getItem("forkflow.generation");
     const [o, c, p, staff] = await Promise.all([
       apiFetch<{ order: Order }>(`/api/orders/${orderId}`),
       apiFetch<{ categories: Category[] }>("/api/categories"),
       apiFetch<{ products: Product[] }>("/api/products"),
       apiFetch<{ captains: Array<{ id: string; name: string }> }>("/api/captains"),
     ]);
-    if (revision !== reloadRevision.current || session.token !== token || localStorage.getItem("forkflow.generation") !== generation) return;
+    if (revision !== reloadRevision.current || session.token !== token || outletStorage.getItem("forkflow.generation") !== generation) return;
     setOrder(o.order);
     setCaptains(staff.captains);
     setCategories(c.categories.filter((cat) => cat.isActive));
@@ -184,16 +187,16 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   function saveDraft(next: DraftItem[]): boolean {
     try {
-      localStorage.setItem(draftKey, JSON.stringify(next));
-      localStorage.removeItem(`forkflow.draft.${orderId}`);
+      outletStorage.setItem(draftKey, JSON.stringify(next));
+      outletStorage.removeItem(`forkflow.draft.${orderId}`);
       setDraft(next); return true;
     } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
   }
 
   async function run(action: () => Promise<unknown>) {
     if (actionLock.current || billingLock.current) return;
-    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
-    const current = () => actionEpoch.current === epoch && session.token === token && localStorage.getItem("forkflow.generation") === generation;
+    const epoch = actionEpoch.current, token = session.token, generation = outletStorage.getItem("forkflow.generation");
+    const current = () => actionEpoch.current === epoch && session.token === token && outletStorage.getItem("forkflow.generation") === generation;
     actionLock.current = true; setPending(true); setError(""); setMessage("");
     try {
       await action();
@@ -338,8 +341,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   }
 
   function actionFence() {
-    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
-    return () => { if (actionEpoch.current !== epoch || session.token !== token || localStorage.getItem("forkflow.generation") !== generation) throw new QueueReconciliationRequiredError(); };
+    const epoch = actionEpoch.current, token = session.token, generation = outletStorage.getItem("forkflow.generation");
+    return () => { if (actionEpoch.current !== epoch || session.token !== token || outletStorage.getItem("forkflow.generation") !== generation) throw new QueueReconciliationRequiredError(); };
   }
 
   async function newSplit() {
@@ -395,7 +398,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   function heldCart(id: string) {
     let foldedDraftCount = 0;
     try {
-      const rows: unknown = JSON.parse(localStorage.getItem(`forkflow.draft.${user.id}.${id}`) ?? localStorage.getItem(`forkflow.draft.${id}`) ?? "[]");
+      const rows: unknown = JSON.parse(outletStorage.getItem(`forkflow.draft.${user.id}.${id}`) ?? outletStorage.getItem(`forkflow.draft.${id}`) ?? "[]");
       foldedDraftCount = Array.isArray(rows) ? rows.length : 0;
     } catch { /* an unreadable draft is shown as empty, so it cannot block either */ }
     const foldedQueuedCount = queuedRequests(user.id).filter((request) => request.path.startsWith(`/api/orders/${id}/`)).length;
@@ -443,7 +446,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const query = search.toLocaleLowerCase().trim();
   const activeProducts = products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query));
   const hasSentItems = order.items.some((i) => i.status === "sent");
-  const canCancelOrder = order.status === "open" && !hasSentItems;
+  const canCancelOrder = allows("orders.delete") && order.status === "open" && !hasSentItems;
   const total = order.items.filter((i) => i.status !== "cancelled").reduce((sum, i) => sum + i.pricePaise * i.qty, 0);
   // Drafts can survive a menu edit or application upgrade. Only saved order
   // lines have a price snapshot; show current service prices for unsaved lines.
@@ -558,7 +561,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           {order.items.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
             <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong><span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}</div>
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
-            {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || user.role === "admin" || user.role === "cashier") && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
+            {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || user.role === "admin" || user.role === "cashier") && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked || !allows("orders.delete")} onClick={() => cancelItem(item)}>×</button>}
           </div>)}
         </div>}
         </div>

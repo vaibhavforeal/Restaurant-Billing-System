@@ -8,6 +8,7 @@ import { ProductEditor } from "./ProductEditor";
 import { CatalogTransfer } from "./CatalogTransfer";
 import { useNavigationGuard } from "../navigation-guard";
 import "../product-editor.css";
+import { usePermissions } from "../permissions";
 
 function CatalogWriteGuard({ busy }: { busy: boolean }) {
   useNavigationGuard(() => {
@@ -25,6 +26,7 @@ function CatalogWriteGuard({ busy }: { busy: boolean }) {
 }
 
 export function Catalog() {
+  const { allows } = usePermissions();
   const { isEnabled } = useIntegrations();
   const zomato = isEnabled("zomato");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -75,6 +77,7 @@ export function Catalog() {
   }
 
   function addCategory() {
+    if (!allows("categories.create")) return;
     const name = newCatName.trim();
     if (!name) return;
     const maxSort = Math.max(0, ...categories.map((c) => c.sortOrder));
@@ -85,6 +88,7 @@ export function Catalog() {
   }
 
   function patchCategory(id: string, patch: Partial<Pick<Category, "name" | "sortOrder" | "isActive">>) {
+    if (!allows(patch.isActive === false ? "categories.delete" : "categories.update")) return;
     void run(() => apiFetch(`/api/categories/${id}`, { method: "PATCH", body: JSON.stringify(patch) }));
   }
 
@@ -129,7 +133,7 @@ export function Catalog() {
         <h2>Categories</h2>
         <div style={{ display: "flex", gap: 4 }}>
           <input value={newCatName} aria-label="New category" disabled={busy !== null} placeholder="New category" onChange={(e) => setNewCatName(e.target.value)} style={{ flex: 1 }} />
-          <button className="primary" disabled={busy !== null} onClick={addCategory}>Add</button>
+          <button className="primary" disabled={busy !== null || !allows("categories.create")} onClick={addCategory}>Add</button>
         </div>
         <ul style={{ listStyle: "none", padding: 0 }}>
           {categories.map((c) => (
@@ -154,7 +158,7 @@ export function Catalog() {
       <div className="panel catalog-products">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Products</h2>
-          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null || !allows("products.create")} style={{ padding: "8px 16px" }}>
             New product
           </button>
         </div>
@@ -188,9 +192,9 @@ export function Catalog() {
                 <td>{p.gstRate === null ? "Default" : `${p.gstRate}%`}</td>
                 <td>{p.isVeg ? "🟢" : "🔴"}</td>
                 <td>{p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
-                <td className="catalog-availability"><span className={p.isSoldOut ? "sold-out" : ""}>{p.isSoldOut ? "Sold out" : "Available"}</span><button disabled={busy !== null} aria-label={`Mark ${p.name} ${p.isSoldOut ? "available" : "sold out"}`} onClick={() => toggleSoldOut(p)}>{busy === p.id ? "Saving…" : p.isSoldOut ? "Mark available" : "Mark sold out"}</button></td>
+                <td className="catalog-availability"><span className={p.isSoldOut ? "sold-out" : ""}>{p.isSoldOut ? "Sold out" : "Available"}</span><button disabled={busy !== null || !allows("products.update")} aria-label={`Mark ${p.name} ${p.isSoldOut ? "available" : "sold out"}`} onClick={() => toggleSoldOut(p)}>{busy === p.id ? "Saving…" : p.isSoldOut ? "Mark available" : "Mark sold out"}</button></td>
                 <td>
-                  <button disabled={busy !== null} onClick={() => setEditing(p)}>Edit</button>
+                  <button disabled={busy !== null || !allows("products.update")} onClick={() => setEditing(p)}>Edit</button>
                 </td>
               </tr>
             ))}

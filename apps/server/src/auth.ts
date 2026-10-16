@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { deviceHash } from "./licensing.js";
 import { createPinThrottle } from "./pin-throttle.js";
 import { httpError } from "./http-error.js";
+import { staffCan, userPermissions } from "./staff-permissions.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export interface AuthedUser {
@@ -85,7 +86,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
   app.decorate("assertPermission", (req: FastifyRequest, slug: string): AuthedUser => {
     const user = authenticate(req);
     if (!user) throw httpError(401, "unauthenticated");
-    if (!can(roleFor(user.role), slug)) throw new PermissionError(slug);
+    if (!staffCan(app, user, slug, req)) throw new PermissionError(slug);
     req.user = user;
     app.licensing.assertAccess(req);
     return user;
@@ -162,6 +163,9 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
   });
 
   app.get("/api/me", { preHandler: requireAuth }, async (req) => ({ user: req.user }));
+  app.get("/api/me/permissions", { preHandler: requireAuth }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store"); return { permissions: userPermissions(app, req.user) };
+  });
 
   app.post("/api/logout", { preHandler: requireAuth }, async (req, reply) => {
     const token = (req.headers.authorization ?? "").slice("Bearer ".length);

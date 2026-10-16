@@ -1,3 +1,4 @@
+import { outletStorage } from "./outlet-identity";
 import { useEffect, useState } from "react";
 import { discardRequest, queuedRequests, queueConnected, recoveryRequests, startQueue, subscribeQueue } from "./retry-queue";
 import { connectWs } from "./ws";
@@ -19,13 +20,13 @@ export function ConnectionStatus({ userId, captain = false }: { userId: string; 
   const recoveries = recoveryRequests(userId);
   const review = async (entry: { id: string; path: string }, message: string) => {
     window.dispatchEvent(new CustomEvent("forkflow:queue-review", { detail: { requestId: entry.id, path: entry.path, message } }));
-    const token = session.token, generation = localStorage.getItem("forkflow.generation");
+    const token = session.token, generation = outletStorage.getItem("forkflow.generation");
     const resource = entry.path.match(/^\/api\/(orders|bills)\/([^/]+)\//);
     if (!resource) return;
     try {
       await apiFetch(`/api/${resource[1]}/${resource[2]}`);
-      if (session.token === token && localStorage.getItem("forkflow.generation") === generation) setReviewStatus("Current server state refreshed. Review the order before another attempt.");
-    } catch { if (session.token === token && localStorage.getItem("forkflow.generation") === generation) setReviewStatus("Could not refresh the order yet. Reconnect before reviewing this action."); }
+      if (session.token === token && outletStorage.getItem("forkflow.generation") === generation) setReviewStatus("Current server state refreshed. Review the order before another attempt.");
+    } catch { if (session.token === token && outletStorage.getItem("forkflow.generation") === generation) setReviewStatus("Could not refresh the order yet. Reconnect before reviewing this action."); }
   };
   if (connected && queueConnected() && entries.length === 0 && recoveries.length === 0) return <aside className="pos-statusbar" aria-label="Connection and saved actions"><span className="pos-connected" role="status">● {captain ? "Connected to POS" : "Connected"} · All actions saved</span>{!captain && <span>{[[bindings.new_order, "New"], [bindings.save_items, "Punch"], [bindings.send_kitchen, "KOT"], [bindings.billing, "Billing"]].filter(([key]) => key).map(([key, label]) => `${key} ${label}`).join(" · ")}</span>}</aside>;
   return <aside className="pos-statusbar pos-status-warning" aria-label="Connection and saved actions">

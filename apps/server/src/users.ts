@@ -2,6 +2,8 @@ import { hashPassword, verifyPassword } from "@forkflow/core";
 import { UserCreate, UserUpdate, uuidv7, type RoleName } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { StaffOverrides, effectiveStaffPermissions } from '@forkflow/domain/staff-permissions';
+import { z } from 'zod';
 
 interface UserRow {
   id: string;
@@ -21,7 +23,31 @@ const toUser = (r: UserRow) => ({
 });
 
 export function registerUsers(app: FastifyInstance): void {
+  app.db.exec('CREATE TABLE IF NOT EXISTS cloud_staff_policy (id TEXT PRIMARY KEY, overrides TEXT NOT NULL)');
   const manage = app.requirePermission("users.manage");
+  const adminOnly = async (req: import('fastify').FastifyRequest) => {
+    app.assertPermission(req, 'users.manage');
+    if (req.user.role !== 'admin') throw httpError(403, 'Only a restaurant administrator can edit permissions');
+  };
+  app.get('/api/users/:id/permissions', { preHandler: adminOnly }, async req => {
+    const user = getUser((req.params as {id:string}).id);
+    if (!user) throw httpError(404, 'User not found');
+    const saved = app.db.prepare('SELECT overrides FROM cloud_staff_policy WHERE id=?').get(user.id) as {overrides:string} | undefined;
+    const overrides = user.role === 'admin' ? {} : saved ? JSON.parse(saved.overrides) : app.licensing.featurePolicy()?.staffPermissions?.[user.id] ?? {};
+    return {overrides, permissions: effectiveStaffPermissions(user.role, overrides)};
+  });
+  app.put('/api/users/:id/permissions', { preHandler: adminOnly }, async req => {
+    const {overrides} = z.object({overrides:StaffOverrides}).strict().parse(req.body);
+    const id = (req.params as {id:string}).id;
+    app.db.transaction(() => {
+      const user = getUser(id);
+      if (!user) throw httpError(404, 'User not found');
+      if (user.role === 'admin') throw httpError(409, 'Administrator access cannot be restricted');
+      app.db.prepare('INSERT INTO cloud_staff_policy VALUES (?,?) ON CONFLICT(id) DO UPDATE SET overrides=excluded.overrides').run(id, JSON.stringify(overrides));
+    })();
+    app.wsRevalidate(); app.broadcast('features.changed', {});
+    return {saved:true};
+  });
 
   // PIN uniqueness requires async verification of salted hashes. Keep all staff
   // mutations in one instance-local queue, without holding SQLite across awaits.
@@ -54,6 +80,7 @@ export function registerUsers(app: FastifyInstance): void {
 
   app.post("/api/users", { preHandler: manage }, async (req, reply) => {
     const body = UserCreate.parse(req.body);
+    if (req.user.role !== "admin" && body.role === "admin") throw httpError(403, "Only an administrator can assign the admin role");
     const user = await serializeUserMutation(async () => {
       app.assertPermission(req, "users.manage");
       if (await pinInUse(body.pin)) throw httpError(409, "PIN already in use");
@@ -73,9 +100,11 @@ export function registerUsers(app: FastifyInstance): void {
   app.patch("/api/users/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
     const body = UserUpdate.parse(req.body);
+    if (body.role && req.user.role !== "admin") throw httpError(403, "Only an administrator can change staff roles");
     return serializeUserMutation(async () => {
       app.assertPermission(req, "users.manage");
       if (!getUser(id)) throw httpError(404, "user not found");
+      if (req.user.role !== "admin" && getUser(id)?.role === "admin") throw httpError(403, "Only an administrator can modify another administrator");
       if (body.pin && (await pinInUse(body.pin, id))) throw httpError(409, "PIN already in use");
       const pinHash = body.pin ? await hashPassword(body.pin) : undefined;
 
@@ -85,6 +114,7 @@ export function registerUsers(app: FastifyInstance): void {
         app.assertPermission(req, "users.manage");
         const row = getUser(id);
         if (!row) throw httpError(404, "user not found");
+        if (req.user.role !== "admin" && row.role === "admin") throw httpError(403, "Only an administrator can modify another administrator");
         const role = body.role ?? row.role;
         const isActive = body.isActive ?? row.is_active === 1;
         if (row.role === "admin" && row.is_active === 1 && (role !== "admin" || !isActive)) {

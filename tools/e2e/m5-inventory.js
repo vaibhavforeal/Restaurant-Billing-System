@@ -1,5 +1,13 @@
 // Run via agent-browser eval --stdin against a local scratch DB, signed in as admin.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (!/^https?:\/\/(localhost|127\.0\.0\.1):/.test(location.origin)) throw new Error('Local test server required');
   const checks = [];
   const check = (ok, message) => { if (!ok) throw new Error(message); checks.push(message); };
@@ -10,9 +18,10 @@
   };
   const button = (text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
   const click = async (text) => { const b = await waitFor(() => button(text), text); if (b.disabled) throw new Error(`Disabled: ${text}`); b.click(); await new Promise((r) => setTimeout(r, 100)); };
-  const field = (text) => [...document.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith(text))?.querySelector('input,select');
+  const field = (text) => [...document.querySelectorAll("label, .choice-field")].find((l) => l.textContent.trim().startsWith(text))?.querySelector("input,[role=radiogroup]");
   const fill = async (text, value) => {
     const input = await waitFor(() => field(text), text);
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(input, value);
     input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 70));

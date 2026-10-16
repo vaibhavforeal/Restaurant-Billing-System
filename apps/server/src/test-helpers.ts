@@ -7,7 +7,7 @@ import { makeFakeSink } from "./print/sinks.js";
 export function freshApp(): FastifyInstance {
   const db = openDb(":memory:");
   migrate(db, MIGRATIONS);
-  return buildServer({ db });
+  return buildServer({ db, allowFixtureIntegrationWrites: true });
 }
 
 export function freshAppWithFakeSink(): {
@@ -17,7 +17,7 @@ export function freshAppWithFakeSink(): {
   const db = openDb(":memory:");
   migrate(db, MIGRATIONS);
   const fake = makeFakeSink();
-  const app = buildServer({ db, sinkSend: fake.send });
+  const app = buildServer({ db, sinkSend: fake.send, allowFixtureIntegrationWrites: true });
   return { app, fake };
 }
 
@@ -85,7 +85,18 @@ export function enableIntegration(app: FastifyInstance, id: IntegrationId): void
   if (!admin) throw new Error("enableIntegration needs an admin user; call setupAdmin first");
   app.db.prepare(`INSERT INTO integration_state (id, enabled, updated_at, updated_by) VALUES (?,1,?,?)
     ON CONFLICT(id) DO UPDATE SET enabled=1, updated_at=excluded.updated_at, updated_by=excluded.updated_by`).run(id, Date.now(), admin.id);
+  // Commercial fixtures model an owner-signed policy, never a staff override.
+  if (app.licensing.enabled) {
+    const fixture = fixturePolicySigners.get(app);
+    if (!fixture) throw new Error("Commercial fixture needs its policy signer");
+    fixture.enabled[id] = true;
+    const policy = { kind: "restaurant-features", version: 1, ...fixture.identity, revision: ++fixture.revision, enabled: fixture.enabled };
+    const message = `ff1.${Buffer.from(JSON.stringify(policy)).toString("base64url")}`;
+    const envelope = `${message}.${sign(null, Buffer.from(message), fixture.key).toString("base64url")}`;
+    app.db.prepare("INSERT INTO owner_feature_policy VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET envelope=excluded.envelope,synced_at=excluded.synced_at").run(envelope, Date.now());
+  }
 }
+const fixturePolicySigners = new WeakMap<FastifyInstance, { key: ReturnType<typeof generateKeyPairSync>["privateKey"]; identity: { installationId: string; organizationId: string; outletId: string }; revision: number; enabled: Record<string, boolean> }>();
 
 /** A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device). */
 export async function commercialApp(plan: Plan) {
@@ -105,5 +116,6 @@ export async function commercialApp(plan: Plan) {
   if (activated.statusCode !== 200) throw new Error(`commercialApp activation failed: ${activated.body}`);
   const registered = await app.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Counter" }, headers });
   if (registered.statusCode !== 200) throw new Error(`commercialApp device registration failed: ${registered.body}`);
+  fixturePolicySigners.set(app, { key: keys.privateKey, identity: { installationId, organizationId: claims.organizationId, outletId: claims.outletId }, revision: 0, enabled: {} });
   return { app, headers };
 }

@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoSettings, type ZomatoReconciliation,
   type ZomatoReconciliationRow, type ZomatoImportKind, type ZomatoImportPreview } from "@forkflow/domain/zomato";
@@ -82,7 +83,7 @@ export function ZomatoReconciliationPanel() {
         <div><span>Needs review</span><strong>{currentReport.totals.needsReview}<small> / {currentReport.rows.length} orders</small></strong></div>
       </div>
       <div className="zomato-toolbar"><label>Search order or reference<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Order ID or settlement reference" /></label>
-        <label>Show<select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All orders</option><option value="review">Needs review</option>{Object.entries(stateLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+        <div className="choice-field">Show<ChoiceTiles aria-label="Show" value={filter} onChange={choiceValue => setFilter(choiceValue)}><option value="all">All orders</option><option value="review">Needs review</option>{Object.entries(stateLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</ChoiceTiles></div></div>
       <p className="muted">{visible.length} of {currentReport.rows.length} orders. Statement net = gross − deductions + additions. Reported paid comes from your import; bank receipt is not verified.</p>
       {!visible.length ? <div className="panel zomato-empty"><h3>{currentReport.rows.length ? "No matching orders" : "No orders or statements in this period"}</h3><p>{currentReport.rows.length ? "Change the search or status filter." : "Import your order history and settlement entries below, then choose their dates."}</p></div> :
         <div className="zomato-table-wrap" tabIndex={0} aria-label="Reconciliation table, scroll horizontally for all amounts"><table className="zomato-table"><thead><tr>
@@ -137,7 +138,7 @@ function ZomatoImport({ restaurantId, onImported }: { restaurantId: string; onIm
     <p className="muted">Map your Zomato exports to the ForkFlow template. Amounts are INR with two decimals. These templates are not Zomato's export format.</p>
     {!restaurantId && <p>Save a restaurant ID in Marketplace, Zomato settings before importing.</p>}
     <fieldset disabled={busy || !restaurantId} className="zomato-fields">
-      <div className="zomato-toolbar"><label>Import type<select value={kind} onChange={e => { setKind(e.target.value as ZomatoImportKind); replaceCsv(""); if (file.current) file.current.value = ""; }}><option value="orders">Order history</option><option value="settlements">Settlement entries</option></select></label>
+      <div className="zomato-toolbar"><div className="choice-field">Import type<ChoiceTiles aria-label="Import type" value={kind} onChange={choiceValue => { setKind(choiceValue as ZomatoImportKind); replaceCsv(""); if (file.current) file.current.value = ""; }}><option value="orders">Order history</option><option value="settlements">Settlement entries</option></ChoiceTiles></div>
         <button type="button" onClick={() => downloadText(zomatoCsv([ZOMATO_CSV_COLUMNS[kind]]), `zomato-${kind}-template.csv`, "text/csv;charset=utf-8")}>Download template</button>
         <label>CSV file<input ref={file} type="file" accept=".csv,text/csv" onChange={e => void readFile(e.target.files?.[0])} /></label></div>
       <p className="muted">{kind === "orders" ? "Use ordered_at with a timezone, such as 2026-10-02T12:30:00+05:30. Keep order IDs as text to preserve leading zeros." : "Use a unique entry_id for each statement line. For later adjustments, use a new entry ID and include only the incremental amounts. Negative net_paid is supported for recoveries."}</p>

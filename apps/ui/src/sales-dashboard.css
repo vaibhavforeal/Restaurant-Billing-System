@@ -7,9 +7,6 @@ html[data-theme] .sales-dashboard, html[data-theme] .sales-reports { display: fl
 html[data-theme] :is(.sales-dashboard, .sales-reports) :is(button, input, select, summary) { min-height: var(--control-touch); }
 html[data-theme] .sales-period { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-4); }
 .sales-presets { display: flex; gap: var(--space-2); }
-.report-view-switch { padding-bottom: var(--space-4); border-bottom: var(--border) solid var(--line); }
-.report-view-switch .pos-segments { width: min(100%, 320px); }
-.report-view-switch .pos-segments button { flex: 1; }
 html[data-theme] .sales-presets button[aria-pressed="true"] { background: var(--pos-accent-soft); color: var(--pos-accent); border-color: var(--pos-accent); }
 html[data-theme] .sales-period label { display: grid; gap: var(--space-1); }
 .sales-period input { width: 144px; }
@@ -73,10 +70,58 @@ html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; backgr
   .sales-presets button { flex: 1; }
   .sales-service-strip span + span { border-left: 0; padding-left: 0; }
 }
-.operational-report-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
-.operational-report-picker select { max-width: 100%; }
-.operational-report section { margin-top: 24px; }
+.operational-report section { margin-top: var(--space-8); }
 .operational-report h3 small { font-weight: 400; }
 .report-notes { margin: 12px 0; font-size: 13px; }
 .report-notes summary { cursor: pointer; }
 .report-notes p { max-width: 90ch; line-height: 1.5; }
+
+/* Reports & Analytics: a classic, accounting-software layout. Tighter tokens apply to every report view
+   inside the screen; the dashboard keeps its own spacing. */
+html[data-theme] .sales-reports {
+  --space-4: 6px; --space-6: 8px; --space-8: 10px; --space-12: 14px;
+  --control-touch: 28px; --table-row: 26px; --radius: 2px; --radius-panel: 2px;
+  gap: var(--space-4);
+}
+html[data-theme] .sales-reports > .page-header { margin: 0; }
+/* Compact report selection keeps multi-line labels readable without tall cards. */
+html[data-theme] .sales-reports > .page-header { min-height: 32px; }
+html[data-theme] .sales-reports .report-tabs > button { min-height: 26px; padding-inline: 8px; }
+html[data-theme] .sales-reports .report-tabs > .report-choices { padding: 4px 0; gap: 4px; }
+html[data-theme] .sales-reports .report-choices :is(.choice-options, .choice-group) { gap: 4px; }
+html[data-theme] .sales-reports .report-choices .choice-options-scroll { padding: 0; }
+html[data-theme] .sales-reports .report-choices .choice-group-title { padding-top: 0; }
+html[data-theme] .sales-reports .report-choices label.choice-tile { flex: 1 1 120px; }
+html[data-theme] .sales-reports .report-choices .choice-search { min-height: 28px; padding: 3px 6px; }
+html[data-theme] .sales-reports .report-choices .choice-tile-face { min-height: 32px; padding: 4px 6px; gap: 5px; line-height: 1.25; }
+html[data-theme] .sales-reports button { padding-inline: var(--space-4); }
+/* Report tabs: plain text tabs on a rule, the selected one underlined in the accent colour. */
+.report-tabs { display: flex; flex-wrap: wrap; align-items: end; gap: 0; border-bottom: var(--border) solid var(--line); }
+html[data-theme] .sales-reports .report-tabs > button { min-height: var(--control-touch); padding: 0 var(--space-8); border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-weight: 600; margin-bottom: -1px; }
+html[data-theme] .sales-reports .report-tabs > button:hover { color: var(--ink); }
+html[data-theme] .sales-reports .report-tabs > button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--pos-accent); }
+html[data-theme] .sales-reports .report-more { margin: 0 0 var(--space-1) var(--space-6); min-width: 180px; color: var(--muted); font-weight: 600; }
+html[data-theme] .sales-reports .report-more.active { color: var(--ink); border-color: var(--pos-accent); }
+.report-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8); padding-bottom: var(--space-3); border-bottom: var(--border) solid var(--line); }
+.report-toolbar .sales-period { flex: 1; align-items: center; }
+html[data-theme] .sales-reports .sales-period { align-items: center; }
+html[data-theme] .sales-reports .sales-period label { display: flex; align-items: center; gap: var(--space-2); }
+/* Toggle groups (date presets, analytics filters) as joined, neutral buttons rather than pink pills. */
+html[data-theme] .sales-reports :is(.sales-presets, .pos-segments) { gap: 0; }
+html[data-theme] .sales-reports .pos-segments > button { flex: none; white-space: nowrap; }
+html[data-theme] .sales-reports :is(.sales-presets, .pos-segments) > button + button { margin-left: -1px; }
+html[data-theme] .sales-reports :is(.sales-presets, .pos-segments) > button[aria-pressed="true"] { background: color-mix(in srgb, var(--line) 55%, var(--surface)); color: var(--ink); border-color: var(--muted); font-weight: 600; }
+/* Totals as one thin strip; each total's explanation is its tooltip. */
+html[data-theme] .sales-reports .sales-metrics { display: flex; flex-wrap: wrap; gap: 0; border: var(--border) solid var(--line); background: var(--surface); }
+html[data-theme] .sales-reports .sales-metrics .sales-metric { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-3) var(--space-8); border: 0; border-left: var(--border) solid var(--line); border-radius: 0; background: transparent; container-type: normal; }
+html[data-theme] .sales-reports .sales-metrics .sales-metric:first-child { border-left: 0; }
+html[data-theme] .sales-reports .sales-metrics .sales-metric p { margin: 0; }
+html[data-theme] .sales-reports .sales-metrics .sales-metric strong { font-size: var(--text-base); white-space: nowrap; }
+html[data-theme] .sales-reports .sales-metrics .sales-metric small { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Gridded tables with the explanation as a small footnote under the rows. */
+html[data-theme] .sales-reports .sales-report-table { border: 0; border-radius: 0; }
+html[data-theme] .sales-reports .sales-report-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+html[data-theme] .sales-reports .sales-report-table :is(th, td) { padding: var(--space-1) var(--space-4); border: var(--border) solid var(--line); }
+html[data-theme] .sales-reports .sales-report-table thead th { background: color-mix(in srgb, var(--line) 35%, var(--surface)); font-weight: 600; }
+html[data-theme] .sales-reports .sales-report-table caption { caption-side: bottom; padding: var(--space-2) var(--space-4); font-size: var(--text-secondary); }
+@media (max-width: 760px) { .report-tabs { flex-wrap: nowrap; overflow-x: auto; } html[data-theme] .sales-reports .report-more { min-width: 150px; } .report-toolbar .sales-period { flex-basis: 100%; } }

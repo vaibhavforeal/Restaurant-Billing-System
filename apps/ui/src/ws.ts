@@ -1,4 +1,5 @@
 import { session, deviceCredential } from "./api";
+import { outletIdentityHeaders } from "./outlet-identity";
 
 export interface WsHandlers {
   onEvent: (event: string, data: unknown) => void;
@@ -41,7 +42,15 @@ function connect() {
 
   socket.onopen = () => {
     // Send auth frame immediately
-    socket.send(JSON.stringify({ type: "auth", token, device: deviceCredential() }));
+    try {
+      const identity = outletIdentityHeaders();
+      socket.send(JSON.stringify({ type: "auth", token, device: deviceCredential(), ...(identity["x-forkflow-outlet-identity"] ? { outletIdentity: identity["x-forkflow-outlet-identity"], generation: identity["x-forkflow-generation"] } : {}) }));
+    } catch {
+      socket.onclose = null; socket.close();
+      if (ws === socket) { ws = null; socketToken = null; connected = false; }
+      notify(handler => handler.onStatus(false));
+      window.dispatchEvent(new Event("forkflow:outlet-identity-changed"));
+    }
   };
 
   socket.onmessage = (e) => {
@@ -67,6 +76,11 @@ function connect() {
       return; // No reconnect
     }
     notify((h) => h.onStatus(false));
+    if (e.code === 4409) {
+      socketToken = null;
+      window.dispatchEvent(new Event("forkflow:outlet-identity-changed"));
+      return; // Boot verifies health and archives the old browser scope first.
+    }
     if (e.code === 4403) {
       socketToken = null;
       window.dispatchEvent(new Event("forkflow:license-changed"));

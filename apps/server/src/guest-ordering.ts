@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { z } from "zod";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import { httpError } from "./http-error.js";
+import { assertFeatureActive, featureCatalog } from "./features.js";
 import { loadOrderJson, type OrderRow } from "./mappers.js";
 import { lanUrls } from "./system.js";
 import { menuPhotoUrl } from "./menu-photo.js";
@@ -90,7 +91,8 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     const status = app.licensing.status();
     if (!["development", "active", "grace"].includes(status.state)) throw httpError(403, "The restaurant menu is temporarily unavailable. Please ask a member of staff.");
     if (ordering && !status.features.qrOrdering) throw httpError(403, "Please ask a member of staff to place your order.");
-    return status.features.qrOrdering;
+    if (ordering) assertFeatureActive(app, "qrOrdering");
+    return featureCatalog(app).features.find(feature => feature.id === "qrOrdering")!.active;
   }
   function qrTable(req: FastifyRequest) {
     const token = credential(req.headers["x-qr-token"]);
@@ -113,7 +115,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     const snapshot = { categories, products: visible };
     const pricing = { ...snapshot, products: visible.map(({ description: _description, photoUrl: _photoUrl, ...p }) => p) };
     return { restaurantName: settings.restaurant_name, table: { id: table.id, name: table.name, area: table.area },
-      orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot };
+      orderingAvailable, servicesAvailable: featureCatalog(app).features.find(feature => feature.id === "guestServices")!.active, menuVersion: hash(JSON.stringify(pricing)), ...snapshot };
   }
   function snapshotItems(current: GuestMenu, items: GuestSubmission["items"]): GuestRequestItem[] {
     return items.map((item) => {

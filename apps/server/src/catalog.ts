@@ -1,3 +1,4 @@
+import { updateCatalog } from "./configuration-writes.js";
 import {
   CategoryCreate, CategoryUpdate,
   ProductCreate, ProductUpdate,
@@ -106,12 +107,7 @@ export function registerCatalog(app: FastifyInstance): void {
 
   app.patch("/api/categories/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
-    const body = CategoryUpdate.parse(req.body);
-    const row = getCategory(id);
-    if (!row) throw httpError(404, "category not found");
-    app.db
-      .prepare("UPDATE categories SET name = ?, sort_order = ?, is_active = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.sortOrder ?? row.sort_order, (body.isActive ?? row.is_active === 1) ? 1 : 0, id);
+    updateCatalog(app.db, "category", id, req.body);
     changed();
     return { category: toCategory(getCategory(id)!) };
   });
@@ -169,36 +165,7 @@ export function registerCatalog(app: FastifyInstance): void {
 
   app.patch("/api/products/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
-    const body = ProductUpdate.parse(req.body);
-    const photo = validateMenuPhoto(body.photo);
-    const row = getProduct(id);
-    if (!row) throw httpError(404, "product not found");
-    checkRefs(body.categoryId, body.kotStationId);
-    // undefined = unchanged, null = clear the station
-    const station = body.kotStationId === undefined ? row.kot_station_id : body.kotStationId;
-    app.db
-      .prepare(
-        `UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ?,
-          description = ?, is_sold_out = ?, photo_data = CASE WHEN ? THEN ? ELSE photo_data END,
-          photo_hash = CASE WHEN ? THEN ? ELSE photo_hash END, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ? WHERE id = ?`,
-      )
-      .run(
-        body.categoryId ?? row.category_id,
-        body.name ?? row.name,
-        body.pricePaise ?? row.price_paise,
-        body.gstRate === undefined ? row.gst_rate : body.gstRate,
-        (body.isVeg ?? row.is_veg === 1) ? 1 : 0,
-        station,
-        (body.isActive ?? row.is_active === 1) ? 1 : 0,
-        body.description ?? row.description,
-        (body.isSoldOut ?? row.is_sold_out === 1) ? 1 : 0,
-        photo === undefined ? 0 : 1, photo?.data ?? null,
-        photo === undefined ? 0 : 1, photo?.hash ?? null,
-        body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise,
-        body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise,
-        body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise,
-        id,
-      );
+    updateCatalog(app.db, "product", id, req.body);
     changed();
     return { product: toProduct(getProduct(id)!, variantsFor(id)) };
   });
@@ -238,12 +205,7 @@ export function registerCatalog(app: FastifyInstance): void {
 
   app.patch("/api/variants/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
-    const body = VariantUpdate.parse(req.body);
-    const row = getVariant(id);
-    if (!row) throw httpError(404, "variant not found");
-    app.db
-      .prepare("UPDATE variants SET name = ?, price_paise = ?, is_active = ?, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.pricePaise ?? row.price_paise, (body.isActive ?? row.is_active === 1) ? 1 : 0, body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise, body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise, body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise, id);
+    updateCatalog(app.db, "variant", id, req.body);
     changed();
     return { variant: toVariant(getVariant(id)!) };
   });

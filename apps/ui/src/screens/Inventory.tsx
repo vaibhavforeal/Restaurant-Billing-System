@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StockItem, StockMove, StockUnit } from "@forkflow/domain";
 import { apiFetch, session, type User } from "../api";
@@ -12,6 +13,8 @@ import { DishCosting } from "./DishCosting";
 import { useLicense } from "./LicenseSettings";
 import { Icon } from "../Icon";
 import "../recipes.css";
+import { useFeatures, FeatureNotice } from "../features";
+import { usePermissions } from "../permissions";
 
 type InventoryTab = "stock" | "recipes" | "costing";
 const TAB_LABELS: Record<InventoryTab, string> = { stock: "Stock", recipes: "Recipes", costing: "Dish costing" };
@@ -26,7 +29,10 @@ function number(text: string) {
 }
 
 export function Inventory({ user }: { user: User }) {
-  const canManage = user.role === "admin";
+  const features = useFeatures();
+  const inventoryActive = features.isActive("inventory"), recipesActive = features.isActive("recipes"), costingActive = features.isActive("costing");
+  const { allows } = usePermissions(user.role);
+  const canManage = (allows("stock.create") || allows("stock.update") || allows("stock.delete")) && inventoryActive;
   const [items, setItems] = useState<StockItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selected, setSelected] = useState<StockItem | null>(null);
@@ -47,7 +53,7 @@ export function Inventory({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [reloadInventory, setReloadInventory] = useState(0);
   const { status } = useLicense();
-  const canSeeCosts = user.role === "admin" && status?.features.recipes === true;
+  const canSeeCosts = allows("costs.read") && status?.features.recipes === true && costingActive;
   const [costData, setCostData] = useState<{ items: StockCost[]; totalValuePaise: number } | null>(null);
   const [costError, setCostError] = useState("");
   // Cost figures are refreshed whenever stock reloads (stock.changed, reconnect, or a save): historyVersion bumps each time.
@@ -62,7 +68,7 @@ export function Inventory({ user }: { user: User }) {
   const costById = new Map((costData?.items ?? []).map((c) => [c.stockItemId, c]));
   const valueSummary = costData ? stockValueSummary(costData.items) : null;
   // Dish costing shows cost data, so only administrators get the tab (Basic plans see the upgrade prompt inside it).
-  const tabs: InventoryTab[] = user.role === "admin" ? ["stock", "recipes", "costing"] : ["stock", "recipes"];
+  const tabs: InventoryTab[] = (["stock", ...(recipesActive ? ["recipes"] : []), ...(user.role === "admin" && costingActive ? ["costing"] : [])] as InventoryTab[]);
   function canLeaveRecipe() {
     if (recipeBusy) return false;
     return !recipeDirty || window.confirm("Discard your unsaved recipe or stock-item changes?");
@@ -123,25 +129,28 @@ export function Inventory({ user }: { user: User }) {
     </div></div>
     {!connected && <p role="status">Reconnecting…</p>}
     {error && <div className="recipe-error"><p role="alert">{error}</p><button disabled={recipeBusy} onClick={() => setReloadInventory((value) => value + 1)}>Retry inventory load</button></div>}<p role="status">{tab === "stock" ? message : ""}</p>
+    {!inventoryActive && <FeatureNotice id="inventory" />}
+    {tab === "recipes" && !recipesActive && <FeatureNotice id="recipes" />}
+    {tab === "costing" && !costingActive && <FeatureNotice id="costing" />}
     {tab === "recipes" ? <div id="inventory-recipes-panel" role="tabpanel" aria-labelledby="inventory-recipes-tab">
-      <RecipesWorkspace products={products} items={items} loading={loading} canManage={canManage && status?.canOperate === true} fullRecipe={status?.features.recipes === true} refresh={recipeRefresh}
+      <RecipesWorkspace products={products} items={items} loading={loading} canManage={allows("recipes.update") && recipesActive && status?.canOperate === true} fullRecipe={status?.features.recipes === true} refresh={recipeRefresh}
         onDirtyChange={setRecipeDirty} onBusyChange={setRecipeBusy} canLeave={canLeaveRecipe} onStockCreated={(item) => setItems((old) => [...old.filter((entry) => entry.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name)))} />
-    </div> : tab === "costing" && canManage ? <div id="inventory-costing-panel" role="tabpanel" aria-labelledby="inventory-costing-tab">
+    </div> : tab === "costing" && allows("costs.read") ? <div id="inventory-costing-panel" role="tabpanel" aria-labelledby="inventory-costing-tab">
       <DishCosting fullRecipe={status?.features.recipes === true} refresh={recipeRefresh} />
     </div> : <div id="inventory-stock-panel" role="tabpanel" aria-labelledby="inventory-stock-tab">
     <p role="status" style={{ color: low.length ? "var(--warning-text, #874500)" : "var(--success-text, #176336)" }}>{low.length ? `${low.length} active stock item${low.length === 1 ? " is" : "s are"} low or out of stock.` : "No low-stock items."}</p>
-    {canManage && <details className="pos-section" aria-label="Add stock item"><summary>Add stock item</summary><div className="pos-section-body">
+    {allows("stock.create") && inventoryActive && <section className="inventory-create-card" aria-label="Add stock item"><h3>Add stock item</h3><div className="pos-section-body">
       <form onSubmit={(e) => { e.preventDefault(); void create(); }} style={grid}>
         <label style={fieldStyle}>Stock name<input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={busy} /></label>
-        <label style={fieldStyle}>Unit<select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as StockUnit })} disabled={busy}>{UNITS.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+        <div className="choice-field" style={fieldStyle}>Unit<ChoiceTiles aria-label="Unit" value={form.unit} onChange={(choiceValue) => setForm({ ...form, unit: choiceValue as StockUnit })} disabled={busy}>{UNITS.map((unit) => <option key={unit}>{unit}</option>)}</ChoiceTiles></div>
         <label style={fieldStyle}>Opening quantity<input type="number" min="0" step="0.001" required value={form.opening} onChange={(e) => setForm({ ...form, opening: e.target.value })} disabled={busy} /></label>
         <label style={fieldStyle}>Low-stock threshold<input type="number" min="0" step="0.001" placeholder="Optional" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: e.target.value })} disabled={busy} /></label>
         <button className="primary" disabled={busy}>Add stock item</button>
       </form><p>Use up to 3 decimal places. The unit cannot be changed later.</p>
-    </div></details>}
-    <section style={panel}><h3>Stock balances</h3><div style={grid}>
+    </div></section>}
+    <section style={panel}><h3>Stock balances</h3><div className="inventory-filters" style={grid}>
       <label style={fieldStyle}>Find stock<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-      <label style={fieldStyle}>Show stock<select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="active">Active</option><option value="low">Low stock</option><option value="all">All, including archived</option></select></label>
+      <div className="choice-field" style={fieldStyle}>Show stock<ChoiceTiles aria-label="Show stock" value={filter} onChange={(choiceValue) => setFilter(choiceValue)}><option value="active">Active</option><option value="low">Low stock</option><option value="all">All, including archived</option></ChoiceTiles></div>
     </div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", textAlign: "left", borderSpacing: "10px 14px" }}>
       <thead><tr><th>Name</th><th>On hand</th>{canSeeCosts && <><th>Avg cost</th><th>Stock value</th></>}<th>Threshold</th><th>Status</th><th>Action</th></tr></thead>
       <tbody>{visible.map((item) => <tr key={item.id}><td>{item.name}</td><td>{quantity(item.qty)} {item.unit}</td>{canSeeCosts && <><td>{costData ? formatUnitCost(costById.get(item.id)?.unitCostMilliPaise ?? null, item.unit) : "…"}</td><td>{costData ? (costById.get(item.id)?.valuePaise == null ? "—" : formatMovementCost(costById.get(item.id)!.valuePaise)) : "…"}</td></>}<td>{item.lowStockThreshold === null ? "At zero" : `${quantity(item.lowStockThreshold)} ${item.unit}`}</td>
@@ -154,6 +163,9 @@ export function Inventory({ user }: { user: User }) {
 }
 
 function StockDetail({ item, canManage, onSaved, historyVersion, canSeeCosts, unitCostMilliPaise, onNotice }: { item: StockItem; canManage: boolean; onSaved: (item: StockItem) => void; historyVersion: number; canSeeCosts: boolean; unitCostMilliPaise: number | null | undefined; onNotice: (text: string) => void }) {
+  const costFormStarted = useRef(false);
+  const showCostForm = canSeeCosts && item.isActive;
+  if (showCostForm) costFormStarted.current = true;
   const [name, setName] = useState(item.name);
   const [threshold, setThreshold] = useState(item.lowStockThreshold?.toString() ?? "");
   const [reason, setReason] = useState<"purchase" | "wastage" | "adjustment">("purchase");
@@ -196,16 +208,16 @@ function StockDetail({ item, canManage, onSaved, historyVersion, canSeeCosts, un
         <button type="button" disabled={busy} onClick={() => void run(() => metadata(!item.isActive))}>{item.isActive ? "Archive item" : "Reactivate item"}</button>
       </form>
       {item.isActive && <form style={{ ...grid, marginTop: "var(--space-6)" }} onSubmit={(e) => { e.preventDefault(); void run(movement); }}>
-        <label style={fieldStyle}>Movement<select value={reason} onChange={(e) => setReason(e.target.value as typeof reason)} disabled={busy}>
+        <div className="choice-field" style={fieldStyle}>Movement<ChoiceTiles aria-label="Movement" value={reason} onChange={(choiceValue) => setReason(choiceValue as typeof reason)} disabled={busy}>
           <option value="purchase">Receive stock</option><option value="wastage">Record wastage</option><option value="adjustment">Physical stock count</option>
-        </select></label>
+        </ChoiceTiles></div>
         <label style={fieldStyle}>{reason === "adjustment" ? "Counted quantity" : "Movement quantity"} ({item.unit})<input type="number" min={reason === "adjustment" ? "0" : "0.001"} step="0.001" required value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></label>
         {canSeeCosts && reason === "purchase" && <label style={fieldStyle}>Amount paid (₹, incl. GST)<input type="text" inputMode="decimal" placeholder="Optional" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} disabled={busy} /></label>}
         {canSeeCosts && reason === "purchase" && <PerUnitHint amountPaid={amountPaid} quantity={amount} unit={item.unit} />}
         <label style={fieldStyle}>Reason / reference<input required maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} /></label>
         <button disabled={busy}>Record movement</button>
       </form>}
-      {canSeeCosts && item.isActive && <SetUnitCostForm item={item} onSaved={onSaved} onNotice={onNotice} />}
+      {costFormStarted.current && <div hidden={!showCostForm} inert={!showCostForm}><SetUnitCostForm item={item} onSaved={onSaved} onNotice={onNotice} /></div>}
       <p>A physical count replaces the balance you reviewed. If stock changes meanwhile, refresh the balance before trying again.</p>
     </>}
     <StockHistory itemId={item.id} unit={item.unit} refresh={historyVersion} showCost={canSeeCosts} />

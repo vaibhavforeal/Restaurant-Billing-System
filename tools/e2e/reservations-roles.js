@@ -1,5 +1,13 @@
 // Run after reservations.js on the same disposable server, preferably at a 390px viewport.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4127' || !window.__reservationChecks) throw new Error('Run reservations.js first.');
   const checks = [], fixture = window.__reservationChecks;
   const check = (ok, name) => { if (!ok) throw new Error(name); checks.push(name); };
@@ -7,8 +15,9 @@
   const tick = () => new Promise((r) => setTimeout(r, 40));
   const button = (name) => [...document.querySelectorAll('button')].find((b) => (b.textContent.trim() === name || b.getAttribute('aria-label') === name) && (!b.closest('dialog') || b.closest('dialog').open));
   const click = async (name) => { await wait(() => button(name) && !button(name).disabled); button(name).click(); await tick(); };
-  const set = async (el, value) => { Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await tick(); };
-  const input = (name) => [...document.querySelectorAll('.reservations-dialog label')].find((el) => el.textContent.startsWith(name))?.querySelector('input,select');
+  const set = async (el, value) => { if (chooseTile(el, value)) return;
+    Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await tick(); };
+  const input = (name) => [...document.querySelectorAll(".reservations-dialog label, .reservations-dialog .choice-field")].find((el) => el.textContent.startsWith(name))?.querySelector("input,[role=radiogroup]");
   const api = async (path, method = 'GET', body) => {
     const res = await fetch('/api' + path, { method, headers: { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const result = await res.json(); if (!res.ok) throw new Error(JSON.stringify(result)); return result;
@@ -30,7 +39,7 @@
   const dialog = document.querySelector('.reservations-dialog'), form = document.querySelector('.reservation-form');
   check(dialog.getBoundingClientRect().width <= innerWidth && dialog.scrollWidth <= dialog.clientWidth + 1, 'Reservation dialog fits the phone viewport');
   check(getComputedStyle(form).gridTemplateColumns.split(' ').length === 1 || innerWidth > 540, 'Reservation form stacks its fields on phones');
-  check([...form.querySelectorAll('input,select,button')].every((el) => el.getBoundingClientRect().right <= innerWidth), 'Form controls remain inside the phone viewport');
+  check([...form.querySelectorAll("input,[role=radiogroup],button")].every((el) => el.getBoundingClientRect().right <= innerWidth), 'Form controls remain inside the phone viewport');
   await click('Save reservation'); await wait(() => document.querySelector('.reservation-list')?.innerText.includes(guest));
   const booking = (await api('/reservations')).reservations.find((r) => r.customerName === guest);
   check(booking?.status === 'booked', 'Cashier can create a reservation through the form');

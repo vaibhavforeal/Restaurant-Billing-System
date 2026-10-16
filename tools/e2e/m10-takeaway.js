@@ -3,6 +3,14 @@
 // A reload-required result means reload the page, then run this same file again.
 // Uses real UI actions; APIs only prepare fixtures and inspect persisted results.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4121') throw new Error('Disposable http://127.0.0.1:4121 only');
   const stateKey = 'forkflow.qa.m10.takeaway';
   const state = JSON.parse(localStorage.getItem(stateKey) || 'null') || { phase: 'normal', checks: [], orders: [], bills: [] };
@@ -22,16 +30,17 @@
   const visible = value => !!value && value.getClientRects().length > 0 && getComputedStyle(value).visibility !== 'hidden' && !value.closest('[hidden],[inert]');
   const actionScope = () => document.querySelector('dialog[open]') || document;
   const button = label => [...actionScope().querySelectorAll('button')].find(value => visible(value) && (value.textContent.trim().replace(/ · F\d+$/, '') === label || value.getAttribute('aria-label') === label));
-  // Reports & Analytics: everyday reports are tabs; the rest are under "More reports".
-  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const s = document.querySelector('select[aria-label="More reports"]'); if (!s) throw new Error('Report tabs missing'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, value); s.dispatchEvent(new Event('change', { bubbles: true })); } await new Promise(r => setTimeout(r, 80)); };
+  // Reports & Analytics: everyday reports are tabs; detailed reports are visible tiles.
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
   const click = async (label, twice = false) => {
     const value = await wait(() => { const b = button(label); return b && !b.matches(':disabled') ? b : null; }, 'enabled ' + label);
     value.click(); if (twice) value.click(); await pause();
   };
-  const field = label => [...actionScope().querySelectorAll('label')].filter(value => value.textContent.trim().startsWith(label)).map(value => value.querySelector('input,select')).find(visible);
+  const field = label => [...actionScope().querySelectorAll("label, .choice-field")].filter(value => value.textContent.trim().startsWith(label)).map(value => value.querySelector("input,[role=radiogroup]")).find(visible);
   const fill = async (label, value) => {
     const input = await wait(() => { const value = field(label); return value && !value.matches(':disabled') ? value : null; }, 'field ' + label);
     const prototype = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, value);
     input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
     await pause();
@@ -245,7 +254,7 @@
       check(bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === 'card' && bill.payments[0].amountPaise === state.settleRecovery.totalPaise, 'Reloaded settlement replay keeps exactly one correct payment');
       check((await api('/orders/' + state.settleRecovery.orderId)).order.status === 'settled', 'Recovered paid takeaway remains settled');
       check((await stockMoves(state.rice.id, state.settleRecovery.orderId)).length === 1 && (await stockMoves(state.bottles.id, state.settleRecovery.orderId)).length === 1, 'Bill and settlement recovery do not duplicate either stock deduction');
-      await closeBilling(); await click('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid'); await click('Open bill #' + bill.billNo);
+      await closeBilling(); await click('Reports & Analytics'); await pickReport('bills'); await fill('Show', 'paid'); await click('Open bill #' + bill.billNo);
       await wait(() => button('Next takeaway'), 'recovered paid order'); await click('View bill'); await click('View receipt');
       await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('CARD'), 'recovered paid receipt');
       check(true, 'Recovered paid receipt and Next takeaway are available');

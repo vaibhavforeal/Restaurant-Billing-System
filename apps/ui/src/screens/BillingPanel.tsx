@@ -1,3 +1,5 @@
+import { outletStorage } from "../outlet-identity";
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
@@ -103,8 +105,8 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: preferredPayment(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
   }
   function actionFence() {
-    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
-    return () => { if (actionEpoch.current !== epoch || session.token !== token || localStorage.getItem("forkflow.generation") !== generation) throw new QueueReconciliationRequiredError(); };
+    const epoch = actionEpoch.current, token = session.token, generation = outletStorage.getItem("forkflow.generation");
+    return () => { if (actionEpoch.current !== epoch || session.token !== token || outletStorage.getItem("forkflow.generation") !== generation) throw new QueueReconciliationRequiredError(); };
   }
   useEffect(() => {
     const review = (event: Event) => {
@@ -165,8 +167,8 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
 
   async function run(action: () => Promise<void>) {
     if (lock.current || disabled) return;
-    const epoch = actionEpoch.current, token = session.token, generation = localStorage.getItem("forkflow.generation");
-    const current = () => actionEpoch.current === epoch && session.token === token && localStorage.getItem("forkflow.generation") === generation;
+    const epoch = actionEpoch.current, token = session.token, generation = outletStorage.getItem("forkflow.generation");
+    const current = () => actionEpoch.current === epoch && session.token === token && outletStorage.getItem("forkflow.generation") === generation;
     openDialog();
     lock.current = true; setBusy(true); onBusyChange?.(true); setError(""); setMessage("");
     try { await action(); }
@@ -322,7 +324,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
       <header className="billing-dialog-header">
         <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill #${bill.billNo} — ${billStatusLabel(bill)}` : quick ? "Takeaway checkout" : "Billing"}</h2>
-        {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector("input")?.focus(); }}>{shortcut("discount", "Discount")}</button>}
+        {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector<HTMLInputElement>('input[name="bill-discount"]')?.focus(); }}>{shortcut("discount", "Discount")}</button>}
         <button disabled={blocked} onClick={closeDialog} aria-label="Close billing">Close</button>
       </header>
       <div className="billing-dialog-body">
@@ -337,11 +339,11 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
             {!zomatoBill && <details ref={options} className="billing-options" open={!totals}>
               <summary>Bill options</summary>
               <div className="billing-options-fields">
-                <label>Receipt printer <select value={printerId} onChange={(e) => changePrinter(e.target.value)} disabled={blocked}>
+                <div className="choice-field">Receipt printer <ChoiceTiles aria-label="Receipt printer" value={printerId} onChange={(choiceValue) => changePrinter(choiceValue)} disabled={blocked}>
                   <option value="">Browser / A4 receipt</option>{printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select></label>
+                </ChoiceTiles></div>
                 {!bill && order.status === "open" && <>
-                  <label>Discount (₹) <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={blocked} /></label>
+                  <label>Discount (₹) <input name="bill-discount" type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={blocked} /></label>
                   <label className="billing-wide-field">Discount reason <input maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} /></label>
                 </>}
               </div>

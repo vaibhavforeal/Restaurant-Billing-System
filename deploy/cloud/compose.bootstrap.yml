@@ -1,0 +1,18 @@
+# Infrastructure-only HTTPS page, until delivery/storage are configured.
+name: forkflow-bootstrap
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment: {PORTAL_DOMAIN: '${PORTAL_DOMAIN:?Set PORTAL_DOMAIN}'}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile.bootstrap:/etc/caddy/Caddyfile:ro
+      - bootstrap_data:/data
+      - bootstrap_config:/config
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+volumes:
+  bootstrap_data:
+  bootstrap_config:

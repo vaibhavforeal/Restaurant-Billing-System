@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useMemo, useState } from "react";
 import type { DishCost } from "@forkflow/domain";
 import { PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
@@ -6,11 +7,13 @@ import { apiFetch } from "../api";
 import { COSTING_PRO_NOTE, costingPriceNote, formatTierPrice, sortDishes } from "../dish-costing";
 import { formatMovementCost } from "../stock-costs";
 import { useIntegrations } from "../integrations";
+import { useFeatures } from "../features";
 
 const TIERS = ["non_ac", "ac", "takeaway", "zomato"] as const;
 const cell = { padding: "6px 10px", verticalAlign: "top" } as const;
 
 export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refresh: number }) {
+  const enabled = useFeatures().isActive("costing");
   const { isEnabled } = useIntegrations();
   const tiers = TIERS.filter((tier) => tier !== "zomato" || isEnabled("zomato"));
   const [data, setData] = useState<{ dishes: DishCost[]; gstMode: GstMode } | null>(null);
@@ -18,13 +21,13 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
   const [category, setCategory] = useState("all");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (!fullRecipe) { setData(null); setError(""); return; }
+    if (!fullRecipe || !enabled) { setError(""); return; }
     const controller = new AbortController();
     apiFetch<{ dishes: DishCost[]; gstMode: GstMode }>("/api/costing/dishes", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
       .then((result) => { if (!controller.signal.aborted) { setData(result); setError(""); } })
       .catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not load dish costing"); });
     return () => controller.abort();
-  }, [fullRecipe, refresh, retry]);
+  }, [fullRecipe, refresh, retry, enabled]);
   const categories = useMemo(() => [...new Set((data?.dishes ?? []).map((dish) => dish.categoryName))].sort((a, b) => a.localeCompare(b)), [data]);
   // A category that disappears after a refresh would leave an empty, unexplained table.
   const activeCategory = category === "all" || categories.includes(category) ? category : "all";
@@ -40,12 +43,12 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
     {error && <div className="recipe-error"><p role="alert">{error}</p><button onClick={() => setRetry((value) => value + 1)}>Retry</button></div>}
     {!data && !error && <p role="status">Loading dish costing…</p>}
     {data && <>
-      <label style={{ display: "grid", gap: 6, maxWidth: 280, margin: "12px 0" }}>Category
-        <select value={activeCategory} onChange={(event) => setCategory(event.target.value)}>
+      <div className="choice-field" style={{ display: "grid", gap: 6, maxWidth: 280, margin: "12px 0" }}>Category
+        <ChoiceTiles aria-label="Category" value={activeCategory} onChange={(choiceValue) => setCategory(choiceValue)}>
           <option value="all">All categories</option>
           {categories.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
-      </label>
+        </ChoiceTiles>
+      </div>
       <div style={{ overflowX: "auto" }}>
         <table aria-label="Dish costing" style={{ width: "100%", textAlign: "left", borderSpacing: 0 }}>
           <thead><tr>

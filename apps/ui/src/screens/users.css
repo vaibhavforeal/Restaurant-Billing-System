@@ -1,0 +1,30 @@
+.users-screen.legacy-screen { padding:12px 14px; }
+.users-screen h2 { display:flex;align-items:center;gap:9px;margin:0 0 6px;font-size:22px; }
+.users-heading-icon { display:inline-flex;padding:6px;border-radius:8px;color:#be1e3b;background:#fff0f3; }
+.users-screen>p { margin:0 0 14px;color:var(--muted,#657084);font-size:14px; }
+.users-create { display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:10px; }
+.users-screen input:not([type=checkbox]):not([type=radio]) { min-height:36px;padding:7px 10px; }
+.users-screen button { display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:32px;padding:6px 10px;font-size:13px; }
+.users-role-picker { display:flex;gap:5px;flex-wrap:wrap; }
+.role-choice { display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--border,#e1e5ed);border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap; }
+.role-choice input { width:14px;height:14px;margin:0;accent-color:currentColor; }
+.role-admin { color:#7850a6;--role-bg:#f3edfb; }
+.role-cashier { color:#237453;--role-bg:#eaf6ef; }
+.role-waiter { color:#296ba2;--role-bg:#edf5fc; }
+.role-kitchen { color:#99630d;--role-bg:#fff5df; }
+.role-choice.selected { background:var(--role-bg);border-color:currentColor;font-weight:600; }
+.role-choice:has(input:focus-visible) { outline:2px solid currentColor;outline-offset:2px; }
+.role-choice:has(input:disabled) { opacity:.5;cursor:default; }
+.users-screen table th,.users-screen table td { padding:7px 8px; }
+.users-screen table th { font-size:13px; }
+.user-avatar { display:inline-flex;vertical-align:middle;align-items:center;justify-content:center;width:29px;height:29px;border-radius:8px;background:var(--role-bg);margin-right:8px; }
+.user-status { display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 7px;border-radius:20px; }
+.user-status.active { color:#237453;background:#eaf6ef; }
+.user-status.inactive { color:#687080;background:#eff1f5; }
+.user-status>span { width:6px;height:6px;border-radius:50%;background:currentColor; }
+.user-actions { display:flex;gap:5px;flex-wrap:wrap; }
+.users-screen .user-danger { color:#bd263e;border-color:#edccd2; }
+.users-screen .user-restore { color:#237453;border-color:#c2dfd1; }
+.users-screen .panel { padding:12px; }
+.users-screen input[type=checkbox] { width:16px;height:16px;accent-color:#bd1e3c; }
+@media(max-width:800px) { .users-create .users-role-picker { width:100%; } .users-screen table { min-width:780px; } }

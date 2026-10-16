@@ -47,22 +47,20 @@ describe("kds licensing", () => {
     expect(res.json().integrations.find((i: { id: string }) => i.id === "zomato").licensed).toBe(true);
   });
 
-  it("allows turning kds off but not on while unlicensed", async () => {
+  it("prevents restaurant staff from changing KDS on Basic", async () => {
     const c = await commercialApp("basic"); app = c.app;
     const on = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: true } });
     expect(on.statusCode).toBe(403);
-    expect(on.json().error).toBe("Kitchen Display requires the Pro plan");
+    expect(on.json().error).toBe("Integrations are controlled by the ForkFlow owner.");
     enableIntegration(app, "kds"); // a plan downgrade can leave the stored switch on
     const off = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: false } });
-    expect(off.statusCode, off.body).toBe(200);
-    expect(off.json().integration).toMatchObject({ id: "kds", enabled: false, licensed: false });
+    expect(off.statusCode, off.body).toBe(403);
   });
 
-  it("lets a Pro admin turn kds on", async () => {
+  it("prevents restaurant staff from changing KDS on Pro", async () => {
     const c = await commercialApp("pro"); app = c.app;
     const on = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: true } });
-    expect(on.statusCode, on.body).toBe(200);
-    expect(on.json().integration).toMatchObject({ id: "kds", enabled: true, licensed: true });
+    expect(on.statusCode, on.body).toBe(403);
   });
 });
 

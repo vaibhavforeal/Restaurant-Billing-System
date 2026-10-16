@@ -1,5 +1,13 @@
 // Run with agent-browser eval --stdin after admin setup on a disposable port-4127 server.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4127') throw new Error('Use the disposable reservation QA server on port 4127.');
   const checks = [];
   const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
@@ -11,10 +19,11 @@
   const pause = () => new Promise((resolve) => setTimeout(resolve, 50));
   const button = (name, scope = document) => [...scope.querySelectorAll('button')].find((b) => b.textContent.trim() === name && (!b.closest('dialog') || b.closest('dialog').open));
   const click = async (name, scope = document) => { await wait(() => button(name, scope) && !button(name, scope).disabled); button(name, scope).click(); await pause(); };
-  const field = (name) => [...document.querySelectorAll('.reservations-dialog label')].find((label) => label.textContent.startsWith(name))?.querySelector('input,select,textarea');
+  const field = (name) => [...document.querySelectorAll(".reservations-dialog label, .reservations-dialog .choice-field")].find((label) => label.textContent.startsWith(name))?.querySelector("input,[role=radiogroup],textarea");
   const set = async (name, value) => {
     const el = field(name); if (!el) throw new Error('Missing field: ' + name);
     const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    if (chooseTile(el, value)) return;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
     el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await pause();
   };
@@ -74,13 +83,13 @@
     const tableCard = [...document.querySelectorAll('.table-card.reserved')].find((el) => el.innerText.includes(table.name));
     check(tableCard.innerText.includes(guest), 'A current reservation marks its table reserved');
     tableCard.click(); await wait(() => !!card(guest));
-    check(field('Show table').value === table.id, 'Reserved table opens its filtered reservations');
+    check(field('Show table').querySelector('input:checked')?.value === table.id, 'Reserved table opens its filtered reservations');
     await click('New reservation'); await set('Guest name', secondGuest);
     await click('Save reservation'); await wait(() => alertHas('already has a reservation'));
     check(!!field('Guest name'), 'An overlapping booking shows an actionable error and keeps the form');
     await set('Table', second.id); await set('Date and time', nextDate + 'T19:00');
     await click('Save reservation'); await wait(() => !!card(secondGuest));
-    check(field('Reservation date').value === nextDate && field('Show table').value === second.id, 'Saving another date and table follows the saved reservation');
+    check(field('Reservation date').value === nextDate && field('Show table').querySelector('input:checked')?.value === second.id, 'Saving another date and table follows the saved reservation');
     await click('Edit', card(secondGuest)); await set('Date and time', clock.nowLocal);
     await click('Save reservation'); await wait(() => !!card(secondGuest) && field('Reservation date').value === clock.date);
     check((await api('/reservations?date=' + nextDate)).reservations.every((row) => row.customerName !== secondGuest), 'Rescheduling removes the old date entry');

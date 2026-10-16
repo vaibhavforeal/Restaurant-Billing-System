@@ -1,6 +1,14 @@
 // Run via agent-browser eval --stdin on a disposable QA server with the seeded
 // recipe bowl and an authenticated, registered Pro administrator. Never use live data.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4117') throw new Error('Use the isolated QR QA server on 4117');
   const checks = [], writes = [], originalConfirm = window.confirm;
   const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
@@ -24,11 +32,12 @@
     }
   };
   const openStaffDialog = async (label) => { await closeDialogs(); await click(document, label); return wait(() => activeModal(document), label + ' dialog'); };
-  const field = (doc, label) => [...doc.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith(label) && available(l))?.querySelector('select,input,textarea');
+  const field = (doc, label) => [...doc.querySelectorAll("label, .choice-field")].find((l) => l.textContent.trim().startsWith(label) && available(l))?.querySelector("[role=radiogroup],input,textarea");
   const fill = async (doc, label, value) => {
-    const input = await wait(() => { const el = field(doc, label); return el && !el.disabled ? el : null; }, label);
+    const input = await wait(() => { const el = field(doc, label); return el && !el.disabled && el.getAttribute('aria-disabled') !== 'true' ? el : null; }, label);
     const view = doc.defaultView;
     const proto = input.tagName === 'SELECT' ? view.HTMLSelectElement.prototype : input.tagName === 'TEXTAREA' ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
+    if (chooseTile(input, value)) return;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value);
     input.dispatchEvent(new view.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await pause();
   };

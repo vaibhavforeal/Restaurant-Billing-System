@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api";
 import type { ReportPeriod, SalesReport } from "./sales-report";
+import { useFeatures } from "./features";
 
 export function useSalesReport(initialPeriod?: ReportPeriod) {
+  const enabled = useFeatures().isActive("reports");
   const [period, setPeriod] = useState<ReportPeriod | null>(initialPeriod ?? null);
   const [report, setReport] = useState<SalesReport | null>(null);
   const [error, setError] = useState("");
@@ -11,6 +13,7 @@ export function useSalesReport(initialPeriod?: ReportPeriod) {
   const revision = useRef(0);
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
   useEffect(() => {
+    if (!enabled) { setLoading(false); return; }
     const request = ++revision.current;
     const controller = new AbortController();
     setReport(null); setError(""); setLoading(true);
@@ -20,6 +23,6 @@ export function useSalesReport(initialPeriod?: ReportPeriod) {
       .catch((e: unknown) => { if (!controller.signal.aborted && request === revision.current) setError(e instanceof Error ? e.message : "Could not load sales and collections"); })
       .finally(() => { if (request === revision.current) setLoading(false); });
     return () => { revision.current++; controller.abort(); };
-  }, [period?.from, period?.to, version]);
+  }, [period?.from, period?.to, version, enabled]);
   return { period, setPeriod, report, error, loading, refresh };
 }

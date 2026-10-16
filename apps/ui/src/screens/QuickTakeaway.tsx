@@ -1,9 +1,11 @@
+import { outletStorage } from "../outlet-identity";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch, type User } from "../api";
 import { useNavigationGuard } from "../navigation-guard";
 import type { Order } from "../types";
 import { uuid } from "../uuid";
 import { OrderScreen } from "./OrderScreen";
+import { FeatureWorkspace } from "../features";
 
 interface SavedTakeaway {
   version: 1;
@@ -16,7 +18,7 @@ class TakeawayRecoveryError extends Error {}
 
 function readSaved(key: string): SavedTakeaway | null {
   let raw: string | null;
-  try { raw = localStorage.getItem(key); }
+  try { raw = outletStorage.getItem(key); }
   catch { throw new TakeawayRecoveryError("Device storage is unavailable. Enable browser storage before opening a takeaway."); }
   if (raw === null) return null;
   try {
@@ -33,8 +35,8 @@ function readSaved(key: string): SavedTakeaway | null {
 function writeSaved(key: string, saved: SavedTakeaway) {
   try {
     const raw = JSON.stringify(saved);
-    localStorage.setItem(key, raw);
-    if (localStorage.getItem(key) !== raw) throw new Error();
+    outletStorage.setItem(key, raw);
+    if (outletStorage.getItem(key) !== raw) throw new Error();
   } catch {
     throw new TakeawayRecoveryError("Cannot save this takeaway on the device. Free browser storage, then retry to recover the same order.");
   }
@@ -61,8 +63,8 @@ export function releaseHeldTakeaway(userId: string, orderId: string) {
   const saved = readSaved(key);
   if (saved?.orderId !== orderId) return;
   try {
-    localStorage.removeItem(key);
-    if (localStorage.getItem(key) !== null) throw new Error();
+    outletStorage.removeItem(key);
+    if (outletStorage.getItem(key) !== null) throw new Error();
   } catch { throw new TakeawayRecoveryError("Could not hold this takeaway. Check browser storage and try again."); }
 }
 
@@ -79,7 +81,7 @@ export function QuickTakeaway({ user, onBack, onOpenOrder }: {
   // unmounted, so it cannot replace the cart/payment guard on the order screen.
   return activeOrder
     ? <OrderScreen key={activeOrder.id} user={user} orderId={activeOrder.id} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling onHold={() => { releaseHeldTakeaway(user.id, activeOrder.id); onBack(); }} onNextTakeaway={() => setActiveOrder(null)} />
-    : <TakeawayStart key={user.id} user={user} onBack={onBack} onReady={setActiveOrder} />;
+    : <FeatureWorkspace id="takeaway"><TakeawayStart key={user.id} user={user} onBack={onBack} onReady={setActiveOrder} /></FeatureWorkspace>;
 }
 
 function TakeawayStart({ user, onBack, onReady }: { user: User; onBack: () => void; onReady: (order: Order) => void }) {
@@ -111,7 +113,7 @@ function TakeawayStart({ user, onBack, onReady }: { user: User; onBack: () => vo
       // Check the restore generation before replaying an ambiguous create. The
       // shared connection queue archives this draft prefix after a restore.
       let previousGeneration: string | null;
-      try { previousGeneration = localStorage.getItem("forkflow.generation"); }
+      try { previousGeneration = outletStorage.getItem("forkflow.generation"); }
       catch { throw new TakeawayRecoveryError("Device storage is unavailable. Enable browser storage before opening a takeaway."); }
       const { generation } = await apiFetch<{ generation: string }>("/api/system/generation");
       if (!mounted.current) return;

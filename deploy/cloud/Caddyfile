@@ -1,0 +1,13 @@
+{$PORTAL_DOMAIN} {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+  }
+  handle /health {
+    reverse_proxy api:4200
+  }
+  handle {
+    reverse_proxy ui:80
+  }
+}

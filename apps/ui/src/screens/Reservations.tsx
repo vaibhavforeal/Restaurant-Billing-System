@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Reservation, ReservationInput, ReservationList } from "@forkflow/domain";
 import { apiFetch, session, type User } from "../api";
@@ -6,6 +7,8 @@ import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import "../reservations.css";
+import { useFeatures } from "../features";
+import { usePermissions } from "../permissions";
 
 interface Editor { id: string | null; version: number; clientRef: string; input: ReservationInput; original: string }
 const statusText = { booked: "Booked", seated: "Seated", cancelled: "Cancelled", no_show: "No-show" };
@@ -15,7 +18,9 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
   onOpenOrder: (id: string) => void; onChanged: () => void;
   onBusyChange: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void;
 }) {
-  const canManage = user.role === "admin" || user.role === "cashier";
+  const { allows } = usePermissions(user.role);
+  const canManage = allows("reservations.create") || allows("reservations.update") || allows("reservations.delete");
+  const enabled = useFeatures().isActive("reservations");
   const [date, setDate] = useState("");
   const [tableFilter, setTableFilter] = useState(initialTableId ?? "");
   const [data, setData] = useState<ReservationList | null>(null);
@@ -73,6 +78,7 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
     onDirtyChange(false); onClose();
   }
   function startEditor(reservation?: Reservation) {
+    if (!enabled || !allows(reservation ? "reservations.update" : "reservations.create")) return;
     const nowLocal = data?.nowLocal ?? `${date}T19:00`;
     const input: ReservationInput = reservation ? {
       tableId: reservation.tableId, customerName: reservation.customerName, phone: reservation.phone,
@@ -86,7 +92,7 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
     setEditor((old) => old ? { ...old, input: { ...old.input, [key]: value } } : null);
   }
   function save() {
-    if (!editor) return;
+    if (!editor || !enabled || !allows(editor.id ? "reservations.update" : "reservations.create")) return;
     void run(async () => {
       const { reservation } = await apiFetch<{ reservation: Reservation }>(editor.id ? `/api/reservations/${editor.id}` : "/api/reservations", {
         method: editor.id ? "PATCH" : "POST", body: JSON.stringify({ ...editor.input, ...(editor.id ? { version: editor.version } : { clientRef: editor.clientRef }) }),
@@ -117,21 +123,23 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
       <label>Guest name<input required maxLength={100} disabled={busy} value={editor.input.customerName} onChange={(e) => field("customerName", e.target.value)} /></label>
       <label>Phone (optional)<input type="tel" maxLength={30} disabled={busy} value={editor.input.phone} onChange={(e) => field("phone", e.target.value)} /></label>
       <label>Party size<input type="number" min={1} max={99} required disabled={busy} value={editor.input.partySize} onChange={(e) => field("partySize", Number(e.target.value))} /></label>
-      <label>Table<select required disabled={busy} value={editor.input.tableId} onChange={(e) => field("tableId", e.target.value)}>
+      <div className="choice-field">Table<ChoiceTiles aria-label="Table" required disabled={busy} value={editor.input.tableId} onChange={(choiceValue) => field("tableId", choiceValue)}>
         <option value="">Choose a table</option>{tables.filter((t) => t.isActive).map((t) => <option key={t.id} value={t.id}>{t.name}{t.area ? ` · ${t.area}` : ""}</option>)}
-      </select></label>
+      </ChoiceTiles></div>
       <label>Date and time<input type="datetime-local" required disabled={busy} value={editor.input.startsLocal} onChange={(e) => field("startsLocal", e.target.value)} /></label>
       <label>Duration (minutes)<input type="number" min={15} max={480} required disabled={busy} value={editor.input.durationMinutes} onChange={(e) => field("durationMinutes", Number(e.target.value))} /></label>
       <label className="reservation-wide">Notes (optional)<textarea rows={2} maxLength={500} disabled={busy} value={editor.input.notes} onChange={(e) => field("notes", e.target.value)} /></label>
       <p className="reservation-help reservation-wide">Check the chosen table has enough seats for the party. Overlapping reservations are blocked.</p>
-      <div className="reservation-actions reservation-wide"><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save reservation"}</button>
+      {!enabled && <p className="reservation-wide" role="status">Reservations are turned off. Your draft is retained until they are enabled again.</p>}
+      <div className="reservation-actions reservation-wide"><button className="primary" disabled={busy || !enabled}>{busy ? "Saving…" : "Save reservation"}</button>
         <button type="button" disabled={busy} onClick={() => { if (!dirty || window.confirm("Discard the unsaved reservation changes?")) { setEditor(null); onDirtyChange(false); setError(""); } }}>Back to reservations</button></div>
     </form> : <>
       <div className="reservation-toolbar">
         <label>Reservation date<input type="date" value={date} disabled={busy} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setError(""); setMessage(""); } }} /></label>
-        <label>Show table<select value={tableFilter} disabled={busy} onChange={(e) => setTableFilter(e.target.value)}><option value="">All tables</option>{tables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+        <div className="choice-field">Show table<ChoiceTiles aria-label="Show table" value={tableFilter} disabled={busy} onChange={(choiceValue) => setTableFilter(choiceValue)}><option value="">All tables</option>{tables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</ChoiceTiles></div>
         <button disabled={busy} onClick={() => { void run(async () => {}); }}>Refresh</button>
-        {canManage && <button className="primary" disabled={busy || loading || !data || !tables.some((t) => t.isActive)} onClick={() => startEditor()}>New reservation</button>}
+        {canManage && <button className="primary" disabled={!allows("reservations.create") || !enabled || busy || loading || !data || !tables.some((t) => t.isActive)} onClick={() => startEditor()}>New reservation</button>}
+        {!enabled && <p role="status">Reservations are turned off. Existing reservations can still be seated or cancelled.</p>}
       </div>
       {loading && <p role="status">Updating reservations…</p>}
       {!canManage && <p className="reservation-help">An admin or cashier can create, change or seat a reservation.</p>}
@@ -147,9 +155,9 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
               const result = await apiFetch<{ order: Order }>(`/api/reservations/${r.id}/seat`, { method: "POST", body: JSON.stringify({ version: r.version }) });
               return { orderId: result.order.id };
             }); }}>Seat & open bill</button>
-            <button disabled={busy} onClick={() => startEditor(r)}>Edit</button>
+            <button disabled={busy || !enabled || !allows("reservations.update")} onClick={() => startEditor(r)}>Edit</button>
             <button disabled={busy || now < r.startsAt} onClick={() => changeStatus(r, "no_show")}>No-show</button>
-            <button disabled={busy} onClick={() => changeStatus(r, "cancelled")}>Cancel reservation</button>
+            <button disabled={busy || !allows("reservations.delete")} onClick={() => changeStatus(r, "cancelled")}>Cancel reservation</button>
           </>}
           {r.status === "seated" && r.orderId && <button disabled={busy} onClick={() => onOpenOrder(r.orderId!)}>Open order{r.orderStatus === "settled" ? " (settled)" : ""}</button>}
         </div>

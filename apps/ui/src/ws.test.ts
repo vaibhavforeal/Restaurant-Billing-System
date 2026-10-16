@@ -37,6 +37,21 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const handlers = () => ({ onEvent: vi.fn(), onStatus: vi.fn(), onAuthFail: vi.fn() });
 
 describe("shared websocket", () => {
+  it("sends the verified outlet identity and recovery generation in the auth frame", async () => {
+    const { activateOutletIdentity } = await import("./outlet-identity");
+    activateOutletIdentity({ outletIdentity: "outlet-a", generation: "generation-1" });
+    const { session } = await import("./api"); session.set("bound-token");
+    connectWs(handlers()); FakeSocket.all[0]!.open();
+    expect(JSON.parse(FakeSocket.all[0]!.sent[0]!)).toMatchObject({ token: "bound-token", outletIdentity: "outlet-a", generation: "generation-1" });
+  });
+
+  it("rechecks identity instead of reconnecting when the outlet rejects the socket identity", () => {
+    const client = handlers(); connectWs(client); FakeSocket.all[0]!.drop(4409);
+    expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "forkflow:outlet-identity-changed" }));
+    expect(client.onStatus).toHaveBeenLastCalledWith(false);
+    expect(client.onAuthFail).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(20000); expect(FakeSocket.all).toHaveLength(1);
+  });
   it("serves every subscriber from one authenticated socket", () => {
     const a = handlers(), b = handlers();
     connectWs(a); connectWs(b);

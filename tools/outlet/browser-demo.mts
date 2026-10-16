@@ -1,0 +1,11 @@
+import {build} from 'esbuild';
+import {resolve} from 'node:path';
+import {mkdir} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+process.env.FORKFLOW_RUNTIME='browser-preview';
+process.env.FORKFLOW_PORT='4111';
+process.env.FORKFLOW_DATA_DIR=resolve('.forkflow/browser-demo');
+process.env.FORKFLOW_UI_DIR=resolve('apps/ui/dist');
+await mkdir('build/browser-demo',{recursive:true});
+await build({entryPoints:['apps/server/src/main.ts'],outfile:'build/browser-demo/main.mjs',bundle:true,packages:'external',platform:'node',format:'esm',target:'node24',define:{__FORKFLOW_DEMO__:'true'}});
+await import(pathToFileURL(resolve('build/browser-demo/main.mjs')).href);

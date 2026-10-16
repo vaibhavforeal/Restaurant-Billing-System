@@ -33,10 +33,16 @@ import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discover
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
 import { provideLicensedFeatures } from "./kds.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
-import { registerIntegrations } from "./integrations.js";
+import { registerIntegrations, provideOwnerIntegrations } from "./integrations.js";
 import { registerZomato, type ZomatoProvider } from "./zomato.js";
+import { FeatureDisabledError, registerFeatures, registerFeatureGuards } from "./features.js";
 
 export interface ServerOptions {
+  appVersion?: string;
+  outletIdentity?: string;
+  maintenanceProbe?: boolean;
+  /** In-memory test fixture compatibility; never configured by production startup. */
+  allowFixtureIntegrationWrites?: boolean;
   demo?: boolean;
   db: Database;
   logger?: FastifyServerOptions["logger"];
@@ -55,6 +61,13 @@ export interface ServerOptions {
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({ logger: opts.logger ?? false });
+  if (opts.outletIdentity) app.addHook('onRequest', async (req, reply) => {
+    const identity = req.headers['x-forkflow-outlet-identity'], generation = req.headers['x-forkflow-generation'];
+    if ((identity !== undefined && identity !== opts.outletIdentity) || (generation !== undefined && generation !== (opts.generation ?? 'initial'))) return reply.status(409).send({ error: 'This browser belongs to a different outlet or recovery session. Reload before continuing.', code: 'outlet_identity_changed' });
+  });
+  if (opts.maintenanceProbe) app.addHook('onRequest', async (req, reply) => {
+    if (req.method !== 'GET' || req.url !== '/api/health') return reply.status(503).send({ error: 'Outlet update verification is in progress' });
+  });
 
   // Harden content-type parser for browsers/proxies that send application/json on empty bodies
   app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
@@ -76,7 +89,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     app.broadcast("print.job", { job });
   }, opts.db, opts.generation);
   app.decorate("printQueue", queue);
-  app.addHook("onReady", async () => queue.start());
+  app.addHook("onReady", async () => { if (!opts.maintenanceProbe) queue.start(); });
   app.addHook("preClose", async () => queue.close());
 
   app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "table", label: string, bytes: Buffer) => {
@@ -118,14 +131,22 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       return reply.status(status).send({ error: "internal error" });
     }
     const code = typeof err === "object" && err !== null && "code" in err && (err.code === "menu_changed" || err.code === "kds_off" || err.code === "zomato_duplicate" || err.code === "zomato_status" || err.code === "zomato_order" || err.code === "credit_history_inconsistent") ? err.code : undefined;
-    return reply.status(status).send({ error: message, ...(code ? { code } : {}), ...(err instanceof PermissionError ? { permission: err.permission } : {}) });
+    return reply.status(status).send({ error: message, ...(code ? { code } : {}), ...(err instanceof FeatureDisabledError ? { code: err.code, feature: err.feature } : {}), ...(err instanceof PermissionError ? { permission: err.permission } : {}) });
   });
 
   configureLicensing(app, opts.licensing);
+  provideOwnerIntegrations(app.db, () => app.licensing.enabled || app.licensing.cloudManaged ? app.licensing.featurePolicy()?.enabled ?? {} : null);
+  app.addHook("onReady", async () => {
+    if (opts.maintenanceProbe) return;
+    const stop = app.licensing.startFeatureChecks();
+    app.addHook("onClose", async () => stop());
+  });
   provideLicensedFeatures(app.db, () => app.licensing.status().features);
   registerAuth(app, opts.demo ?? false);
-  registerWs(app, opts.authTimeoutMs);
+  registerWs(app, opts.authTimeoutMs, opts.outletIdentity ? { outletIdentity: opts.outletIdentity, generation: opts.generation ?? 'initial' } : undefined);
   registerLicensing(app);
+  registerFeatureGuards(app);
+  registerFeatures(app);
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);
@@ -146,16 +167,16 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCosting(app);
   registerGuestOrdering(app, opts.port);
   registerGuestServices(app);
-  registerIntegrations(app);
+  registerIntegrations(app, opts.allowFixtureIntegrationWrites);
   registerZomato(app, opts.zomatoProvider);
   const cloudBackups = opts.backups ? new CloudBackups(opts.backups, opts.cloudBackupProvider) : undefined;
   if (cloudBackups) {
-    app.addHook("onReady", async () => { cloudBackups.start(); });
+    app.addHook("onReady", async () => { if (!opts.maintenanceProbe) cloudBackups.start(); });
     app.addHook("preClose", async () => { await cloudBackups.close(); });
   }
   registerSystem(app, opts.backups, opts.port, opts.generation, opts.captainHttps, cloudBackups);
 
-  app.get("/api/health", async () => ({ ok: true, ...(opts.instanceId ? { instanceId: opts.instanceId } : {}) }));
+  app.get("/api/health", async () => ({ ok: true, ...(opts.instanceId ? { instanceId: opts.instanceId } : {}), ...(opts.outletIdentity ? { outletIdentity: opts.outletIdentity, generation: opts.generation ?? 'initial' } : {}), ...(opts.appVersion ? { version: opts.appVersion } : {}), ...(opts.maintenanceProbe ? { maintenance: true } : {}) }));
 
   return app;
 }

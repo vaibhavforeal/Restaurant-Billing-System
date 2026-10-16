@@ -1,4 +1,8 @@
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { webCryptoSigner, encodeFeaturePolicy } from "@forkflow/license-issuer";
+import { z } from "zod";
+import { ownerRoute, installationPolicy } from "./owner-features.js";
+import { syncStaffRoster } from "./staff-permissions.js";
+import { StaffRoster } from "@forkflow/domain/staff-permissions";
 import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
 import type { Deps } from "./issue.js";
@@ -8,6 +12,7 @@ import { subscribePage } from "./subscribe-page.js";
 import { handleCreateSubscription } from "./subscriptions.js";
 import { handleCreateSession, resolveSession } from "./sessions.js";
 import { handleWebhook } from "./webhook.js";
+import { handleCloudSubscriptionSession } from './cloud-subscriptions.js';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const html = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -40,6 +45,23 @@ async function readJson(request: Request): Promise<{ ok: true; body: unknown } |
 async function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const { method } = request;
+  if(method==='POST'&&url.pathname==='/v1/cloud/subscribe-session'){
+    if(await rateLimited(request,env))return json({error:'rate_limited'},429);
+    const body=await readJson(request);return body.ok?handleCloudSubscriptionSession({db:env.DB,now:Date.now},body.body,request.headers.get('authorization'),env.CLOUD_SERVICE_TOKEN):json({error:'bad_request'},400);
+  }
+  const owner = await ownerRoute(request, env);
+  if (owner) return owner;
+  if (method === "POST" && url.pathname === "/v1/features") {
+    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    const body = await readJson(request);
+    const parsed = z.object({ installationId: z.string().uuid(), staff: StaffRoster.optional() }).strict().safeParse(body.ok ? body.body : null);
+    if (!parsed.success) return json({ error: "bad_request" }, 400);
+    const policy = await installationPolicy(env.DB, parsed.data.installationId, request.headers.get(SECRET_HEADER));
+    if (!policy) return json({ error: "unauthorized" }, 401);
+    if (parsed.data.staff && !await syncStaffRoster(env.DB, parsed.data.installationId, request.headers.get(SECRET_HEADER), parsed.data.staff)) return json({ error: "bad_request" }, 400);
+    const response = json({ policy: await encodeFeaturePolicy(policy, (await signerFor(env)).sign) });
+    response.headers.set("Cache-Control", "no-store"); return response;
+  }
   const deps = async (): Promise<Deps> => ({ db: env.DB, signer: await signerFor(env), now: Date.now, uuid: () => crypto.randomUUID() });
 
   if (method === "POST" && url.pathname === "/v1/activate") {

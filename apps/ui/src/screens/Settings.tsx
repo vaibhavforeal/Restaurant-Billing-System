@@ -1,3 +1,5 @@
+import { CloudStatusPanel } from "../cloud-status";
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_GST_RATES } from "@forkflow/domain/gst";
 import { resolveReceiptStyle } from "@forkflow/domain/receipt-styles";
@@ -332,31 +334,31 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
             </label>
           ))}
-          <label style={{ display: "grid", gap: 4 }}>
+          <div className="choice-field" style={{ display: "grid", gap: 4 }}>
             Bill style
-            <select value={form.receiptStyle ?? "classic"} onChange={(e) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(e.target.value) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">
+            <ChoiceTiles aria-label="Bill style" value={form.receiptStyle ?? "classic"} onChange={(choiceValue) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(choiceValue) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">
               <option value="classic">Classic - Receipt mono</option>
               <option value="modern">Modern - Bold sans serif</option>
               <option value="heritage">Heritage - Traditional serif</option>
               <option value="compact">Compact - Space-saving sans serif</option>
-            </select>
-          </label>
+            </ChoiceTiles>
+          </div>
           <small id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</small>
-          <label style={{ display: "grid", gap: 4 }}>
+          <div className="choice-field" style={{ display: "grid", gap: 4 }}>
             GST
-            <select value={form.gstMode} disabled={busy} aria-describedby="gst-settings-help"
-              onChange={(e) => { setForm({ ...form, gstMode: e.target.value === "none" ? "none" : "included" }); setProfileStatus(""); }}>
+            <ChoiceTiles aria-label="GST" value={form.gstMode} disabled={busy} aria-describedby="gst-settings-help"
+              onChange={(choiceValue) => { setForm({ ...form, gstMode: choiceValue === "none" ? "none" : "included" }); setProfileStatus(""); }}>
               <option value="included">Prices include GST</option>
               <option value="none">No GST charged</option>
-            </select>
-          </label>
-          {form.gstMode === "included" && <label style={{ display: "grid", gap: 4 }}>
+            </ChoiceTiles>
+          </div>
+          {form.gstMode === "included" && <div className="choice-field" style={{ display: "grid", gap: 4 }}>
             Default GST rate
-            <select value={form.gstRate} disabled={busy} aria-describedby="gst-settings-help"
-              onChange={(e) => { setForm({ ...form, gstRate: Number(e.target.value) as SettingsData["gstRate"] }); setProfileStatus(""); }}>
+            <ChoiceTiles aria-label="Default GST rate" value={form.gstRate} disabled={busy} aria-describedby="gst-settings-help"
+              onChange={(choiceValue) => { setForm({ ...form, gstRate: Number(choiceValue) as SettingsData["gstRate"] }); setProfileStatus(""); }}>
               {DEFAULT_GST_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
-            </select>
-          </label>}
+            </ChoiceTiles>
+          </div>}
           <small id="gst-settings-help">Applies to new bills. With GST included, the tax is part of your menu prices and is shown as an Includes GST block on the bill; items without their own rate use the default rate. With No GST charged, bills show no tax. Existing bills keep their original tax calculation.</small>
           <label style={{ display: "grid", gap: 4 }}>
             UPI ID for bill payments
@@ -407,12 +409,12 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                     />
                   </td>
                   <td>
-                    <select
+                    <ChoiceTiles aria-label="Printer connection type"
                       value={editPrinter.kind ?? "network"}
-                      onChange={(e) =>
+                      onChange={(choiceValue) =>
                         setEditPrinter({
                           ...editPrinter,
-                          kind: e.target.value as "network" | "windows" | "bluetooth",
+                          kind: choiceValue as "network" | "windows" | "bluetooth",
                           connection: "",
                         })
                       }
@@ -420,7 +422,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                       <option value="network">Network (WiFi/LAN)</option>
                       <option value="windows">USB (Windows driver)</option>
                       <option value="bluetooth">Bluetooth (COM port)</option>
-                    </select>
+                    </ChoiceTiles>
                   </td>
                   <td>
                     {editPrinter.kind === "windows" ? <WindowsPrinterPicker value={editPrinter.connection ?? ""}
@@ -431,13 +433,13 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                     />}
                   </td>
                   <td>
-                    <select
+                    <ChoiceTiles aria-label="Paper width"
                       value={editPrinter.paperWidth ?? 80}
-                      onChange={(e) => setEditPrinter({ ...editPrinter, paperWidth: Number(e.target.value) as 58 | 80 })}
+                      onChange={(choiceValue) => setEditPrinter({ ...editPrinter, paperWidth: Number(choiceValue) as 58 | 80 })}
                     >
                       <option value={80}>80mm</option>
                       <option value={58}>58mm</option>
-                    </select>
+                    </ChoiceTiles>
                   </td>
                   <td>{p.isActive ? "✓" : "—"}</td>
                   <td>
@@ -483,16 +485,16 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
               style={{ flex: 1 }}
             />
-            <select
+            <ChoiceTiles
               aria-label="Printer connection type" value={newPrinter.kind}
-              onChange={(e) =>
-                setNewPrinter({ ...newPrinter, kind: e.target.value as "network" | "windows" | "bluetooth", connection: "" })
+              onChange={(choiceValue) =>
+                setNewPrinter({ ...newPrinter, kind: choiceValue as "network" | "windows" | "bluetooth", connection: "" })
               }
             >
               <option value="network">Network (WiFi/LAN)</option>
               <option value="windows">USB (Windows driver)</option>
               <option value="bluetooth">Bluetooth (COM port)</option>
-            </select>
+            </ChoiceTiles>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "start" }}>
             {newPrinter.kind === "windows" ? <WindowsPrinterPicker value={newPrinter.connection}
@@ -502,13 +504,13 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               onChange={(e) => setNewPrinter({ ...newPrinter, connection: e.target.value })}
               style={{ flex: 1 }}
             />}
-            <select
+            <ChoiceTiles
               aria-label="Paper width" value={newPrinter.paperWidth}
-              onChange={(e) => setNewPrinter({ ...newPrinter, paperWidth: Number(e.target.value) as 58 | 80 })}
+              onChange={(choiceValue) => setNewPrinter({ ...newPrinter, paperWidth: Number(choiceValue) as 58 | 80 })}
             >
               <option value={80}>80mm</option>
               <option value={58}>58mm</option>
-            </select>
+            </ChoiceTiles>
             <PrintProfileControls title="New bill profile" value={newPrinter.receiptProfile} disabled={busy}
               onChange={receiptProfile => setNewPrinter(previous => ({ ...previous, receiptProfile }))} />
             <PrintProfileControls title="New KOT and cancellation profile" value={newPrinter.kotProfile} disabled={busy}
@@ -535,9 +537,9 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               <tr key={s.id} style={{ borderBottom: "1px solid #eee", opacity: s.isActive ? 1 : 0.45 }}>
                 <td style={{ padding: 6 }}>{s.name}</td>
                 <td>
-                  <select
+                  <ChoiceTiles aria-label="Station printer"
                     value={s.printerId ?? ""}
-                    onChange={(e) => void updateStationPrinter(s.id, e.target.value)}
+                    onChange={(choiceValue) => void updateStationPrinter(s.id, choiceValue)}
                     disabled={!s.isActive || busy}
                   >
                     <option value="">No printer</option>
@@ -546,7 +548,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </ChoiceTiles>
                 </td>
                 <td>{s.isActive ? "✓" : "—"}</td>
                 <td>
@@ -615,7 +617,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
           </div>
         )}
       </div>}
-      {active === "backups" && <SystemSettings />}
+      {active === "backups" && <><CloudStatusPanel /><SystemSettings /></>}
       {active === "plan" && <LicenseSettings />}
       </div>
       </>}

@@ -4,6 +4,7 @@ import { apiFetch, session } from "./api";
 import type { SalesReport } from "./sales-report";
 import type { Order } from "./types";
 import { connectWs } from "./ws";
+import { useFeatures } from "./features";
 
 export interface DashboardDayEnd { sales: { billCount: number }; cancellations: { orderCount: number } }
 interface DashboardData {
@@ -34,6 +35,7 @@ export function useNow(intervalMs: number): number {
  * sales are always part of the report, independently of whether live integration polling is enabled.
  */
 export function useDashboard(date: string) {
+  const enabled = useFeatures().isActive("dashboard");
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,6 +44,7 @@ export function useDashboard(date: string) {
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
 
   useEffect(() => {
+    if (!enabled) { setLoading(false); return; }
     const request = ++revision.current;
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]);
@@ -79,9 +82,10 @@ export function useDashboard(date: string) {
       setLoading(false);
     });
     return () => { revision.current++; controller.abort(); };
-  }, [date, version]);
+  }, [date, version, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     let scheduled: ReturnType<typeof setTimeout> | undefined;
     let connectedOnce = false;
     const schedule = () => { clearTimeout(scheduled); scheduled = setTimeout(refresh, 400); };
@@ -92,7 +96,7 @@ export function useDashboard(date: string) {
     });
     const timer = setInterval(refresh, 60000);
     return () => { stop(); clearTimeout(scheduled); clearInterval(timer); };
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   const current = data?.date === date ? data : null;
   return {

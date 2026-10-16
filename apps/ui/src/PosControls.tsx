@@ -1,10 +1,9 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 
 export function Button({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button type="button" className={`pos-button ${className}`} {...props} />;
 }
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) { return <input {...props} />; }
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) { return <select {...props} />; }
 export function TerminalClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30000); return () => window.clearInterval(timer); }, []);
@@ -37,7 +36,5 @@ export function QtyStepper({ name, value, disabled, onChange }: { name: string; 
   </div>;
 }
 export function OverflowMenu({ label = "More", children }: { label?: string; children: ReactNode }) {
-  return <details className="pos-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>{label}</summary><div className="pos-overflow-content" onClick={(event) => {
-    if ((event.target as HTMLElement).closest("button:not(:disabled)")) event.currentTarget.parentElement?.removeAttribute("open");
-  }}>{children}</div></details>;
+  return <div className="pos-action-tiles" role="group" aria-label={label}>{children}</div>;
 }

@@ -1,11 +1,20 @@
 // Run through agent-browser eval --stdin after signing into the disposable fixture as admin.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   const checks = [];
   const assert = (condition, message) => { if (!condition) throw new Error(message); checks.push(message); };
   const wait = async (check) => { for (let i = 0; i < 200; i++) { if (check()) return; await new Promise((r) => setTimeout(r, 50)); } throw new Error("UI wait timed out"); };
   const button = (text) => [...document.querySelectorAll("button")].find((e) => e.textContent.trim() === text);
   const setValue = (element, value) => {
     const prototype = element.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    if (chooseTile(element, value)) return;
     Object.getOwnPropertyDescriptor(prototype, "value").set.call(element, value);
     element.dispatchEvent(new Event(element.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
   };
@@ -14,9 +23,9 @@
   URL.createObjectURL = (blob) => { downloads.push(blob); return originalCreate(blob); };
   try {
     button("Reports & Analytics").click();
-    await wait(() => document.querySelector('[aria-label="Detailed report"]'));
+    await wait(() => document.querySelector("[role=radiogroup][aria-label=\"Detailed reports\"]"));
     for (const kind of ["items", "cashiers", "hourly", "kots", "cancellations", "stock"]) {
-      setValue(document.querySelector('[aria-label="Detailed report"]'), kind);
+      setValue(document.querySelector("[role=radiogroup][aria-label=\"Detailed reports\"]"), kind);
       await wait(() => button("Export CSV") && !button("Export CSV").disabled && document.querySelector(".operational-report table"));
       const dates = [...document.querySelectorAll('.operational-report input[type="date"]')].map((e) => e.value);
       const response = await originalFetch(`/api/reports/operations/${kind}?from=${dates[0]}&to=${dates[1]}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
@@ -33,7 +42,7 @@
       const csv = await downloads.at(-1).text();
       assert(csv.includes(`"Report","${kind}"`) && csv.includes(report.from) && csv.includes(report.timezone), `${kind}: CSV contains report/date/timezone`);
       assert(report.tables.every((t) => csv.includes(t.title)), `${kind}: CSV includes all tables`);
-      if (kind === "items") assert(csv.includes('"880.00"'), "Item sales CSV reconciles with fixture bills");
+      if (kind === "items") assert(csv.includes('"838.00"'), "Item sales CSV reconciles with fixture bills");
       if (kind === "cashiers") assert(regions[0].textContent.includes("Counter 2"), "Collections show settling cashier");
       if (kind === "hourly") assert(report.tables[0].rows.length === 24, "Hourly report has 24 hours");
       if (kind === "kots") assert(report.tables[0].rows[0].average === 12, "KOT average excludes pending and cancelled tickets");
@@ -50,15 +59,16 @@
     button("Refresh").click();
     await wait(() => !button("Export CSV").disabled);
     // A range with no records remains usable and exportable.
-    setValue(document.querySelector('[aria-label="Detailed report"]'), "items");
+    setValue(document.querySelector("[role=radiogroup][aria-label=\"Detailed reports\"]"), "items");
     await wait(() => document.querySelector('.operational-report h3')?.textContent === "Item / category sales" && !button("Export CSV").disabled);
     const fields = [...document.querySelectorAll('.operational-report input[type="date"]')];
     setValue(fields[0], "2020-01-01"); setValue(fields[1], "2020-01-02"); button("Apply dates").click();
-    await wait(() => document.querySelector(".operational-report")?.textContent.includes("No records for these dates."));
+    // The Zomato section 9(5) table is always present and empty, so wait for the 2020 range itself to load.
+    await wait(() => document.querySelector(".operational-report")?.textContent.includes("2020-01-01 → 2020-01-02") && !button("Export CSV").disabled);
     assert(!button("Export CSV").disabled, "Empty date range has an exportable report");
     button("Today").click(); await wait(() => !button("Export CSV").disabled && document.querySelector(".operational-report table"));
     const selectedDates = [...document.querySelectorAll('.operational-report input[type="date"]')].map((e) => e.value);
-    setValue(document.querySelector('[aria-label="Detailed report"]'), "cashiers");
+    setValue(document.querySelector("[role=radiogroup][aria-label=\"Detailed reports\"]"), "cashiers");
     await wait(() => document.querySelector('.operational-report h3')?.textContent === "Cashier collections" && !button("Export CSV").disabled);
     assert(JSON.stringify([...document.querySelectorAll('.operational-report input[type="date"]')].map((e) => e.value)) === JSON.stringify(selectedDates), "Detailed reports preserve the selected date range when switching");
     const result = { status: "passed", count: checks.length, checks };

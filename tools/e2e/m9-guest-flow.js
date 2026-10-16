@@ -1,5 +1,13 @@
 // Run in a signed-in, registered admin browser on the disposable QA server only.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4120') throw new Error('Disposable port4120 only');
   const checks = [], errors = [];
   const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
@@ -63,9 +71,8 @@
     await wait(() => guest.querySelector('.guest-menu-request-pending'), 'request awaiting review');
     const requestDialog = await openStaffDialog('Review requests');
     const card = await wait(() => requestDialog.querySelector('[aria-label="QR request from ' + table.name + '"]'), 'staff review card');
-    const select = card.querySelector('select');
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'new');
-    select.dispatchEvent(new Event('change', { bubbles: true })); await pause();
+    const select = card.querySelector("[role=radiogroup]");
+    chooseTile(select, 'new'); await pause();
     await click(card, 'Accept & open order');
     await wait(() => guest.querySelector('.guest-menu-preparation-queued'), 'accepted queued status');
     const order = (await api('/orders')).orders.find(o => o.tableId === table.id);

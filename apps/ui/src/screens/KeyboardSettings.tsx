@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useState } from "react";
 import { DEFAULT_SHORTCUTS, decodeShortcuts, SHORTCUT_ACTIONS, SHORTCUT_KEYS, shortcutErrors, type ShortcutAction } from "../shortcut-bindings";
 import { saveShortcutBindings, shortcutSnapshot, useShortcutBindings } from "../pos-shortcuts";
@@ -39,9 +40,9 @@ export function KeyboardSettings() {
     }}>
       <div className="keyboard-rows">{SHORTCUT_ACTIONS.map(action => <div className="keyboard-row" key={action.id}>
         <div><label htmlFor={`shortcut-${action.id}`}>{action.label}</label><p id={`shortcut-help-${action.id}`}>{action.description}</p></div>
-        <div><select id={`shortcut-${action.id}`} aria-label={`${action.label} shortcut`} aria-describedby={`shortcut-help-${action.id}${errors[action.id] ? ` shortcut-error-${action.id}` : ""}`} aria-invalid={!!errors[action.id]} value={draft[action.id]} onChange={event => change(action.id, event.target.value)}>
+        <div><ChoiceTiles id={`shortcut-${action.id}`} aria-label={`${action.label} shortcut`} aria-describedby={`shortcut-help-${action.id}${errors[action.id] ? ` shortcut-error-${action.id}` : ""}`} aria-invalid={!!errors[action.id]} value={draft[action.id]} onChange={choiceValue => change(action.id, choiceValue)}>
           <option value="">Disabled</option>{SHORTCUT_KEYS.map(key => <option key={key} value={key}>{key}</option>)}
-        </select>{errors[action.id] && <p id={`shortcut-error-${action.id}`} className="keyboard-error">{errors[action.id]}</p>}</div>
+        </ChoiceTiles>{errors[action.id] && <p id={`shortcut-error-${action.id}`} className="keyboard-error">{errors[action.id]}</p>}</div>
       </div>)}</div>
       <div className="keyboard-actions">
         <button className="primary" type="submit" disabled={Object.keys(errors).length > 0 || (changedElsewhere && dirty)}>Save shortcuts</button>

@@ -1,30 +1,31 @@
+import { outletIdentityHeaders, outletStorage } from "./outlet-identity";
 const TOKEN_KEY = typeof location !== "undefined" && /^\/kitchen\/?$/.test(location.pathname) ? "forkflow.kitchen.token" : "forkflow.token";
 const DEVICE_KEY = "forkflow.device.v1";
 export function deviceCredential(): string {
-  let value = localStorage.getItem(DEVICE_KEY);
+  let value = outletStorage.getItem(DEVICE_KEY);
   if (!value || !/^[a-f0-9]{64}$/.test(value)) {
     value = Array.from(crypto.getRandomValues(new Uint8Array(32)), (n) => n.toString(16).padStart(2, "0")).join("");
-    localStorage.setItem(DEVICE_KEY, value);
+    outletStorage.setItem(DEVICE_KEY, value);
   }
   return value;
 }
 export function authHeaders() {
-  return { authorization: `Bearer ${session.token ?? ""}`, "x-forkflow-device": deviceCredential() };
+  return { authorization: `Bearer ${session.token ?? ""}`, "x-forkflow-device": deviceCredential(), ...outletIdentityHeaders() };
 }
 
 export const session = {
   onUnauthorized: null as (() => void) | null,
 
   get token(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return outletStorage.getItem(TOKEN_KEY);
   },
 
   set(token: string) {
-    localStorage.setItem(TOKEN_KEY, token);
+    outletStorage.setItem(TOKEN_KEY, token);
   },
 
   clear() {
-    localStorage.removeItem(TOKEN_KEY);
+    outletStorage.removeItem(TOKEN_KEY);
     this.onUnauthorized?.();
   },
 };
@@ -41,6 +42,7 @@ export class ApiError extends Error {
  */
 export async function apiFetch<T>(path: string, init?: RequestInit, options?: { keepSessionOnMessage?: string }): Promise<T> {
   const headers = new Headers(init?.headers);
+  for (const [name, value] of Object.entries(outletIdentityHeaders())) headers.set(name, value);
   headers.set("x-forkflow-device", deviceCredential());
   if (init?.body) headers.set("content-type", "application/json");
   const token = session.token;
@@ -50,6 +52,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit, options?: { 
   if (res.status === 401 && !options?.keepSessionOnMessage) session.clear();
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
+    if (body.code === "outlet_identity_changed" && typeof window !== "undefined") window.dispatchEvent(new Event("forkflow:outlet-identity-changed"));
     if (res.status === 401 && options?.keepSessionOnMessage && body.error !== options.keepSessionOnMessage) session.clear();
     throw new ApiError(res.status, body.error === "validation" ? (body.issues?.[0]?.message ?? "Check the form values") : (body.error ?? res.statusText), typeof body.code === "string" ? body.code : undefined);
   }

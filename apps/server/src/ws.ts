@@ -9,7 +9,7 @@ interface ClientInfo {
   device: unknown;
 }
 
-export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): void {
+export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000, identity?: { outletIdentity: string; generation: string }): void {
   const clients = new Map<WebSocket, ClientInfo>();
 
   app.decorate("broadcast", (event: string, data: unknown) => {
@@ -55,9 +55,17 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
         if (authenticated) return; // Ignore subsequent frames
 
         try {
-          const frame = JSON.parse(raw.toString()) as { type?: string; token?: string; device?: string };
+          const frame = JSON.parse(raw.toString()) as { type?: string; token?: string; device?: string; outletIdentity?: string; generation?: string };
           if (frame.type !== "auth" || typeof frame.token !== "string") {
             socket.close(4401, "unauthenticated");
+            return;
+          }
+
+          // A restored database can contain valid old session tokens. Validate the
+          // outlet and recovery identity before admitting the socket to broadcasts.
+          if (identity && (frame.outletIdentity !== identity.outletIdentity || frame.generation !== identity.generation)) {
+            clearTimeout(timeout);
+            socket.close(4409, "outlet identity changed");
             return;
           }
 

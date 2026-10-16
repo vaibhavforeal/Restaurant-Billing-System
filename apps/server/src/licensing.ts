@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { LicenseClaims, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
+import { LicenseClaims, RestaurantFeaturePolicy, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
 import { verifyLicenseSignature } from "@forkflow/core";
 import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
@@ -65,6 +65,70 @@ export class Licensing {
     }
   }
   get enabled() { return this.options !== undefined; }
+  get cloudManaged() {
+    return !!this.app.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cloud_sync_state'").get()
+      && (this.app.db.prepare('SELECT outlet_id FROM cloud_sync_state WHERE id=1').get() as { outlet_id: string } | undefined)?.outlet_id !== 'unpaired';
+  }
+  private verifiedPolicy: { envelope: string; policy: RestaurantFeaturePolicy; identity: string } | null = null;
+  featurePolicy(): RestaurantFeaturePolicy | null {
+    if (this.cloudManaged) {
+      const state = this.app.db.prepare('SELECT outlet_id,installation_id,sequence FROM cloud_sync_state WHERE id=1').get() as { outlet_id: string; installation_id: string; sequence: number };
+      const saved = this.saved();
+      const legacy = this.app.db.prepare('SELECT envelope FROM owner_feature_policy WHERE id=1').get() as { envelope: string } | undefined;
+      let prior: RestaurantFeaturePolicy | null = null;
+      if (legacy && this.options) { try { prior = this.verifyFeaturePolicy(legacy.envelope); } catch { /* use current local settings */ } }
+      const local = this.app.db.prepare('SELECT id,enabled FROM feature_state UNION ALL SELECT id,enabled FROM integration_state').all() as Array<{ id: string; enabled: number }>;
+      const row = this.app.db.prepare("SELECT enabled FROM cloud_feature_policy WHERE id='policy'").get() as { enabled: string } | undefined;
+      const staff = this.app.db.prepare('SELECT id,overrides FROM cloud_staff_policy').all() as Array<{ id: string; overrides: string }>;
+      return { kind: 'restaurant-features', version: 1, installationId: state.installation_id, organizationId: saved.organization_id ?? state.outlet_id, outletId: state.outlet_id, revision: state.sequence,
+        enabled: { ...Object.fromEntries(local.map(r => [r.id, r.enabled === 1])), ...prior?.enabled, ...(row ? JSON.parse(row.enabled) : {}) },
+        staffPermissions: { ...prior?.staffPermissions, ...Object.fromEntries(staff.map(r => [r.id, JSON.parse(r.overrides)])) } };
+    }
+    const row = this.app.db.prepare("SELECT envelope FROM owner_feature_policy WHERE id=1").get() as { envelope: string } | undefined;
+    if (!row || !this.options) return null;
+    try {
+      const saved = this.saved(), identity = `${saved.organization_id}:${saved.outlet_id}`;
+      if (this.verifiedPolicy?.envelope === row.envelope && this.verifiedPolicy.identity === identity) return this.verifiedPolicy.policy;
+      const policy = this.verifyFeaturePolicy(row.envelope);
+      this.verifiedPolicy = { envelope: row.envelope, policy, identity }; return policy;
+    } catch { return null; }
+  }
+  private verifyFeaturePolicy(envelope: string): RestaurantFeaturePolicy {
+    const policy = RestaurantFeaturePolicy.parse(verifyLicenseSignature(envelope, this.options!.publicKey, 1_048_576));
+    const saved = this.saved();
+    if (policy.installationId !== this.options!.installationId || policy.organizationId !== saved.organization_id || policy.outletId !== saved.outlet_id) throw Error("Feature settings belong to another restaurant");
+    return policy;
+  }
+  private policyFetch: Promise<boolean> | null = null;
+  refreshFeaturePolicy(): Promise<boolean> {
+    if (!this.policyFetch) this.policyFetch = this.fetchFeaturePolicyOnce().finally(() => { this.policyFetch = null; });
+    return this.policyFetch;
+  }
+  private async fetchFeaturePolicyOnce(): Promise<boolean> {
+    if (this.cloudManaged) return false;
+    if (!this.options?.serviceUrl || !this.saved().outlet_id) return false;
+    try {
+      const staff = (this.app.db.prepare("SELECT id,name,role,is_active FROM users ORDER BY id").all() as Array<{ id: string; name: string; role: string; is_active: number }>).map(row => ({ id: row.id, name: row.name, role: row.role, isActive: row.is_active === 1 }));
+      const response = await (this.options.fetch ?? fetch)(`${this.options.serviceUrl}/v1/features`, { method: "POST", headers: this.serviceHeaders(), body: JSON.stringify({ installationId: this.options.installationId, staff }), signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!response.ok) return false;
+      const { policy: envelope } = z.object({ policy: z.string().max(1_048_576) }).parse(await response.json());
+      const policy = this.verifyFeaturePolicy(envelope), old = this.featurePolicy();
+      if (old && (policy.revision < old.revision || policy.revision === old.revision && (JSON.stringify(policy.enabled) !== JSON.stringify(old.enabled) || JSON.stringify(policy.staffPermissions ?? {}) !== JSON.stringify(old.staffPermissions ?? {})))) return false;
+      if (old?.revision === policy.revision) return false;
+      this.app.db.transaction(() => {
+        this.app.db.prepare("INSERT INTO owner_feature_policy (id,envelope,synced_at) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET envelope=excluded.envelope,synced_at=excluded.synced_at").run(envelope, this.now());
+        this.app.db.prepare("UPDATE feature_revision SET revision=revision+1 WHERE id=1").run();
+      })();
+      this.app.broadcast("features.changed", {}); this.app.broadcast("integrations.changed", {});
+      return true;
+    } catch { return false; }
+  }
+  startFeatureChecks(): () => void {
+    let stopped = false;
+    const check = () => { if (!stopped) void this.refreshFeaturePolicy(); };
+    const timer = setInterval(check, 60_000); timer.unref(); check();
+    return () => { stopped = true; clearInterval(timer); };
+  }
   private saved() { return this.app.db.prepare("SELECT * FROM license_state WHERE id = 1").get() as SavedLicense; }
   // status() runs on every authenticated request, so remember the last verified envelope instead of re-checking its signature.
   private verified: { envelope: string; claims: LicenseClaims } | null = null;
@@ -244,10 +308,11 @@ export class Licensing {
       if (!response.ok) return result("unreachable");
       license = serviceReply.parse(await response.json()).license;
     } catch { return result("unreachable"); }
-    if (license === null) return result("up_to_date");
+    if (license === null) { await this.refreshFeaturePolicy(); return result("up_to_date"); }
     try {
       const revision = this.saved().revision;
       this.activate(license.trim(), AUTOMATIC_ACTOR);
+      await this.refreshFeaturePolicy();
       return result(this.saved().revision === revision ? "up_to_date" : "installed");
     } catch (error) { return result("rejected", error instanceof Error ? error.message : "The licence could not be installed"); }
   }

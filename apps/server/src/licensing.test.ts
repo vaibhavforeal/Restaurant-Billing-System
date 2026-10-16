@@ -467,11 +467,11 @@ describe("licence renewal from the licensing service", () => {
     const first = f.app.licensing.fetchLatest(), second = f.app.licensing.fetchLatest();
     release();
     const results = await Promise.all([first, second]);
-    expect(s.spy).toHaveBeenCalledTimes(1);
+    expect(s.spy.mock.calls.filter(([url]) => String(url).endsWith("/v1/activate"))).toHaveLength(1);
     expect(results[0]).toEqual({ outcome: "up_to_date", message: "Your licence is up to date." });
     expect(results[1]).toBe(results[0]);
     await f.app.licensing.fetchLatest();
-    expect(s.spy).toHaveBeenCalledTimes(2);
+    expect(s.spy.mock.calls.filter(([url]) => String(url).endsWith("/v1/activate"))).toHaveLength(2);
   });
 
   it("checks on start and every six hours until stopped, never logging the licence", async () => {
@@ -482,12 +482,12 @@ describe("licence renewal from the licensing service", () => {
     const log: string[] = [];
     const stop = f.app.licensing.startRenewalChecks((m) => log.push(m));
     await vi.advanceTimersByTimeAsync(0);
-    expect(s.spy).toHaveBeenCalledTimes(1);
+    expect(s.spy.mock.calls.filter(([url]) => String(url).endsWith("/v1/activate"))).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000 - 1);
-    expect(s.spy).toHaveBeenCalledTimes(1);
+    expect(s.spy.mock.calls.filter(([url]) => String(url).endsWith("/v1/activate"))).toHaveLength(1);
     next = `${signed({ ...f.claims, revision: 2 })}\n`;
     await vi.advanceTimersByTimeAsync(1);
-    expect(s.spy).toHaveBeenCalledTimes(2);
+    expect(s.spy.mock.calls.filter(([url]) => String(url).endsWith("/v1/activate"))).toHaveLength(2);
     expect(f.app.licensing.status(device).revision).toBe(2);
     next = `${signed({ ...f.claims, revision: 3, installationId: randomUUID() })}\n`;
     await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
@@ -496,7 +496,7 @@ describe("licence renewal from the licensing service", () => {
     expect(log.join("\n")).not.toContain("ff1.");
     stop();
     await vi.advanceTimersByTimeAsync(12 * 60 * 60 * 1000);
-    expect(s.spy).toHaveBeenCalledTimes(3);
+    expect(s.spy.mock.calls.filter(([url]) => String(url).endsWith("/v1/activate"))).toHaveLength(3);
   });
 
   it("a failing post-install broadcast is logged, not an unhandled rejection", async () => {

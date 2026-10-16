@@ -5,6 +5,8 @@
   "type": "module",
   "description": "SQLite schema, migrations, and business logic for the local-only POS.",
   "exports": {
+    "./catalog-schemas": "./src/catalog-schemas.ts",
+    "./settings-schemas": "./src/settings-schemas.ts",
     ".": "./src/index.ts",
     "./pricing": "./src/pricing.ts",
     "./gst": "./src/gst.ts",
@@ -13,7 +15,9 @@
     "./catalog-csv": "./src/catalog-csv.ts",
     "./zomato": "./src/zomato.ts",
     "./integrations": "./src/integrations.ts",
-    "./licensing": "./src/licensing.ts"
+    "./licensing": "./src/licensing.ts",
+    "./features": "./src/features.ts",
+    "./staff-permissions": "./src/staff-permissions.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

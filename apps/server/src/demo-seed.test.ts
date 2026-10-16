@@ -9,11 +9,15 @@ describe("customer demo data", () => {
       await seedDemo(app);
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM users").get()).toEqual({ n: 4 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM products").get()).toEqual({ n: 14 });
-      expect(app.db.prepare("SELECT COUNT(*) AS n FROM bills WHERE status = 'paid'").get()).toEqual({ n: 8 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM bills WHERE status = 'paid'").get()).toEqual({ n: 7 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM credit_notes").get()).toEqual({ n: 1 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'open'").get()).toEqual({ n: 3 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM kots WHERE done_at IS NULL").get()).toEqual({ n: 3 });
       expect(app.db.prepare("SELECT enabled FROM integration_state WHERE id = 'kds'").get()).toEqual({ enabled: 1 });
       expect(app.db.prepare("SELECT COUNT(*) AS n FROM product_stock_links").get()).toEqual({ n: 12 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM reservations").get()).toEqual({ n: 3 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM printers").get()).toEqual({ n: 2 });
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM stock_moves WHERE reason='purchase'").get()).toEqual({ n: 5 });
       app.db.prepare("UPDATE users SET name = 'Customer demo edit' WHERE role = 'admin'").run();
       await seedDemo(app);
       expect(app.db.prepare("SELECT name FROM users WHERE role = 'admin'").get()).toEqual({ name: "Customer demo edit" });

@@ -12,6 +12,39 @@ afterEach(async () => {
 });
 
 describe("WebSocket auth handshake", () => {
+  it.each([
+    { outletIdentity: "another-outlet", generation: "generation-1" },
+    { outletIdentity: "outlet-a", generation: "old-generation" },
+    {},
+  ])("rejects a stale or absent outlet identity before acknowledging auth or exposing events: %j", async (identity) => {
+    const db = openDb(":memory:"); migrate(db, MIGRATIONS);
+    app = buildServer({ db, outletIdentity: "outlet-a", generation: "generation-1" });
+    await app.ready(); const admin = await setupAdmin(app);
+    const ws = await app.injectWS("/api/ws"), messages: string[] = [];
+    const result = new Promise<unknown>(resolve => {
+      ws.on("message", (raw: Buffer) => { messages.push(raw.toString()); resolve(JSON.parse(raw.toString())); });
+      ws.once("close", (code: number) => resolve({ closed: true, code }));
+    });
+    ws.send(JSON.stringify({ type: "auth", token: admin.token, ...identity }));
+    expect(await result).toEqual({ closed: true, code: 4409 });
+    app.broadcast("order.updated", { privateOrder: "must-not-leak" });
+    expect(messages).toEqual([]);
+    ws.terminate();
+  });
+
+  it("authenticates the matching outlet and recovery generation", async () => {
+    const db = openDb(":memory:"); migrate(db, MIGRATIONS);
+    app = buildServer({ db, outletIdentity: "outlet-a", generation: "generation-1" });
+    await app.ready(); const admin = await setupAdmin(app);
+    const ws = await app.injectWS("/api/ws");
+    const response = new Promise<string>(resolve => ws.once("message", (raw: Buffer) => resolve(raw.toString())));
+    ws.send(JSON.stringify({ type: "auth", token: admin.token, outletIdentity: "outlet-a", generation: "generation-1" }));
+    expect(JSON.parse(await response)).toEqual({ event: "auth.ok", data: {} });
+    const event = new Promise<string>(resolve => ws.once("message", (raw: Buffer) => resolve(raw.toString())));
+    app.broadcast("order.updated", { id: "allowed" });
+    expect(JSON.parse(await event)).toEqual({ event: "order.updated", data: { id: "allowed" } });
+    ws.terminate();
+  });
   it("closes with 4401 when no auth frame is sent within timeout", async () => {
     const db = openDb(":memory:");
     migrate(db, MIGRATIONS);

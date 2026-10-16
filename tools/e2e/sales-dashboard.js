@@ -1,6 +1,14 @@
 // Run with agent-browser eval --stdin on the disposable fixture, signed in as admin.
 // Exercises the production UI; never run this against a restaurant database.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4145') throw new Error('Disposable sales fixture only');
   const checks = [], downloads = [];
   window.__salesDashboardProgress = checks;
@@ -11,7 +19,10 @@
   };
   const button = (name) => [...document.querySelectorAll('button')].find(e => e.textContent.trim() === name);
   const click = async (name) => { const e = button(name); if (!e || e.disabled) throw new Error('Missing enabled button: ' + name); e.click(); await new Promise(r => setTimeout(r, 20)); };
-  const setValue = (e, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, value); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); };
+  // Reports & Analytics: everyday reports are tabs; detailed reports are visible tiles.
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
+  const setValue = (e, value) => { if (chooseTile(e, value)) return;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, value); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); };
   const setPeriod = async (from, to) => { const inputs = document.querySelectorAll('.sales-period input'); setValue(inputs[0], from); setValue(inputs[1], to); await new Promise(r => setTimeout(r, 20)); await click('Apply dates'); };
   const loaded = () => document.querySelector('.sales-metrics') && button('Refresh') && !button('Refresh').disabled;
   const dashboardLoaded = () => document.querySelector('.dash-channel-total .dash-channel-amount')?.textContent !== '—' && document.querySelector('.dash-stat-successful strong')?.textContent !== '—' && document.querySelector('.dash-slot-chart') && !document.querySelector('[aria-label="Refreshing dashboard"]');
@@ -28,7 +39,7 @@
     if (this.download) { const entry = { filename: this.download, text: '' }; downloads.push(entry); void nextBlob.text().then(text => entry.text = text); }
     return nativeClick.call(this);
   };
-  const captureExport = async name => { const n = downloads.length; const summary = [...document.querySelectorAll('summary')].find(e => e.textContent.includes('Export')); summary.click(); await click(name); await wait(() => downloads.length > n && downloads[n].text); return downloads[n]; };
+  const captureExport = async name => { const n = downloads.length; await click(name); await wait(() => downloads.length > n && downloads[n].text); return downloads[n]; };
   try {
     await wait(dashboardLoaded);
     const initial = (await api('/api/reports/sales')).report;
@@ -167,24 +178,24 @@
     check(document.querySelector('.workspace').scrollHeight <= document.querySelector('.workspace').clientHeight, 'Long report scrolls inside table at 1280×720');
     const table = document.querySelector('.sales-report-table'); table.scrollTop = table.scrollHeight;
     check(getComputedStyle(table.querySelector('thead th')).position === 'sticky' && getComputedStyle(table.querySelector('tfoot td')).position === 'sticky', 'Report header and totals remain sticky');
-    await click('Collections');
+    await pickReport('collections');
     check(document.querySelector('.sales-report-table tfoot').textContent.includes(money(thirty.collections.totalPaise)), 'Collections table reconciles with API');
     const collectionCsv = await captureExport('Export collections CSV');
     check(collectionCsv.filename.includes('collections-') && collectionCsv.text.includes('Cash (net) INR') && collectionCsv.text.includes((thirty.collections.totalPaise / 100).toFixed(2)), 'Collections CSV has payment columns and matching total');
-    await click('Sales'); table.scrollTop = 0; await click(thirtyFrom);
+    await pickReport('sales'); table.scrollTop = 0; await click(thirtyFrom);
     await wait(() => document.querySelector('.pos-report-grid'));
     check(document.querySelector('.legacy-screen input').value === thirtyFrom, 'Daily row opens unchanged Day-end/GST for selected date');
     const dayCsv = await captureExport('Export CSV');
     check(dayCsv.filename === `forkflow-day-end-${thirtyFrom}.csv`, 'Existing day-end CSV remains available');
-    await click('Sales'); await setPeriod('2020-01-01', '2020-01-03'); await wait(loaded);
+    await pickReport('sales'); await setPeriod('2020-01-01', '2020-01-03'); await wait(loaded);
     check(metrics().every(v => v === '₹0.00' || v === '0') && document.querySelectorAll('.sales-report-table tbody tr').length === 3, 'Empty periods show zero totals and complete daily rows');
-    await click('Day-end / GST'); await wait(() => document.querySelector('.pos-report-grid'));
+    await pickReport('day-end'); await wait(() => document.querySelector('.pos-report-grid'));
     check(document.querySelector('.legacy-screen input').value === '2020-01-03', 'Day-end tab starts at current report end date');
-    await click('Sales'); await setPeriod('2020-01-04', '2020-01-03');
+    await pickReport('sales'); await setPeriod('2020-01-04', '2020-01-03');
     check(document.querySelector('[role="alert"]').textContent.includes('start date'), 'Reversed range is rejected with visible feedback');
     await setPeriod('2020-01-01', '2022-01-01'); await wait(() => document.querySelector('[role="alert"]')?.textContent.includes('366'));
     check(!document.querySelector('.sales-metrics') && !document.querySelector('.sales-report-table'), 'Invalid server range clears stale results');
-    const summary = [...document.querySelectorAll('summary')].find(e => e.textContent.includes('Export')); if (!summary.parentElement.open) summary.click();
+    // Export actions are directly visible.
     check(button('Export sales CSV').disabled, 'Stale report cannot be exported');
     await click('7 days'); await wait(loaded);
     window.fetch = async (path, init) => String(path).startsWith('/api/reports/sales') ? new Response(JSON.stringify({ error: 'Fixture reporting outage' }), { status: 503, headers: { 'content-type': 'application/json' } }) : nativeFetch(path, init);

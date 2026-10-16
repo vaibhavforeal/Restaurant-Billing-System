@@ -1,0 +1,7 @@
+{$PORTAL_DOMAIN} {
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+  }
+  respond "ForkFlow hosting is being configured. The cloud portal is not available yet." 503
+}

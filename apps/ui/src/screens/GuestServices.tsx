@@ -1,3 +1,4 @@
+import { outletStorage } from "../outlet-identity";
 import { useEffect, useRef, useState } from "react";
 import type { ServiceReceipt, ServiceSubmission } from "@forkflow/domain";
 import { uuid } from "../uuid";
@@ -12,7 +13,7 @@ const keyFor = (token: string) => `forkflow.guest-services.v1.${token}`;
 
 function readCalls(token: string): Calls {
   try {
-    const value = JSON.parse(localStorage.getItem(keyFor(token)) ?? "null") as Calls | null;
+    const value = JSON.parse(outletStorage.getItem(keyFor(token)) ?? "null") as Calls | null;
     if (!value || value.version !== 1) return blank();
     const next = blank();
     for (const kind of kinds) {
@@ -55,7 +56,7 @@ function ServiceCalls({ token, available }: { token: string; available: boolean 
 
   function save(next: Calls) {
     current.current = next; setCalls(next);
-    try { localStorage.setItem(keyFor(token), JSON.stringify(next)); setStorageWarning(false); }
+    try { outletStorage.setItem(keyFor(token), JSON.stringify(next)); setStorageWarning(false); }
     catch { setStorageWarning(true); }
   }
 
@@ -103,8 +104,8 @@ function ServiceCalls({ token, available }: { token: string; available: boolean 
     const next: Calls = { ...current.current, [kind]: { submission, receipt: null } };
     try {
       const encoded = JSON.stringify(next);
-      localStorage.setItem(keyFor(token), encoded);
-      if (localStorage.getItem(keyFor(token)) !== encoded) throw new Error("Storage unavailable");
+      outletStorage.setItem(keyFor(token), encoded);
+      if (outletStorage.getItem(keyFor(token)) !== encoded) throw new Error("Storage unavailable");
     } catch {
       setStorageWarning(true);
       setErrors((value) => ({ ...value, [kind]: "Your browser could not save this request safely. Please enable website storage or ask staff directly." }));

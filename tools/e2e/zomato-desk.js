@@ -5,6 +5,14 @@
 // (progress in window.__zomatoDeskProgress). Restart the fixture before repeating the gate (E2E-1 stays reserved).
 // Never run this against a restaurant database.
 (async () => {
+  const chooseTile = (element, value) => {
+    const group = element?.matches('[role="radiogroup"]') ? element : element?.matches('input[type="radio"]') ? element.closest('[role="radiogroup"]') : null;
+    if (!group) return false;
+    const option = [...group.querySelectorAll('input[type="radio"]')].find(input => input.value === String(value));
+    if (!option || option.disabled) throw new Error('Unavailable choice: ' + value);
+    option.click(); return true;
+  };
+
   if (location.origin !== 'http://127.0.0.1:4150') throw new Error('Disposable Zomato desk fixture only');
   const checks = [];
   window.__zomatoDeskProgress = checks;
@@ -24,12 +32,14 @@
   };
   const ownToken = localStorage.getItem('forkflow.token');
   const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forkflow-device': device }, body: JSON.stringify({ pin }) })).json()).token;
-  const setValue = (e, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, value); e.dispatchEvent(new Event('input', { bubbles: true })); };
+  const setValue = (e, value) => { if (chooseTile(e, value)) return;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, value); e.dispatchEvent(new Event('input', { bubbles: true })); };
+  // Reports & Analytics: everyday reports are tabs; detailed reports are visible tiles.
+  const pickReport = async (value) => { for (let i = 0; i < 200 && !document.querySelector('[aria-label="Report"]'); i++) await new Promise(r => setTimeout(r, 50)); const tab = document.querySelector(`[aria-label="Report"] [data-report="${value}"]`); if (tab) tab.click(); else { const group = document.querySelector('[role="radiogroup"][aria-label="Detailed reports"]'); if (!group) throw new Error('Report tiles missing'); chooseTile(group, value); } await new Promise(r => setTimeout(r, 80)); };
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const goto = async label => { await wait(() => navItem(label) && !navItem(label).disabled, 'nav ' + label); navItem(label).click(); await sleep(80); };
   const button = (name, root = document) => [...root.querySelectorAll('button')].find(b => b.textContent.trim() === name);
   const clickButton = async (name, root = document) => { const b = await wait(() => { const e = button(name, root); return e && !e.disabled ? e : null; }, 'enabled button ' + name); b.click(); await sleep(60); };
-  const presetTab = name => [...document.querySelectorAll('.sales-presets button')].find(b => b.textContent === name);
   const zomatoApi = async () => (await call('GET', '/api/orders', ownToken)).json.orders.filter(o => o.type === 'zomato');
   const cards = () => [...document.querySelectorAll('.zomato-desk-card')];
   const cardFor = id => cards().find(c => c.querySelector('.zomato-desk-id')?.textContent === '#' + id);
@@ -91,9 +101,9 @@
     const bills = (await call('GET', '/api/bills?status=all', ownToken)).json.bills.filter(b => b.receipt.orderType === 'zomato');
     const bill = bills[0];
     check(bills.length === 1 && bill.totalPaise === PRICE && bill.status === 'paid' && bill.receipt.zomatoOrderId === 'E2E-1' && bill.receipt.gstPaidBy === 'zomato', 'One paid Zomato bill at the item value, marked GST paid by Zomato');
-    await goto('Reports & Analytics'); await wait(() => presetTab('Bills'), 'Bills tab'); presetTab('Bills').click();
-    const showSelect = await wait(() => document.querySelector('.pos-history select'), 'Bills filter');
-    showSelect.value = 'all'; showSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    await goto('Reports & Analytics'); await pickReport('bills');
+    const showSelect = await wait(() => document.querySelector(".pos-history [role=radiogroup]"), 'Bills filter');
+    chooseTile(showSelect, 'all');
     const row = await wait(() => [...document.querySelectorAll('.pos-history tbody tr')].find(r => r.textContent.includes('Zomato #E2E-1')), 'Zomato bill row');
     check(row.textContent.includes(money(PRICE)), 'Bills lists "Zomato #E2E-1" with its total');
     button(`Open bill #${bill.billNo}`, row).click();
@@ -125,7 +135,7 @@
     await goto('home');
     await wait(() => { const e = document.querySelector('.dash-channel-zomato .dash-channel-amount'); return e && e.textContent !== '—'; }, 'dashboard Zomato card');
     check(document.querySelector('.dash-channel-zomato .dash-channel-amount').textContent === money(PRICE) && document.querySelector('.dash-channel-zomato small').textContent === '1 Order' && document.querySelector('.dash-channel-total .dash-channel-amount').textContent === money(PRICE), 'The dashboard Zomato card shows the sale and is part of Total Sales');
-    await goto('Reports & Analytics'); await wait(() => presetTab('Day-end / GST'), 'Day-end tab'); presetTab('Day-end / GST').click();
+    await goto('Reports & Analytics'); await pickReport('day-end');
     // Scoped to the Day-end screen: the Sales metrics also have a "Zomato receivable (outstanding)" card.
     const receivable = await wait(() => [...document.querySelectorAll('.sales-reports .legacy-screen p')].find(p => p.textContent.startsWith('Zomato receivable (outstanding)')), 'day-end receivable');
     check(receivable.textContent.includes(money(PRICE)), 'Day-end shows "Zomato receivable (outstanding)" with the bill value');
@@ -134,7 +144,7 @@
     // The fixture issues no other bill, so the restaurant's own GST breakdown is empty.
     const supplies = [...document.querySelectorAll('.sales-reports .legacy-screen p')].find(p => p.textContent.startsWith('Supplies under section 9(5) (GST paid by Zomato)'));
     check(!!supplies && supplies.textContent.includes(money(PRICE)) && dayEnd.zomatoSuppliesPaise === PRICE && dayEnd.taxes.length === 0 && dayEnd.net.taxablePaise === 0, 'Day-end keeps the Zomato bill out of the GST breakdown and shows it as a section 9(5) supply');
-    await wait(() => presetTab('Zomato reconciliation'), 'Zomato reconciliation tab'); presetTab('Zomato reconciliation').click();
+    await pickReport('zomato');
     const reconRow = await wait(() => [...document.querySelectorAll('.zomato-table tbody tr')].find(r => r.textContent.includes('E2E-1')), 'reconciliation row');
     check(reconRow.textContent.includes(money(PRICE)) && /Awaiting statement/.test(reconRow.textContent), 'Reports, Zomato reconciliation lists E2E-1 awaiting its payout statement');
 

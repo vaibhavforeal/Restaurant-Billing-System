@@ -11,10 +11,12 @@ const admin = await setupAdmin(app);
 const cashier = await createUser(app, admin.token, { name: "Counter 2", role: "cashier", pin: "2345" });
 const captain = await createUser(app, admin.token, { name: "Ravi", role: "waiter", pin: "3456" });
 await createUser(app, admin.token, { name: "Kitchen", role: "kitchen", pin: "4567" });
-const call = async (method: "POST" | "PUT", url: string, payload: object, token = admin.token) => {
+const call = async (method: "POST" | "PUT" | "PATCH", url: string, payload: object, token = admin.token) => {
   const res = await app.inject({ method, url, payload, headers: auth(token) });
   if (res.statusCode >= 400) throw new Error(res.body); return res.json();
 };
+// The fixture sends kitchen items, so the Kitchen Display add-on (off by default) must be on.
+await call("PATCH", "/api/integrations/kds", { enabled: true });
 const table = (await call("POST", "/api/tables", { name: "T1" })).table;
 await call("POST", "/api/tables", { name: "T2" });
 const category = (await call("POST", "/api/categories", { name: "Meals" })).category;

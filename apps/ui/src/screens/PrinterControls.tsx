@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import type { PrintProfile } from "../types";
@@ -40,13 +41,13 @@ export function WindowsPrinterPicker({ value, onChange, disabled }: {
   useEffect(() => { void refresh(); }, [refresh]);
   const known = printers.some(printer => printer.name === value);
   return <div className="windows-printer-picker" style={{ display: "grid", gap: 6 }}>
-    <label>Printer on POS computer
-      <select aria-label="Installed Windows printer" disabled={disabled || loading} value={known ? value : ""}
-        onChange={event => { onChange(event.target.value); setManual(false); }}>
+    <div className="choice-field">Printer on POS computer
+      <ChoiceTiles aria-label="Installed Windows printer" disabled={disabled || loading} value={known ? value : ""}
+        onChange={choiceValue => { onChange(choiceValue); setManual(false); }}>
         <option value="">{loading ? "Finding printers…" : "Select a printer"}</option>
         {printers.map(printer => <option key={printer.name} value={printer.name}>{printer.name}{printer.isDefault ? " (Windows default)" : ""}</option>)}
-      </select>
-    </label>
+      </ChoiceTiles>
+    </div>
     <button type="button" disabled={disabled || loading} onClick={() => void refresh()}>Refresh printers</button>
     <label><input type="checkbox" disabled={disabled} checked={manual} onChange={event => setManual(event.target.checked)} /> Enter name manually</label>
     {(manual || (!!value && !known)) && <label>Windows printer name<input value={value} disabled={disabled}

@@ -20,8 +20,8 @@
   const screen = () => document.querySelector('.pos-history');
   const rowElements = () => [...(screen()?.querySelectorAll('tbody tr[data-bill-id]') ?? [])];
   const visibleIds = () => rowElements().map(row => row.dataset.billId);
-  const filter = () => screen()?.querySelector('select');
-  const ready = () => filter() && !filter().disabled;
+  const filter = () => screen()?.querySelector("[role=radiogroup]");
+  const ready = () => filter() && filter().getAttribute('aria-disabled') !== 'true';
   const older = () => [...(screen()?.querySelectorAll('button') ?? [])].find(button => button.textContent === 'Load older bills');
   const scroller = () => screen().querySelector('.pos-table-scroll');
   const anchor = () => {

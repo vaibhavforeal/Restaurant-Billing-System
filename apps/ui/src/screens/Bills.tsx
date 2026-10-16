@@ -1,3 +1,4 @@
+import { ChoiceTiles } from "../ChoiceTiles";
 import { useEffect, useRef, useState } from "react";
 import type { Bill } from "@forkflow/domain";
 import { BillHistory, type BillHistoryStatus, type BillHistorySnapshot } from "../bill-history";
@@ -52,7 +53,7 @@ export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
   };
   return <section className="legacy-screen pos-history">
     <div className="pos-toolbar"><h2>Bills</h2>
-    <label>Show <select value={snapshot.status} onChange={(e) => changeStatus(e.target.value as BillHistoryStatus)} disabled={snapshot.busy}><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="all">All bills</option></select></label></div>
+    <div className="choice-field">Show <ChoiceTiles aria-label="Show" value={snapshot.status} onChange={(choiceValue) => changeStatus(choiceValue as BillHistoryStatus)} disabled={snapshot.busy}><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="all">All bills</option></ChoiceTiles></div></div>
     <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{snapshot.error}</p>
     {!snapshot.bills.length && <p>No bills to show.</p>}
     <div className="pos-table-scroll" tabIndex={0} role="region" aria-label="Scrollable records" ref={scroller}><table style={{ width: "100%", textAlign: "left", borderSpacing: "8px 16px" }}>

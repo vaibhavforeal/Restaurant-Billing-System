@@ -1,0 +1,20 @@
+import {test,expect} from 'vitest';
+import {randomUUID} from 'node:crypto';
+import {memoryD1} from './testing/d1.js';
+import {createInstallation} from './store.js';
+import {sha256Hex} from './secret.js';
+import {resolveSession} from './sessions.js';
+import {handleCloudSubscriptionSession} from './cloud-subscriptions.js';
+test('service bridge refuses unknown credentials and stores hashed installation-bound checkout sessions',async()=>{
+ const db=memoryD1(),installationId=randomUUID(),serviceToken='service-secret-with-32-characters',now=Date.now();
+ await createInstallation(db,{installationId,licenseId:randomUUID(),organizationId:randomUUID(),outletId:randomUUID(),trialStartedAt:now,revisionFloor:0,createdAt:now,secretHash:await sha256Hex('installation-secret')});
+ const deps={db,now:()=>now},input={installationId};
+ expect((await handleCloudSubscriptionSession(deps,input,null,serviceToken)).status).toBe(401);
+ expect((await handleCloudSubscriptionSession(deps,input,'Bearer wrong',serviceToken)).status).toBe(401);
+ expect((await handleCloudSubscriptionSession(deps,input,`Bearer ${serviceToken}`,undefined)).status).toBe(503);
+ const response=await handleCloudSubscriptionSession(deps,input,`Bearer ${serviceToken}`,serviceToken);expect(response.status).toBe(200);
+ const body=await response.json() as {session:string;expiresAt:number};expect(body.session).toMatch(/^[A-Za-z0-9_-]{43}$/);
+ expect(await resolveSession(db,body.session,now)).toBe(installationId);
+ expect(JSON.stringify(await db.prepare('SELECT * FROM subscribe_sessions').all())).not.toContain(body.session);
+ expect((await handleCloudSubscriptionSession(deps,{installationId:randomUUID()},`Bearer ${serviceToken}`,serviceToken)).status).toBe(404);
+});

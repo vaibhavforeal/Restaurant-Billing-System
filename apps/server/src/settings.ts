@@ -1,3 +1,4 @@
+import { updateSettings } from "./configuration-writes.js";
 import { SettingsUpdate, type GstMode, type ReceiptStyle } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 
@@ -36,10 +37,7 @@ export function registerSettings(app: FastifyInstance): void {
   app.get("/api/settings", { preHandler: manage }, async () => ({ settings: readSettings() }));
 
   app.put("/api/settings", { preHandler: manage }, async (req) => {
-    const body = SettingsUpdate.parse(req.body);
-    app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate) WHERE id = 1")
-      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null);
+    updateSettings(app.db, req.body);
     return { settings: readSettings() };
   });
 }

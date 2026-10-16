@@ -1,3 +1,4 @@
+import { outletStorage } from "./outlet-identity";
 import { ApiError, apiFetch, session } from "./api";
 import { uuid } from "./uuid";
 import { RECOVERY_PREFIX, RECONCILIATION_MESSAGE, RESULT_PREFIX, classifyPrintOutcome, matchingCompletions, selectCompletion, storeCompletion, sweepExpiredCompletions, type QueueCompletion, type ReliableResult } from "./queue-completion";
@@ -30,14 +31,14 @@ export function notifyQueue() { listeners.forEach((listener) => listener()); }
 export function subscribeQueue(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 function storageKeys(prefix: string): string[] {
   const keys: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key?.startsWith(prefix)) keys.push(key); }
+  for (let i = 0; i < outletStorage.length; i++) { const key = outletStorage.key(i); if (key?.startsWith(prefix)) keys.push(key); }
   return keys;
 }
 export function queuedRequests(userId = actor): QueuedRequest[] {
   const entries: QueuedRequest[] = [];
   for (const key of storageKeys(PREFIX)) {
     try {
-      const entry = JSON.parse(localStorage.getItem(key)!) as QueuedRequest;
+      const entry = JSON.parse(outletStorage.getItem(key)!) as QueuedRequest;
       if (entry.id && key === PREFIX + entry.id && entry.userId === userId) entries.push(entry);
     } catch { /* preserve damaged evidence for review */ }
   }
@@ -47,7 +48,7 @@ export function recoveryRequests(userId = actor): RecoveryRecord[] {
   const records = new Map<string, RecoveryRecord>([...localRecovery].filter(([, r]) => r.entry.userId === userId));
   for (const key of storageKeys(RECOVERY_PREFIX)) {
     try {
-      const value = JSON.parse(localStorage.getItem(key)!) as RecoveryRecord;
+      const value = JSON.parse(outletStorage.getItem(key)!) as RecoveryRecord;
       if (value.entry?.userId === userId && key === RECOVERY_PREFIX + value.entry.id) records.set(value.entry.id, value);
     } catch { /* damaged evidence remains in storage */ }
   }
@@ -57,7 +58,7 @@ function saveRecovery(entry: QueuedRequest, reason = RECONCILIATION_MESSAGE) {
   const alreadySaved = localRecovery.has(entry.id);
   const record = { entry, reason, savedAt: Date.now() };
   localRecovery.set(entry.id, record);
-  try { localStorage.setItem(RECOVERY_PREFIX + entry.id, JSON.stringify(record)); } catch { /* retain in memory */ }
+  try { outletStorage.setItem(RECOVERY_PREFIX + entry.id, JSON.stringify(record)); } catch { /* retain in memory */ }
   notifyQueue();
   if (!alreadySaved) window.dispatchEvent(new CustomEvent("forkflow:queue-review", { detail: { requestId: entry.id, path: entry.path, message: reason } }));
 }
@@ -65,11 +66,11 @@ function protectedRequests(): Set<string> {
   return new Set([...storageKeys(PREFIX).map((key) => key.slice(PREFIX.length)), ...waiters.keys(), ...localSuccess.keys()]);
 }
 function completionFor(entry: QueuedRequest) {
-  return selectCompletion(matchingCompletions(localStorage, { requestId: entry.id, userId: entry.userId, generation: entry.generation, path: entry.path, body: entry.body })
+  return selectCompletion(matchingCompletions(outletStorage, { requestId: entry.id, userId: entry.userId, generation: entry.generation, path: entry.path, body: entry.body })
     .filter((record) => Date.now() - record.completedAt < 24 * 60 * 60 * 1000));
 }
 function expiredCompletion(entry: QueuedRequest) {
-  return matchingCompletions(localStorage, { requestId: entry.id, userId: entry.userId, generation: entry.generation, path: entry.path, body: entry.body })
+  return matchingCompletions(outletStorage, { requestId: entry.id, userId: entry.userId, generation: entry.generation, path: entry.path, body: entry.body })
     .some((record) => Date.now() - record.completedAt >= 24 * 60 * 60 * 1000);
 }
 function resultFor<T>(entry: QueuedRequest, completion: QueueCompletion): ReliableResult<T> {
@@ -107,29 +108,29 @@ function cleanDraft(entry: QueuedRequest) {
   if (!entry.draftKey) return;
   const items = (JSON.parse(entry.body) as { items?: Array<{ clientRef: string }> }).items ?? [];
   const refs = new Set(items.map((item) => item.clientRef));
-  const draft = JSON.parse(localStorage.getItem(entry.draftKey) ?? "[]") as Array<{ clientRef: string }>;
+  const draft = JSON.parse(outletStorage.getItem(entry.draftKey) ?? "[]") as Array<{ clientRef: string }>;
   const cleaned = draft.filter((item) => !refs.has(item.clientRef));
   if (cleaned.length !== draft.length) {
     const serialized = JSON.stringify(cleaned);
-    localStorage.setItem(entry.draftKey, serialized);
-    if (localStorage.getItem(entry.draftKey) !== serialized) throw new Error("Draft cleanup was not acknowledged");
+    outletStorage.setItem(entry.draftKey, serialized);
+    if (outletStorage.getItem(entry.draftKey) !== serialized) throw new Error("Draft cleanup was not acknowledged");
   }
 }
 function finishSuccess(entry: QueuedRequest, completion: QueueCompletion) {
   if (completion.outcome !== "success") return;
-  const pending = localStorage.getItem(PREFIX + entry.id) !== null;
+  const pending = outletStorage.getItem(PREFIX + entry.id) !== null;
   if (pending) {
     cleanDraft(entry);
-    localStorage.removeItem(PREFIX + entry.id);
-    if (localStorage.getItem(PREFIX + entry.id) !== null) throw new Error("Pending removal was not acknowledged");
+    outletStorage.removeItem(PREFIX + entry.id);
+    if (outletStorage.getItem(PREFIX + entry.id) !== null) throw new Error("Pending removal was not acknowledged");
   }
   localSuccess.delete(entry.id);
   settle(entry, completion);
   if (pending) window.dispatchEvent(new CustomEvent("forkflow:ack", { detail: entry }));
 }
 function finishTerminal(entry: QueuedRequest, completion: QueueCompletion) {
-  localStorage.removeItem(PREFIX + entry.id);
-  if (localStorage.getItem(PREFIX + entry.id) !== null) throw new Error("Pending removal was not acknowledged");
+  outletStorage.removeItem(PREFIX + entry.id);
+  if (outletStorage.getItem(PREFIX + entry.id) !== null) throw new Error("Pending removal was not acknowledged");
   settle(entry, completion);
 }
 function failReconciliation(entry: QueuedRequest) {
@@ -142,34 +143,34 @@ export function reconcileWaiters() {
     if (waiter.lifecycle !== lifecycle || waiter.token !== session.token || actor !== waiter.entry.userId) {
       waiters.delete(id); waiter.reject(new Error("Request saved. Sign in as the same staff member to resume.")); continue;
     }
-    if (waiter.entry.generation !== localStorage.getItem(GENERATION)) { failReconciliation(waiter.entry); continue; }
+    if (waiter.entry.generation !== outletStorage.getItem(GENERATION)) { failReconciliation(waiter.entry); continue; }
     if (recoveryRequests(actor).some((record) => record.entry.id === id)) { failReconciliation(waiter.entry); continue; }
     let completion: QueueCompletion | null;
     try { completion = completionFor(waiter.entry); } catch { continue; }
     if (completion?.outcome === "success") {
       try { finishSuccess(waiter.entry, completion); } catch { failReconciliation(waiter.entry); }
     } else if (completion) { try { finishTerminal(waiter.entry, completion); } catch { failReconciliation(waiter.entry); } }
-    else if (localStorage.getItem(PREFIX + id) === null || expiredCompletion(waiter.entry)) failReconciliation(waiter.entry);
+    else if (outletStorage.getItem(PREFIX + id) === null || expiredCompletion(waiter.entry)) failReconciliation(waiter.entry);
   }
   for (const [id, saved] of [...localSuccess]) {
     const { completion: evidence } = saved;
     if (waiters.has(id) || actor !== evidence.userId || !session.token || saved.token !== session.token ||
-      saved.lifecycle !== lifecycle || evidence.generation !== localStorage.getItem(GENERATION)) continue;
+      saved.lifecycle !== lifecycle || evidence.generation !== outletStorage.getItem(GENERATION)) continue;
     const entry = queuedRequests(actor).find((r) => r.id === id) ?? localRecovery.get(id)?.entry ?? delivered.get(id)?.entry;
     if (!entry) continue;
     try {
-      storeCompletion(localStorage, evidence, protectedRequests());
+      storeCompletion(outletStorage, evidence, protectedRequests());
       const confirmed = completionFor(entry);
       if (confirmed?.outcome === "success") finishSuccess(entry, confirmed);
     } catch { saveRecovery(entry); }
   }
   for (const { entry, token, lifecycle: deliveredLifecycle } of delivered.values()) {
-    if (actor !== entry.userId || !session.token || session.token !== token || deliveredLifecycle !== lifecycle || entry.generation !== localStorage.getItem(GENERATION)) continue;
+    if (actor !== entry.userId || !session.token || session.token !== token || deliveredLifecycle !== lifecycle || entry.generation !== outletStorage.getItem(GENERATION)) continue;
     try { const completion = completionFor(entry); if (completion) settle(entry, completion); } catch { /* next tick can retry reading feedback */ }
   }
   // Feedback has no continuation; retain only the bounded set of durable groups.
   if (delivered.size > 100) for (const id of [...delivered.keys()].slice(0, delivered.size - 100)) { delivered.delete(id); deliveredPrint.delete(id); reviewedSuccess.delete(id); }
-  try { sweepExpiredCompletions(localStorage, protectedRequests()); } catch { /* preserve evidence when storage cannot evict it */ }
+  try { sweepExpiredCompletions(outletStorage, protectedRequests()); } catch { /* preserve evidence when storage cannot evict it */ }
 }
 export function discardRequest(id: string) {
   const entry = queuedRequests().find((r) => r.id === id);
@@ -177,7 +178,7 @@ export function discardRequest(id: string) {
   const record: QueueCompletion = { version: 1, requestId: id, attemptId: uuid(), userId: entry.userId, generation: entry.generation,
     path: entry.path, body: entry.body, completedAt: Date.now(), outcome: "dismissed" };
   try {
-    storeCompletion(localStorage, record, protectedRequests());
+    storeCompletion(outletStorage, record, protectedRequests());
     const selected = completionFor(entry) ?? record;
     if (selected.outcome === "success") finishSuccess(entry, selected);
     else finishTerminal(entry, selected);
@@ -204,7 +205,7 @@ export function startQueue(userId: string) {
 }
 export function reliablePost<T>(path: string, body: unknown, label: string, draftKey?: string): Promise<ReliableResult<T>> {
   if (isEmptyKitchenSend(path, body)) return Promise.reject(new Error("No items are waiting for a kitchen ticket."));
-  if (!actor || !localStorage.getItem(GENERATION)) return Promise.reject(new Error("Waiting for the server connection. Try again shortly."));
+  if (!actor || !outletStorage.getItem(GENERATION)) return Promise.reject(new Error("Waiting for the server connection. Try again shortly."));
   if (!/^\/api\/(orders\/[^/]+\/(items|send|bill)|bills\/[^/]+\/settle)$/.test(path)) return Promise.reject(new Error("This action cannot be queued"));
   const existing = queuedRequests().find((r) => r.path === path);
   if (existing) return Promise.reject(new Error(`A saved ${existing.label} request needs to finish or be reviewed first.`));
@@ -212,8 +213,8 @@ export function reliablePost<T>(path: string, body: unknown, label: string, draf
   let serialized: string;
   try { serialized = JSON.stringify(body); if (serialized === undefined) throw new Error(); }
   catch { return Promise.reject(new Error("Request could not be saved.")); }
-  const entry: QueuedRequest = { id: uuid(), userId: actor, generation: localStorage.getItem(GENERATION)!, path, body: serialized, label, createdAt: Date.now(), ...(draftKey ? { draftKey } : {}) };
-  try { localStorage.setItem(PREFIX + entry.id, JSON.stringify(entry)); }
+  const entry: QueuedRequest = { id: uuid(), userId: actor, generation: outletStorage.getItem(GENERATION)!, path, body: serialized, label, createdAt: Date.now(), ...(draftKey ? { draftKey } : {}) };
+  try { outletStorage.setItem(PREFIX + entry.id, JSON.stringify(entry)); }
   catch { return Promise.reject(new Error("Browser storage is full or unavailable. Request was not sent.")); }
   const result = new Promise<ReliableResult<T>>((resolve, reject) => waiters.set(entry.id, { entry, lifecycle, token: session.token, resolve: (value) => resolve(value as ReliableResult<T>), reject }));
   notifyQueue(); void pump(); return result;
@@ -221,13 +222,13 @@ export function reliablePost<T>(path: string, body: unknown, label: string, draf
 function archiveGeneration(next: string) {
   const keys = [...new Set([...storageKeys("forkflow.draft."), ...storageKeys(PREFIX), ...storageKeys(RESULT_PREFIX), ...storageKeys(RECOVERY_PREFIX)])];
   const saved: Record<string, string> = {};
-  for (const key of keys) { const value = localStorage.getItem(key); if (value !== null) saved[key] = value; }
+  for (const key of keys) { const value = outletStorage.getItem(key); if (value !== null) saved[key] = value; }
   const archiveKey = `forkflow.recovery-archive.${Date.now()}`;
   const archive = JSON.stringify(saved);
-  localStorage.setItem(archiveKey, archive);
-  if (localStorage.getItem(archiveKey) !== archive) throw new Error("Archive was not acknowledged");
-  for (const key of keys) localStorage.removeItem(key);
-  localStorage.setItem(GENERATION, next);
+  outletStorage.setItem(archiveKey, archive);
+  if (outletStorage.getItem(archiveKey) !== archive) throw new Error("Archive was not acknowledged");
+  for (const key of keys) outletStorage.removeItem(key);
+  outletStorage.setItem(GENERATION, next);
   for (const waiter of waiters.values()) waiter.reject(new QueueReconciliationRequiredError());
   waiters.clear(); localSuccess.clear(); localRecovery.clear(); delivered.clear(); deliveredPrint.clear(); reviewedSuccess.clear();
   window.alert("The server was restored from backup. Saved drafts and queued actions were archived for review. Sign in again and check your open orders.");
@@ -238,15 +239,15 @@ async function pump() {
   if (running || !actor || !session.token) return;
   running = true;
   const userId = actor, token = session.token, runId = lifecycle;
-  const generationBeforeCheck = localStorage.getItem(GENERATION);
+  const generationBeforeCheck = outletStorage.getItem(GENERATION);
   const valid = (generation?: string) => actor === userId && session.token === token && lifecycle === runId &&
-    (!generation || localStorage.getItem(GENERATION) === generation);
+    (!generation || outletStorage.getItem(GENERATION) === generation);
   try {
     const { generation } = await apiFetch<{ generation: string }>("/api/system/generation");
-    if (!valid() || localStorage.getItem(GENERATION) !== generationBeforeCheck) return;
-    const previous = localStorage.getItem(GENERATION);
+    if (!valid() || outletStorage.getItem(GENERATION) !== generationBeforeCheck) return;
+    const previous = outletStorage.getItem(GENERATION);
     if (previous && previous !== generation) { archiveGeneration(generation); return; }
-    localStorage.setItem(GENERATION, generation); generationChecked = true;
+    outletStorage.setItem(GENERATION, generation); generationChecked = true;
     reconcileWaiters();
     for (const snapshot of queuedRequests(userId)) {
       if (!valid(generation)) break;
@@ -268,7 +269,7 @@ async function pump() {
           printOutcome: classifyPrintOutcome(entry.path, JSON.parse(entry.body), response) };
         localSuccess.set(entry.id, { completion: evidence, lifecycle: runId, token });
         try {
-          storeCompletion(localStorage, evidence, protectedRequests());
+          storeCompletion(outletStorage, evidence, protectedRequests());
           const confirmed = completionFor(entry);
           if (!confirmed?.outcome || confirmed.outcome !== "success") throw new Error("Completion not acknowledged");
           finishSuccess(entry, confirmed);
@@ -280,7 +281,7 @@ async function pump() {
           path: entry.path, body: entry.body, completedAt: Date.now(), outcome: "rejected", status: error.status, message: error.message,
           ...(error.code ? { code: error.code } : {}) };
         try {
-          storeCompletion(localStorage, evidence, protectedRequests());
+          storeCompletion(outletStorage, evidence, protectedRequests());
           const selected = completionFor(entry) ?? evidence;
           if (selected.outcome === "success") finishSuccess(entry, selected);
           else finishTerminal(entry, selected);
