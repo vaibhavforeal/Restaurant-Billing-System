@@ -9,6 +9,8 @@ export const BillPreview = z.object({
   discountNote: z.string().trim().max(200).default(""),
   // An admin's PIN approves a discount above the signed-in user's limit. Never stored.
   approverPin: z.string().regex(/^\d{4,6}$/, "Enter the admin PIN").optional(),
+  /** Loyalty points the order's customer spends on this bill, as a discount. */
+  redeemPoints: z.number().int().min(0).max(1_000_000).default(0),
 }).superRefine((v, ctx) => {
   if (v.discountPaise > 0 && !v.discountNote) ctx.addIssue({ code: "custom", message: "Discount reason required", path: ["discountNote"] });
 });
@@ -55,11 +57,26 @@ export interface ReceiptSnapshot {
   zomatoOrderId?: string;
   /** The restaurant's own order type (e.g. "Home delivery") on a takeaway order; absent for the built-in types. */
   orderTypeName?: string;
+  /** The order's customer, with the discount and points this bill gave them. Absent when no customer was attached. */
+  customer?: ReceiptCustomer;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
   /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
   gstScheme?: "composition";
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number }>;
+}
+export interface ReceiptCustomer {
+  name: string;
+  /** Last four digits only, e.g. "******3210". */
+  phone: string;
+  typeName?: string;
+  slabPercent?: number;
+  customerDiscountPaise?: number;
+  pointsRedeemed?: number;
+  pointsValuePaise?: number;
+  pointsEarned?: number;
+  /** Balance after this bill's redemption and earning. */
+  pointsBalance?: number;
 }
 /** A void or refund as shown on its bill. */
 export interface BillCreditNote {

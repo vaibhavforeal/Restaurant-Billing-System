@@ -17,7 +17,8 @@ export type Page =
   | { name: "bills" }
   | { name: "marketplace" }
   | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "analytics" | "bills" | "zomato" | "cash"; period?: { from: string; to: string } }
-  | { name: "inventory" };
+  | { name: "inventory" }
+  | { name: "customers" };
 // Billing and reports use the existing cashier/admin permissions.
 
 export function NavBar({
@@ -54,6 +55,7 @@ export function NavBar({
           { page: { name: "home" }, label: "home" },
           { page: { name: "tables" }, label: "tables" },
           { page: { name: "reports" }, label: "reports" },
+          { page: { name: "customers" }, label: "customers" },
           { page: { name: "inventory" }, label: "inventory" },
           { page: { name: "kitchen" }, label: "kitchen" },
           { page: { name: "catalog" }, label: "catalog" },
@@ -66,6 +68,7 @@ export function NavBar({
             { page: { name: "home" }, label: "home" },
             { page: { name: "tables" }, label: "tables" },
             { page: { name: "reports" }, label: "reports" },
+            { page: { name: "customers" }, label: "customers" },
             { page: { name: "inventory" }, label: "inventory" },
             { page: { name: "kitchen" }, label: "kitchen" },
             { page: { name: "marketplace" }, label: "marketplace" },

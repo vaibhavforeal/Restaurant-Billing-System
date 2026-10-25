@@ -5,6 +5,7 @@ import { paiseToRupees } from "../money";
 import type { Category, Order, OrderItem, OrderTypeInfo, Product, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
+import { OrderCustomer } from "./OrderCustomer";
 import { BillingPanel } from "./BillingPanel";
 import { mergeBlockedReason, mergeRoles } from "../table-transfer";
 import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
@@ -477,6 +478,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             <span>{order.captainName || "Select captain"}</span><span aria-hidden="true">⌄</span>
           </button>
         </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>}
+        {!captain && <OrderCustomer order={order} canAdd={user.role === "admin" || user.role === "cashier"} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
         {order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
           {takeawayTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select></label>}

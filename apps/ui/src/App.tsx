@@ -20,6 +20,7 @@ import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";
 import { GuestMenu } from "./screens/GuestMenu";
 import { QuickTakeaway, releaseHeldTakeaway } from "./screens/QuickTakeaway";
+import { Customers } from "./screens/Customers";
 import { QrNotifications } from "./QrNotifications";
 import { usePosShortcuts } from "./pos-shortcuts";
 import { CaptainNav } from "./CaptainNav";
@@ -142,6 +143,7 @@ function StaffApp() {
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} canSettle={user.role === "admin" || user.role === "cashier"} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <Inventory user={user} />}
+          {page.name === "customers" && (user.role === "admin" || user.role === "cashier") && <Customers isAdmin={user.role === "admin"} />}
           {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
           </main>
           </QrNotifications>

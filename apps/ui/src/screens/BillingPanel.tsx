@@ -51,6 +51,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const [discount, setDiscount] = useState("0");
   const [reason, setReason] = useState("");
   const [approverPin, setApproverPin] = useState("");
+  const [redeem, setRedeem] = useState("");
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
   const [printerId, setPrinterId] = useState(() => readPreference("forkflow.receipt-printer"));
   const [payments, setPayments] = useState<PaymentDraft[]>([]);
@@ -115,7 +116,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Failed to load billing"); });
     return () => { active = false; };
   }, [order.id, order.status]);
-  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin]);
+  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin, redeem, order.customer?.id]);
   useEffect(() => { setHtml(""); setFrameReady(false); }, [bill?.id, bill?.status]);
   useEffect(() => { setShowQr(false); }, [bill?.id, bill?.status]);
   useEffect(() => {
@@ -160,17 +161,19 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       await onPrepare();
     }
     const pin = discountPaise > 0 ? approverPin.trim() : "";
+    const redeemPoints = redeem.trim() ? Number(redeem) : 0;
+    if (!Number.isInteger(redeemPoints) || redeemPoints < 0) throw new Error("Enter whole points to redeem");
     const { preview: value } = await apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
-      method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}) }),
+      method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}) }),
     });
     setPreview(value);
     setMessage(""); setCashReceived("");
-    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, ...(pin ? { approverPin: pin } : {}) };
+    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, ...(pin ? { approverPin: pin } : {}) };
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
     const { bill: value, job: printJob, printError } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>(`/api/orders/${order.id}/bill`, createRequest.current, "Issue bill");
-    acceptBill(value); setPreview(null); setApproverPin(""); setJob(printJob);
+    acceptBill(value); setPreview(null); setApproverPin(""); setRedeem(""); setJob(printJob);
     setMessage(`Bill #${value.billNo} issued. Record payment below.${printError ? ` ${printError}. Use Print receipt to try again.` : ""}`);
     await onChanged();
   }
@@ -302,6 +305,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
                 {!bill && order.status === "open" && <>
                   <label>Discount (₹) <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={blocked} /></label>
                   <label className="billing-wide-field">Discount reason <input maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} /></label>
+                  {order.customer && order.customer.pointsBalance > 0 && <label>Redeem points (has {order.customer.pointsBalance}) <input type="number" min="0" max={order.customer.pointsBalance} step="1" value={redeem} onChange={(e) => setRedeem(e.target.value)} disabled={blocked} /></label>}
                   {role !== "admin" && <label className="billing-wide-field">Admin PIN (only for a discount above your limit) <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={approverPin} onChange={(e) => setApproverPin(e.target.value)} disabled={blocked} /></label>}
                 </>}
               </div>

@@ -96,6 +96,17 @@ export interface SettingsData {
   kotEditPrint: "ask" | "always" | "never";
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  typeId: string | null;
+  typeName: string | null;
+  notes: string;
+  pointsBalance: number;
+  createdAt: number;
+}
+
 export interface OrderTypeInfo {
   id: string;
   name: string;
@@ -153,6 +164,8 @@ export interface Order {
   tableName: string | null;
   tableLabel?: string | null;
   mergedInto: string | null;
+  /** The customer attached for discounts and loyalty points. */
+  customer: Customer | null;
   status: "open" | "billed" | "settled" | "cancelled";
   openedBy: string;
   openedAt: number;

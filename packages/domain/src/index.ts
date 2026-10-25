@@ -13,7 +13,7 @@ export { PLANS, LicenseClaims, type Plan, type Feature, type LicenseStatus, type
 export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, UnitCostSet, type StockUnit, type StockItem, type StockWarning, type StockLink, type StockMove } from "./stock-schemas.js";
 export { stockJson, appendStockMove, consumeStock, reverseStock, returnPartialStock, orderStockWarnings, type StockRow } from "./stock.js";
 export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";
-export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type PaymentMode, type BillTotals, type ReceiptSnapshot, type Bill, type BillCreditNote } from "./billing.js";
+export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type PaymentMode, type BillTotals, type ReceiptSnapshot, type ReceiptCustomer, type Bill, type BillCreditNote } from "./billing.js";
 export { GST_MODES, DEFAULT_GST_RATES, effectiveGstRate, receiptGstMode, type GstMode, type DefaultGstRate } from "./gst.js";
 export { openDb, type Database } from "./db.js";
 export { migrate, type Migration } from "./migrate.js";
@@ -54,3 +54,4 @@ export {
 export * from "./pricing.js";
 export { CloudBackupPreferences, type CloudBackupSettings, type CloudBackupState, type CloudBackupAccount, type CloudBackupStatus } from "./cloud-backups.js";
 export { ShiftOpen, CashMovementCreate, ShiftClose, DayClose } from "./shift-schemas.js";
+export { normalizePhone, CustomerCreate, CustomerUpdate, CustomerSlab, CustomerTypeCreate, CustomerTypeUpdate, LoyaltySettingsUpdate, LoyaltyAdjust, OrderCustomerSet, bestSlabPercent, percentOf, pointsEarned, type SlabRule } from "./customers.js";

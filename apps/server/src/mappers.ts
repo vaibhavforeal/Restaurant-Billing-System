@@ -21,6 +21,7 @@ export interface OrderRow {
   order_type_id?: string | null;
   /** Name snapshot of the restaurant's own type, shown on slips and bills; NULL for the built-in types. */
   order_type_name?: string | null;
+  customer_id?: string | null;
 }
 
 export interface OrderItemRow {
@@ -96,6 +97,17 @@ export function kotWithContextJson(
   };
 }
 
+export const pointsBalance = (db: Database, customerId: string) =>
+  (db.prepare("SELECT COALESCE(SUM(points), 0) AS n FROM loyalty_ledger WHERE customer_id = ?").get(customerId) as { n: number }).n;
+
+/** A customer as staff screens show them: with their type name and current points balance. */
+export function customerJson(db: Database, id: string) {
+  const row = db.prepare(`SELECT c.*, t.name AS type_name FROM customers c LEFT JOIN customer_types t ON t.id = c.type_id WHERE c.id = ?`).get(id) as
+    { id: string; name: string; phone: string; type_id: string | null; notes: string | null; created_at: number; type_name: string | null } | undefined;
+  if (!row) return null;
+  return { id: row.id, name: row.name, phone: row.phone, typeId: row.type_id, typeName: row.type_name, notes: row.notes ?? "", pointsBalance: pointsBalance(db, row.id), createdAt: row.created_at };
+}
+
 export function loadOrderJson(db: Database, orderId: string) {
   const row = db
     .prepare(
@@ -132,6 +144,7 @@ export function loadOrderJson(db: Database, orderId: string) {
     captainId: row.captain_id ?? null,
     captainName: row.captain_name ?? null,
     mergedInto: row.merged_into ?? null,
+    customer: row.customer_id ? customerJson(db, row.customer_id) : null,
     status: row.status,
     openedBy: row.opened_by,
     openedAt: row.opened_at,

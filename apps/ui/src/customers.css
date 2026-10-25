@@ -1,0 +1,12 @@
+.customers-layout { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .customers-layout { grid-template-columns: 1fr; } }
+.customer-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; max-height: 420px; overflow: auto; }
+.customer-list button { width: 100%; display: flex; flex-wrap: wrap; gap: 4px 8px; justify-content: space-between; text-align: left; }
+.customer-list button small { color: var(--muted); }
+.customer-ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+.customer-ledger td { padding: 4px 6px; border-bottom: 1px solid var(--border, #eee); }
+.customer-type { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; padding: 6px 0; border-bottom: 1px solid var(--border, #eee); }
+.slab-editor { width: 100%; }
+.slab-editor p { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.cash-drawer-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; border: 0; padding: 0; margin: 8px 0; min-width: 0; }
+.cash-drawer-form label { display: grid; gap: 4px; }

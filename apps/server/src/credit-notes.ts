@@ -1,4 +1,5 @@
 import { verifyPassword } from "@forkflow/core";
+import { reverseLoyalty } from "./customers.js";
 import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
   type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -245,6 +246,7 @@ async function issueCredit(app: FastifyInstance, req: FastifyRequest, reply: Fas
     const now = Date.now();
     const noteId = writeCreditNote(db, { billId: id, kind, reason: request.reason, draft, refunds: request.refunds,
       requestedBy: req.user.id, approvedBy: approver.id, clientRef: request.clientRef, requestJson, now });
+    reverseLoyalty(db, { billId: id, creditNoteId: noteId, kind, actorId: req.user.id, now });
     if (kind === "void") {
       db.prepare("UPDATE bills SET status = 'void' WHERE id = ?").run(id);
       if (bill.status === "unpaid") {

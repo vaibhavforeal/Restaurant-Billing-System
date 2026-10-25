@@ -16,7 +16,7 @@ it("upgrades old bills without changing money or inventing historical categories
       INSERT INTO bill_taxes (id,bill_id,gst_rate,taxable_paise,cgst_paise,sgst_paise) VALUES ('tx','b',5,10000,250,250);`);
     const before = db.prepare("SELECT * FROM bills").all();
     migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
-    expect(db.prepare("SELECT * FROM bills").all()).toEqual(before.map((row: any) => ({ ...row, discount_approved_by: null })));
+    expect(db.prepare("SELECT * FROM bills").all()).toEqual(before.map((row: any) => ({ ...row, discount_approved_by: null, customer_id: null, customer_discount_paise: 0, points_redeemed: 0, points_value_paise: 0 })));
     expect(db.prepare("SELECT name, category_name, total_paise, discount_paise FROM bill_report_lines").get()).toEqual({ name: "Old name", category_name: "Historical category unavailable", total_paise: 10500, discount_paise: 1 });
     expect(db.prepare("SELECT cancelled_at FROM order_items").get()).toEqual({ cancelled_at: null });
   } finally { db.close(); }

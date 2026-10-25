@@ -15,6 +15,15 @@ export const escape = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp
 const statusLabel = (bill: Bill) => bill.status === "paid" ? "PAID" : bill.status === "void" ? "VOID" : "PAYMENT DUE";
 const paidAmount = (bill: Bill) => bill.payments.reduce((sum, p) => sum + p.amountPaise, 0);
 const quantity = (bill: Bill) => bill.receipt.items.reduce((sum, item) => sum + item.qty, 0);
+/** Who the bill is for and their loyalty points, when a customer was attached. */
+function customerLines(bill: Bill): string[] {
+  const c = bill.receipt.customer;
+  if (!c) return [];
+  const lines = [`Customer: ${c.name} (${c.phone})${c.typeName ? ` - ${c.typeName}` : ""}`];
+  if (c.pointsRedeemed) lines.push(`Points redeemed: ${c.pointsRedeemed} (Rs.${money(c.pointsValuePaise ?? 0)})`);
+  if (c.pointsBalance !== undefined) lines.push(`Points earned: ${c.pointsEarned ?? 0} | Balance: ${c.pointsBalance}`);
+  return lines;
+}
 const footer = (bill: Bill) => bill.receipt.receiptFooter || "Thank you for visiting. Please come again.";
 const paymentModes = (bill: Bill) => [...new Set(bill.payments.map((p) => p.mode.toUpperCase()))].join(" + ");
 // The declaration a composition-scheme bill of supply must carry.
@@ -130,6 +139,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
     rule();
   }
   if (bill.discountNote) line(`Discount reason: ${bill.discountNote}`);
+  for (const text of customerLines(bill)) line(text);
   if (bill.payments.length) {
     for (const p of bill.payments) pair(p.mode.toUpperCase(), money(p.amountPaise));
   }
@@ -195,6 +205,7 @@ export function receiptHtml(bill: Bill): string {
     ${bill.payments.length ? `<dl>${bill.payments.map((p) => `<div><dt>${e(p.mode.toUpperCase())}</dt><dd>₹${money(p.amountPaise)}</dd></div>`).join("")}</dl>` : `<p class="tax-note">${bill.status === "paid" ? "No payment required." : bill.status === "void" ? "This bill is void." : "Payment not yet received."}</p>`}
     <p class="payment-state"><strong>${bill.status === "paid" ? "PAID IN FULL" : bill.status === "void" ? "VOID - NOT PAYABLE" : `AMOUNT DUE ₹${money(due)}`}</strong></p></section>
   ${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}
+  ${customerLines(bill).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}
   ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill #${bill.billNo} · Amount filled in automatically</p></section>` : ""}
   <footer>${e(footer(bill))}</footer></main></body></html>`;
 }

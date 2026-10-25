@@ -13,7 +13,8 @@
     "./catalog-csv": "./src/catalog-csv.ts",
     "./zomato": "./src/zomato.ts",
     "./integrations": "./src/integrations.ts",
-    "./licensing": "./src/licensing.ts"
+    "./licensing": "./src/licensing.ts",
+    "./customers": "./src/customers.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
