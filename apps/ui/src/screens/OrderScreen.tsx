@@ -283,6 +283,37 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     }
   }
 
+  /** Change a sent item's note, or (admin/cashier) cut its quantity. The removed units are cancelled with the reason. */
+  function editSentItem(item: OrderItem) {
+    if (actionLock.current || billingLock.current || item.status !== "sent") return;
+    const canCut = user.role === "admin" || user.role === "cashier";
+    let qty = item.qty;
+    if (canCut && item.qty > 1) {
+      const raw = window.prompt(`${item.name}: new quantity (1 to ${item.qty}). To add more, add the dish again.`, String(item.qty));
+      if (raw === null) return;
+      qty = Number(raw.trim());
+      if (!Number.isInteger(qty) || qty < 1 || qty > item.qty) { setError(`Enter a quantity from 1 to ${item.qty}`); return; }
+    }
+    const noteInput = window.prompt(`${item.name}: cooking note (leave blank for none)`, item.note ?? "");
+    if (noteInput === null) return;
+    const note = noteInput.trim() || null;
+    if (qty === item.qty && note === (item.note ?? null)) return;
+    let reason: string | undefined;
+    if (qty < item.qty) {
+      const value = window.prompt(`Reason for removing ${item.qty - qty} × ${item.name} (required):`);
+      if (!value?.trim()) return;
+      reason = value.trim();
+    }
+    void run(async () => {
+      const { print: rule } = await apiFetch<{ print: "ask" | "always" | "never" }>("/api/kot-edit-settings");
+      const print = rule === "ask" ? window.confirm("Print a CHANGED slip to the kitchen?") : rule === "always";
+      const result = await apiFetch<{ printError: string | null }>(`/api/order-items/${item.id}/edit-sent`, { method: "POST", body: JSON.stringify({
+        clientRef: uuid(), ...(qty !== item.qty ? { qty, reason } : {}), ...(note !== (item.note ?? null) ? { note } : {}), print,
+      }) });
+      setMessage(`${item.name} updated${result.printError ? `. Slip not printed: ${result.printError}` : ""}`);
+    });
+  }
+
   function sendToKitchen() {
     void run(async () => {
       if (queuedRequests(user.id).some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
@@ -517,6 +548,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           {order.items.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
             <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong><span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}</div>
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
+            {order.status === "open" && item.status === "sent" && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
             {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || user.role === "admin" || user.role === "cashier") && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
           </div>)}
         </div>}

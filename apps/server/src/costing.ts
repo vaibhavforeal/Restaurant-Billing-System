@@ -110,8 +110,10 @@ export function registerCosting(app: FastifyInstance): void {
     const { from, to, bounds } = reportRange(req.query);
     // One synchronous read transaction keeps lines, wastage and adjustments on the same snapshot.
     const { lines, wastage, adjustments } = db.transaction(() => {
-      // Sale movements that were later reversed (cancelled items) no longer count as consumption.
-      const sales = `(SELECT m.cost_paise FROM stock_moves m WHERE m.order_item_id = l.order_item_id AND m.reason = 'sale'
+      // Sale movements that were later reversed (cancelled items) no longer count as consumption; a KOT edit's partial
+      // return (partial_of) takes its share off the sale it reduced.
+      const sales = `(SELECT m.cost_paise + COALESCE((SELECT SUM(p.cost_paise) FROM stock_moves p WHERE p.partial_of = m.id), 0) AS cost_paise
+        FROM stock_moves m WHERE m.order_item_id = l.order_item_id AND m.reason = 'sale'
         AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id))`;
       const recipe = `(SELECT COUNT(*) FROM ${sales}) AS saleMoves, (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves`;
       // Issued lines by bill date (void bills too). Credit-note lines subtract their taxable value and quantity on the

@@ -101,6 +101,50 @@ export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: Pri
   return finishSlip(pos, profile);
 }
 
+export interface EditSlipCtx {
+  kotNo: number;
+  /** The slip's context line, from `contextLine`. */
+  context: string;
+  name: string;
+  oldQty: number;
+  newQty: number;
+  oldNote: string | null;
+  newNote: string | null;
+  reason: string | null;
+  atMs: number;
+}
+
+/** A sent item was changed: the kitchen sees the old and new quantity and note side by side. */
+export function editSlip(ctx: EditSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+  const pos = new EscPos();
+  const width = CHARS_PER_LINE[paperWidth];
+
+  pos
+    .init()
+    .align("center")
+    .bold(true)
+    .size(2, 2)
+    .line("CHANGED")
+    .size(1, 1)
+    .line(`KOT #${ctx.kotNo}`)
+    .line(ctx.context)
+    .line(formatTime(ctx.atMs))
+    .hr(width)
+    .align("left")
+    .bold(true)
+    .line(ctx.name)
+    .bold(false);
+  if (ctx.newQty !== ctx.oldQty) pos.bold(true).line(`Qty: ${ctx.oldQty} -> ${ctx.newQty}`).bold(false);
+  else pos.line(`Qty: ${ctx.newQty}`);
+  if (ctx.newNote !== ctx.oldNote) {
+    pos.line(`Was: ${ctx.oldNote ?? "(no note)"}`);
+    pos.bold(true).line(`Now: ${ctx.newNote ?? "(no note)"}`).bold(false);
+  }
+  if (ctx.reason) pos.line(`Reason: ${ctx.reason}`);
+
+  return finishSlip(pos, profile);
+}
+
 export interface TableChangeSlipCtx {
   stationName: string;
   /** Printable text only (ASCII): the thermal encoder replaces other characters, e.g. "T3 -> T7" or "T3, T4". */

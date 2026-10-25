@@ -11,6 +11,7 @@ interface SettingsRow {
   gstin: string;
   fssai: string;
   receipt_footer: string;
+  kot_edit_print: "ask" | "always" | "never";
 }
 
 export function registerSettings(app: FastifyInstance): void {
@@ -18,7 +19,7 @@ export function registerSettings(app: FastifyInstance): void {
 
   const readSettings = () => {
     const r = app.db
-      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate FROM settings WHERE id = 1")
+      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print FROM settings WHERE id = 1")
       .get() as SettingsRow;
     return {
       gstMode: r.gst_mode,
@@ -30,6 +31,7 @@ export function registerSettings(app: FastifyInstance): void {
       gstin: r.gstin,
       fssai: r.fssai,
       receiptFooter: r.receipt_footer,
+      kotEditPrint: r.kot_edit_print,
     };
   };
 
@@ -38,8 +40,8 @@ export function registerSettings(app: FastifyInstance): void {
   app.put("/api/settings", { preHandler: manage }, async (req) => {
     const body = SettingsUpdate.parse(req.body);
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate) WHERE id = 1")
-      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null);
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print) WHERE id = 1")
+      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null);
     return { settings: readSettings() };
   });
 }

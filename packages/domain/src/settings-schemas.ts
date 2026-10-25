@@ -21,5 +21,7 @@ export const SettingsUpdate = z.object({
   gstin: z.string().trim().max(15).default(""),
   fssai: z.string().trim().max(14).default(""),
   receiptFooter: z.string().trim().max(500).default(""),
+  /** Whether a KOT edit prints a slip to the kitchen: staff choose ('ask'), or always / never. */
+  kotEditPrint: z.enum(["ask", "always", "never"]).optional(),
 });
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdate>;

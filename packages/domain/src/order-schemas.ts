@@ -69,3 +69,19 @@ export const ItemCancel = z.object({
   reason: z.string().trim().min(1).max(200).optional(),
 });
 export type ItemCancelInput = z.infer<typeof ItemCancel>;
+
+/**
+ * Edit an item already sent to the kitchen: cut its quantity and/or change its cooking note. More of a dish is a new
+ * item sent on its own ticket. A quantity cut needs a reason. `print` is the staff's answer when the setting is "ask".
+ */
+export const SentItemEdit = z.object({
+  clientRef: z.string().min(8).max(64),
+  qty: z.number().int().min(1).max(99).optional(),
+  note: z.string().trim().max(200).nullable().optional(),
+  reason: z.string().trim().min(1).max(200).optional(),
+  print: z.boolean().default(true),
+}).superRefine((v, ctx) => {
+  if (v.qty === undefined && v.note === undefined) ctx.addIssue({ code: "custom", message: "Change the quantity or the note", path: ["qty"] });
+  if (v.qty !== undefined && !v.reason) ctx.addIssue({ code: "custom", message: "Give a reason for reducing the quantity", path: ["reason"] });
+});
+export type SentItemEditInput = z.infer<typeof SentItemEdit>;

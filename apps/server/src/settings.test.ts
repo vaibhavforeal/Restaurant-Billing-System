@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5,
+      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask",
     });
 
     const put = await app.inject({

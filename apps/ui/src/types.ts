@@ -92,6 +92,8 @@ export interface SettingsData {
   gstin: string;
   fssai: string;
   receiptFooter: string;
+  /** Whether a change to a sent item prints a slip to the kitchen: staff choose, or always / never. */
+  kotEditPrint: "ask" | "always" | "never";
 }
 
 export interface TableInfo {

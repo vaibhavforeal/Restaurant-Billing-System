@@ -20,6 +20,8 @@ function requireTransaction(db: Database) {
 export function appendStockMove(db: Database, input: {
   stockItemId: string; delta: number; reason: "sale" | "purchase" | "adjustment" | "wastage" | "cancel_reversal";
   actorId: string; note?: string | null; orderItemId?: string | null; reversalOf?: string | null;
+  /** A partial return: the sale move this reversal reduces (KOT edit quantity cut). */
+  partialOf?: string | null;
   clientRef?: string | null; requestJson?: string | null;
   /** Purchases: amount paid (paise) blended into the average. Reversals: the frozen cost being undone (may be null). */
   costPaise?: number | null;
@@ -43,10 +45,10 @@ export function appendStockMove(db: Database, input: {
   else throw new Error("Cost can only be given for purchases and reversals");
   const id = uuidv7();
   db.prepare(`INSERT INTO stock_moves (id, stock_item_id, delta, reason, ref, note, created_at, created_by,
-    order_item_id, reversal_of, client_ref, request_json, balance_after, cost_paise, unit_cost_after)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    order_item_id, reversal_of, client_ref, request_json, balance_after, cost_paise, unit_cost_after, partial_of)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, input.stockItemId, delta / 1000, input.reason, input.orderItemId ?? null, input.note ?? null, Date.now(), input.actorId,
-    input.orderItemId ?? null, input.reversalOf ?? null, input.clientRef ?? null, input.requestJson ?? null, after, costPaise, unitCost,
+    input.orderItemId ?? null, input.reversalOf ?? null, input.clientRef ?? null, input.requestJson ?? null, after, costPaise, unitCost, input.partialOf ?? null,
   );
   db.prepare("UPDATE stock_items SET qty = ?, unit_cost_milli_paise = ?, version = version + 1 WHERE id = ?").run(after, unitCost, input.stockItemId);
   return id;
@@ -75,13 +77,56 @@ export function consumeStock(db: Database, orderItemIds: string[], actorId: stri
 /** Reverse saved sale quantities, never the product's current links. */
 export function reverseStock(db: Database, orderItemId: string, actorId: string, note: string): string[] {
   requireTransaction(db);
-  const moves = db.prepare(`SELECT m.id, m.stock_item_id, m.delta, m.cost_paise FROM stock_moves m WHERE m.order_item_id = ? AND m.reason = 'sale'
-    AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id) ORDER BY m.id`).all(orderItemId) as Array<{ id: string; stock_item_id: string; delta: number; cost_paise: number | null }>;
-  for (const move of moves) appendStockMove(db, {
-    stockItemId: move.stock_item_id, delta: -move.delta, reason: "cancel_reversal", actorId, note, orderItemId, reversalOf: move.id,
-    costPaise: move.cost_paise === null ? null : 0 - move.cost_paise,
-  });
-  return [...new Set(moves.map((move) => move.stock_item_id))];
+  const changed = new Set<string>();
+  // What is still consumed: the sale less any partial returns from earlier KOT edits.
+  for (const move of unreversedSales(db, orderItemId)) {
+    if (!move.remainingMilli) continue;
+    appendStockMove(db, {
+      stockItemId: move.stock_item_id, delta: move.remainingMilli / 1000, reason: "cancel_reversal", actorId, note, orderItemId, reversalOf: move.id,
+      costPaise: move.remainingCost,
+    });
+    changed.add(move.stock_item_id);
+  }
+  return [...changed];
+}
+
+/** An order item's sale moves that are not fully reversed, with the quantity (milli-units, positive) and cost still consumed. */
+function unreversedSales(db: Database, orderItemId: string) {
+  const moves = db.prepare(`SELECT m.id, m.stock_item_id, m.delta, m.cost_paise,
+      COALESCE((SELECT SUM(p.delta) FROM stock_moves p WHERE p.partial_of = m.id), 0) AS returned,
+      (SELECT SUM(p.cost_paise) FROM stock_moves p WHERE p.partial_of = m.id) AS returned_cost
+    FROM stock_moves m WHERE m.order_item_id = ? AND m.reason = 'sale'
+    AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id) ORDER BY m.id`).all(orderItemId) as Array<{
+      id: string; stock_item_id: string; delta: number; cost_paise: number | null; returned: number; returned_cost: number | null }>;
+  return moves.map((m) => ({
+    id: m.id, stock_item_id: m.stock_item_id,
+    remainingMilli: -stockMilli(m.delta) - stockMilli(m.returned),
+    remainingCost: m.cost_paise === null ? null : 0 - m.cost_paise - (m.returned_cost ?? 0),
+  }));
+}
+
+/**
+ * A sent item's quantity is cut from `currentQty` to `currentQty - removedQty`: its stock for the removed units comes back,
+ * recorded against the cancelled item that holds them (`cancelledItemId`). Each sale move keeps exactly the share of the
+ * units still on the order, so a later full cancel returns only the rest.
+ */
+export function returnPartialStock(db: Database, input: {
+  orderItemId: string; cancelledItemId: string; currentQty: number; removedQty: number; actorId: string; note: string;
+}): string[] {
+  requireTransaction(db);
+  if (!Number.isInteger(input.removedQty) || input.removedQty <= 0 || input.removedQty >= input.currentQty) throw new Error("Invalid quantity cut");
+  const changed = new Set<string>();
+  for (const move of unreversedSales(db, input.orderItemId)) {
+    const milli = move.remainingMilli * input.removedQty / input.currentQty;
+    if (!Number.isSafeInteger(milli) || milli <= 0) continue;
+    appendStockMove(db, {
+      stockItemId: move.stock_item_id, delta: milli / 1000, reason: "cancel_reversal", actorId: input.actorId, note: input.note,
+      orderItemId: input.cancelledItemId, partialOf: move.id,
+      costPaise: move.remainingCost === null ? null : Math.round(move.remainingCost * input.removedQty / input.currentQty),
+    });
+    changed.add(move.stock_item_id);
+  }
+  return [...changed];
 }
 
 export function orderStockWarnings(db: Database, orderId: string): StockWarning[] {

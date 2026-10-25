@@ -13,9 +13,9 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5 };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask" };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -365,6 +365,16 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               aria-describedby="upi-settings-help"
               onChange={(e) => { setForm({ ...form, upiId: e.target.value }); setProfileStatus(""); }} />
           </label>
+          <label style={{ display: "grid", gap: 4 }}>
+            Kitchen slip when a sent item is changed
+            <select value={form.kotEditPrint} disabled={busy} aria-describedby="kot-edit-help"
+              onChange={(e) => { setForm({ ...form, kotEditPrint: e.target.value as SettingsData["kotEditPrint"] }); setProfileStatus(""); }}>
+              <option value="ask">Ask each time</option>
+              <option value="always">Always print</option>
+              <option value="never">Never print</option>
+            </select>
+          </label>
+          <small id="kot-edit-help">When staff change the quantity or note of an item already sent to the kitchen, a CHANGED slip can print at that kitchen station. The kitchen screen updates either way.</small>
           <small id="upi-settings-help">Save your restaurant’s UPI ID once to print a payment QR on new unpaid bills, with the bill amount filled in. Leave blank to disable for new bills. Existing bills keep their saved UPI ID.</small>
           <button
             className="primary" onClick={() => void saveProfile()}

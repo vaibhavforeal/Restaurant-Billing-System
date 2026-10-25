@@ -7,6 +7,7 @@ import { registerCatalog } from "./catalog.js";
 import { registerUsers } from "./users.js";
 import { registerSettings } from "./settings.js";
 import { registerDiscountCaps } from "./discount-caps.js";
+import { registerKotEdits } from "./kot-edit.js";
 import { registerTables } from "./tables.js";
 import { registerReservations } from "./reservations.js";
 import { registerOrders } from "./orders.js";
@@ -80,7 +81,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.addHook("onReady", async () => queue.start());
   app.addHook("preClose", async () => queue.close());
 
-  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "table", label: string, bytes: Buffer) => {
+  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer) => {
     interface StationRow {
       printer_id: string | null;
     }
@@ -131,6 +132,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerUsers(app);
   registerSettings(app);
   registerDiscountCaps(app);
+  registerKotEdits(app);
   registerTables(app);
   registerReservations(app);
   registerOrders(app);
@@ -166,6 +168,6 @@ declare module "fastify" {
   interface FastifyInstance {
     db: Database;
     printQueue: PrintQueue;
-    enqueuePrint(stationId: string, kind: "kot" | "cancel" | "table", label: string, bytes: Buffer): void;
+    enqueuePrint(stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer): void;
   }
 }
