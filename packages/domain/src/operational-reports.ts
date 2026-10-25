@@ -2,6 +2,7 @@ export const OPERATIONAL_REPORTS = [
   { id: "items", title: "Item / category sales" },
   { id: "cashiers", title: "Cashier collections" },
   { id: "hourly", title: "Hourly sales" },
+  { id: "order-types", title: "Order type sales" },
   { id: "kots", title: "KOT performance" },
   { id: "cancellations", title: "Cancellation details" },
   { id: "stock", title: "Stock consumption / wastage" },

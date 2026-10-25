@@ -1,9 +1,10 @@
 import type { IconName } from "./Icon";
 
-export type SettingsSectionId = "profile" | "printers" | "stations" | "jobs" | "backups" | "plan" | "shortcuts";
+export type SettingsSectionId = "profile" | "order-types" | "printers" | "stations" | "jobs" | "backups" | "plan" | "shortcuts";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: string; blurb: string; icon: IconName }> = [
   { id: "profile", title: "Restaurant profile", blurb: "Name, GST, bill style and UPI", icon: "marketplace" },
+  { id: "order-types", title: "Order types", blurb: "Takeaway and delivery types", icon: "bag" },
   { id: "printers", title: "Printers", blurb: "Network, USB and Bluetooth printers", icon: "printer" },
   { id: "stations", title: "KOT stations", blurb: "Which printer each kitchen station uses", icon: "kitchen" },
   { id: "jobs", title: "Print jobs", blurb: "Check, retry or confirm printed copies", icon: "bills" },

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { priceForTier, PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
 import { ApiError, apiFetch, session, type User } from "../api";
 import { paiseToRupees } from "../money";
-import type { Category, Order, OrderItem, Product, TableInfo } from "../types";
+import type { Category, Order, OrderItem, OrderTypeInfo, Product, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { BillingPanel } from "./BillingPanel";
@@ -45,6 +45,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   }
   const [order, setOrder] = useState<Order | null>(null);
   const [captains, setCaptains] = useState<Array<{ id: string; name: string }>>([]);
+  /** Active takeaway and delivery types; the picker shows only when the restaurant added its own. */
+  const [takeawayTypes, setTakeawayTypes] = useState<OrderTypeInfo[]>([]);
   const [captainPickerOpen, setCaptainPickerOpen] = useState(false);
   const [captainError, setCaptainError] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -71,6 +73,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [transferSignal, setTransferSignal] = useState(0);
   const transferRefs = useRef(new Map<string, string>());
   useEffect(() => { if (order) savePreference("forkflow.order-type", order.type); }, [order?.type]);
+  useEffect(() => {
+    if (order?.type !== "parcel" || order.status !== "open") return;
+    let active = true;
+    apiFetch<{ orderTypes: OrderTypeInfo[] }>("/api/order-types")
+      .then(({ orderTypes }) => { if (active) setTakeawayTypes(orderTypes.filter((t) => t.isActive && (t.kind === "takeaway" || t.kind === "delivery"))); })
+      .catch(() => { /* the picker stays hidden; the order keeps its type */ });
+    return () => { active = false; };
+  }, [order?.id, order?.type, order?.status]);
   // Another device (or this one) folded this order into a different bill: follow it.
   const mergedInto = order?.mergedInto ?? null;
   useEffect(() => {
@@ -182,6 +192,15 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     } catch (e) {
       setError(e instanceof Error ? e.message : "Request failed");
     } finally { actionLock.current = false; setPending(false); }
+  }
+
+  function chooseOrderType(orderTypeId: string) {
+    if (!order || orderTypeId === order.orderTypeId) return;
+    void run(async () => {
+      const { order: saved } = await apiFetch<{ order: Order }>(`/api/orders/${order.id}/order-type`, { method: "PATCH", body: JSON.stringify({ orderTypeId }) });
+      setOrder(saved);
+      setMessage(`Order type: ${saved.orderTypeName ?? "Takeaway"}`);
+    });
   }
 
   function chooseCaptain(captainId: string | null) {
@@ -450,7 +469,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   return <section className="screen order-screen">
     <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
-      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
+      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : order.orderTypeName ?? "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
         {order.type === "dine_in" && order.status === "open" ? <div className="order-captain-picker">
           <span>Captain</span>
           <button type="button" aria-label="Captain for this order" aria-haspopup="dialog" aria-expanded={captainPickerOpen} disabled={locked}
@@ -458,6 +477,9 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             <span>{order.captainName || "Select captain"}</span><span aria-hidden="true">⌄</span>
           </button>
         </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>}
+        {order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
+          {takeawayTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select></label>}
         {isQuick && order.status === "open" && <p className="muted">Select items, then checkout. Kitchen items are sent automatically.</p>}</div>
       {captain ? <OverflowMenu label="More">
         {order.status === "open" && <button {...shortcutProps("hold")} title={shortcut("hold", "Hold and return to tables")} disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>Hold & return to tables</button>}

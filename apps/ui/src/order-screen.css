@@ -83,6 +83,7 @@
   .order-screen .cart-controls button { min-height: 36px; }
 }
 .order-captain-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
+.order-type-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
 .order-captain-picker > button { display: flex; justify-content: space-between; align-items: center; gap: 16px; max-width: 100%; min-width: 145px; text-align: left; }
 .order-captain-picker > button > span:first-child { overflow-wrap: anywhere; white-space: normal; }
 html[data-theme] .workspace-dialog.order-captain-dialog { width: min(440px, calc(100vw - 24px)); }

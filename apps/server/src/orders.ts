@@ -14,6 +14,7 @@ import { bestEffortPrint } from "./print/best-effort.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { integrationEnabled } from "./integrations.js";
+import { takeawayOrderType } from "./order-types.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -58,6 +59,8 @@ export function registerOrders(app: FastifyInstance): void {
       if (app.db.prepare("SELECT id FROM orders WHERE zomato_order_id = ? AND type = 'zomato'").get(body.zomatoOrderId!)) throw zomatoDuplicate(body.zomatoOrderId!);
     }
 
+    const customType = body.orderTypeId ? takeawayOrderType(app.db, body.orderTypeId) : null;
+
     if (body.type === "dine_in") {
       const table = app.db
         .prepare("SELECT id, is_active FROM dining_tables WHERE id = ?")
@@ -96,8 +99,8 @@ export function registerOrders(app: FastifyInstance): void {
     } else {
       // Parcel: split_label is NULL
       app.db
-        .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .run(id, body.clientRef, body.type, body.tableId, null, req.user.id, now, "takeaway");
+        .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier, order_type_id, order_type_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(id, body.clientRef, body.type, body.tableId, null, req.user.id, now, "takeaway", customType?.id ?? null, customType?.name ?? null);
     }
 
     const order = orderWithDetails(id)!;
@@ -313,7 +316,7 @@ export function registerOrders(app: FastifyInstance): void {
             // Build context line using kitchen-board rule
             let contextLine: string;
             if (order.type === "parcel") {
-              contextLine = "Parcel";
+              contextLine = order.order_type_name ?? "Parcel";
             } else if (order.type === "zomato") {
               contextLine = `Zomato #${order.zomato_order_id}`;
             } else if (tableName) {
@@ -333,6 +336,7 @@ export function registerOrders(app: FastifyInstance): void {
                 kotNo: kot.kot_no,
                 stationName: stationRow.name,
                 orderType: order.type,
+                orderTypeName: order.order_type_name ?? null,
                 zomatoOrderId: order.zomato_order_id ?? null,
                 tableName,
                 splitLabel: order.split_label,

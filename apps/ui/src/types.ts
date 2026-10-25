@@ -96,6 +96,16 @@ export interface SettingsData {
   kotEditPrint: "ask" | "always" | "never";
 }
 
+export interface OrderTypeInfo {
+  id: string;
+  name: string;
+  kind: "dine_in" | "takeaway" | "delivery" | "aggregator";
+  isActive: boolean;
+  /** Dine-in, Takeaway and Zomato: rename and reorder only. */
+  isSystem: boolean;
+  sortOrder: number;
+}
+
 export interface TableInfo {
   priceTier: "non_ac" | "ac";
   id: string;
@@ -132,6 +142,10 @@ export interface Order {
   id: string;
   clientRef: string;
   type: "dine_in" | "parcel" | "zomato";
+  /** The order type id: a built-in id (same as `type`) or the restaurant's own takeaway/delivery type. */
+  orderTypeId: string;
+  /** Name of the restaurant's own type; null for the built-in types. */
+  orderTypeName: string | null;
   zomatoOrderId: string | null;
   zomatoStatus: "preparing" | "ready" | "picked_up" | null;
   tableId: string | null;
@@ -166,6 +180,7 @@ export interface KotWithContext {
   acceptedAt: number | null;
   doneAt: number | null;
   orderType: "dine_in" | "parcel" | "zomato";
+  orderTypeName?: string | null;
   zomatoOrderId: string | null;
   tableName: string | null;
   splitLabel: string | null;

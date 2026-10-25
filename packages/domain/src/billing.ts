@@ -53,6 +53,8 @@ export interface ReceiptSnapshot {
   orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null;
   /** Set on Zomato orders. */
   zomatoOrderId?: string;
+  /** The restaurant's own order type (e.g. "Home delivery") on a takeaway order; absent for the built-in types. */
+  orderTypeName?: string;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
   /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */

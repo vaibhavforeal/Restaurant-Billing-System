@@ -10,7 +10,7 @@ const salesColumns = [column("qty", "Quantity", "quantity"), column("bills", "Bi
 
 export function registerOperationalReports(app: FastifyInstance) {
   app.get("/api/reports/operations/:kind", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
-    const { kind } = z.object({ kind: z.enum(["items", "cashiers", "hourly", "kots", "cancellations", "stock", "credit-notes"]) }).parse(req.params);
+    const { kind } = z.object({ kind: z.enum(["items", "cashiers", "hourly", "order-types", "kots", "cancellations", "stock", "credit-notes"]) }).parse(req.params);
     const { from, to, bounds } = reportRange(req.query);
     const [start, end] = bounds;
     const db = app.db;
@@ -86,6 +86,26 @@ export function registerOperationalReports(app: FastifyInstance) {
         const totals = sum(rows, ["bills", "total", "discount", "gst", "credit"]);
         tables.push({ title: "Hourly sales", columns: [column("hour", "Hour"), column("bills", "Bills"), column("discount", "Discount", "money"), column("gst", "Net GST", "money"), column("credit", "Credit notes", "money"), column("total", "Net sales", "money"), column("average", "Average bill", "money")], rows,
           totals: { hour: "Total", ...totals, average: totals.bills ? Math.round(totals.total! / totals.bills) : 0 } });
+      }
+      if (kind === "order-types") {
+        notes.push("Issued bills (including void ones) by bill date, grouped by the order type at billing; credit notes subtract on their own date from the order type of the bill they credit. Sales include GST and rounding.",
+          "Restaurant-defined takeaway and delivery types are listed under their current name. Average bill is net sales divided by bills issued.");
+        const rows = query(`WITH entries AS (
+            SELECT COALESCE(o.order_type_id, o.type) AS typeId, 1 AS bills, b.subtotal_paise AS subtotal, b.discount_paise AS discount,
+              b.cgst_paise + b.sgst_paise AS gst, b.total_paise AS total, 0 AS credit
+            FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.created_at >= ? AND b.created_at < ?
+            UNION ALL
+            SELECT COALESCE(o.order_type_id, o.type), 0, 0, 0, -(c.cgst_paise + c.sgst_paise), -c.total_paise, c.total_paise
+            FROM credit_notes c JOIN bills b ON b.id = c.bill_id JOIN orders o ON o.id = b.order_id WHERE c.created_at >= ? AND c.created_at < ?)
+          SELECT COALESCE(t.name, e.typeId) AS orderType, CASE t.kind WHEN 'dine_in' THEN 'Dine-in' WHEN 'takeaway' THEN 'Takeaway' WHEN 'delivery' THEN 'Delivery' WHEN 'aggregator' THEN 'Aggregator' ELSE '' END AS kind,
+            SUM(e.bills) AS bills, SUM(e.subtotal) AS subtotal, SUM(e.discount) AS discount, SUM(e.gst) AS gst, SUM(e.credit) AS credit, SUM(e.total) AS total
+          FROM entries e LEFT JOIN order_types t ON t.id = e.typeId GROUP BY e.typeId ORDER BY total DESC, orderType`, ...bounds, ...bounds)
+          .map((row) => ({ ...row, average: Number(row.bills) ? Math.round(Number(row.total) / Number(row.bills)) : 0 }));
+        const totals = sum(rows, ["bills", "subtotal", "discount", "gst", "credit", "total"]);
+        tables.push({ title: "Order type sales", columns: [column("orderType", "Order type"), column("kind", "Kind"), column("bills", "Bills"),
+          column("subtotal", "Subtotal", "money"), column("discount", "Discount", "money"), column("gst", "Net GST", "money"), column("credit", "Credit notes", "money"),
+          column("total", "Net sales", "money"), column("average", "Average bill", "money")],
+          rows, totals: { orderType: "Total", ...totals, average: totals.bills ? Math.round(totals.total! / totals.bills) : 0 } });
       }
       if (kind === "credit-notes") {
         notes.push("Every void and refund credit note made during the selected dates, by the date it was made (not the original bill's date). GST is CGST + SGST credited; total includes round-off.");

@@ -123,7 +123,7 @@ export function registerKots(app: FastifyInstance): void {
         // Build context line using kitchen-board rule
         let contextLine: string;
         if (orderResult.type === "parcel") {
-          contextLine = "Parcel";
+          contextLine = orderResult.order_type_name ?? "Parcel";
         } else if (orderResult.type === "zomato") {
           contextLine = `Zomato #${orderResult.zomato_order_id}`;
         } else if (tableName) {
@@ -143,6 +143,7 @@ export function registerKots(app: FastifyInstance): void {
             kotNo: kotRow.kot_no,
             stationName: stationRow.name,
             orderType: orderResult.type,
+            orderTypeName: orderResult.order_type_name ?? null,
             zomatoOrderId: orderResult.zomato_order_id ?? null,
             tableName,
             splitLabel: orderResult.split_label,

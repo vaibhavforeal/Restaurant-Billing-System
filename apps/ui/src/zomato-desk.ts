@@ -17,16 +17,16 @@ export function zomatoLabel(zomatoOrderId: string | null | undefined): string {
 }
 
 /** The location line of a kitchen ticket. */
-export function kitchenContextLabel(kot: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | null }): string {
+export function kitchenContextLabel(kot: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | null; orderTypeName?: string | null }): string {
   if (kot.orderType === "zomato") return zomatoLabel(kot.zomatoOrderId);
-  if (kot.orderType === "parcel") return "Parcel";
+  if (kot.orderType === "parcel") return kot.orderTypeName ?? "Parcel";
   return kot.splitLabel && kot.splitLabel !== "A" ? `${kot.tableName ?? "Table"} · ${kot.splitLabel}` : kot.tableName ?? "Table";
 }
 
 /** The "Table / parcel" cell of a bill, from its receipt snapshot. */
-export function billContextLabel(receipt: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | undefined }): string {
+export function billContextLabel(receipt: { orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null; zomatoOrderId?: string | undefined; orderTypeName?: string | undefined }): string {
   if (receipt.orderType === "zomato") return zomatoLabel(receipt.zomatoOrderId);
-  if (receipt.orderType === "parcel") return "Parcel";
+  if (receipt.orderType === "parcel") return receipt.orderTypeName ?? "Parcel";
   return `${receipt.tableName} · ${receipt.splitLabel ?? "A"}`;
 }
 

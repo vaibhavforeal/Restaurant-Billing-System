@@ -6,6 +6,7 @@ import { connectWs } from "../ws";
 import { SystemSettings } from "./SystemSettings";
 import { LicenseSettings } from "./LicenseSettings";
 import { KeyboardSettings } from "./KeyboardSettings";
+import { OrderTypes } from "./OrderTypes";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 import { Icon } from "../Icon";
 import { initialSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId } from "../settings-sections";
@@ -322,6 +323,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       </div>
       <div className="pos-section settings-detail">
       {active === "shortcuts" && <KeyboardSettings />}
+      {active === "order-types" && <OrderTypes />}
       {/* Profile section */}
       {active === "profile" && <div className="panel">
 

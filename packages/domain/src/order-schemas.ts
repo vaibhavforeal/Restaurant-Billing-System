@@ -32,6 +32,8 @@ export const OrderCreate = z
     type: z.enum(["dine_in", "parcel", "zomato"]),
     tableId: z.string().min(1).nullable().default(null),
     zomatoOrderId: ZOMATO_ORDER_ID.optional(),
+    /** A restaurant's own takeaway or delivery type; only for parcel orders. */
+    orderTypeId: z.string().min(1).max(64).optional(),
   })
   .superRefine((o, ctx) => {
     if (o.type === "dine_in" && !o.tableId) ctx.addIssue({ code: "custom", message: "dine_in requires tableId" });
@@ -40,6 +42,7 @@ export const OrderCreate = z
     if (o.type === "zomato" && !o.zomatoOrderId) ctx.addIssue({ code: "custom", message: "zomato requires zomatoOrderId", path: ["zomatoOrderId"] });
     if (o.type === "zomato" && o.tableId) ctx.addIssue({ code: "custom", message: "zomato cannot have a table" });
     if (o.type === "zomato" && o.captainId) ctx.addIssue({ code: "custom", message: "Select captains for dine-in orders" });
+    if (o.type !== "parcel" && o.orderTypeId) ctx.addIssue({ code: "custom", message: "Order types other than the built-in ones are for takeaway orders", path: ["orderTypeId"] });
     if (o.type !== "zomato" && o.zomatoOrderId) ctx.addIssue({ code: "custom", message: "zomatoOrderId is only for zomato orders", path: ["zomatoOrderId"] });
   });
 export type OrderCreateInput = z.infer<typeof OrderCreate>;
@@ -85,3 +88,16 @@ export const SentItemEdit = z.object({
   if (v.qty !== undefined && !v.reason) ctx.addIssue({ code: "custom", message: "Give a reason for reducing the quantity", path: ["reason"] });
 });
 export type SentItemEditInput = z.infer<typeof SentItemEdit>;
+
+/** Kinds a restaurant can add itself; dine-in and aggregator (Zomato) are built in. */
+export const ORDER_TYPE_KINDS = ["dine_in", "takeaway", "delivery", "aggregator"] as const;
+export type OrderTypeKind = typeof ORDER_TYPE_KINDS[number];
+const OrderTypeName = z.string().trim().min(1, "Enter a name").max(40);
+export const OrderTypeCreate = z.object({ name: OrderTypeName, kind: z.enum(["takeaway", "delivery"]) });
+export const OrderTypeUpdate = z.object({
+  name: OrderTypeName.optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+});
+/** Switch an open takeaway between the restaurant's takeaway and delivery types. */
+export const OrderTypeChange = z.object({ orderTypeId: z.string().min(1).max(64) });

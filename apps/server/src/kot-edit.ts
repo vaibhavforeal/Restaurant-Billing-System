@@ -88,7 +88,7 @@ export function registerKotEdits(app: FastifyInstance): void {
         ? db.prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1").get(station.printer_id) as { paper_width: 58 | 80; kot_profile: string } | undefined
         : undefined;
       if (!printer) return false;
-      const context = contextLine(order.type, tableName, order.split_label, order.zomato_order_id ?? null);
+      const context = contextLine(order.type, tableName, order.split_label, order.zomato_order_id ?? null, order.order_type_name ?? null);
       const rendered = bestEffortPrint(app.log, `Edit slip for KOT #${kot.kot_no}`, () => editSlip({ kotNo: kot.kot_no, context, ...change }, printer.paper_width, readProfile(printer.kot_profile)));
       if (rendered.error) { printError = rendered.error; return false; }
       app.enqueuePrint(kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${context}`, rendered.value!);

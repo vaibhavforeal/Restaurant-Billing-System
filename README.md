@@ -76,6 +76,7 @@ parcel workflow, and **New parcel** remains available alongside Quick takeaway.
 Operations: [Quick takeaway billing](docs/operations/quick-takeaway.md),
 [Discount limits](docs/operations/discount-limits.md),
 [Changing sent items](docs/operations/kot-edits.md),
+[Order types](docs/operations/order-types.md),
 [Table QR ordering](docs/operations/qr-ordering.md),
 [Recipe editing](docs/operations/recipes.md),
 [Inventory costing and profit](docs/operations/costing.md), and

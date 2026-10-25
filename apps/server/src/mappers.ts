@@ -17,6 +17,10 @@ export interface OrderRow {
   opened_at: number;
   closed_at: number | null;
   merged_into?: string | null;
+  /** NULL for the built-in type named by `type`. */
+  order_type_id?: string | null;
+  /** Name snapshot of the restaurant's own type, shown on slips and bills; NULL for the built-in types. */
+  order_type_name?: string | null;
 }
 
 export interface OrderItemRow {
@@ -84,6 +88,7 @@ export function kotWithContextJson(
   return {
     ...kotJson(kot),
     orderType: order.type,
+    orderTypeName: order.order_type_name ?? null,
     zomatoOrderId: order.zomato_order_id ?? null,
     tableName,
     splitLabel: order.split_label,
@@ -115,6 +120,8 @@ export function loadOrderJson(db: Database, orderId: string) {
     id: row.id,
     clientRef: row.client_ref,
     type: row.type,
+    orderTypeId: row.order_type_id ?? row.type,
+    orderTypeName: row.order_type_name ?? null,
     priceTier: row.price_tier,
     zomatoOrderId: row.zomato_order_id ?? null,
     zomatoStatus: row.zomato_status ?? null,

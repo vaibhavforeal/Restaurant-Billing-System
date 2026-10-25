@@ -93,7 +93,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   line(`Date: ${dateTime(bill.createdAt)}`);
   pair(`Bill #${bill.billNo}`, statusLabel(bill));
   line(r.orderType === "zomato" ? contextLine(r.orderType, null, null, r.zomatoOrderId) :
-    r.orderType === "parcel" ? "TAKEAWAY / Parcel" : `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}`);
+    r.orderType === "parcel" ? (r.orderTypeName ? r.orderTypeName.toUpperCase() : "TAKEAWAY / Parcel") : `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}`);
   if (bill.payments.length) line(`Payment mode: ${paymentModes(bill)}`);
   line("All amounts in Rs.");
   rule().bold(true);
@@ -157,7 +157,7 @@ export function receiptHtml(bill: Bill): string {
   const style = resolveReceiptStyle(r.receiptStyle);
   const e = escape;
   const due = Math.max(0, bill.totalPaise - paidAmount(bill));
-  const service = r.orderType === "zomato" ? "Zomato" : r.orderType === "parcel" ? "Takeaway / Parcel" : "Dine-in";
+  const service = r.orderType === "zomato" ? "Zomato" : r.orderType === "parcel" ? e(r.orderTypeName ?? "Takeaway / Parcel") : "Dine-in";
   const order = r.orderType === "zomato" ? `Zomato #${e(r.zomatoOrderId ?? "")}` : "Parcel";
   // Zomato collects and pays the GST on its orders (section 9(5)): the bill shows the note, never per-rate GST lines.
   const zomatoGst = r.gstPaidBy === "zomato";
