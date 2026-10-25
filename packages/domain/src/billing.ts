@@ -7,6 +7,8 @@ const Ref = z.string().min(8).max(64);
 export const BillPreview = z.object({
   discountPaise: Paise.default(0),
   discountNote: z.string().trim().max(200).default(""),
+  // An admin's PIN approves a discount above the signed-in user's limit. Never stored.
+  approverPin: z.string().regex(/^\d{4,6}$/, "Enter the admin PIN").optional(),
 }).superRefine((v, ctx) => {
   if (v.discountPaise > 0 && !v.discountNote) ctx.addIssue({ code: "custom", message: "Discount reason required", path: ["discountNote"] });
 });

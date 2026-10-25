@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch } from "../api";
 import type { AdminUser } from "../types";
+import { DiscountCaps } from "./DiscountCaps";
 
 const ROLES: AdminUser["role"][] = ["admin", "cashier", "waiter", "kitchen"];
 
@@ -44,7 +45,7 @@ export function Users() {
     });
   }
 
-  function patchUser(id: string, patch: Partial<Pick<AdminUser, "role" | "isActive">> & { pin?: string }) {
+  function patchUser(id: string, patch: Partial<Pick<AdminUser, "role" | "isActive" | "maxDiscountPercent">> & { pin?: string }) {
     void run(() => apiFetch(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) }));
   }
 
@@ -77,6 +78,7 @@ export function Users() {
           <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
             <th style={{ padding: 6 }}>Name</th>
             <th>Role</th>
+            <th>Discount limit</th>
             <th>Status</th>
             <th></th>
           </tr>
@@ -92,6 +94,8 @@ export function Users() {
                   ))}
                 </select>
               </td>
+              <td>{u.role === "admin" ? "No limit" : <input type="number" min={0} max={100} step="0.5" style={{ width: 70 }} aria-label={`Discount limit (%) for ${u.name}`} placeholder="Role default" defaultValue={u.maxDiscountPercent ?? ""} key={`${u.id}-${u.maxDiscountPercent ?? ""}`}
+                onBlur={(e) => { const raw = e.target.value.trim(); const next = raw === "" ? null : Number(raw); if (next !== u.maxDiscountPercent && (next === null || (Number.isFinite(next) && next >= 0 && next <= 100))) patchUser(u.id, { maxDiscountPercent: next }); }} />}</td>
               <td>{u.isActive ? "active" : "inactive"}</td>
               <td style={{ display: "flex", gap: 4, padding: 4 }}>
                 <button onClick={() => setUserPin(u)}>Set PIN</button>
@@ -105,6 +109,7 @@ export function Users() {
       </table>
       </div>
       </fieldset>
+      <DiscountCaps />
     </div>
   );
 }

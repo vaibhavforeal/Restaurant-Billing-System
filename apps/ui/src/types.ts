@@ -77,6 +77,8 @@ export interface AdminUser {
   role: "admin" | "cashier" | "waiter" | "kitchen";
   isActive: boolean;
   createdAt: number;
+  /** Overrides the role's discount limit; null follows the role. */
+  maxDiscountPercent: number | null;
 }
 
 export interface SettingsData {

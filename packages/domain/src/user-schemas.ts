@@ -15,5 +15,7 @@ export const UserUpdate = z.object({
   pin: PIN.optional(),
   role: RoleEnum.optional(),
   isActive: z.boolean().optional(),
+  // Overrides the role's discount limit for this person; null goes back to the role's limit.
+  maxDiscountPercent: z.number().min(0).max(100).nullable().optional(),
 });
 export type UserUpdateInput = z.infer<typeof UserUpdate>;

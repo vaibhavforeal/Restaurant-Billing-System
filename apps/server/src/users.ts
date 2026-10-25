@@ -10,6 +10,7 @@ interface UserRow {
   is_active: number;
   created_at: number;
   pin_hash: string;
+  max_discount_percent: number | null;
 }
 
 const toUser = (r: UserRow) => ({
@@ -18,6 +19,7 @@ const toUser = (r: UserRow) => ({
   role: r.role,
   isActive: r.is_active === 1,
   createdAt: r.created_at,
+  maxDiscountPercent: r.max_discount_percent,
 });
 
 export function registerUsers(app: FastifyInstance): void {
@@ -73,8 +75,9 @@ export function registerUsers(app: FastifyInstance): void {
     const pinHash = body.pin ? await hashPassword(body.pin) : row.pin_hash;
 
     app.db
-      .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash, id);
+      .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ?, max_discount_percent = ? WHERE id = ?")
+      .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash,
+        body.maxDiscountPercent === undefined ? row.max_discount_percent : body.maxDiscountPercent, id);
 
     // Close WS sockets if user was deactivated
     if (row.is_active === 1 && body.isActive === false) {

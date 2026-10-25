@@ -19,7 +19,7 @@ license and device access. A takeaway has no dining table.
 4. Review the total in the checkout dialog. **Bill options** contains the
    receipt printer and discount; **Tax details** expands the GST breakdown.
    Bill options can also be opened before checkout. Discounts need a reason, and cashiers keep
-   the existing 10% limit. A changed cart or discount needs a fresh checkout
+   their discount limit (see [Discount limits](discount-limits.md)). A changed cart or discount needs a fresh checkout
    preview before issuing the bill.
 5. Choose **Cash**, **UPI**, or **Card**. For cash, enter **Cash received** to see
    the change due; leaving it blank means the exact bill total. The recorded

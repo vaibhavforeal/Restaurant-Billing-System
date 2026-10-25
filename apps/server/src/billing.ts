@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
   type Bill, type Database, type GstMode, type PaymentMode, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
 import { readGstSettings } from "./gst-settings.js";
@@ -14,6 +14,8 @@ import { consumeStock, saveReportLines } from "@forkflow/domain";
 import { publishStock } from "./stock.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
+import { effectiveDiscountCap } from "./discount-caps.js";
+import { resolveApprover } from "./credit-notes.js";
 
 interface BillRow {
   id: string; bill_no: number; order_id: string; status: Bill["status"];
@@ -38,9 +40,12 @@ export function loadBill(db: Database, id: string): Bill {
 }
 
 type IssueRole = Parameters<typeof roleFor>[0];
+/** Who is billing, and the admin (if any) who approved a discount above their limit. */
+interface BillActor { id: string; role: IssueRole; approvedBy?: string | null }
+const isDiscountCapError = (err: unknown) => typeof err === "object" && err !== null && "code" in err && err.code === "discount_cap";
 
 /** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
-function priceOrder(db: Database, orderId: string, discountPaise: number, role: IssueRole, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>) {
+function priceOrder(db: Database, orderId: string, discountPaise: number, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>) {
   const order = loadOrderJson(db, orderId);
   if (!order) throw httpError(404, "order not found");
   if (order.status !== "open") throw httpError(409, "order is not open");
@@ -53,8 +58,8 @@ function priceOrder(db: Database, orderId: string, discountPaise: number, role: 
   const mode = gstMode ?? readGstSettings(db).gstMode;
   try { totals = calculateBill(items, discountPaise, mode); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message : "Invalid bill"); }
-  const limit = roleFor(role).limits?.["max_discount_percent"];
-  if (typeof limit === "number" && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%`);
+  const limit = effectiveDiscountCap(db, actor);
+  if (limit !== null && !actor.approvedBy && totals.discountPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%; an admin PIN is needed for more`, "discount_cap");
   const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle">;
   const receipt: ReceiptSnapshot = { ...profile, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })), ...receiptExtra };
@@ -66,17 +71,17 @@ function priceOrder(db: Database, orderId: string, discountPaise: number, role: 
  * Call inside an open `db.transaction`. Printing and broadcasting are the caller's job; the returned stock IDs are for `publishStock`.
  */
 export function issueBill(db: Database, orderId: string, opts: {
-  discountPaise: number; discountNote: string | null; clientRef: string; requestJson: string; actorId: string; role: IssueRole;
+  discountPaise: number; discountNote: string | null; clientRef: string; requestJson: string; actorId: string; role: IssueRole; approvedBy?: string | null;
   gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>;
 }): { billId: string; changedStockIds: string[] } {
-  const { totals, receipt } = priceOrder(db, orderId, opts.discountPaise, opts.role, opts.gstMode, opts.receiptExtra);
+  const { totals, receipt } = priceOrder(db, orderId, opts.discountPaise, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra);
   const id = uuidv7();
   const billNo = nextSequence(db, "bill_no");
   db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
-    cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, orderId, totals.subtotalPaise,
+    cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json, discount_approved_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, orderId, totals.subtotalPaise,
       totals.discountPaise, opts.discountNote || null, totals.cgstPaise, totals.sgstPaise, totals.roundingPaise,
-      totals.totalPaise, Date.now(), opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt));
+      totals.totalPaise, Date.now(), opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt), totals.discountPaise > 0 ? opts.approvedBy ?? null : null);
   for (const tax of totals.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
   saveReportLines(db, id);
   // All remaining pending items are stationless; deduct before changing status.
@@ -147,16 +152,30 @@ export function registerBilling(app: FastifyInstance): void {
     if (type === "zomato") throw httpError(409, "Zomato orders are billed and closed with Picked up on the Zomato desk", "zomato_order");
   }
   const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
-  function preview(orderId: string, body: z.infer<typeof BillPreview>, role: Parameters<typeof roleFor>[0]) {
+  function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor) {
     refuseZomato(orderType(orderId));
-    const { items, totals, receipt } = priceOrder(db, orderId, body.discountPaise, role, undefined);
+    const { items, totals, receipt } = priceOrder(db, orderId, body.discountPaise, actor, undefined);
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
     return { ...totals, receipt, previewKey };
   }
 
+  /**
+   * A discount above the signed-in user's limit needs an admin PIN. Returns the approving admin's id, or null when the
+   * discount is within the limit. Runs before the write transaction because checking a PIN is asynchronous.
+   */
+  async function discountApproval(req: FastifyRequest, orderId: string, body: z.infer<typeof BillPreview>): Promise<string | null> {
+    try { priceOrder(db, orderId, body.discountPaise, { id: req.user.id, role: req.user.role }, undefined); return null; }
+    catch (err) {
+      if (!isDiscountCapError(err) || !body.approverPin) throw err;
+      return (await resolveApprover(app, req, body.approverPin)).id;
+    }
+  }
   app.post("/api/orders/:id/bill-preview", { preHandler: create }, async (req) => {
     const { id } = req.params as { id: string };
-    return { preview: preview(id, BillPreview.parse(req.body ?? {}), req.user.role) };
+    const body = BillPreview.parse(req.body ?? {});
+    refuseZomato(orderType(id));
+    const approvedBy = await discountApproval(req, id, body);
+    return { preview: preview(id, body, { id: req.user.id, role: req.user.role, approvedBy }) };
   });
   app.get("/api/orders/:id/bill", { preHandler: read }, async (req) => {
     const { id } = req.params as { id: string };
@@ -165,8 +184,13 @@ export function registerBilling(app: FastifyInstance): void {
   });
   app.post("/api/orders/:id/bill", { preHandler: create }, async (req, reply) => {
     const { id: orderId } = req.params as { id: string };
-    const body = BillCreate.parse(req.body);
+    const { approverPin, ...body } = BillCreate.parse(req.body);
+    // The PIN is a credential: it approves this request but is never stored in the replay record.
     const requestJson = JSON.stringify({ orderId, ...body });
+    // A replay of an already-issued bill needs no approval; the transaction below answers it.
+    const replayed = db.prepare("SELECT 1 FROM bills WHERE client_ref = ?").get(body.clientRef) !== undefined;
+    if (!replayed) refuseZomato(orderType(orderId));
+    const approvedBy = replayed ? null : await discountApproval(req, orderId, { ...body, approverPin });
     const changedStockIds: string[] = [];
     const result = db.transaction(() => {
       const existing = db.prepare("SELECT * FROM bills WHERE client_ref = ?").get(body.clientRef) as BillRow | undefined;
@@ -176,10 +200,10 @@ export function registerBilling(app: FastifyInstance): void {
       }
       refuseZomato(orderType(orderId));
       if (db.prepare("SELECT id FROM bills WHERE order_id = ?").get(orderId)) throw httpError(409, "Order already billed; reload to view its bill");
-      const value = preview(orderId, body, req.user.role);
+      const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy });
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
       const target = body.printerId ? printer(body.printerId) : null;
-      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role });
+      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy });
       changedStockIds.push(...issued.changedStockIds);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
       return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };

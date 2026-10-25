@@ -74,6 +74,7 @@ checkout; an existing unpaid bill reopens for payment. Waiters retain the ordina
 parcel workflow, and **New parcel** remains available alongside Quick takeaway.
 
 Operations: [Quick takeaway billing](docs/operations/quick-takeaway.md),
+[Discount limits](docs/operations/discount-limits.md),
 [Table QR ordering](docs/operations/qr-ordering.md),
 [Recipe editing](docs/operations/recipes.md),
 [Inventory costing and profit](docs/operations/costing.md), and
@@ -179,7 +180,7 @@ The mode, restaurant details, item prices and GST rates are saved with each bill
 Dine-in cashier/admin flow: punch the cart → send kitchen items → **Preview bill** →
 **Issue bill** → record cash, UPI and/or card amounts → **Settle bill**. Payment
 amounts must equal the total; enter the cash applied to the bill, excluding change.
-Discounts require a reason; cashiers have the existing 10% cap. Each table split
+Discounts require a reason; each role has a discount limit (cashiers start at 10%) and a larger discount needs an admin PIN. Each table split
 gets its own bill, and the table frees when all groups settle.
 
 Pick a receipt printer at checkout, or use **View receipt → Print / save PDF**.
