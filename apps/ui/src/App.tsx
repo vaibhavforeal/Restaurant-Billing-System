@@ -140,7 +140,7 @@ function StaffApp() {
           {page.name === "users" && <Users />}
           {page.name === "settings" && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
-          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} onOpenOrder={onOpenOrder} />}
+          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} canSettle={user.role === "admin" || user.role === "cashier"} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <Inventory user={user} />}
           {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
           </main>

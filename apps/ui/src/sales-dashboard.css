@@ -80,3 +80,10 @@ html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; backgr
 .report-notes { margin: 12px 0; font-size: 13px; }
 .report-notes summary { cursor: pointer; }
 .report-notes p { max-width: 90ch; line-height: 1.5; }
+
+/* Cash & day close */
+.cash-drawer { display: grid; gap: 12px; }
+.cash-drawer .pos-totals { max-width: 420px; }
+.cash-drawer-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.cash-drawer-form legend { font-weight: 600; margin-bottom: 4px; }
+.cash-drawer-form label { display: grid; gap: 4px; }
