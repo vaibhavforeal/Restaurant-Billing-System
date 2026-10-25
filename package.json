@@ -26,6 +26,8 @@
     "package:commercial": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64",
     "package:dev": "npm run build:desktop && electron-builder --config electron-builder.dev.yml --win --x64",
     "package:win": "npm run package:commercial",
+    "release:stable": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --publish always",
+    "release:patch": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --publish always -c.publish.releaseType=prerelease",
     "package:dir": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --dir"
   },
   "devDependencies": {

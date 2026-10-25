@@ -79,6 +79,7 @@ Operations: [Quick takeaway billing](docs/operations/quick-takeaway.md),
 [Order types](docs/operations/order-types.md),
 [Cash drawer and day close](docs/operations/cash-drawer-and-day-close.md),
 [Customers and loyalty](docs/operations/customers-and-loyalty.md),
+[Automatic updates](docs/operations/updates.md),
 [Table QR ordering](docs/operations/qr-ordering.md),
 [Recipe editing](docs/operations/recipes.md),
 [Inventory costing and profit](docs/operations/costing.md), and

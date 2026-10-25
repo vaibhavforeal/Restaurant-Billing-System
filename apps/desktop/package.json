@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "electron": "^43.4.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

@@ -55,3 +55,4 @@ export * from "./pricing.js";
 export { CloudBackupPreferences, type CloudBackupSettings, type CloudBackupState, type CloudBackupAccount, type CloudBackupStatus } from "./cloud-backups.js";
 export { ShiftOpen, CashMovementCreate, ShiftClose, DayClose } from "./shift-schemas.js";
 export { normalizePhone, CustomerCreate, CustomerUpdate, CustomerSlab, CustomerTypeCreate, CustomerTypeUpdate, LoyaltySettingsUpdate, LoyaltyAdjust, OrderCustomerSet, bestSlabPercent, percentOf, pointsEarned, type SlabRule } from "./customers.js";
+export { UPDATE_CHANNELS, isToServer, isToDesktop, type UpdateChannel, type UpdateState, type UpdateStatus, type ToDesktop, type ToServer } from "./updates.js";

@@ -39,7 +39,10 @@ try {
   const captainInfo: CaptainHttpsInfo = { enabled: false };
   try { captainTls = loadCaptainHttps(dataDir); if (captainTls) Object.assign(captainInfo, captainTls.info); }
   catch (error) { captainInfo.error = error instanceof Error ? error.message : "Captain HTTPS configuration could not be loaded"; }
-  const app = buildServer({ db, backups, port, generation, demo, ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
+  // The desktop shell's message port: shutdown requests and the auto-updater's status arrive here.
+  const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void; postMessage(message: unknown): void } }).parentPort;
+  const updateBridge = parent ? { send: (message: unknown) => parent.postMessage(message), onMessage: (listener: (message: unknown) => void) => parent.on("message", ({ data }) => listener(data)) } : undefined;
+  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
     serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
   } });
   const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };
@@ -62,7 +65,6 @@ try {
   const close = async () => { if (closing) return; closing = true; await app.close(); };
   process.on("SIGTERM", () => { void close(); });
   process.on("SIGINT", () => { void close(); });
-  const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void } }).parentPort;
   parent?.on("message", ({ data }) => { if (data === "shutdown") void close().then(() => process.exit(0)); });
   if (demo) await seedDemo(app);
   await app.listen({ host: "0.0.0.0", port });

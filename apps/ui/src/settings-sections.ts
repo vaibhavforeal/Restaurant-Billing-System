@@ -1,6 +1,6 @@
 import type { IconName } from "./Icon";
 
-export type SettingsSectionId = "profile" | "order-types" | "printers" | "stations" | "jobs" | "backups" | "plan" | "shortcuts";
+export type SettingsSectionId = "profile" | "order-types" | "printers" | "stations" | "jobs" | "backups" | "plan" | "updates" | "shortcuts";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: string; blurb: string; icon: IconName }> = [
   { id: "profile", title: "Restaurant profile", blurb: "Name, GST, bill style and UPI", icon: "marketplace" },
@@ -10,6 +10,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: st
   { id: "jobs", title: "Print jobs", blurb: "Check, retry or confirm printed copies", icon: "bills" },
   { id: "backups", title: "Backups & connections", blurb: "Backups, devices and cloud", icon: "cloud" },
   { id: "plan", title: "Plan & devices", blurb: "Licence, plan and registered devices", icon: "badge" },
+  { id: "updates", title: "Updates", blurb: "Version, update channel and installing", icon: "refresh" },
   { id: "shortcuts", title: "Keyboard shortcuts", blurb: "Counter hotkeys", icon: "keyboard" },
 ];
 

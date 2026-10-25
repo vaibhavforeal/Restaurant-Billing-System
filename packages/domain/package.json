@@ -14,7 +14,8 @@
     "./zomato": "./src/zomato.ts",
     "./integrations": "./src/integrations.ts",
     "./licensing": "./src/licensing.ts",
-    "./customers": "./src/customers.ts"
+    "./customers": "./src/customers.ts",
+    "./updates": "./src/updates.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

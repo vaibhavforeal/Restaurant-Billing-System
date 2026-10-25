@@ -14,7 +14,8 @@ const stage = join(root, "build", "desktop", stageName);
 if (relative(root, stage).replaceAll("\\", "/") !== `build/desktop/${stageName}`) throw new Error("Unsafe staging directory");
 rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
 const pkg = JSON.parse(readFileSync(join(root, "package.json")));
-const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*" };
+// electron-updater runs in the Electron main process; it is copied like the server's runtime dependencies.
+const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*", "electron-updater": "*" };
 delete deps["@forkflow/core"]; delete deps["@forkflow/domain"];
 const installed = new Map();
 function locate(name, from) {
@@ -45,7 +46,7 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
   define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
   plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
-await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo) } });
+await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) } });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
 writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "forkflow-demo" : "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "ForkFlow customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
 writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));

@@ -25,3 +25,10 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   include: tools/installer.nsh
+# Auto-update feed. Stable releases are uploaded as drafts and go live when published on GitHub;
+# patch (hotfix) builds are uploaded as pre-releases, which only installations on the Patch channel take.
+publish:
+  provider: github
+  owner: vaibhavforeal
+  repo: Restaurant-Billing-System
+  releaseType: draft

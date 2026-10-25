@@ -5,9 +5,13 @@ import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
 import { startupDocument } from "../../ui/src/startup-screen.js";
 import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
+import { createUpdater, type AutoUpdaterLike } from "./updater.js";
+import { isToDesktop } from "../../../packages/domain/src/updates.js";
 
 declare const __FORKFLOW_DEMO__: boolean;
+declare const __FORKFLOW_COMMERCIAL__: boolean;
 const demo = typeof __FORKFLOW_DEMO__ !== "undefined" && __FORKFLOW_DEMO__;
+const commercial = typeof __FORKFLOW_COMMERCIAL__ !== "undefined" && __FORKFLOW_COMMERCIAL__;
 if (demo) { app.setName("ForkFlow Demo"); app.setPath("userData", join(app.getPath("appData"), "forkflow-demo")); }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,6 +27,7 @@ let restarts = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let recovering = false;
 let errorShown = false;
+let updates: ReturnType<typeof createUpdater> | null = null;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -69,6 +74,13 @@ else {
         void failure("The server process could not be launched. Open the data folder to inspect server.log.");
       }
     }, 5000);
+    // The server relays Settings -> Updates; the shell answers with the updater's status.
+    child.on("message", (data: unknown) => {
+      if (!isToDesktop(data) || server !== child) return;
+      if (data.type === "update-config") updates?.configure(data.channel);
+      else if (data.type === "update-check") updates?.check();
+      else void updates?.install();
+    });
     child.stdout?.on("data", (data: Buffer) => writeLog(data.toString()));
     child.stderr?.on("data", (data: Buffer) => writeLog(data.toString()));
     const watchdog = setInterval(() => { void (async () => {
@@ -155,6 +167,25 @@ else {
       app.setLoginItemSettings({ openAtLogin: true });
       appendFileSync(join(dataDir, "desktop-initialized"), "1");
     }
+    // Only the installed customer edition updates itself; Demo and development builds report why not.
+    const unsupportedReason = !commercial ? "This is not the customer edition of ForkFlow, so it does not update automatically."
+      : !app.isPackaged ? "Updates install only into an installed copy of ForkFlow." : null;
+    let autoUpdater: AutoUpdaterLike | null = null;
+    if (!unsupportedReason) {
+      try { autoUpdater = (await import("electron-updater")).default.autoUpdater as unknown as AutoUpdaterLike; }
+      catch (error) { writeLog(`Updater unavailable: ${String(error)}\n`); }
+    }
+    updates = createUpdater({
+      updater: autoUpdater, currentVersion: app.getVersion(),
+      unsupportedReason: unsupportedReason ?? (autoUpdater ? null : "The updater could not start; see server.log."),
+      publish: (status) => server?.postMessage({ type: "update-status", status }), log: writeLog,
+      beforeInstall: async () => {
+        // The installer replaces the app: stop serving cleanly (the server takes a pre-update backup at next start).
+        quitting = true;
+        await stopServer();
+        tray?.destroy();
+      },
+    });
     startServer();
     writeLog("Creating tray menu\n");
     tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
