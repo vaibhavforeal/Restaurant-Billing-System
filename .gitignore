@@ -29,3 +29,6 @@ output/
 # Licensing Worker local signing key and wrangler state
 .dev.vars
 .wrangler/
+
+# Claude Code personal settings
+.claude/settings.local.json
