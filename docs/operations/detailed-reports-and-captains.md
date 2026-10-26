@@ -43,7 +43,11 @@ show the captains chosen on their current orders. There are no fixed table
 assignments in Users or Manage tables. The upgrade removes old table defaults
 while preserving captains already recorded on existing orders.
 
-Captains sign in with their PIN and use the existing Captain interface. Table
+Captains sign in with their PIN and use the existing Captain interface. A table a
+captain opens there is assigned to that captain automatically, and captains see the
+assignment instead of the picker. On a table opened at the counter without a
+captain, they can tap **Assign to me**. Changing an assigned captain is done at the
+counter. Table
 assignments indicate responsibility for the current order; they do not prevent another captain from
 helping at the table. Financial reports remain restricted to admins/cashiers.
 

@@ -73,7 +73,9 @@ export function registerOrders(app: FastifyInstance): void {
 
     const id = uuidv7();
     const now = Date.now();
-    const chosenCaptainName = captainName(body.captainId);
+    // A captain opening a table from the Captain app serves it; counter staff choose explicitly.
+    const captainId = body.captainId ?? (body.type === "dine_in" && req.user.role === "waiter" ? req.user.id : null);
+    const chosenCaptainName = captainName(captainId);
 
     if (body.type === "dine_in") {
       const write = app.db.transaction(() => {
@@ -83,7 +85,7 @@ export function registerOrders(app: FastifyInstance): void {
 
         app.db
           .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier, captain_id, captain_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          .run(id, body.clientRef, body.type, body.tableId, label, req.user.id, now, tablePriceTier(app.db, body.tableId!), body.captainId ?? null, chosenCaptainName);
+          .run(id, body.clientRef, body.type, body.tableId, label, req.user.id, now, tablePriceTier(app.db, body.tableId!), captainId, chosenCaptainName);
       });
       write();
     } else if (body.type === "zomato") {

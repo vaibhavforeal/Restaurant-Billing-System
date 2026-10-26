@@ -471,7 +471,11 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
       <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : order.orderTypeName ?? "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
-        {order.type === "dine_in" && order.status === "open" ? <div className="order-captain-picker">
+        {/* Captains serve their own tables; reassigning is a counter decision. */}
+        {user.role === "waiter" && order.type === "dine_in" && order.status === "open" && !order.captainName ? <div className="order-captain-picker">
+          <span>Captain</span>
+          <button type="button" disabled={locked} onClick={() => chooseCaptain(user.id)}>Assign to me</button>
+        </div> : user.role !== "waiter" && order.type === "dine_in" && order.status === "open" ? <div className="order-captain-picker">
           <span>Captain</span>
           <button type="button" aria-label="Captain for this order" aria-haspopup="dialog" aria-expanded={captainPickerOpen} disabled={locked}
             onClick={() => { setCaptainError(""); setCaptainPickerOpen(true); }}>

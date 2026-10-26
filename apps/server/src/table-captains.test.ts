@@ -54,3 +54,15 @@ it("limits the captain directory to active names/IDs and restricts assignment to
   await request("PATCH", `/api/users/${ravi.id}`, { isActive: false });
   expect((await request("GET", "/api/captains")).json().captains).toEqual([]);
 });
+
+it("assigns a table to the captain who opens it, but not to counter staff", async () => {
+  const ravi = await createUser(app, token, { name: "Ravi", role: "waiter", pin: "2345" });
+  const maya = await createUser(app, token, { name: "Maya", role: "waiter", pin: "3456" });
+  const cashier = await createUser(app, token, { name: "Counter", role: "cashier", pin: "4567" });
+  const table = (await request("POST", "/api/tables", { name: "T1" })).json().table;
+  const openAs = async (as: string, captainId?: string) => (await request("POST", "/api/orders", { type: "dine_in", tableId: table.id, clientRef: uuidv7(), ...(captainId ? { captainId } : {}) }, as)).json().order;
+  expect((await openAs(ravi.token)).captainName).toBe("Ravi");
+  expect((await openAs(ravi.token, maya.id)).captainName).toBe("Maya");
+  expect((await openAs(cashier.token)).captainId).toBeNull();
+  expect((await openAs(token)).captainId).toBeNull();
+});
