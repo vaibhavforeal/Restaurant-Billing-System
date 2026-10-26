@@ -12,12 +12,13 @@ import { DayEnd } from "./DayEnd";
 import { CashDrawer } from "./CashDrawer";
 import { Bills } from "./Bills";
 import { ZomatoReconciliationPanel } from "./ZomatoReconciliation";
+import { CustomReports } from "./CustomReports";
 import { OverflowMenu, SegmentedControl } from "../PosControls";
 import "../sales-dashboard.css";
 
-export function SalesReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZomato = false, canSettle = false, onOpenOrder }: { canSeeCosts: boolean; /** Cashiers and admins work a cash drawer shift; only admins (canSeeCosts) close a day. */ canSettle?: boolean; /** Admins and cashiers may open the Zomato reconciliation tab, whether Zomato is on or off (receivables from closed orders stay reconcilable). */ canSeeZomato?: boolean; initialTab?: SalesReportKind | "day-end" | "analytics" | "bills" | "zomato" | "cash" | undefined; initialPeriod?: ReportPeriod | undefined; onOpenOrder: (id: string) => void }) {
+export function SalesReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZomato = false, canSettle = false, onOpenOrder }: { canSeeCosts: boolean; /** Cashiers and admins work a cash drawer shift; only admins (canSeeCosts) close a day. */ canSettle?: boolean; /** Admins and cashiers may open the Zomato reconciliation tab, whether Zomato is on or off (receivables from closed orders stay reconcilable). */ canSeeZomato?: boolean; initialTab?: SalesReportKind | "day-end" | "analytics" | "bills" | "zomato" | "cash" | "custom" | undefined; initialPeriod?: ReportPeriod | undefined; onOpenOrder: (id: string) => void }) {
   const [view, setView] = useState<"reports" | "analytics">(initialTab === "analytics" ? "analytics" : "reports");
-  const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | OperationalReportKind | "profit">(initialTab === "analytics" ? "sales" : initialTab);
+  const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | "custom" | OperationalReportKind | "profit">(initialTab === "analytics" ? "sales" : initialTab);
   const { status } = useLicense();
   const profit = canSeeCosts && tab === "profit";
   const operational = OPERATIONAL_REPORTS.some((r) => r.id === tab) || profit;
@@ -33,7 +34,7 @@ export function SalesReports({ initialTab = "sales", initialPeriod, canSeeCosts,
       setExportError(""); setMessage(`${tab === "sales" ? "Sales" : "Collections"} CSV downloaded for ${report.from} to ${report.to}.`);
     } catch (e) { setMessage(""); setExportError(e instanceof Error ? e.message : "Could not download report"); }
   }
-  const presets: Array<{ id: "bills" | "sales" | "collections" | "day-end" | "cash" | "zomato"; title: string }> = [{ id: "bills", title: "Bills" }, { id: "sales", title: "Sales" }, { id: "collections", title: "Collections" }, { id: "day-end", title: "Day-end / GST" }, { id: "cash", title: "Cash & day close" }, ...(canSeeZomato ? [{ id: "zomato" as const, title: "Zomato reconciliation" }] : [])];
+  const presets: Array<{ id: "bills" | "sales" | "collections" | "day-end" | "cash" | "custom" | "zomato"; title: string }> = [{ id: "bills", title: "Bills" }, { id: "sales", title: "Sales" }, { id: "collections", title: "Collections" }, { id: "day-end", title: "Day-end / GST" }, { id: "cash", title: "Cash & day close" }, { id: "custom", title: "Custom reports" }, ...(canSeeZomato ? [{ id: "zomato" as const, title: "Zomato reconciliation" }] : [])];
   return <section className="sales-reports">
     <div className="page-header"><h2>Reports &amp; Analytics</h2>
       {view === "reports" && (tab === "sales" || tab === "collections") && <OverflowMenu label="Export"><button disabled={!report || loading} onClick={exportReport}>Export {tab === "sales" ? "sales" : "collections"} CSV</button></OverflowMenu>}
@@ -45,7 +46,7 @@ export function SalesReports({ initialTab = "sales", initialPeriod, canSeeCosts,
       <option value="">Choose a detailed report</option>{OPERATIONAL_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeCosts && <option value="profit">{PROFIT_REPORT_TITLE}</option>}
     </select></label>
     </>}
-    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={canSeeCosts} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={PROFIT_REPORT_TITLE}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | "profit"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
+    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={canSeeCosts} /> : tab === "custom" ? <CustomReports canManage={canSeeCosts} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={PROFIT_REPORT_TITLE}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | "profit"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
       <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { setMessage(""); setExportError(""); setPeriod(next); }} onRefresh={() => { setMessage(""); refresh(); }} />
       {(error || exportError) && <p role="alert">{error || exportError}</p>}
       {message && <p role="status">{message}</p>}

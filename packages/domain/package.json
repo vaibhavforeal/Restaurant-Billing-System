@@ -10,6 +10,7 @@
     "./gst": "./src/gst.ts",
     "./receipt-styles": "./src/receipt-styles.ts",
     "./operational-reports": "./src/operational-reports.ts",
+    "./custom-reports": "./src/custom-reports.ts",
     "./catalog-csv": "./src/catalog-csv.ts",
     "./zomato": "./src/zomato.ts",
     "./integrations": "./src/integrations.ts",

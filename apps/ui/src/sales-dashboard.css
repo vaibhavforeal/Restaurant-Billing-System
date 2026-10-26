@@ -87,3 +87,16 @@ html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; backgr
 .cash-drawer-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
 .cash-drawer-form legend { font-weight: 600; margin-bottom: 4px; }
 .cash-drawer-form label { display: grid; gap: 4px; }
+
+.custom-report-bar { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin: 12px 0; }
+.custom-report-bar label { display: grid; gap: 4px; font-size: 13px; }
+.custom-report-builder { margin: 12px 0; }
+.custom-report-builder > summary { cursor: pointer; font-weight: 600; }
+.custom-report-builder fieldset { margin: 12px 0; display: grid; gap: var(--space-2); }
+.custom-report-fields { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.custom-report-fields label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.custom-report-order { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 20px; }
+.custom-report-order li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.custom-report-order li > span { min-width: 140px; }
+.custom-report-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.custom-report-run { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: 12px 0; }

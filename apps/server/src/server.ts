@@ -24,6 +24,7 @@ import { registerZomatoDesk } from "./zomato-desk.js";
 import { registerReports } from "./reports.js";
 import { registerSalesReports } from "./sales-reports.js";
 import { registerOperationalReports } from "./operational-reports.js";
+import { registerCustomReports } from "./custom-reports.js";
 import { registerOrderAnalytics } from "./order-analytics.js";
 import { registerStock } from "./stock.js";
 import { registerCosting } from "./costing.js";
@@ -157,6 +158,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerReports(app);
   registerSalesReports(app);
   registerOperationalReports(app);
+  registerCustomReports(app);
   registerOrderAnalytics(app);
   registerStock(app);
   registerCosting(app);

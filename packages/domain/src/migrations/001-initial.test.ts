@@ -23,7 +23,7 @@ describe("migration 001", () => {
         "kots", "kot_requests", "order_items", "orders", "payments", "printers", "product_stock_links",
         "print_jobs", "print_queue_state",
         "products", "sequences", "sessions", "settings", "stock_cost_changes", "stock_items", "stock_moves",
-        "users", "variants", "license_state", "licensed_devices", "license_events", "table_qr", "guest_requests", "guest_service_requests", "reservations",
+        "users", "variants", "license_state", "licensed_devices", "license_events", "table_qr", "guest_requests", "guest_service_requests", "reservations", "saved_reports",
         "zomato_settings", "zomato_orders", "zomato_events", "zomato_settlements", "zomato_imports",
         "table_links", "order_table_events",
         "credit_notes", "credit_note_lines", "credit_note_taxes", "refund_payments",
