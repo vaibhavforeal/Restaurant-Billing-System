@@ -1,0 +1,5 @@
+# Preserve the exact packaged bytes used by manifest.json checksums.
+assets/** -text
+captain/** -text
+kitchen/** -text
+index.html binary

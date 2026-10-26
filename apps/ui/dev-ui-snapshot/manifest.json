@@ -1,0 +1,17 @@
+{
+  "source": "ForkFlow Dev/resources/app.asar",
+  "version": "0.7.0",
+  "files": {
+    "assets/index--TBobyOL.css": "2b5ea739ce896bffbfa4c08624bb66889bedb997d611629956a5ccbf5752426c",
+    "assets/index-Cb8zr6JT.js": "8c247ad9082cbaa50bb9c85cf4a1f1497d7d5225d401211c1d8f1bf3e844b748",
+    "captain/icon-192.png": "ced60b8e54d96d10fda48009536ff370cc730cf81e62bd3a02470a6501614bb4",
+    "captain/icon-512.png": "f521fc7931140b82388110861470695e684ac969135b8cd1f4ff5d7ab2195a2c",
+    "captain/manifest.webmanifest": "2dcae02acce5bde324694118f1345537d1134c441b0ce31d1aa5bff9dbde14ae",
+    "captain/sw.js": "521889e8bfc5560f163e2a68a9a4b2b9220f890205eed9eb1fa2e2a6c1a89247",
+    "index.html": "96401eb0cceaae08c4ef87a382fccf9a87dc2b3a10e02013848175147a90cd9f",
+    "kitchen/icon-192.png": "ced60b8e54d96d10fda48009536ff370cc730cf81e62bd3a02470a6501614bb4",
+    "kitchen/icon-512.png": "f521fc7931140b82388110861470695e684ac969135b8cd1f4ff5d7ab2195a2c",
+    "kitchen/manifest.webmanifest": "10fc401a9590050a7059273fa53e18186285ccf447c72c54f3551e8516db6f3d",
+    "kitchen/sw.js": "6f8c0b8f8757ff55ad5e676d160e85680864a7b3db3b6fcfe782dad321921778"
+  }
+}

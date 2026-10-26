@@ -1,0 +1,17 @@
+{
+  "id": "/captain/",
+  "name": "ForkFlow Captain",
+  "short_name": "Captain",
+  "description": "Restaurant tables, orders and kitchen tickets on your tablet.",
+  "start_url": "/captain/",
+  "scope": "/captain/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "background_color": "#ffffff",
+  "theme_color": "#b92335",
+  "lang": "en",
+  "icons": [
+    { "src": "/captain/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/captain/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
