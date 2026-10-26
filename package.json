@@ -20,6 +20,7 @@
     "build:desktop": "npm run build -w @forkflow/ui && node tools/build-desktop.mjs",
     "build:demo": "node tools/build-desktop.mjs --demo --check && npm run build -w @forkflow/ui && node tools/build-desktop.mjs --demo",
     "build:kitchen": "node tools/build-kitchen.mjs",
+    "build:captain-android": "node tools/build-captain-android.mjs",
     "package:demo": "npm run build:demo && electron-builder --config electron-builder.demo.yml --win --x64",
     "package:kitchen": "npm run build:kitchen && electron-builder --config electron-builder.kitchen.yml --win --x64",
     "build:commercial": "node tools/build-desktop.mjs --commercial --check && npm run build -w @forkflow/ui && node tools/build-desktop.mjs --commercial",

@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { MIGRATIONS, PLANS, migrate, openDb, type IntegrationId, type Plan } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
-import { buildServer } from "./server.js";
+import { buildServer, type ServerOptions } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 
 export function freshApp(): FastifyInstance {
@@ -10,14 +10,14 @@ export function freshApp(): FastifyInstance {
   return buildServer({ db });
 }
 
-export function freshAppWithFakeSink(): {
+export function freshAppWithFakeSink(options: Partial<Omit<ServerOptions, "db" | "sinkSend">> = {}): {
   app: FastifyInstance;
   fake: ReturnType<typeof makeFakeSink>;
 } {
   const db = openDb(":memory:");
   migrate(db, MIGRATIONS);
   const fake = makeFakeSink();
-  const app = buildServer({ db, sinkSend: fake.send });
+  const app = buildServer({ ...options, db, sinkSend: fake.send });
   return { app, fake };
 }
 

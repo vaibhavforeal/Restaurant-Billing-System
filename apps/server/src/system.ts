@@ -16,22 +16,45 @@ export function edgeShortcut(url: string): string {
   // The only caller passes a URL generated from the server's own IPv4 interfaces.
   return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\ForkFlow.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
 }
+/** Copied into the UI build by tools/build-desktop.mjs when the Android app has been built. */
+export const CAPTAIN_APK_PATH = "/captain/android/ForkFlow-Captain.apk";
+/** QR payload for the Android Captain app: the POS origin and, for HTTPS, the restaurant CA it must pin. */
+export function captainPairingUri(origin: string, fingerprint?: string): string {
+  const params = new URLSearchParams({ server: origin });
+  if (fingerprint) params.set("ca", fingerprint.replaceAll(":", "").toUpperCase());
+  return `forkflow-captain://pair?${params}`;
+}
 export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4100, generation = "initial", captainHttps?: CaptainHttpsInfo, cloudBackups?: CloudBackups) {
   const manage = app.requirePermission("settings.manage");
   app.get("/api/system/generation", { preHandler: app.requireAuth }, async () => ({ generation }));
-  app.get("/api/system/connections", { preHandler: manage }, async () => ({
-    connections: await Promise.all(lanUrls(port).map(async (url) => ({ url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) }))),
-    captain: {
-      enabled: captainHttps?.enabled ?? false,
-      error: captainHttps?.error,
-      fingerprint: captainHttps?.fingerprint,
-      expiresAt: captainHttps?.expiresAt,
-      connections: captainHttps?.enabled ? await Promise.all((captainHttps.addresses ?? []).map(async (address) => {
-        const url = `https://${address}:${captainHttps.port}/captain/`;
-        return { url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) };
-      })) : [],
-    },
-  }));
+  app.get("/api/system/connections", { preHandler: manage }, async () => {
+    const secure = captainHttps?.enabled ? (captainHttps.addresses ?? []).map((address) => `https://${address}:${captainHttps.port}`) : [];
+    return {
+      connections: await Promise.all(lanUrls(port).map(async (url) => ({ url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) }))),
+      android: {
+        // A new tablet's browser does not trust the restaurant CA yet, so the APK downloads over LAN HTTP.
+        downloads: await Promise.all(lanUrls(port).map(async (origin) => {
+          const url = `${origin}${CAPTAIN_APK_PATH}`;
+          return { url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) };
+        })),
+        // Pair over HTTPS when it is set up; plain LAN HTTP still works but is unencrypted.
+        pairings: await Promise.all((secure.length ? secure : lanUrls(port)).map(async (origin) => {
+          const pairing = captainPairingUri(origin, secure.length ? captainHttps?.fingerprint : undefined);
+          return { origin, secure: secure.length > 0, qr: await QRCode.toDataURL(pairing, { width: 220, margin: 2 }) };
+        })),
+      },
+      captain: {
+        enabled: captainHttps?.enabled ?? false,
+        error: captainHttps?.error,
+        fingerprint: captainHttps?.fingerprint,
+        expiresAt: captainHttps?.expiresAt,
+        connections: captainHttps?.enabled ? await Promise.all((captainHttps.addresses ?? []).map(async (address) => {
+          const url = `https://${address}:${captainHttps.port}/captain/`;
+          return { url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) };
+        })) : [],
+      },
+    };
+  });
   // A CA certificate is public onboarding material, never a private key.
   app.get("/captain/restaurant-ca.cer", async (_req, reply) => {
     if (!captainHttps?.enabled || !captainHttps.certificate) return reply.status(404).send({ error: "Captain HTTPS is not configured" });

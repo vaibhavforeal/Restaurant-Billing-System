@@ -15,6 +15,37 @@ The Captain App is ForkFlow's tablet and phone interface for tables, orders and 
 
 Captain tokens extend the existing palette and spacing: 44px touch controls, 48px header, 13px base text, 16px inputs, 24px totals, 96px minimum menu tiles, 4/6px corners. Phones use Menu/Order panes; landscape tablets show menu and cart together.
 
+## Android Captain app
+
+`apps/captain-android` is a small Kotlin app that opens the POS's own `/captain/` screens, so tablets always match the POS release and no order logic is duplicated. Compared with installing the PWA from Chrome, it:
+
+- pairs by scanning a code in **Settings → Backups & connections → Android Captain app**. The code carries the POS address and the SHA-256 fingerprint of the restaurant CA. The app downloads `/captain/restaurant-ca.cer`, checks that fingerprint, and from then on accepts only server certificates issued by that CA for the paired address. Tablets need no certificate installed in Android settings.
+- accepts a typed address too. It tries `https://<address>:4443` first, then `http://<address>:4100`. A typed HTTPS address shows the fingerprint for staff to compare with POS Settings. A plain HTTP connection warns that PINs and orders are unencrypted.
+- keeps the screen on, closes Captain dialogs and leaves orders with the Android back button, and shows a native reconnect screen with **Change POS server**.
+- updates itself. Each ForkFlow build ships the matching APK at `/captain/android/ForkFlow-Captain.apk` with `version.json`. The app checks on start and every six hours, verifies the SHA-256, and asks Android to install it. The first update asks staff to allow installs from ForkFlow Captain.
+
+The app does not use the PWA service worker. Drafts and the retry queue stay in the app's own storage, with the same offline limits as described below.
+
+### Rolling out to tablets
+
+1. On the POS, open **Settings → Backups & connections → Android Captain app**.
+2. On the tablet, scan the download code (plain LAN HTTP, because the tablet does not trust the CA yet) and install the APK. Android asks once to allow installs from the browser.
+3. Open ForkFlow Captain, tap **Scan pairing code**, scan the pairing code and sign in with a waiter PIN.
+
+Run the Captain HTTPS setup below first, so pairing codes are encrypted. Without it, pairing codes use the unencrypted desktop address.
+
+### Building
+
+Requirements: Android Studio, or its SDK and a JDK 17+.
+
+```powershell
+npm run build:captain-android -- --create-signing-key   # first time on a build PC only
+npm run build:captain-android                            # tests, then a signed release APK
+npm run package:commercial                               # includes the APK when its version matches package.json
+```
+
+The app's version follows `package.json`: version code = major × 1,000,000 + minor × 1,000 + patch. The build script tests the app and signs the APK with the key in `~/.forkflow/captain-android/` (or `FORKFLOW_ANDROID_SIGNING`), outside the repository. **Back up that folder.** Installed tablets accept updates only when they are signed with the same key. A lost key means uninstalling and reinstalling on every tablet. `tools/build-desktop.mjs` skips an APK built for a different version.
+
 ## Connectivity and offline behavior
 
 Internet is not needed. Keep the POS PC running and connect tablets to the same restaurant network. HTTPS adds encryption to this local connection, not a cloud round trip.

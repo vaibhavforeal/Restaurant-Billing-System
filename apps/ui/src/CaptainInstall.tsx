@@ -1,7 +1,13 @@
-import { installCaptain, useCaptainPwa } from "./captain-pwa";
+import { captainAndroid, installCaptain, useCaptainPwa } from "./captain-pwa";
 
 export function CaptainInstall() {
   const pwa = useCaptainPwa();
+  const android = captainAndroid();
+  if (android) return <section className="captain-install" aria-label="Captain app">
+    <h3>ForkFlow Captain for Android {android.version()}</h3>
+    <p>Connected to <code>{android.server()}</code>. Orders and kitchen confirmation need the POS connection.</p>
+    <button onClick={() => android.changeServer()}>Change POS server</button>
+  </section>;
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   return <section className="captain-install" aria-label="Install Captain">
     <h3>{pwa.installed ? "Captain is installed" : "Install on this tablet"}</h3>
@@ -15,5 +21,5 @@ export function CaptainInstall() {
 }
 
 export function CaptainReconnect() {
-  return <main className="captain-offline"><h1>Reconnect to your POS</h1><p>Join the restaurant Wi-Fi and check that the POS PC is running.</p><p>Your saved drafts and queued actions stay on this tablet. A connection is needed to sign in, load tables, and confirm kitchen orders.</p><button className="primary" onClick={() => location.reload()}>Try again</button></main>;
+  return <main className="captain-offline"><h1>Reconnect to your POS</h1><p>Join the restaurant Wi-Fi and check that the POS PC is running.</p><p>Your saved drafts and queued actions stay on this tablet. A connection is needed to sign in, load tables, and confirm kitchen orders.</p><button className="primary" onClick={() => location.reload()}>Try again</button>{captainAndroid() && <button onClick={() => captainAndroid()?.changeServer()}>Change POS server</button>}</main>;
 }

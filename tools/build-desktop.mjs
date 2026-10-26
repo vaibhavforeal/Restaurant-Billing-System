@@ -5,6 +5,7 @@ import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { desktopBuildConfig } from "./desktop-build-config.mjs";
+import { stageCaptainAndroid } from "./captain-android-release.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint, serviceUrl } = desktopBuildConfig(process.argv.slice(2), process.env);
@@ -48,6 +49,8 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
 });
 await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) } });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
+// The Captain Android app, when built for this release by tools/build-captain-android.mjs.
+console.log(stageCaptainAndroid(join(root, "apps/captain-android/app/build/outputs/apk/release"), join(stage, "ui"), pkg.version));
 writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "forkflow-demo" : "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "ForkFlow customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
 writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));
 

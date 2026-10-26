@@ -55,7 +55,7 @@ try {
   const uiDist = process.env["FORKFLOW_UI_DIR"] ?? resolve(here, "../../ui/dist");
   if (existsSync(uiDist)) {
     await app.register(fastifyStatic, { root: uiDist, wildcard: true, setHeaders: (response, filePath) => {
-      if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.webmanifest")) response.header("Cache-Control", "no-cache");
+      if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.webmanifest") || filePath.endsWith("version.json")) response.header("Cache-Control", "no-cache");
     } });
     app.setNotFoundHandler((req, reply) => {
       if (req.method === "GET" && !req.url.startsWith("/api/") && !req.url.startsWith("/assets/")) return reply.sendFile("index.html");

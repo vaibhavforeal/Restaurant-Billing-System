@@ -12,6 +12,10 @@ interface CaptainConnection {
   enabled: boolean; error?: string; fingerprint?: string; expiresAt?: string;
   connections: Array<{ url: string; qr: string }>;
 }
+interface AndroidCaptain {
+  downloads: Array<{ url: string; qr: string }>;
+  pairings: Array<{ origin: string; secure: boolean; qr: string }>;
+}
 async function download(path: string, filename: string) {
   const res = await fetch(path, { headers: authHeaders(), signal: AbortSignal.timeout(60_000) });
   if (res.status === 401) session.clear();
@@ -27,14 +31,20 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
   const [second, setSecond] = useState("");
   const [connections, setConnections] = useState<Array<{ url: string; qr: string }>>([]);
   const [captain, setCaptain] = useState<CaptainConnection | null>(null);
+  const [android, setAndroid] = useState<AndroidCaptain | null>(null);
+  const [apk, setApk] = useState<{ versionName: string } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let active = true;
-    Promise.all([apiFetch<BackupStatus>("/api/system/backups"), backupOnly ? Promise.resolve({ connections: [], captain: undefined }) : apiFetch<{ connections: Array<{ url: string; qr: string }>; captain?: CaptainConnection }>("/api/system/connections")])
-      .then(([s, c]) => { if (active) { setStatus(s); setDays(s.retentionDays); setSecond(s.secondLocation); setConnections(c.connections); setCaptain(c.captain ?? null); } })
+    Promise.all([apiFetch<BackupStatus>("/api/system/backups"), backupOnly ? Promise.resolve({ connections: [], captain: undefined, android: undefined }) : apiFetch<{ connections: Array<{ url: string; qr: string }>; captain?: CaptainConnection; android?: AndroidCaptain }>("/api/system/connections")])
+      .then(([s, c]) => { if (active) { setStatus(s); setDays(s.retentionDays); setSecond(s.secondLocation); setConnections(c.connections); setCaptain(c.captain ?? null); setAndroid(c.android ?? null); } })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load backup settings"); });
+    // Present only in builds that include the Android app; the static fallback serves HTML otherwise.
+    if (!backupOnly) fetch("/captain/android/version.json", { cache: "no-store" }).then((res) => res.ok ? res.json() : null)
+      .then((info: { versionName?: unknown } | null) => { if (active && typeof info?.versionName === "string") setApk({ versionName: info.versionName }); })
+      .catch(() => {});
     return () => { active = false; };
   }, [backupOnly]);
   async function run(action: () => Promise<void>) {
@@ -84,6 +94,14 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
     })}</ul></>}
     <p>The main POS must stay running. Tickets and completion synchronize over the restaurant network. In Chrome choose Install Kitchen; on iPad use Add to Home Screen. Installation uses the restaurant certificate described below.</p>
     </>}
+    <h2>Android Captain app</h2>
+    {apk && android ? <>
+      <p>1. On each Android tablet or phone, scan a download code and install ForkFlow Captain {apk.versionName}. Android asks once to allow installs from the browser.</p>
+      <div className="captain-connection-list">{android.downloads.map((link) => <div key={link.url}><img src={link.qr} width={180} height={180} alt={`Download the Captain app from ${link.url}`} /><p><a href={link.url}>{link.url}</a></p></div>)}</div>
+      <p>2. Open the app, tap <strong>Scan pairing code</strong> and scan a code below. Then sign in with a waiter PIN.</p>
+      <div className="captain-connection-list">{android.pairings.map((pairing) => <div key={pairing.origin}><img src={pairing.qr} width={180} height={180} alt={`Pair the Captain app with ${pairing.origin}`} /><p><code>{pairing.origin}</code></p></div>)}</div>
+      <p>{android.pairings[0]?.secure ? "The app checks the restaurant certificate itself, so there is nothing to install on the tablet." : "These connections are not encrypted. Run the Captain HTTPS setup below, then pair tablets again."} The app updates itself from this POS after each ForkFlow update.</p>
+    </> : <p>The Android app is not included in this ForkFlow build. Tablets can use Captain in the browser as described below.</p>}
     <h2>Captain tablets</h2>
     {captain?.enabled ? <>
       <p>Trust the restaurant certificate on each tablet once, then open a secure Captain link below. Sign in with a staff PIN and choose Install Captain from the account menu.</p>

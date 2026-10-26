@@ -6,7 +6,7 @@ import { migrate, MIGRATIONS, openDb } from "@forkflow/domain";
 import { Backups } from "./backups.js";
 import { buildServer } from "./server.js";
 import { auth, createUser, setupAdmin } from "./test-helpers.js";
-import { edgeShortcut } from "./system.js";
+import { captainPairingUri, edgeShortcut } from "./system.js";
 
 let app: ReturnType<typeof buildServer>; let folder: string;
 afterEach(async () => { await app?.close(); if (app?.db.open) app.db.close(); if (folder) rmSync(folder, { recursive: true, force: true }); });
@@ -25,9 +25,19 @@ it("restricts backups and network details to admins and downloads only managed s
   expect((await app.inject({ url: "/api/system/shortcut?url=http%3A%2F%2Fevil.example", headers: auth(admin.token) })).statusCode).toBe(400);
   expect((await app.inject({ method: "PUT", url: "/api/system/backups", headers: auth(admin.token), payload: { retentionDays: 1 } })).statusCode).toBe(400);
   expect((await app.inject({ url: "/api/system/generation", headers: auth(cashier.token) })).json()).toEqual({ generation: "initial" });
+  const { connections, android } = (await app.inject({ url: "/api/system/connections", headers: auth(admin.token) })).json();
+  expect(android.downloads.map((link: { url: string }) => link.url)).toEqual(connections.map((link: { url: string }) => `${link.url}/captain/android/ForkFlow-Captain.apk`));
+  expect(android.pairings.every((pairing: { secure: boolean }) => !pairing.secure)).toBe(true);
 });
 it("creates a Windows Edge app-mode shortcut with a fixed server URL", () => {
   const result = edgeShortcut("http://192.168.1.50:4100");
   expect(result).toContain("--app=http://192.168.1.50:4100");
   expect(result).toContain("CreateShortcut"); expect(result).toContain("GetFolderPath('Desktop')");
+});
+it("encodes the Android Captain pairing address with the pinned restaurant CA", () => {
+  const uri = new URL(captainPairingUri("https://192.168.1.50:4443", "ab:cd:01"));
+  expect(uri.protocol).toBe("forkflow-captain:");
+  expect(uri.searchParams.get("server")).toBe("https://192.168.1.50:4443");
+  expect(uri.searchParams.get("ca")).toBe("ABCD01");
+  expect(new URL(captainPairingUri("http://192.168.1.50:4100")).searchParams.has("ca")).toBe(false);
 });

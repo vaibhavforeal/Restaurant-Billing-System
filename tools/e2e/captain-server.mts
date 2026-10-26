@@ -4,7 +4,9 @@ import fastifyStatic from "@fastify/static";
 import { resolve } from "node:path";
 import { writeFileSync, mkdirSync } from "node:fs";
 mkdirSync(".e2e-scratch", { recursive: true });
-const { app, fake } = freshAppWithFakeSink();
+// Optional HTTPS fixture: tools/setup-captain-https.ps1 output, also used to pair the Android app.
+const tls=loadCaptainHttps(resolve(".e2e-scratch/captain-tls-qa"));
+const { app, fake } = freshAppWithFakeSink(tls ? { captainHttps: tls.info } : {});
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist"), setHeaders: (reply) => reply.header("Cache-Control", "no-cache") });
 app.setNotFoundHandler((req, reply) => req.method === "GET" && !req.url.startsWith("/api/") ? reply.sendFile("index.html") : reply.code(404).send({error:"not found"}));
 app.get("/__qa/prints", async () => ({ prints: fake.sent.map(p => p.bytes.toString("utf8")) }));
@@ -22,7 +24,6 @@ for(let n=1;n<=18;n++){const {table}=await post("/api/tables",{name:`T${String(n
 for(const table of tables.slice(6,9)){const {order}=await post("/api/orders",{clientRef:crypto.randomUUID(),type:"dine_in",tableId:table.id});await post(`/api/orders/${order.id}/items`,{items:[{clientRef:crypto.randomUUID(),productId:products[0].id,qty:2}]});}
 mkdirSync("output/captain",{recursive:true});writeFileSync(".e2e-scratch/captain-fixture.json",JSON.stringify({admin,waiter,cashier,kitchen,products,tables}));
 await app.listen({host:"127.0.0.1",port:4139});
-const tls=loadCaptainHttps(resolve(".e2e-scratch/captain-tls-qa"));
 const secure=tls?await startCaptainHttps(app,tls,"127.0.0.1"):null;
 const close=async()=>{await secure?.close();await app.close();process.exit(0);};process.on("SIGINT",()=>void close());process.on("SIGTERM",()=>void close());
 console.log("Captain fixture ready: http://127.0.0.1:4139/captain/" + (secure ? " and HTTPS on configured port" : " (HTTP loopback is sufficient for PWA browser tests)"));

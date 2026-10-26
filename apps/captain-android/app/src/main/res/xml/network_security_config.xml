@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- POS addresses are local IPs chosen per restaurant. Plain HTTP is allowed for POS PCs without
+     Captain HTTPS; HTTPS is checked against the restaurant CA pinned at pairing (RestaurantTrust). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -116,6 +116,13 @@ interface and existing draft/retry storage help with disconnections, while new
 orders and kitchen confirmations require the POS connection. See
 [Captain setup, tablet trust and offline behavior](docs/operations/captain-app.md).
 
+**Captain for Android:** `apps/captain-android` is a native Android app around the
+same Captain screens. Tablets download it from the POS, pair by scanning a code in
+**Settings → Backups & connections**, and trust the restaurant certificate without a
+manual certificate install. It updates itself from the POS. Build it with
+`npm run build:captain-android` before packaging. See
+[Android Captain app](docs/operations/captain-app.md#android-captain-app).
+
 ```bash
 npm ci
 npm test              # vitest across all workspaces

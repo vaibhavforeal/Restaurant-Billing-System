@@ -10,6 +10,9 @@ let state: PwaState = { installed: false, installable: false, ready: false, erro
 const listeners = new Set<() => void>();
 const publish = (patch: Partial<PwaState>) => { state = { ...state, ...patch }; listeners.forEach((fn) => fn()); };
 export const isCaptainPath = () => /^\/captain\/?$/.test(location.pathname);
+/** Injected by the ForkFlow Captain Android app (apps/captain-android). */
+export interface CaptainAndroid { version(): string; server(): string; changeServer(): void }
+export const captainAndroid = () => (window as Window & { ForkFlowAndroid?: CaptainAndroid }).ForkFlowAndroid ?? null;
 export function useCaptainPwa() { return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => state); }
 export async function installCaptain() {
   const request = prompt;
@@ -22,6 +25,8 @@ export function startCaptainPwa() {
   if (!isCaptainPath()) return;
   document.title = "ForkFlow Captain";
   document.documentElement.dataset["captain"] = "true";
+  // The Android app is already installed and trusts the POS itself; a service worker would fail its certificate check.
+  if (captainAndroid()) return;
   const manifest = document.createElement("link");
   manifest.rel = "manifest"; manifest.href = "/captain/manifest.webmanifest"; document.head.append(manifest);
   const icon = document.createElement("link"); icon.rel = "apple-touch-icon"; icon.href = "/captain/icon-192.png"; document.head.append(icon);

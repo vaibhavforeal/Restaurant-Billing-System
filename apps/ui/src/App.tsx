@@ -25,7 +25,8 @@ import { QrNotifications } from "./QrNotifications";
 import { usePosShortcuts } from "./pos-shortcuts";
 import { CaptainNav } from "./CaptainNav";
 import { CaptainReconnect } from "./CaptainInstall";
-import { isCaptainPath } from "./captain-pwa";
+import { captainAndroid, isCaptainPath } from "./captain-pwa";
+import { listenForAndroidBack } from "./android-back";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
@@ -69,6 +70,8 @@ function StaffApp() {
   const [demo, setDemo] = useState(false);
   const navigationGuard = useRef(new Set<NavigationGuard>());
   const captainEntry = isCaptainPath();
+  const androidBack = useRef<() => boolean>(() => false);
+  useEffect(() => { if (captainAndroid()) listenForAndroidBack(() => androidBack.current()); }, []);
   function enter(user: User) {
     if (user.role === "waiter" && !captainEntry) { window.location.replace("/captain/"); return; }
     const page: Page = user.role === "kitchen" ? { name: "kitchen" } : captainEntry || user.role === "waiter" ? { name: "tables" } : { name: "home" };
@@ -106,6 +109,7 @@ function StaffApp() {
     };
   }, []);
 
+  androidBack.current = () => false;
   switch (state.kind) {
     case "loading":
       return <StartupScreen />;
@@ -123,6 +127,7 @@ function StaffApp() {
       const go = (next: Page) => { if ((next.name !== "takeaway" || canQuickBill) && canLeave()) setState({ kind: "in", user, page: next }); };
       const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
       const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
+      androidBack.current = () => { if (page.name === "tables") return false; if (canLeave()) onBack(); return true; };
       return (
         <NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}

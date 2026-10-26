@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, generateKeyPairSync } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { desktopBuildConfig } from "./desktop-build-config.mjs";
@@ -94,4 +94,23 @@ test("installer guard rejects legacy stages and customer builds without a key", 
   const demo = fixture(t, "demo");
   demo.writeInfo({ verificationKeyFingerprint: "a".repeat(64) });
   assert.throws(() => verifyDesktopPackage(demo.context), /must not use customer licensing/);
+});
+
+test("ships the Captain Android app only when it was built for this release", async () => {
+  const { stageCaptainAndroid } = await import("./captain-android-release.mjs");
+  const folder = mkdtempSync(join(tmpdir(), "forkflow-captain-apk-"));
+  try {
+    const apks = join(folder, "apk"), ui = join(folder, "ui");
+    assert.match(stageCaptainAndroid(apks, ui, "1.2.3"), /not built/);
+    mkdirSync(apks, { recursive: true });
+    writeFileSync(join(apks, "app-release.apk"), "apk bytes");
+    writeFileSync(join(apks, "output-metadata.json"), JSON.stringify({ elements: [{ versionCode: 1002003, versionName: "1.2.3", outputFile: "app-release.apk" }] }));
+    assert.match(stageCaptainAndroid(apks, ui, "1.2.4"), /Skipping/);
+    assert.equal(existsSync(join(ui, "captain/android")), false);
+    stageCaptainAndroid(apks, ui, "1.2.3");
+    assert.equal(readFileSync(join(ui, "captain/android/ForkFlow-Captain.apk"), "utf8"), "apk bytes");
+    assert.deepEqual(JSON.parse(readFileSync(join(ui, "captain/android/version.json"), "utf8")), {
+      versionCode: 1002003, versionName: "1.2.3", sha256: createHash("sha256").update("apk bytes").digest("hex").toUpperCase(),
+    });
+  } finally { rmSync(folder, { recursive: true, force: true }); }
 });
