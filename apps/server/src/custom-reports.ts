@@ -71,12 +71,41 @@ function sourceSql(id: string, start: number, end: number): SourceSql {
     return {
       from: "customers c LEFT JOIN customer_types ct ON ct.id = c.type_id", dateColumn: null, order: "c.name COLLATE NOCASE, c.id",
       fields: {
-        name: "c.name", phone: "c.phone", type: "COALESCE(ct.name, 'None')", joined: "c.created_at",
+        name: "c.name", phone: "c.phone", email: "COALESCE(c.email, '')", type: "COALESCE(ct.name, 'None')",
+        tags: "COALESCE((SELECT group_concat(g.tag, '; ') FROM customer_tags g WHERE g.customer_id = c.id), '')",
+        birthday: "COALESCE(c.birth_date, '')", anniversary: "COALESCE(c.anniversary_date, '')",
+        optIn: "CASE c.marketing_opt_in WHEN 1 THEN 'Yes' ELSE 'No' END", active: "CASE c.is_active WHEN 1 THEN 'Yes' ELSE 'No' END",
+        joined: "c.created_at",
         visits: `(SELECT COUNT(*) ${bills()})`, spend: `(SELECT COALESCE(SUM(v.total_paise), 0) ${bills()})`, lastVisit: `(SELECT MAX(v.created_at) ${bills()})`,
-        // Earned less redeemed plus reversed/adjusted is the change in balance over the dates.
+        // Earned less redeemed and expired plus reversed/adjusted is the change in balance over the dates.
         pointsEarned: `(SELECT COALESCE(SUM(l.points), 0) ${points("'earn'")})`, pointsRedeemed: `(SELECT COALESCE(-SUM(l.points), 0) ${points("'redeem'")})`,
+        pointsExpired: `(SELECT COALESCE(-SUM(l.points), 0) ${points("'expire'")})`,
         pointsOther: `(SELECT COALESCE(SUM(l.points), 0) ${points("'reverse', 'adjust'")})`,
         pointsBalance: "(SELECT COALESCE(SUM(l.points), 0) FROM loyalty_ledger l WHERE l.customer_id = c.id)",
+        rating: `(SELECT ROUND(AVG(f.overall), 2) FROM customer_feedback f WHERE f.customer_id = c.id AND f.created_at >= ${start} AND f.created_at < ${end})`,
+      },
+    };
+  }
+  if (id === "loyalty") {
+    return {
+      from: "loyalty_ledger l JOIN customers c ON c.id = l.customer_id LEFT JOIN bills b ON b.id = l.bill_id LEFT JOIN users u ON u.id = l.created_by",
+      dateColumn: "l.created_at", order: "l.created_at DESC, l.id DESC",
+      fields: {
+        date: local("l.created_at", "%Y-%m-%d"), month: local("l.created_at", "%Y-%m"), time: "l.created_at",
+        customer: "c.name", customerPhone: "c.phone",
+        entry: "CASE l.kind WHEN 'earn' THEN 'Earned' WHEN 'redeem' THEN 'Redeemed' WHEN 'reverse' THEN 'Reversed' WHEN 'adjust' THEN 'Adjusted' ELSE 'Expired' END",
+        billNo: "b.bill_no", note: "COALESCE(l.note, '')", recordedBy: "COALESCE(u.name, '')", entries: "1", points: "l.points",
+      },
+    };
+  }
+  if (id === "feedback") {
+    return {
+      from: "customer_feedback f JOIN bills b ON b.id = f.bill_id LEFT JOIN customers c ON c.id = f.customer_id",
+      dateColumn: "f.created_at", order: "f.created_at DESC, f.id DESC",
+      fields: {
+        date: local("f.created_at", "%Y-%m-%d"), month: local("f.created_at", "%Y-%m"), time: "f.created_at",
+        billNo: "b.bill_no", customer: "COALESCE(c.name, 'Walk-in')", source: "CASE f.source WHEN 'qr' THEN 'QR code' ELSE 'Staff' END",
+        comment: "COALESCE(f.comment, '')", responses: "1", overall: "f.overall", food: "f.food", service: "f.service", ambience: "f.ambience",
       },
     };
   }

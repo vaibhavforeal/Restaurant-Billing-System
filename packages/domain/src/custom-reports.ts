@@ -56,10 +56,34 @@ export const CUSTOM_REPORT_SOURCES: CustomReportSource[] = [
     id: "customers", title: "Customers", dateLabel: "activity date",
     description: "One row per customer. Visits, spend and points earned, redeemed, reversed or adjusted count only the selected dates (void bills excluded); points balance is the current balance, whatever the dates.",
     fields: [
-      dim("name", "Customer"), dim("phone", "Phone"), dim("type", "Customer type"), dim("joined", "Added on", "time", false),
+      dim("name", "Customer"), dim("phone", "Phone"), dim("email", "Email"), dim("type", "Customer type"), dim("tags", "Tags"),
+      dim("birthday", "Birthday"), dim("anniversary", "Anniversary"), dim("optIn", "Marketing opt-in"), dim("active", "Active"),
+      dim("joined", "Added on", "time", false),
       sum("visits", "Visits", "quantity"), sum("spend", "Spend"), stat("lastVisit", "Last visit", "time", "max"),
       sum("pointsEarned", "Points earned", "quantity"), sum("pointsRedeemed", "Points redeemed", "quantity"),
+      sum("pointsExpired", "Points expired", "quantity"),
       sum("pointsOther", "Points reversed / adjusted", "quantity"), sum("pointsBalance", "Points balance now", "quantity"),
+      stat("rating", "Average rating", "number", "avg"),
+    ],
+  },
+  {
+    id: "loyalty", title: "Loyalty points", dateLabel: "entry date",
+    description: "One row per points entry: earned, redeemed, reversed by a void or refund, adjusted by an admin, or expired.",
+    fields: [
+      dim("date", "Date", "date"), dim("month", "Month"), dim("time", "Date and time", "time", false),
+      dim("customer", "Customer"), dim("customerPhone", "Customer phone"), dim("entry", "Entry"), dim("billNo", "Bill no.", "number"),
+      dim("note", "Note"), dim("recordedBy", "Recorded by"),
+      sum("entries", "Entries", "quantity"), sum("points", "Points", "quantity"),
+    ],
+  },
+  {
+    id: "feedback", title: "Feedback", dateLabel: "rating date",
+    description: "One row per rating of a visit, from the receipt's QR code or entered by staff. Ratings are 1 to 5.",
+    fields: [
+      dim("date", "Date", "date"), dim("month", "Month"), dim("time", "Date and time", "time", false),
+      dim("billNo", "Bill no.", "number"), dim("customer", "Customer"), dim("source", "Source"), dim("comment", "Comment", "text", false),
+      sum("responses", "Responses", "quantity"), stat("overall", "Overall", "number", "avg"), stat("food", "Food", "number", "avg"),
+      stat("service", "Service", "number", "avg"), stat("ambience", "Ambience", "number", "avg"),
     ],
   },
 ];

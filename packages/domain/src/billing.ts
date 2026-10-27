@@ -97,6 +97,8 @@ export interface Bill extends BillTotals {
   creditNotes: BillCreditNote[];
   /** Units already credited, keyed by order item id. */
   refundedQty: Record<string, number>;
+  /** Where the receipt's "Rate your visit" QR code points, while feedback is on. */
+  feedbackUrl?: string;
 }
 
 /** All financial arithmetic uses integer paise / BigInt. */

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lockDataDirectory } from "./data-lock.js";
 import { buildServer } from "./server.js";
+import { scheduleExpirySweeps } from "./loyalty.js";
 import { redactUrl } from "./log-redact.js";
 import { Backups } from "./backups.js";
 import { prepareDatabase } from "./startup.js";
@@ -50,6 +51,7 @@ try {
   app.addHook("preClose", async () => { await closeCaptain?.(); });
   daily();
   const timer = setInterval(daily, 60 * 60 * 1000); timer.unref();
+  scheduleExpirySweeps(app);
   let stopRenewals: (() => void) | undefined;
   app.addHook("onClose", async () => { clearInterval(timer); stopRenewals?.(); db?.close(); await release(); });
   const uiDist = process.env["FORKFLOW_UI_DIR"] ?? resolve(here, "../../ui/dist");

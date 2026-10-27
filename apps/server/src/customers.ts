@@ -5,16 +5,20 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { currentTier, customerSpend, earnExpiry, loyaltySettings, pointsExpiringSoon, sweepExpiry } from "./loyalty.js";
 import { customerJson, loadOrderJson, pointsBalance } from "./mappers.js";
 
-export { customerJson, pointsBalance };
+export { customerJson, pointsBalance, loyaltySettings };
+export type { LoyaltySettings } from "./loyalty.js";
 
-export interface LoyaltySettings { enabled: boolean; pointsPer100: number; pointValuePaise: number; minRedeemPoints: number }
-
-export function loyaltySettings(db: Database): LoyaltySettings {
-  const r = db.prepare("SELECT enabled, points_per_100, point_value_paise, min_redeem_points FROM loyalty_settings WHERE id = 1").get() as
-    { enabled: number; points_per_100: number; point_value_paise: number; min_redeem_points: number };
-  return { enabled: r.enabled === 1, pointsPer100: r.points_per_100, pointValuePaise: r.point_value_paise, minRedeemPoints: r.min_redeem_points };
+/** Visits, spend and favourite items over a customer's whole history; void bills are left out and refunds subtracted. */
+function customerStats(db: Database, id: string) {
+  const visits = db.prepare(`SELECT COUNT(*) AS visits, MIN(created_at) AS firstVisitAt, MAX(created_at) AS lastVisitAt
+    FROM bills WHERE customer_id = ? AND status <> 'void'`).get(id) as { visits: number; firstVisitAt: number | null; lastVisitAt: number | null };
+  const spendPaise = customerSpend(db, id);
+  const favourites = db.prepare(`SELECT l.name, SUM(l.qty) AS qty FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
+    WHERE b.customer_id = ? AND b.status <> 'void' GROUP BY l.name ORDER BY qty DESC, l.name LIMIT 5`).all(id) as Array<{ name: string; qty: number }>;
+  return { ...visits, spendPaise, averageBillPaise: visits.visits ? Math.round(spendPaise / visits.visits) : 0, favourites };
 }
 
 const slabsOf = (db: Database, typeId: string) => db.prepare(`SELECT min_bill_paise AS minBillPaise, percent, valid_from AS validFrom, valid_to AS validTo
@@ -41,7 +45,11 @@ export function reverseLoyalty(db: Database, input: { billId: string; creditNote
   const takenBack = -sum("kind = 'reverse' AND points < 0");
   const returned = sum("kind = 'reverse' AND points > 0");
   const credited = (db.prepare("SELECT COALESCE(SUM(total_paise), 0) AS n FROM credit_notes WHERE bill_id = ?").get(input.billId) as { n: number }).n;
-  const target = input.kind === "void" || bill.total_paise <= 0 ? earned : Math.min(earned, Math.floor(earned * credited / bill.total_paise));
+  // Earned points that have since expired are already gone; taking them back again would charge the customer twice.
+  const lapsed = (db.prepare(`SELECT COALESCE(-SUM(e.points), 0) AS n FROM loyalty_ledger e JOIN loyalty_ledger l ON e.client_ref = 'expire:' || l.id
+    WHERE l.bill_id = ? AND l.kind = 'earn'`).get(input.billId) as { n: number }).n;
+  const share = input.kind === "void" || bill.total_paise <= 0 ? earned : Math.min(earned, Math.floor(earned * credited / bill.total_paise));
+  const target = Math.max(0, share - lapsed);
   const write = (points: number, note: string) => db.prepare(`INSERT INTO loyalty_ledger (id, customer_id, kind, points, bill_id, credit_note_id, note, created_at, created_by)
     VALUES (?, ?, 'reverse', ?, ?, ?, ?, ?, ?)`).run(uuidv7(), bill.customer_id, points, input.billId, input.creditNoteId, note, input.now, input.actorId);
   if (target > takenBack) write(-(target - takenBack), input.kind === "void" ? "Bill voided" : "Bill refunded");
@@ -61,39 +69,81 @@ export function registerCustomers(app: FastifyInstance): void {
     if (row) throw httpError(409, `This number belongs to ${row.name}`);
   };
 
+  const saveTags = (customerId: string, tags: string[]) => {
+    db.prepare("DELETE FROM customer_tags WHERE customer_id = ?").run(customerId);
+    for (const tag of tags) db.prepare("INSERT INTO customer_tags (customer_id, tag) VALUES (?, ?)").run(customerId, tag);
+  };
+
+  /** Searches by phone prefix or name. Inactive customers are left out unless `inactive=1`; `tag` keeps only customers with that tag. */
   app.get("/api/customers", { preHandler: read }, async (req) => {
-    const { q } = z.object({ q: z.string().trim().max(80).default("") }).parse(req.query);
+    const { q, inactive, tag } = z.object({
+      q: z.string().trim().max(80).default(""), inactive: z.enum(["0", "1"]).default("0"), tag: z.string().trim().max(30).default(""),
+    }).parse(req.query);
     const digits = q.replace(/\D/g, "").replace(/^(91|0)(?=\d{10}$)/, "");
-    const rows = (q ? db.prepare(`SELECT id FROM customers WHERE (? <> '' AND phone LIKE ? || '%') OR name LIKE '%' || ? || '%' COLLATE NOCASE
-      ORDER BY name COLLATE NOCASE LIMIT 50`).all(digits, digits, q) : db.prepare("SELECT id FROM customers ORDER BY created_at DESC LIMIT 50").all()) as Array<{ id: string }>;
+    const where = [
+      ...(q ? ["((? <> '' AND phone LIKE ? || '%') OR name LIKE '%' || ? || '%' COLLATE NOCASE)"] : []),
+      ...(inactive === "1" ? [] : ["is_active = 1"]),
+      ...(tag ? ["EXISTS (SELECT 1 FROM customer_tags t WHERE t.customer_id = customers.id AND t.tag = ?)"] : []),
+    ];
+    const params = [...(q ? [digits, digits, q] : []), ...(tag ? [tag] : [])];
+    const rows = db.prepare(`SELECT id FROM customers ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY ${q ? "name COLLATE NOCASE" : "created_at DESC"} LIMIT 50`).all(...params) as Array<{ id: string }>;
     return { customers: rows.map((r) => customerJson(db, r.id)!) };
   });
+  app.get("/api/customer-tags", { preHandler: read }, async () => ({
+    tags: db.prepare("SELECT tag, COUNT(*) AS count FROM customer_tags GROUP BY tag COLLATE NOCASE ORDER BY tag COLLATE NOCASE").all(),
+  }));
+  /** The customer's profile: stats, tier progress, points expiring soon, feedback, points history and bills (paged by `billsBefore`). */
   app.get("/api/customers/:id", { preHandler: read }, async (req) => {
     const { id } = req.params as { id: string };
-    const customer = customerJson(db, id);
-    if (!customer) throw httpError(404, "customer not found");
-    const ledger = db.prepare(`SELECT l.id, l.kind, l.points, l.note, l.created_at AS createdAt, b.bill_no AS billNo, u.name AS createdByName
+    const { billsBefore } = z.object({ billsBefore: z.coerce.number().int().positive().optional() }).parse(req.query);
+    if (!db.prepare("SELECT 1 FROM customers WHERE id = ?").get(id)) throw httpError(404, "customer not found");
+    const now = Date.now();
+    db.transaction(() => sweepExpiry(db, id, now))();
+    const customer = customerJson(db, id)!;
+    const ledger = db.prepare(`SELECT l.id, l.kind, l.points, l.note, l.created_at AS createdAt, l.expires_at AS expiresAt, b.bill_no AS billNo, u.name AS createdByName
       FROM loyalty_ledger l LEFT JOIN bills b ON b.id = l.bill_id JOIN users u ON u.id = l.created_by WHERE l.customer_id = ? ORDER BY l.created_at DESC, l.id DESC LIMIT 100`).all(id);
-    const bills = db.prepare(`SELECT id, bill_no AS billNo, created_at AS createdAt, total_paise AS totalPaise, status FROM bills WHERE customer_id = ? ORDER BY created_at DESC LIMIT 20`).all(id);
-    return { customer, ledger, bills };
+    const bills = db.prepare(`SELECT id, bill_no AS billNo, created_at AS createdAt, total_paise AS totalPaise, status FROM bills
+      WHERE customer_id = ? AND created_at < ? ORDER BY created_at DESC, bill_no DESC LIMIT 21`).all(id, billsBefore ?? Number.MAX_SAFE_INTEGER) as Array<{ createdAt: number }>;
+    const feedback = db.prepare(`SELECT f.id, f.overall, f.food, f.service, f.ambience, f.comment, f.source, f.created_at AS createdAt, b.bill_no AS billNo
+      FROM customer_feedback f JOIN bills b ON b.id = f.bill_id WHERE f.customer_id = ? ORDER BY f.created_at DESC LIMIT 20`).all(id);
+    return {
+      customer, stats: customerStats(db, id), tier: currentTier(db, id, now), expiringSoon: pointsExpiringSoon(db, id, now),
+      ledger, bills: bills.slice(0, 20), moreBills: bills.length > 20, feedback,
+    };
   });
   app.post("/api/customers", { preHandler: manage }, async (req, reply) => {
     const body = CustomerCreate.parse(req.body);
     typeExists(body.typeId); phoneTaken(body.phone);
     const id = uuidv7();
-    db.prepare("INSERT INTO customers (id, name, phone, type_id, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(id, body.name, body.phone, body.typeId, body.notes || null, Date.now(), req.user.id);
+    db.transaction(() => {
+      db.prepare(`INSERT INTO customers (id, name, phone, type_id, notes, email, birth_date, anniversary_date, gender, marketing_opt_in, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.name, body.phone, body.typeId, body.notes || null, body.email, body.birthDate,
+        body.anniversaryDate, body.gender, body.marketingOptIn ? 1 : 0, Date.now(), req.user.id);
+      saveTags(id, body.tags);
+    })();
     return reply.status(201).send({ customer: customerJson(db, id) });
   });
   app.patch("/api/customers/:id", { preHandler: manage }, async (req) => {
     const { id } = req.params as { id: string };
     const body = CustomerUpdate.parse(req.body);
-    const row = db.prepare("SELECT * FROM customers WHERE id = ?").get(id) as { name: string; phone: string; type_id: string | null; notes: string | null } | undefined;
+    const row = db.prepare("SELECT * FROM customers WHERE id = ?").get(id) as {
+      name: string; phone: string; type_id: string | null; notes: string | null; email: string | null; birth_date: string | null;
+      anniversary_date: string | null; gender: string | null; marketing_opt_in: number; is_active: number;
+    } | undefined;
     if (!row) throw httpError(404, "customer not found");
     typeExists(body.typeId);
     if (body.phone) phoneTaken(body.phone, id);
-    db.prepare("UPDATE customers SET name = ?, phone = ?, type_id = ?, notes = ? WHERE id = ?").run(body.name ?? row.name, body.phone ?? row.phone,
-      body.typeId === undefined ? row.type_id : body.typeId, body.notes === undefined ? row.notes : body.notes || null, id);
+    const keep = <T>(next: T | undefined, current: T) => next === undefined ? current : next;
+    const flag = (next: boolean | undefined, current: number) => next === undefined ? current : next ? 1 : 0;
+    db.transaction(() => {
+      db.prepare(`UPDATE customers SET name = ?, phone = ?, type_id = ?, notes = ?, email = ?, birth_date = ?, anniversary_date = ?, gender = ?,
+        marketing_opt_in = ?, is_active = ?, updated_at = ? WHERE id = ?`).run(body.name ?? row.name, body.phone ?? row.phone, keep(body.typeId, row.type_id),
+        body.notes === undefined ? row.notes : body.notes || null, keep(body.email, row.email), keep(body.birthDate, row.birth_date),
+        keep(body.anniversaryDate, row.anniversary_date), keep(body.gender, row.gender), flag(body.marketingOptIn, row.marketing_opt_in),
+        flag(body.isActive, row.is_active), Date.now(), id);
+      if (body.tags) saveTags(id, body.tags);
+    })();
     return { customer: customerJson(db, id) };
   });
   app.post("/api/customers/:id/loyalty-adjustments", { preHandler: admin }, async (req, reply) => {
@@ -106,8 +156,11 @@ export function registerCustomers(app: FastifyInstance): void {
         return false;
       }
       if (!db.prepare("SELECT 1 FROM customers WHERE id = ?").get(id)) throw httpError(404, "customer not found");
-      db.prepare("INSERT INTO loyalty_ledger (id, customer_id, kind, points, note, created_at, created_by, client_ref) VALUES (?, ?, 'adjust', ?, ?, ?, ?, ?)")
-        .run(uuidv7(), id, body.points, body.note, Date.now(), req.user.id, body.clientRef);
+      const now = Date.now();
+      sweepExpiry(db, id, now);
+      // Points given by hand expire like earned points; points taken away come out of the oldest points first.
+      db.prepare("INSERT INTO loyalty_ledger (id, customer_id, kind, points, note, created_at, created_by, client_ref, expires_at) VALUES (?, ?, 'adjust', ?, ?, ?, ?, ?, ?)")
+        .run(uuidv7(), id, body.points, body.note, now, req.user.id, body.clientRef, body.points > 0 ? earnExpiry(loyaltySettings(db), now) : null);
       return true;
     })();
     return reply.status(created ? 201 : 200).send({ customer: customerJson(db, id) });
@@ -154,8 +207,13 @@ export function registerCustomers(app: FastifyInstance): void {
   app.get("/api/loyalty-settings", { preHandler: read }, async () => ({ settings: loyaltySettings(db) }));
   app.put("/api/loyalty-settings", { preHandler: admin }, async (req) => {
     const body = LoyaltySettingsUpdate.parse(req.body);
-    db.prepare("UPDATE loyalty_settings SET enabled = ?, points_per_100 = ?, point_value_paise = ?, min_redeem_points = ? WHERE id = 1")
-      .run(body.enabled ? 1 : 0, body.pointsPer100, body.pointValuePaise, body.minRedeemPoints);
+    const current = loyaltySettings(db);
+    // A new expiry period applies to points earned from now on; points already earned keep their date.
+    db.prepare(`UPDATE loyalty_settings SET enabled = ?, points_per_100 = ?, point_value_paise = ?, min_redeem_points = ?, expiry_months = ?,
+      tiers_enabled = ?, tier_window_months = ?, max_redeem_percent = ?, feedback_enabled = ? WHERE id = 1`).run(
+      body.enabled ? 1 : 0, body.pointsPer100, body.pointValuePaise, body.minRedeemPoints, body.expiryMonths ?? current.expiryMonths,
+      (body.tiersEnabled ?? current.tiersEnabled) ? 1 : 0, body.tierWindowMonths ?? current.tierWindowMonths,
+      body.maxRedeemPercent ?? current.maxRedeemPercent, (body.feedbackEnabled ?? current.feedbackEnabled) ? 1 : 0);
     return { settings: loyaltySettings(db) };
   });
 
@@ -167,7 +225,9 @@ export function registerCustomers(app: FastifyInstance): void {
       if (!order) throw httpError(404, "order not found");
       if (order.status !== "open") throw httpError(409, "order is not open");
       if (order.type === "zomato") throw httpError(409, "Zomato orders belong to Zomato's customer", "zomato_order");
-      if (body.customerId && !db.prepare("SELECT 1 FROM customers WHERE id = ?").get(body.customerId)) throw httpError(400, "Choose a saved customer");
+      const chosen = body.customerId ? db.prepare("SELECT is_active FROM customers WHERE id = ?").get(body.customerId) as { is_active: number } | undefined : null;
+      if (body.customerId && !chosen) throw httpError(400, "Choose a saved customer");
+      if (chosen && !chosen.is_active) throw httpError(409, "This customer is marked inactive");
       db.prepare("UPDATE orders SET customer_id = ? WHERE id = ?").run(body.customerId, id);
     })();
     const order = loadOrderJson(db, id)!;

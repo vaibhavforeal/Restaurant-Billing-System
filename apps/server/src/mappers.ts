@@ -1,5 +1,6 @@
 import { orderStockWarnings, type Database } from "@forkflow/domain";
 import { orderTableLabel } from "./table-label.js";
+import { currentTier, spendableBalance } from "./loyalty.js";
 
 export interface OrderRow {
   captain_id?: string | null;
@@ -97,15 +98,27 @@ export function kotWithContextJson(
   };
 }
 
-export const pointsBalance = (db: Database, customerId: string) =>
-  (db.prepare("SELECT COALESCE(SUM(points), 0) AS n FROM loyalty_ledger WHERE customer_id = ?").get(customerId) as { n: number }).n;
+/** Points the customer can spend now: expired points are left out even before a sweep records them. */
+export const pointsBalance = (db: Database, customerId: string) => spendableBalance(db, customerId);
 
-/** A customer as staff screens show them: with their type name and current points balance. */
+export const customerTags = (db: Database, customerId: string) =>
+  (db.prepare("SELECT tag FROM customer_tags WHERE customer_id = ? ORDER BY tag COLLATE NOCASE").all(customerId) as Array<{ tag: string }>).map((r) => r.tag);
+
+/** A customer as staff screens show them: profile, tags, type name, current tier (when tiers are on) and points balance. */
 export function customerJson(db: Database, id: string) {
   const row = db.prepare(`SELECT c.*, t.name AS type_name FROM customers c LEFT JOIN customer_types t ON t.id = c.type_id WHERE c.id = ?`).get(id) as
-    { id: string; name: string; phone: string; type_id: string | null; notes: string | null; created_at: number; type_name: string | null } | undefined;
+    { id: string; name: string; phone: string; type_id: string | null; notes: string | null; created_at: number; type_name: string | null;
+      email: string | null; birth_date: string | null; anniversary_date: string | null; gender: "female" | "male" | "other" | null;
+      marketing_opt_in: number; is_active: number } | undefined;
   if (!row) return null;
-  return { id: row.id, name: row.name, phone: row.phone, typeId: row.type_id, typeName: row.type_name, notes: row.notes ?? "", pointsBalance: pointsBalance(db, row.id), createdAt: row.created_at };
+  const tier = currentTier(db, row.id);
+  return {
+    id: row.id, name: row.name, phone: row.phone, typeId: row.type_id, typeName: row.type_name, notes: row.notes ?? "",
+    email: row.email, birthDate: row.birth_date, anniversaryDate: row.anniversary_date, gender: row.gender,
+    marketingOptIn: row.marketing_opt_in === 1, isActive: row.is_active === 1, tags: customerTags(db, row.id),
+    tier: tier && { id: tier.id, name: tier.name, earnMultiplier: tier.earnMultiplier },
+    pointsBalance: pointsBalance(db, row.id), createdAt: row.created_at,
+  };
 }
 
 export function loadOrderJson(db: Database, orderId: string) {

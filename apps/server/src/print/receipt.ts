@@ -19,7 +19,7 @@ const quantity = (bill: Bill) => bill.receipt.items.reduce((sum, item) => sum + 
 function customerLines(bill: Bill): string[] {
   const c = bill.receipt.customer;
   if (!c) return [];
-  const lines = [`Customer: ${c.name} (${c.phone})${c.typeName ? ` - ${c.typeName}` : ""}`];
+  const lines = [`Customer: ${c.name} (${c.phone})${c.typeName ? ` - ${c.typeName}` : ""}${c.tierName ? ` - ${c.tierName} member` : ""}`];
   if (c.pointsRedeemed) lines.push(`Points redeemed: ${c.pointsRedeemed} (Rs.${money(c.pointsValuePaise ?? 0)})`);
   if (c.pointsBalance !== undefined) lines.push(`Points earned: ${c.pointsEarned ?? 0} | Balance: ${c.pointsBalance}`);
   return lines;
@@ -157,6 +157,13 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
     line(`Bill #${bill.billNo}`);
     rule();
   }
+  if (bill.feedbackUrl) {
+    pos.bold(true); line("RATE YOUR VISIT"); pos.bold(false);
+    const qr = upiQrRaster(bill.feedbackUrl, paperWidth);
+    pos.align("left").raster(qr.widthBytes, qr.height, qr.data).align("center");
+    line("Scan on the restaurant Wi-Fi");
+    rule();
+  }
   line(footer(bill));
   return finishSlip(pos, profile);
 }
@@ -207,5 +214,6 @@ export function receiptHtml(bill: Bill): string {
   ${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}
   ${customerLines(bill).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}
   ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill #${bill.billNo} · Amount filled in automatically</p></section>` : ""}
+  ${bill.feedbackUrl ? `<section class="upi-payment" aria-label="Feedback"><h2>Rate your visit</h2><div class="upi-qr">${upiQrSvg(bill.feedbackUrl)}</div><p class="tax-note">Scan on the restaurant Wi-Fi</p></section>` : ""}
   <footer>${e(footer(bill))}</footer></main></body></html>`;
 }
