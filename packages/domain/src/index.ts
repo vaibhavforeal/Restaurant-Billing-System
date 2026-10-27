@@ -55,5 +55,7 @@ export {
 export * from "./pricing.js";
 export { CloudBackupPreferences, type CloudBackupSettings, type CloudBackupState, type CloudBackupAccount, type CloudBackupStatus } from "./cloud-backups.js";
 export { ShiftOpen, CashMovementCreate, ShiftClose, DayClose } from "./shift-schemas.js";
-export { normalizePhone, CustomerCreate, CustomerUpdate, CustomerSlab, CustomerTypeCreate, CustomerTypeUpdate, LoyaltySettingsUpdate, LoyaltyAdjust, OrderCustomerSet, bestSlabPercent, percentOf, pointsEarned, type SlabRule } from "./customers.js";
+export { normalizePhone, CustomerCreate, CustomerUpdate, CustomerSlab, CustomerTypeCreate, CustomerTypeUpdate, LoyaltySettingsUpdate, LoyaltyTierCreate, LoyaltyTierUpdate, LoyaltyAdjust, OrderCustomerSet, FeedbackSubmit, bestSlabPercent, percentOf, pointsEarned, tierFor, daysUntilOccasion, addMonths, type SlabRule, type TierRule } from "./customers.js";
+export { openLots, expiryDue, expiringSoon, expireRef, type LedgerEntry, type PointsLot } from "./loyalty-expiry.js";
+export { SegmentFilter, SegmentSave, matchesSegment, SEGMENT_PRESETS, SEGMENT_CSV_COLUMNS, type SegmentFilterInput, type SegmentFilterValue, type SegmentCustomer, type SavedSegment } from "./customer-segments.js";
 export { UPDATE_CHANNELS, isToServer, isToDesktop, type UpdateChannel, type UpdateState, type UpdateStatus, type ToDesktop, type ToServer } from "./updates.js";

@@ -4,7 +4,7 @@ export type RoleName = "admin" | "cashier" | "waiter" | "kitchen";
 
 /**
  * Permission namespaces (fixed vocabulary for the whole app):
- * orders, kots, bills (bills.refund = void or refund an issued bill; bills.settle also opens and closes the cash drawer shift), tables, reservations, customers (customers.manage = add and edit customers; loyalty and customer types are settings.manage), catalog, stock, costs, users, settings, reports (reports.close_day = close a business date, reports.manage = save, edit and delete custom reports; both admin only), printers, integrations (integrations.read = see the Marketplace, integrations.configure = turn integrations on/off; admin only).
+ * orders, kots, bills (bills.refund = void or refund an issued bill; bills.settle also opens and closes the cash drawer shift), tables, reservations, customers (customers.manage = add and edit customers and record feedback; loyalty, tiers and customer types are settings.manage), crm (crm.export = export customer segments with phone numbers; admin only), catalog, stock, costs, users, settings, reports (reports.close_day = close a business date, reports.manage = save, edit and delete custom reports; both admin only), printers, integrations (integrations.read = see the Marketplace, integrations.configure = turn integrations on/off; admin only).
  * Discount limits are data (`discount_caps`, `users.max_discount_percent`); permissions are code. Roles are code, not data — a restaurant picks a role per staff member and
  * that's the whole model (spec: fewer things to learn).
  */

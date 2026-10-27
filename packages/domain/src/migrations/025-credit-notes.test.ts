@@ -19,7 +19,7 @@ describe("migration 025 credit notes", () => {
     try {
       const billBefore = db.prepare("SELECT * FROM bills WHERE id = 'b1'").get();
       migrate(db, MIGRATIONS);
-      expect(db.prepare("SELECT * FROM bills WHERE id = 'b1'").get()).toEqual({ ...(billBefore as object), discount_approved_by: null, customer_id: null, customer_discount_paise: 0, points_redeemed: 0, points_value_paise: 0 });
+      expect(db.prepare("SELECT * FROM bills WHERE id = 'b1'").get()).toEqual({ ...(billBefore as object), discount_approved_by: null, customer_id: null, customer_discount_paise: 0, points_redeemed: 0, points_value_paise: 0, feedback_token: null });
       expect(db.prepare("SELECT value FROM sequences WHERE name = 'credit_note_no'").get()).toEqual({ value: 0 });
 
       const insertNote = (id: string, cnNo: number, kind: string, clientRef: string) =>

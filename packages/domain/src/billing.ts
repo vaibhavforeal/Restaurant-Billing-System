@@ -70,6 +70,8 @@ export interface ReceiptCustomer {
   /** Last four digits only, e.g. "******3210". */
   phone: string;
   typeName?: string;
+  /** The loyalty tier the bill earned points at, when tiers are on. */
+  tierName?: string;
   slabPercent?: number;
   customerDiscountPaise?: number;
   pointsRedeemed?: number;
