@@ -24,7 +24,8 @@ html[data-theme] .tables-screen.table-overview {
   .tables-search-controls input, .tables-search-controls select { height: 34px; font-size: 12px; }
   .tables-search-controls > select { width: 130px; }
   .tables-layout { gap: 8px; }
-  .tables-layout.has-parcels { grid-template-columns: minmax(0, 1fr) clamp(210px, 21vw, 264px); }
+  .tables-layout.has-parcels { grid-template-columns: minmax(0, 1fr) clamp(280px, 24vw, 340px); }
+  .tables-side, .tables-side > .tables-parcels { width: 100%; box-sizing: border-box; }
   .table-list { padding: 2px; overflow: auto; }
   .table-area { margin-bottom: 10px; }
   .table-area:last-child { margin-bottom: 0; }
@@ -62,16 +63,18 @@ html[data-theme] .tables-screen.table-overview {
   .table-card-footer > span { display: flex; align-items: center; gap: 6px; }
   .table-card-footer > span > svg { color: var(--table-color); }
   .tables-parcels { border-radius: 8px; background: var(--surface); align-self: start; max-height: 100%; }
-  .tables-parcels .panel-title { padding: 8px; min-height: 36px; }
-  .tables-parcels .panel-title h3 { font-size: 13px; }
-  .parcel-list { padding: 4px; gap: 2px; }
-  .parcel-list > button { padding: 6px; gap: 6px; border-color: transparent; background: transparent; border-radius: 5px; }
+  .tables-parcels .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; min-height: 52px; }
+  .tables-parcels .panel-title h3 { font-size: 15px; margin: 0; line-height: 1.4; }
+  .tables-parcels .panel-title > span { font-size: 13px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+  .parcel-list { padding: 0 8px; gap: 0; }
+  .parcel-list > button { display: grid; grid-template-columns: 38px minmax(0, 1fr) 16px; align-items: center; min-height: 106px; padding: 14px 8px; gap: 12px; border-color: transparent; background: transparent; border-radius: 5px; }
   .parcel-list > button + button { border-top-color: var(--line); }
   .parcel-list > button:hover:not(:disabled) { background: var(--pos-accent-soft); border-color: var(--line); }
-  .parcel-list > button > .takeaway-glyph { flex: none; display: grid; place-items: center; width: 30px; height: 34px; border-radius: 5px; background: color-mix(in srgb, var(--muted) 7%, var(--surface)); color: var(--muted); }
-  .takeaway-info { min-width: 0; font-size: 11px; }
-  .takeaway-info small { font-size: 10px; margin-top: 3px; }
-  .takeaway-info strong { display: block; margin-top: 5px; font-size: 13px; text-align: left; }
+  .parcel-list > button > .takeaway-glyph { flex: none; display: grid; place-items: center; width: 38px; height: 42px; border-radius: 6px; background: color-mix(in srgb, var(--muted) 7%, var(--surface)); color: var(--muted); }
+  .parcel-list > button > svg { justify-self: end; }
+  .parcel-list > button > .takeaway-info { min-width: 0; display: grid; gap: 5px; font-size: 13px; line-height: 1.4; }
+  .takeaway-info small { font-size: 12px; margin: 0; }
+  .takeaway-info strong { display: block; margin: 2px 0 0; font-size: 16px; line-height: 1.3; text-align: left; }
   .tables-pane-switch { margin: 0; }
 }
 

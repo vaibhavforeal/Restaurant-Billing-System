@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useEffect, useState } from "react";
 import type { AnalyticsOrderType, OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
 import { apiFetch } from "../api";
@@ -48,11 +49,11 @@ export function OrderAnalytics({ initialPeriod, onPeriodChange }: { initialPerio
   return <div className="order-analytics">
     <div className="analytics-heading"><div><h3>Order analytics</h3><p>Compare service types and see what sells best.</p></div><button disabled={!report || loading} onClick={exportReport}>Export analytics CSV</button></div>
     <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((value) => value + 1); }} onRefresh={() => { invalidate(); setRevision((value) => value + 1); }} />
-    <div className="analytics-filter"><SegmentedControl<AnalyticsOrderType> label="Analytics order type" value={orderType} options={orderOptions} onChange={(value) => { if (value !== orderType) { invalidate(); setOrderType(value); setShowAll(false); } }} /><small>Comparison always shows both types; the filter applies to the other sections.</small></div>
+    <div className="analytics-filter"><SegmentedControl<AnalyticsOrderType> label="Analytics order type" value={orderType} options={orderOptions} onChange={(value) => { if (value !== orderType) { invalidate(); setOrderType(value); setShowAll(false); } }} /><InfoTip>Comparison always shows both types; the filter applies to the other sections.</InfoTip></div>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {loading && <p className="sales-report-empty" role="status">Loading analytics…</p>}
     {report && <>
-      <div className="sales-metrics analytics-metrics">{analyticsMetrics(report).map((metric) => <div className="sales-metric" key={metric.label}><p>{metric.label}</p><strong>{metric.value}</strong><small>{metric.note}</small></div>)}</div>
+      <div className="sales-metrics analytics-metrics">{analyticsMetrics(report).map((metric) => <div className="sales-metric" key={metric.label}><p>{metric.label} <InfoTip>{metric.note}</InfoTip></p><strong>{metric.value}</strong></div>)}</div>
       <SalesRangeCaption report={report} />
       {!report.totals.orderCount && <p className="sales-report-empty">No billed orders for this date range and order type. Choose another range or All orders.</p>}
       <div className="analytics-grid">

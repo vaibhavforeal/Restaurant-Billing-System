@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ZomatoSettings } from "@forkflow/domain/zomato";
 import { apiFetch } from "../api";
@@ -31,15 +32,15 @@ export function ZomatoConnection({ settings, canEdit, onSaved }: { settings: Zom
     finally { lock.current = false; setBusy(false); }
   }
   return <div className="zomato-connection"><form className="panel" onSubmit={e => { e.preventDefault(); void save(); }}>
-    <h3>Restaurant connection</h3><p className="muted">Use the restaurant ID from your Zomato account. This ledger supports one restaurant.</p>
+    <h3>Restaurant connection <InfoTip>Use the restaurant ID from your Zomato account. This ledger supports one restaurant.</InfoTip></h3>
     {!canEdit && <p>Only an administrator can change the connection.</p>}
     <fieldset disabled={!canEdit || busy} className="zomato-fields"><label>Zomato restaurant ID<input required maxLength={160} value={form.restaurantId} onChange={e => update("restaurantId", e.target.value)} /></label>
       <label>Restaurant name<input maxLength={160} value={form.restaurantName} onChange={e => update("restaurantName", e.target.value)} /></label>
       <label>POS vendor ID <small>(when assigned by Zomato)</small><input maxLength={160} value={form.posId} onChange={e => update("posId", e.target.value)} /></label>
       <label>Public webhook service origin <small>(when available)</small><input type="url" placeholder="https://orders.your-domain.com" maxLength={500} value={form.webhookBaseUrl} onChange={e => update("webhookBaseUrl", e.target.value)} /></label>
-      <label>Amber after (minutes)<input type="number" inputMode="numeric" required min={1} max={240} step={1} aria-describedby="zomato-age-hint" value={ages.warn} onChange={e => updateAge("warn", e.target.value)} /></label>
+      <label><span>Amber after (minutes) <InfoTip id="zomato-age-hint">How long since punch-in before a Zomato card turns amber or red.</InfoTip></span><input type="number" inputMode="numeric" required min={1} max={240} step={1} aria-describedby="zomato-age-hint" value={ages.warn} onChange={e => updateAge("warn", e.target.value)} /></label>
       <label>Red after (minutes)<input type="number" inputMode="numeric" required min={1} max={240} step={1} aria-describedby="zomato-age-hint" value={ages.late} onChange={e => updateAge("late", e.target.value)} /></label>
-      <small id="zomato-age-hint" className="muted">How long since punch-in before a Zomato card turns amber or red.</small>
+
       {settings.adapterConfigured && <label className="zomato-check"><input type="checkbox" checked={form.enabled} onChange={e => { setForm(old => ({ ...old, enabled: e.target.checked })); setDirty(true); }} /> Enable verified live receiving</label>}
     </fieldset>
     {dirty && form.version !== settings.version && <p role="alert">Another counter changed these settings. <button type="button" onClick={() => { setForm(settings); setAges(ageText(settings)); setDirty(false); }}>Reload saved values</button></p>}

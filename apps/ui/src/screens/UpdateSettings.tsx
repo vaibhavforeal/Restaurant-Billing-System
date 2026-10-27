@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useEffect, useState } from "react";
 import type { UpdateChannel, UpdateStatus } from "@forkflow/domain/updates";
 import { ApiError, apiFetch } from "../api";
@@ -49,13 +50,13 @@ export function UpdateSettings() {
 
     <fieldset disabled={busy || unsupported} style={{ border: 0, padding: 0, minWidth: 0, display: "grid", gap: 8 }}>
       <label style={{ display: "grid", gap: 4, maxWidth: 420 }}>
-        Update channel
+        <span>Update channel <InfoTip>Patch gets fixes earlier. Switching back to Stable keeps the current version until a newer stable release is out.</InfoTip></span>
         <select value={data.channel} onChange={(e) => void run(() => apiFetch("/api/system/updates", { method: "PUT", body: JSON.stringify({ channel: e.target.value }) }), "Update channel saved.")}>
           <option value="stable">Stable — full releases only (recommended)</option>
           <option value="patch">Patch — also hotfixes as soon as they are released</option>
         </select>
       </label>
-      <small>Patch gets fixes earlier. Switching back to Stable keeps the current version until a newer stable release is out.</small>
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => void run(() => apiFetch("/api/system/updates/check", { method: "POST" }), "Checking for updates…")}>Check now</button>
         {status.state === "ready" && <button className="primary" disabled={data.openOrders > 0} onClick={() => void run(async () => {

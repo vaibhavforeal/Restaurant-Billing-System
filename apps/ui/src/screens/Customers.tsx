@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { joinOccasion, parseTags } from "../crm";
@@ -154,8 +155,7 @@ function CustomerTypes({ types, onChanged }: { types: CustomerType[]; onChanged:
     return { minBillPaise, percent: Number(r.percent), validFrom: r.from || null, validTo: r.to || null };
   });
   return <section className="panel" aria-label="Customer types">
-    <h3>Customer types and discount slabs</h3>
-    <p>Give a type of customer (for example Regular or Staff) a percent off. A slab applies from a minimum bill, optionally only between two dates. The best slab a bill qualifies for is applied automatically and is not counted against staff discount limits.</p>
+    <h3>Customer types and discount slabs <InfoTip>Give a type of customer (for example Regular or Staff) a percent off. A slab applies from a minimum bill, optionally only between two dates. The best slab a bill qualifies for is applied automatically and is not counted against staff discount limits.</InfoTip></h3>
     <fieldset disabled={busy} className="cash-drawer-form">
       {types.map((t) => <div key={t.id} className="customer-type">
         <strong>{t.name}</strong>{!t.isActive && <small className="muted"> (off)</small>}
@@ -202,18 +202,17 @@ function LoyaltySettingsCard() {
   if (!form) return null;
   const set = (patch: Partial<SettingsForm>) => setForm({ ...form, ...patch });
   return <section className="panel" aria-label="Loyalty points">
-    <h3>Loyalty points</h3>
-    <p>Customers earn points on every bill with their number on it, and can spend them as a discount on a later bill. Voids take the points back.</p>
+    <h3>Loyalty points <InfoTip>Customers earn points on every bill with their number on it, and can spend them as a discount on a later bill. Voids take the points back.</InfoTip></h3>
     <fieldset disabled={busy} className="cash-drawer-form">
       <label className="crm-check"><input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> Loyalty points on</label>
       <label>Points per ₹100 spent <input type="number" min="1" max="100" value={form.pointsPer100} onChange={(e) => set({ pointsPer100: e.target.value })} /></label>
       <label>Value of 1 point (₹) <input type="number" min="0.01" step="0.01" value={form.pointValue} onChange={(e) => set({ pointValue: e.target.value })} /></label>
       <label>Minimum points to redeem <input type="number" min="0" value={form.minRedeemPoints} onChange={(e) => set({ minRedeemPoints: e.target.value })} /></label>
       <label>Points can pay up to (% of bill) <input type="number" min="1" max="100" value={form.maxRedeemPercent} onChange={(e) => set({ maxRedeemPercent: e.target.value })} /></label>
-      <label>Points expire after (months, 0 = never) <input type="number" min="0" max="120" value={form.expiryMonths} onChange={(e) => set({ expiryMonths: e.target.value })} /></label>
+      <label><span>Points expire after (months, 0 = never) <InfoTip>A new expiry period applies to points earned from now on.</InfoTip></span><input type="number" min="0" max="120" value={form.expiryMonths} onChange={(e) => set({ expiryMonths: e.target.value })} /></label>
       <label className="crm-check"><input type="checkbox" checked={form.tiersEnabled} onChange={(e) => set({ tiersEnabled: e.target.checked })} /> Use tiers</label>
       {form.tiersEnabled && <label>Tier from spend in the last (months) <input type="number" min="1" max="60" value={form.tierWindowMonths} onChange={(e) => set({ tierWindowMonths: e.target.value })} /></label>}
-      <label className="crm-check"><input type="checkbox" checked={form.feedbackEnabled} onChange={(e) => set({ feedbackEnabled: e.target.checked })} /> Print a "Rate your visit" QR code on bills</label>
+      <label className="crm-check"><input type="checkbox" checked={form.feedbackEnabled} onChange={(e) => set({ feedbackEnabled: e.target.checked })} /> <span>Print a "Rate your visit" QR code on bills <InfoTip>The feedback QR code links to this computer on the restaurant's network, so guests scan it on the restaurant Wi-Fi.</InfoTip></span></label>
       <button className="primary" onClick={() => void run(async () => {
         const pointValuePaise = rupeesToPaise(form.pointValue);
         if (!pointValuePaise) throw new Error("Enter the value of a point in rupees");
@@ -225,7 +224,7 @@ function LoyaltySettingsCard() {
         accept(settings);
       }, "Loyalty settings saved.")}>Save loyalty settings</button>
     </fieldset>
-    <p className="muted">A new expiry period applies to points earned from now on. The feedback QR code links to this computer on the restaurant's network, so guests scan it on the restaurant Wi-Fi.</p>
+
     {status}
   </section>;
 }
@@ -241,8 +240,7 @@ function TiersCard({ tiers, onChanged }: { tiers: LoyaltyTier[]; onChanged: () =
     return value;
   };
   return <section className="panel" aria-label="Loyalty tiers">
-    <h3>Tiers</h3>
-    <p>With "Use tiers" on, a customer's tier comes from what they spent recently, and the tier multiplies the points they earn. With it off, everyone earns points the same way.</p>
+    <h3>Tiers <InfoTip>With "Use tiers" on, a customer's tier comes from what they spent recently, and the tier multiplies the points they earn. With it off, everyone earns points the same way.</InfoTip></h3>
     <fieldset disabled={busy} className="cash-drawer-form">
       {tiers.map((t) => <div key={t.id} className="customer-type">
         <strong>{t.name}</strong>{!t.isActive && <small className="muted"> (off)</small>}

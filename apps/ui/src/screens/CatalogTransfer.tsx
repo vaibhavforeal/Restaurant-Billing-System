@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useRef, useState } from "react";
 import { CATALOG_CSV_LIMIT, type CatalogImportPreview } from "@forkflow/domain/catalog-csv";
 import { catalogTemplateCsv } from "../catalog-template";
@@ -54,19 +55,19 @@ export function CatalogTransfer({ busy, run, onImported }: {
         const result = await apiFetch<{ csv: string; filename: string }>("/api/catalog/export");
         download(result.csv, result.filename);
       }, "transfer"); }}>Export CSV</button>
-      <button disabled={busy} onClick={() => input.current?.click()}>Import CSV</button>
+      <button disabled={busy} onClick={() => input.current?.click()}>Import CSV</button><InfoTip>All categories · Prices in rupees · Preview before saving</InfoTip>
       <button disabled={busy} onClick={() => download(catalogTemplateCsv(), "forkflow-items-template.csv")}>Download template</button>
       <input ref={input} type="file" accept=".csv,text/csv" aria-label="Choose item CSV" hidden disabled={busy}
         onChange={(e) => { chooseFile(e.target.files?.[0]); e.target.value = ""; }} />
       {busy && <span role="status">Working…</span>}
     </div>
-    <p className="product-editor-help">All categories · Prices in rupees · Preview before saving</p>
+
     <details>
-      <summary>CSV format and matching rules</summary>
+      <summary>CSV format and matching rules <InfoTip>CSV includes active and inactive items, descriptions and variants. Photos, recipes, stock quantities, category settings and printer settings are not included. Existing photos and stock links are preserved. Blank descriptions clear the description; omit the column to keep it.</InfoTip></summary>
       <p>Use the template or edit an export in Excel, then save as CSV UTF-8. Required columns: category, name and price. The price column is Non-AC; the optional gst_rate column takes 0, 5, 12, 18 or 28, and a blank gst_rate uses the restaurant default GST rate; optional ac_price and takeaway_price set service prices. Portions use variant_ac_price and variant_takeaway_price. Blank service prices use the item or portion's Non-AC price; omitted columns preserve saved prices. Use true/false for flags. Limit: 5 MB and 10,000 rows.</p>
       <p>Keep item_id to update an exported item. With a blank ID, items match by category and name; new names create items. New categories are added automatically. KOT station names must already exist in Settings; blank means no kitchen station.</p>
       <p>Each variant uses another row with identical item details plus variant_name and variant_price. Keep variant_id when updating a variant. Omitted items and variants stay in the database. Blank flags keep existing values; new items default to active, vegetarian and available.</p>
-      <p>CSV includes active and inactive items, descriptions and variants. Photos, recipes, stock quantities, category settings and printer settings are not included. Existing photos and stock links are preserved. Blank descriptions clear the description; omit the column to keep it.</p>
+
     </details>
     {file && <div className="catalog-import-preview">
       <div className="catalog-transfer-actions">
@@ -83,8 +84,8 @@ export function CatalogTransfer({ busy, run, onImported }: {
             <td>{item.action}</td><td>{item.name}</td><td>{item.category}</td><td>₹{paiseToRupees(item.pricePaise)}</td>
           </tr>)}</tbody>
         </table></div>
-        <p className="product-editor-help">Updates apply the values in this file. No items or variants will be deleted.</p>
-        <button className="primary" disabled={busy} onClick={importFile}>Import {preview.created + preview.updated} items</button>
+
+        <button className="primary" disabled={busy} onClick={importFile}>Import {preview.created + preview.updated} items</button><InfoTip>Updates apply the values in this file. No items or variants will be deleted.</InfoTip>
       </>}
     </div>}
   </section>;

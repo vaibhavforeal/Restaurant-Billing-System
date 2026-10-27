@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import type { StockItem, StockLink, StockUnit } from "@forkflow/domain";
 import { ApiError, apiFetch } from "../api";
@@ -130,7 +131,7 @@ export function RecipeEditor({ productId, items, canManage, fullRecipe, refresh,
   }
 
   return <div className="recipe-editor" aria-label="Recipe editor" aria-busy={loading || working}>
-    <div className="recipe-editor-heading"><div><h4>Ingredients for one item sold</h4><p className="muted">These quantities apply to all variants.</p></div>
+    <div className="recipe-editor-heading"><div><h4>Ingredients for one item sold <InfoTip>These quantities apply to all variants.</InfoTip></h4></div>
       <span className={`recipe-state${dirty ? " is-dirty" : ""}`} role="status">{loading ? "Loading…" : working ? "Saving…" : dirty ? "Unsaved changes" : base ? `${base.links.length} ingredient${base.links.length === 1 ? "" : "s"}` : ""}</span></div>
     {!canManage && <p className="recipe-access-note">Only administrators can edit recipes.</p>}
     {canManage && !fullRecipe && <p className="recipe-access-note">{base && base.links.length > 1 ? "This recipe is view-only on Basic. Pro is required to edit multiple ingredients." : "Basic supports one ingredient per menu item. Multiple ingredients require Pro."}</p>}

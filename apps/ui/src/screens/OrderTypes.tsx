@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api";
 import type { OrderTypeInfo } from "../types";
@@ -27,8 +28,7 @@ export function OrderTypes() {
     void run(() => apiFetch(`/api/order-types/${id}`, { method: "PATCH", body: JSON.stringify(body) }), done);
 
   return <section className="panel" aria-label="Order types">
-    <h3>Order types</h3>
-    <p>Add your own takeaway and delivery types, such as Home delivery or Counter pickup. Staff choose the type on a takeaway order; it prints on the kitchen ticket and the bill, and the Order type sales report groups sales by it. Built-in types can be renamed but not turned off.</p>
+    <h3>Order types <InfoTip>Add your own takeaway and delivery types, such as Home delivery or Counter pickup. Staff choose the type on a takeaway order; it prints on the kitchen ticket and the bill, and the Order type sales report groups sales by it. Built-in types can be renamed but not turned off.</InfoTip></h3>
     <fieldset disabled={busy} style={{ border: 0, padding: 0, minWidth: 0 }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ textAlign: "left" }}><th>Name</th><th>Kind</th><th>Status</th><th></th></tr></thead>

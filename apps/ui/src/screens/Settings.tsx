@@ -1,3 +1,4 @@
+import { InfoTip } from "../InfoTip";
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_GST_RATES } from "@forkflow/domain/gst";
 import { resolveReceiptStyle } from "@forkflow/domain/receipt-styles";
@@ -321,7 +322,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       ) : <>
       <div className="settings-detail-head">
         <button type="button" onClick={() => setActive(null)}>← Settings</button>
-        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title}</h3>
+        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title} {active === "jobs" && <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip>}</h3>
       </div>
       <div className="pos-section settings-detail">
       {active === "shortcuts" && <KeyboardSettings />}
@@ -338,7 +339,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             </label>
           ))}
           <label style={{ display: "grid", gap: 4 }}>
-            Bill style
+            <span>Bill style <InfoTip id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</InfoTip></span>
             <select value={form.receiptStyle ?? "classic"} onChange={(e) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(e.target.value) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">
               <option value="classic">Classic - Receipt mono</option>
               <option value="modern">Modern - Bold sans serif</option>
@@ -346,9 +347,9 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               <option value="compact">Compact - Space-saving sans serif</option>
             </select>
           </label>
-          <small id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</small>
+
           <label style={{ display: "grid", gap: 4 }}>
-            GST
+            <span>GST <InfoTip id="gst-settings-help">Applies to new bills. With GST included, the tax is part of your menu prices and is shown as an Includes GST block on the bill; items without their own rate use the default rate. With No GST charged, bills show no tax. Existing bills keep their original tax calculation.</InfoTip></span>
             <select value={form.gstMode} disabled={busy} aria-describedby="gst-settings-help"
               onChange={(e) => { setForm({ ...form, gstMode: e.target.value === "none" ? "none" : "included" }); setProfileStatus(""); }}>
               <option value="included">Prices include GST</option>
@@ -362,16 +363,16 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               {DEFAULT_GST_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
             </select>
           </label>}
-          <small id="gst-settings-help">Applies to new bills. With GST included, the tax is part of your menu prices and is shown as an Includes GST block on the bill; items without their own rate use the default rate. With No GST charged, bills show no tax. Existing bills keep their original tax calculation.</small>
+
           <label style={{ display: "grid", gap: 4 }}>
-            UPI ID for bill payments
+            <span>UPI ID for bill payments <InfoTip id="upi-settings-help">Save your restaurant’s UPI ID once to print a payment QR on new unpaid bills, with the bill amount filled in. Leave blank to disable for new bills. Existing bills keep their saved UPI ID.</InfoTip></span>
             <input value={form.upiId} placeholder="restaurant@bank" maxLength={255}
               autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={busy}
               aria-describedby="upi-settings-help"
               onChange={(e) => { setForm({ ...form, upiId: e.target.value }); setProfileStatus(""); }} />
           </label>
           <label style={{ display: "grid", gap: 4 }}>
-            Kitchen slip when a sent item is changed
+            <span>Kitchen slip when a sent item is changed <InfoTip id="kot-edit-help">When staff change the quantity or note of an item already sent to the kitchen, a CHANGED slip can print at that kitchen station. The kitchen screen updates either way.</InfoTip></span>
             <select value={form.kotEditPrint} disabled={busy} aria-describedby="kot-edit-help"
               onChange={(e) => { setForm({ ...form, kotEditPrint: e.target.value as SettingsData["kotEditPrint"] }); setProfileStatus(""); }}>
               <option value="ask">Ask each time</option>
@@ -379,8 +380,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               <option value="never">Never print</option>
             </select>
           </label>
-          <small id="kot-edit-help">When staff change the quantity or note of an item already sent to the kitchen, a CHANGED slip can print at that kitchen station. The kitchen screen updates either way.</small>
-          <small id="upi-settings-help">Save your restaurant’s UPI ID once to print a payment QR on new unpaid bills, with the bill amount filled in. Leave blank to disable for new bills. Existing bills keep their saved UPI ID.</small>
+
+
           <button
             className="primary" onClick={() => void saveProfile()}
             style={{ fontWeight: 700 }}
@@ -491,8 +492,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             onChange={receiptProfile => setEditPrinter(previous => ({ ...previous, receiptProfile }))} />
           <PrintProfileControls title="KOT and cancellation profile" value={editPrinter.kotProfile ?? DEFAULT_PRINT_PROFILE} disabled={busy}
             onChange={kotProfile => setEditPrinter(previous => ({ ...previous, kotProfile }))} />
-          <button disabled={busy} onClick={() => void savePrinter(editingPrinterId)}>Save printer and profiles</button>
-          <small>Test prints use the saved profile and its copy count.</small>
+          <div className="info-action-row"><button disabled={busy} onClick={() => void savePrinter(editingPrinterId)}>Save printer and profiles</button><InfoTip>Test prints use the saved profile and its copy count.</InfoTip></div>
+
         </div>}
 
         {/* Add printer form */}
@@ -593,7 +594,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
 
       {/* Print jobs section */}
       {active === "jobs" && <div className="panel">
-        <p>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</p>
+
         {error && <p role="alert">{error}</p>}
 
         {jobs.length === 0 ? (
