@@ -47,3 +47,87 @@
 .crm-spread li { display: grid; grid-template-columns: 32px 1fr 40px; gap: 8px; align-items: center; }
 .crm-bar { height: 10px; border-radius: 5px; background: var(--line, #eee); overflow: hidden; }
 .crm-bar > span { display: block; height: 100%; background: #f2a516; }
+/* Customer workspace: a 360px directory and a flexible guest sheet share a 10px gutter. */
+.customers { --customer-surface: var(--surface, #fff); --customer-border: color-mix(in srgb, var(--ink) 24%, var(--surface)); }
+/* Stick inside the scrolling workspace; cover its padding so rows cannot show above the header. */
+.customers .crm-header {
+  display: block;
+  position: sticky;
+  top: calc(-1 * var(--space-4, 8px));
+  z-index: 5;
+  margin: calc(-1 * var(--space-4, 8px)) calc(-1 * var(--space-4, 8px)) 12px;
+  padding: var(--space-4, 8px) var(--space-4, 8px) 0;
+  background: var(--surface);
+}
+.customers .crm-header h1 { font-size: 22px; letter-spacing: -.6px; margin: 0 0 6px; }
+.customers .crm-header p { margin: 0 0 10px; }
+.customers .crm-header .tabs, .customers .customer-profile .tabs { gap: 16px; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; }
+.customers .crm-header .tabs button, .customers .customer-profile .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); padding: 6px 2px; min-height: 32px; }
+.customers .crm-header .tabs button[aria-pressed="true"], .customers .customer-profile .tabs button[aria-pressed="true"] { border-bottom-color: var(--pos-accent); color: var(--ink); background: transparent; }
+.customer-toolbar, .customer-create-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.customers .customer-toolbar h2, .customers .customer-create h2 { font-size: 18px; margin: 0 0 4px; }
+.customer-toolbar p, .customer-create-heading p { margin: 0; }
+.customers-layout { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 10px; }
+.customers .panel { box-shadow: none; border: 1px solid var(--customer-border); border-radius: 6px; background: var(--customer-surface); }
+.customers .customer-directory { padding: 0; overflow: hidden; }
+.customer-search { padding: 12px; border-bottom: 1px solid var(--line); }
+.customer-search > label { display: block; font-weight: 600; margin-bottom: 8px; }
+.customer-search > input { width: 100%; min-width: 0; }
+.customer-list-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.customer-list-meta .crm-check { font-size: 12px; }
+.customers .customer-list { margin: 0; gap: 0; max-height: clamp(128px, calc(100dvh - 320px), 570px); overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; }
+.customers .customer-list li + li { border-top: 1px solid var(--line); }
+.customers .customer-list button { display: block; min-height: 32px; border: 0; border-radius: 0; padding: 6px 10px; background: transparent; }
+.customers .customer-list button:hover { background: var(--bg); }
+.customers .customer-list button[aria-pressed="true"] { background: var(--pos-accent-soft); box-shadow: inset 3px 0 var(--pos-accent); color: var(--ink); }
+.customer-identity { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; line-height: 20px; }
+.customer-identity > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.customer-identity > small { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.customer-list-message { padding: 12px; font-size: 14px; }
+.customer-list-message p { color: var(--muted); margin: 8px 0 0; }
+.customer-detail-area { min-width: 0; }
+.customers .customer-welcome { padding: 12px; }
+.customer-welcome-mark { color: var(--pos-accent); font-size: 36px; margin-bottom: 20px; }
+.customers .customer-welcome h2 { max-width: 320px; font-size: 22px; line-height: 1.3; letter-spacing: -.5px; margin-bottom: 12px; }
+.customer-welcome dl { margin: 14px 0 0; }
+.customer-welcome dl > div { border-top: 1px solid var(--line); padding: 10px 0; }
+.customer-welcome dt { font-size: 14px; font-weight: 600; }
+.customer-welcome dd { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.customers .customer-profile, .customers .customer-create { padding: 12px; }
+.customers .crm-profile-head { padding-bottom: 10px; }
+.customers .crm-profile-head h3 { font-size: 20px; overflow-wrap: anywhere; }
+.customers .crm-profile-head p { margin: 5px 0; overflow-wrap: anywhere; }
+.customers .crm-points { flex-shrink: 0; }
+.customers .crm-points strong { margin-top: 4px; font-size: 26px; }
+.customers .crm-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0 0 10px; }
+.customers .crm-tiles > div { padding: 8px 10px; border: 1px solid var(--customer-border); border-radius: 4px; background: var(--bg); }
+.customers .crm-tiles dd { font-size: 18px; overflow-wrap: anywhere; }
+.customers .customer-profile .tabs { margin-top: 12px; margin-bottom: 8px; }
+.customers .customer-ledger { border: 1px solid var(--customer-border); }
+.customers .customer-ledger :is(th, td) { padding: 7px 8px; border: 1px solid var(--customer-border); }
+.customers .customer-ledger th { background: var(--bg); text-align: left; text-transform: none; letter-spacing: normal; font-size: 12px; }
+.customers .customer-ledger th.pos-money { text-align: right; }
+.customers .customer-profile > p { margin: 8px 0; }
+.customers .customer-profile .crm-points { padding: 8px 10px; border: 1px solid var(--customer-border); border-radius: 4px; background: var(--bg); }
+.customers .customer-profile .tabs { gap: 4px; border: 1px solid var(--customer-border); border-radius: 4px; padding: 3px; background: var(--bg); }
+.customers .customer-profile .tabs button { padding: 5px 12px; border: 1px solid transparent; border-radius: 3px; min-height: 30px; }
+.customers .customer-profile .tabs button[aria-pressed="true"] { border-color: var(--customer-border); background: var(--customer-surface); color: var(--pos-accent); }
+.customers .customer-create .cash-drawer-form, .customers .crm-edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.customers .customer-create label, .customers .crm-edit label { min-width: 0; }
+.customers .customer-create input, .customers .customer-create select, .customers .crm-edit input, .customers .crm-edit select { width: 100%; min-width: 0; }
+.customers input[type="checkbox"] { width: auto; min-height: auto; }
+.customers .customer-create .crm-check, .customers .customer-create .crm-occasion-input { grid-column: 1 / -1; }
+.customers .customer-create .primary { justify-self: start; }
+.customers .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 1000px) { .customers-layout { grid-template-columns: minmax(250px, .8fr) minmax(0, 1fr); } .customers .crm-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .customers-layout { grid-template-columns: minmax(0, 1fr); }
+  .customers .customer-list { max-height: clamp(128px, calc(100dvh - 340px), 300px); }
+  .customers .crm-header .tabs { gap: 18px; flex-wrap: nowrap; overflow-x: auto; }
+  .customer-toolbar { align-items: start; }
+  .customer-toolbar > .primary { white-space: nowrap; }
+  .customers .customer-profile, .customers .customer-create, .customers .customer-welcome { padding: 12px; }
+  .customers .customer-create .cash-drawer-form, .customers .crm-edit { grid-template-columns: minmax(0, 1fr); }
+  .crm-profile-head { flex-wrap: wrap; }
+  .customer-create-heading { align-items: start; }
+}

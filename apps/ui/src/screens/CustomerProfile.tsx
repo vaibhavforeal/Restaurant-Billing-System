@@ -70,18 +70,18 @@ export function CustomerProfile({ detail, types, isAdmin, onChanged }: { detail:
     {status}
 
     {section === "Bills" && <>
-      <table className="customer-ledger"><tbody>{bills.list.map((b) => <tr key={b.id}>
+      <table className="customer-ledger"><thead><tr><th scope="col">Bill</th><th scope="col">Date</th><th scope="col" className="pos-money">Amount</th><th scope="col">Status</th></tr></thead><tbody>{bills.list.map((b) => <tr key={b.id}>
         <td>#{b.billNo}</td><td>{day(b.createdAt)}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td>{b.status}</td>
-      </tr>)}{!bills.list.length && <tr><td className="muted">No bills yet.</td></tr>}</tbody></table>
+      </tr>)}{!bills.list.length && <tr><td colSpan={4} className="muted">No bills yet.</td></tr>}</tbody></table>
       {bills.more && <button type="button" disabled={busy} onClick={() => void loadMore()}>Load older bills</button>}
     </>}
 
     {section === "Points" && <>
       {isAdmin && <AdjustPoints customerId={c.id} onChanged={onChanged} />}
-      <table className="customer-ledger"><tbody>{detail.ledger.map((l) => <tr key={l.id}>
+      <table className="customer-ledger"><thead><tr><th scope="col">Date</th><th scope="col">Activity</th><th scope="col" className="pos-money">Points</th><th scope="col">Details</th></tr></thead><tbody>{detail.ledger.map((l) => <tr key={l.id}>
         <td>{day(l.createdAt)}</td><td>{KIND[l.kind]}</td><td className="pos-money">{l.points > 0 ? `+${l.points}` : l.points}</td>
         <td>{l.billNo ? `Bill #${l.billNo}` : ""}{l.note ? ` ${l.note}` : ""}{l.expiresAt ? <small className="muted"> · expires {day(l.expiresAt)}</small> : null}</td>
-      </tr>)}{!detail.ledger.length && <tr><td className="muted">No points yet.</td></tr>}</tbody></table>
+      </tr>)}{!detail.ledger.length && <tr><td colSpan={4} className="muted">No points yet.</td></tr>}</tbody></table>
     </>}
 
     {section === "Feedback" && <>
