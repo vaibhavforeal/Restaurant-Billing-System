@@ -33,6 +33,13 @@ bytes, destination and copy count.
 profile. Test prints produce the configured number of copies. Save edits before
 testing. Deactivated printers cannot be test-printed.
 
+## KOT stations
+
+Open **Settings > Printers > KOT stations** to add kitchen stations, assign
+an active printer to each station, or activate and deactivate stations.
+Choose **No printer** to leave a station without a printer assignment.
+The **Printers** tab manages the devices and their bill and KOT profiles.
+
 ## Print jobs
 
 Each requested copy is a separate job under **Settings > Print jobs**, with its

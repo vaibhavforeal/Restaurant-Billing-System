@@ -5,7 +5,7 @@ describe("settings sections", () => {
   it("lists each section once with a title, icon and description", () => {
     const ids = SETTINGS_SECTIONS.map((section) => section.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(["profile", "order-types", "printers", "stations", "jobs", "backups", "plan", "updates", "shortcuts"]);
+    expect(ids).toEqual(["profile", "order-types", "printers", "jobs", "backups", "plan", "updates", "shortcuts"]);
     for (const section of SETTINGS_SECTIONS) {
       expect(section.title.trim()).not.toBe("");
       expect(section.blurb.trim()).not.toBe("");

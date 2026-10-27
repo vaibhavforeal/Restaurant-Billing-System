@@ -39,6 +39,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   const [profileError, setProfileError] = useState("");
 
   // Printers section
+  const [printerSection, setPrinterSection] = useState<"devices" | "stations">("devices");
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
   const [editPrinter, setEditPrinter] = useState<Partial<PrinterInfo>>({});
@@ -395,9 +396,15 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       </div>}
 
       {/* Printers section */}
-      {active === "printers" && <div className="panel">
+      {active === "printers" && <>
+        <div className="tabs" role="group" aria-label="Printer settings sections">
+          <button type="button" className={printerSection === "devices" ? "selected" : ""} aria-pressed={printerSection === "devices"} onClick={() => setPrinterSection("devices")}>Printers</button>
+          <button type="button" className={printerSection === "stations" ? "selected" : ""} aria-pressed={printerSection === "stations"} onClick={() => setPrinterSection("stations")}>KOT stations</button>
+        </div>
+        {error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>}
+      </>}
+      {active === "printers" && printerSection === "devices" && <div className="panel">
 
-      <div role="alert" style={{ color: "var(--danger-text, crimson)", minHeight: 20 }}>{error}</div>
         <div className="printer-table-scroll" role="region" aria-label="Configured printers" tabIndex={0}>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
@@ -533,7 +540,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       </div>}
 
       {/* KOT stations section */}
-      {active === "stations" && <div className="panel">
+      {active === "printers" && printerSection === "stations" && <div className="panel" role="region" aria-label="KOT stations">
 
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
@@ -550,6 +557,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                 <td style={{ padding: 6 }}>{s.name}</td>
                 <td>
                   <select
+                    aria-label={`Printer for ${s.name}`}
                     value={s.printerId ?? ""}
                     onChange={(e) => void updateStationPrinter(s.id, e.target.value)}
                     disabled={!s.isActive || busy}
