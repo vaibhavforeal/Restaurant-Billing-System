@@ -19,6 +19,7 @@ import { ConnectionStatus } from "./ConnectionStatus";
 import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";
 import { GuestMenu } from "./screens/GuestMenu";
+import { FeedbackPage } from "./screens/FeedbackPage";
 import { QuickTakeaway, releaseHeldTakeaway } from "./screens/QuickTakeaway";
 import { Customers } from "./screens/Customers";
 import { QrNotifications } from "./QrNotifications";
@@ -51,6 +52,8 @@ export function App() {
   if (window.location.pathname === "/menu" || window.location.pathname === "/menu/") {
     return <GuestMenu token={guestToken} />;
   }
+  const feedback = /^\/feedback\/([A-Za-z0-9_-]{32})\/?$/.exec(window.location.pathname);
+  if (feedback) return <FeedbackPage token={feedback[1]!} />;
   if (/^\/kitchen\/?$/.test(window.location.pathname)) return <KitchenApp />;
   return <StaffApp />;
 }

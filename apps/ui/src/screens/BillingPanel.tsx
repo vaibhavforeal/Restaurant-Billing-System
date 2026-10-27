@@ -18,7 +18,7 @@ import "../billing-panel.css";
 import "../zomato.css";
 
 const money = (value: number) => `₹${paiseToRupees(value)}`;
-type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"] };
+type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
 const paymentModes = [{ value: "cash", label: "Cash" }, { value: "card", label: "Card" }, { value: "upi", label: "UPI" }] as const;
 function preferredPayment(): "cash" | "card" | "upi" { const value = readPreference("forkflow.payment-mode", "cash"); return value === "card" || value === "upi" ? value : "cash"; }
 
@@ -52,6 +52,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const [reason, setReason] = useState("");
   const [approverPin, setApproverPin] = useState("");
   const [redeem, setRedeem] = useState("");
+  // The most points the last preview allowed on this bill; kept while the cashier edits the amount.
+  const [redeemCap, setRedeemCap] = useState<number | null>(null);
+  useEffect(() => setRedeemCap(null), [order.customer?.id]);
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
   const [printerId, setPrinterId] = useState(() => readPreference("forkflow.receipt-printer"));
   const [payments, setPayments] = useState<PaymentDraft[]>([]);
@@ -167,6 +170,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}) }),
     });
     setPreview(value);
+    setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
     createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, ...(pin ? { approverPin: pin } : {}) };
   }
@@ -305,7 +309,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
                 {!bill && order.status === "open" && <>
                   <label>Discount (₹) <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={blocked} /></label>
                   <label className="billing-wide-field">Discount reason <input maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} /></label>
-                  {order.customer && order.customer.pointsBalance > 0 && <label>Redeem points (has {order.customer.pointsBalance}) <input type="number" min="0" max={order.customer.pointsBalance} step="1" value={redeem} onChange={(e) => setRedeem(e.target.value)} disabled={blocked} /></label>}
+                  {order.customer && order.customer.pointsBalance > 0 && <label>Redeem points (has {order.customer.pointsBalance}{redeemCap !== null && redeemCap < order.customer.pointsBalance ? `, up to ${redeemCap} on this bill` : ""}) <input type="number" min="0" max={Math.min(order.customer.pointsBalance, redeemCap ?? order.customer.pointsBalance)} step="1" value={redeem} onChange={(e) => setRedeem(e.target.value)} disabled={blocked} /></label>}
                   {role !== "admin" && <label className="billing-wide-field">Admin PIN (only for a discount above your limit) <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={approverPin} onChange={(e) => setApproverPin(e.target.value)} disabled={blocked} /></label>}
                 </>}
               </div>

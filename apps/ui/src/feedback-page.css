@@ -1,0 +1,18 @@
+.feedback-page, .feedback-page * { box-sizing: border-box; }
+.feedback-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 440px); justify-content: center; align-items: start; padding: 24px 16px; background: #f6f4f1; color: #1f1d1a; font-family: system-ui, sans-serif; }
+.feedback-card { width: 100%; background: #fff; border-radius: 16px; padding: 24px 20px; box-shadow: 0 4px 24px rgb(0 0 0 / 8%); display: grid; gap: 16px; }
+.feedback-card header h1 { margin: 0; font-size: 22px; }
+.feedback-card header p { margin: 4px 0 0; color: #6b665f; font-size: 14px; }
+.feedback-card h2 { margin: 0; font-size: 18px; }
+.feedback-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.feedback-row small { color: #6b665f; }
+.feedback-stars { display: flex; gap: 2px; }
+.feedback-stars button { min-width: 44px; min-height: 44px; border: 0; background: none; font-size: 28px; line-height: 1; color: #d6d1c9; cursor: pointer; padding: 0; }
+.feedback-stars button.on { color: #f2a516; }
+.feedback-stars button:focus-visible { outline: 2px solid #1f1d1a; border-radius: 8px; }
+.feedback-comment { display: grid; gap: 6px; font-size: 14px; }
+.feedback-comment textarea { font: inherit; padding: 10px; border: 1px solid #d6d1c9; border-radius: 10px; resize: vertical; }
+.feedback-submit { min-height: 48px; border: 0; border-radius: 12px; background: #1f1d1a; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+.feedback-submit:disabled { opacity: .5; cursor: default; }
+.feedback-thanks { font-size: 18px; font-weight: 600; text-align: center; }
+.feedback-card [role="alert"] { color: #b42332; margin: 0; }

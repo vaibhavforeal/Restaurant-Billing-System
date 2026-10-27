@@ -103,6 +103,17 @@ export interface Customer {
   typeId: string | null;
   typeName: string | null;
   notes: string;
+  email: string | null;
+  /** `YYYY-MM-DD`, or `--MM-DD` when the year is not known. */
+  birthDate: string | null;
+  anniversaryDate: string | null;
+  gender: "female" | "male" | "other" | null;
+  marketingOptIn: boolean;
+  isActive: boolean;
+  tags: string[];
+  /** The loyalty tier their recent spend reaches; null when tiers are off. */
+  tier: { id: string; name: string; earnMultiplier: number } | null;
+  /** Points they can spend now (expired points left out). */
   pointsBalance: number;
   createdAt: number;
 }

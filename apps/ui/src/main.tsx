@@ -9,8 +9,8 @@ import { applyTheme, readTheme } from "./theme";
 import { startCaptainPwa } from "./captain-pwa";
 import { startKitchenPwa } from "./kitchen-pwa";
 
-// The customer menu has its own restaurant branding and color palette.
-if (!/^\/menu\/?$/.test(window.location.pathname)) applyTheme(readTheme());
+// The customer menu and feedback pages have their own restaurant branding and color palette.
+if (!/^\/(menu\/?|feedback\/.+)$/.test(window.location.pathname)) applyTheme(readTheme());
 startCaptainPwa();
 startKitchenPwa();
 

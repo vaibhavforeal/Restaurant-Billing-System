@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api";
+import { occasionNote, todayKey } from "../crm";
 import type { Customer, Order } from "../types";
 
 /**
@@ -14,6 +15,7 @@ export function OrderCustomer({ order, canAdd, disabled, onSaved }: { order: Ord
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const customer = order.customer;
+  const occasion = customer ? occasionNote(customer, todayKey()) : null;
 
   useEffect(() => {
     if (!open || query.trim().length < 3) { setResults([]); return; }
@@ -48,12 +50,13 @@ export function OrderCustomer({ order, canAdd, disabled, onSaved }: { order: Ord
   return <div className="order-captain-picker order-customer">
     <span>Customer</span>
     {customer && !open ? <>
-      <span><strong>{customer.name}</strong> · {customer.phone}{customer.typeName ? ` · ${customer.typeName}` : ""} · {customer.pointsBalance} pts</span>
+      <span><strong>{customer.name}</strong> · {customer.phone}{customer.typeName ? ` · ${customer.typeName}` : ""}{customer.tier ? ` · ${customer.tier.name}` : ""} · {customer.pointsBalance} pts</span>
+      {occasion && <span className="crm-occasion">🎂 {occasion}</span>}
       <button type="button" disabled={disabled || busy} onClick={() => setOpen(true)}>Change</button>
       <button type="button" disabled={disabled || busy} aria-label="Remove customer" onClick={() => void attach(null)}>×</button>
     </> : !open ? <button type="button" disabled={disabled} onClick={() => setOpen(true)}>Add customer</button> : <>
       <input type="search" autoFocus aria-label="Customer mobile or name" placeholder="Mobile or name" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {results.map((c) => <button type="button" key={c.id} disabled={busy} onClick={() => void attach(c.id)}>{c.name} · {c.phone}</button>)}
+      {results.map((c) => <button type="button" key={c.id} disabled={busy} onClick={() => void attach(c.id)}>{c.name} · {c.phone}{c.tier ? ` · ${c.tier.name}` : ""}</button>)}
       {canAdd && query.replace(/\D/g, "").length >= 10 && !results.length && <>
         <input aria-label="New customer name" placeholder="Name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
         <button type="button" className="primary" disabled={busy || !name.trim()} onClick={() => void addAndAttach()}>Add</button>
