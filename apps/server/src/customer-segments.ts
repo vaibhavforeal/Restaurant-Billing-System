@@ -5,6 +5,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { requireIntegration } from "./integrations.js";
 import { loyaltySettings, loyaltyTiers, sweepAllExpiry } from "./loyalty.js";
 
 const TAG_SEPARATOR = "\u001f";
@@ -58,9 +59,10 @@ export function segmentCsv(customers: SegmentCustomer[]): string {
 
 export function registerCustomerSegments(app: FastifyInstance): void {
   const db = app.db;
-  const read = app.requirePermission("customers.read");
-  const manage = app.requirePermission("customers.manage");
-  const exporter = app.requirePermission("crm.export");
+  const crm = requireIntegration(app, "crm");
+  const read = [app.requirePermission("customers.read"), crm];
+  const manage = [app.requirePermission("customers.manage"), crm];
+  const exporter = [app.requirePermission("crm.export"), crm];
   const segmentJson = (row: { id: string; name: string; filter_json: string; created_at: number; updated_at: number }): SavedSegment =>
     ({ id: row.id, name: row.name, filter: SegmentFilter.parse(JSON.parse(row.filter_json)), createdAt: row.created_at, updatedAt: row.updated_at });
   const getSegment = (id: string) => {

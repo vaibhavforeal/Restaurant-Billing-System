@@ -4,6 +4,7 @@ import {
 } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
+import { requireIntegration } from "./integrations.js";
 
 export interface LoyaltySettings {
   enabled: boolean; pointsPer100: number; pointValuePaise: number; minRedeemPoints: number;
@@ -123,8 +124,9 @@ export function scheduleExpirySweeps(app: FastifyInstance): void {
 
 export function registerLoyaltyTiers(app: FastifyInstance): void {
   const db = app.db;
-  const read = app.requirePermission("customers.read");
-  const admin = app.requirePermission("settings.manage");
+  const crm = requireIntegration(app, "crm");
+  const read = [app.requirePermission("customers.read"), crm];
+  const admin = [app.requirePermission("settings.manage"), crm];
   const nameTaken = (name: string, exceptId = "") => {
     if (db.prepare("SELECT 1 FROM loyalty_tiers WHERE name = ? COLLATE NOCASE AND id <> ?").get(name, exceptId)) throw httpError(409, "A tier with this name already exists");
   };

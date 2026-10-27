@@ -67,6 +67,14 @@ function KitchenRoute({ user, onNavigate }: { user: User; onNavigate: (page: Pag
   return <Kitchen />;
 }
 
+/** The Customers area belongs to the CRM & Loyalty add-on: while it is off the page points to the Marketplace. */
+function CustomersRoute({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
+  const { ready, isEnabled } = useIntegrations();
+  if (!ready) return <p role="status">Loading customers…</p>;
+  if (!isEnabled("crm")) return <IntegrationOff name="CRM & Loyalty" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  return <Customers isAdmin={user.role === "admin"} />;
+}
+
 function StaffApp() {
   usePosShortcuts();
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -151,7 +159,7 @@ function StaffApp() {
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} canSettle={user.role === "admin" || user.role === "cashier"} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <Inventory user={user} />}
-          {page.name === "customers" && (user.role === "admin" || user.role === "cashier") && <Customers isAdmin={user.role === "admin"} />}
+          {page.name === "customers" && (user.role === "admin" || user.role === "cashier") && <CustomersRoute user={user} onNavigate={go} />}
           {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
           </main>
           </QrNotifications>

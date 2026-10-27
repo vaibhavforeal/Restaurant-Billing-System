@@ -10,6 +10,7 @@ import { uuid } from "../uuid";
 import { connectWs } from "../ws";
 import { reliablePost } from "../retry-queue";
 import { SegmentedControl } from "../PosControls";
+import { useIntegrations } from "../integrations";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
@@ -52,6 +53,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const [reason, setReason] = useState("");
   const [approverPin, setApproverPin] = useState("");
   const [redeem, setRedeem] = useState("");
+  const crm = useIntegrations().isEnabled("crm");
   // The most points the last preview allowed on this bill; kept while the cashier edits the amount.
   const [redeemCap, setRedeemCap] = useState<number | null>(null);
   useEffect(() => setRedeemCap(null), [order.customer?.id]);
@@ -309,7 +311,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
                 {!bill && order.status === "open" && <>
                   <label>Discount (₹) <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={blocked} /></label>
                   <label className="billing-wide-field">Discount reason <input maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} /></label>
-                  {order.customer && order.customer.pointsBalance > 0 && <label>Redeem points (has {order.customer.pointsBalance}{redeemCap !== null && redeemCap < order.customer.pointsBalance ? `, up to ${redeemCap} on this bill` : ""}) <input type="number" min="0" max={Math.min(order.customer.pointsBalance, redeemCap ?? order.customer.pointsBalance)} step="1" value={redeem} onChange={(e) => setRedeem(e.target.value)} disabled={blocked} /></label>}
+                  {crm && order.customer && order.customer.pointsBalance > 0 && <label>Redeem points (has {order.customer.pointsBalance}{redeemCap !== null && redeemCap < order.customer.pointsBalance ? `, up to ${redeemCap} on this bill` : ""}) <input type="number" min="0" max={Math.min(order.customer.pointsBalance, redeemCap ?? order.customer.pointsBalance)} step="1" value={redeem} onChange={(e) => setRedeem(e.target.value)} disabled={blocked} /></label>}
                   {role !== "admin" && <label className="billing-wide-field">Admin PIN (only for a discount above your limit) <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={approverPin} onChange={(e) => setApproverPin(e.target.value)} disabled={blocked} /></label>}
                 </>}
               </div>

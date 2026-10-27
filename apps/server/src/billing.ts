@@ -19,6 +19,7 @@ import { resolveApprover } from "./credit-notes.js";
 import { customerSlab } from "./customers.js";
 import { earnExpiry, loyaltySettings, sweepExpiry } from "./loyalty.js";
 import { billFeedbackUrl } from "./feedback.js";
+import { crmEnabled } from "./integrations.js";
 import { pointsBalance } from "./mappers.js";
 
 interface BillRow {
@@ -64,19 +65,21 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   let totals;
   // The restaurant's setting, unless the caller overrides it (Zomato bills charge no GST).
   const mode = gstMode ?? readGstSettings(db).gstMode;
-  const loyalty = customerDiscounts(db, order.customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0), discount);
+  // With CRM & Loyalty off in the Marketplace a customer left on the order gives no discount, points or receipt line.
+  const customer = crmEnabled(db) ? order.customer : null;
+  const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0), discount);
   try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message.replace("Discount exceeds subtotal", "The discounts are more than the bill") : "Invalid bill"); }
   // The limit is on what staff choose to give; slab discounts are set by an admin and points were earned.
   const limit = effectiveDiscountCap(db, actor);
   if (limit !== null && !actor.approvedBy && discount.manualPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%; an admin PIN is needed for more`, "discount_cap");
-  const earned = order.customer && loyalty.enabled ? pointsEarned(totals.totalPaise, loyalty.pointsPer100, order.customer.tier?.earnMultiplier ?? 1) : 0;
+  const earned = customer && loyalty.enabled ? pointsEarned(totals.totalPaise, loyalty.pointsPer100, customer.tier?.earnMultiplier ?? 1) : 0;
   const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle">;
   const receipt: ReceiptSnapshot = { ...profile, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     ...(order.orderTypeName ? { orderTypeName: order.orderTypeName } : {}),
-    ...(order.customer ? { customer: receiptCustomer(order.customer, loyalty, earned) } : {}),
+    ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),
     items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })), ...receiptExtra };
-  return { items, totals, receipt, loyalty: { ...loyalty, customerId: order.customer?.id ?? null, pointsEarned: earned } };
+  return { items, totals, receipt, loyalty: { ...loyalty, customerId: customer?.id ?? null, pointsEarned: earned } };
 }
 
 type OrderCustomer = NonNullable<NonNullable<ReturnType<typeof loadOrderJson>>["customer"]>;
@@ -136,7 +139,7 @@ export function issueBill(db: Database, orderId: string, opts: {
   const settings = loyaltySettings(db);
   // A random, unguessable link for the receipt's feedback QR; Zomato's customers are not ours to ask.
   const isZomato = (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string }).type === "zomato";
-  const feedbackToken = settings.feedbackEnabled && !isZomato ? randomBytes(24).toString("base64url") : null;
+  const feedbackToken = settings.feedbackEnabled && !isZomato && crmEnabled(db) ? randomBytes(24).toString("base64url") : null;
   db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
     cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json, discount_approved_by,
     customer_id, customer_discount_paise, points_redeemed, points_value_paise, feedback_token)

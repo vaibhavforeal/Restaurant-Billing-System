@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, localDateKey } from "@forkflow/domain";
-import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("customer segments and CRM insights", () => {
   let app: FastifyInstance; let token: string; let productId: string;
   beforeEach(async () => {
-    app = freshApp(); ({ token } = await setupAdmin(app));
+    app = freshApp(); ({ token } = await setupAdmin(app)); enableIntegration(app, "crm");
     const c = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const p = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: c.json().category.id, pricePaise: 50000, gstRate: 5, kotStationId: null } });
     productId = p.json().product.id;

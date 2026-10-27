@@ -3,7 +3,7 @@ import { INTEGRATIONS, IntegrationToggle, isIntegrationId } from "./integrations
 
 describe("integration registry", () => {
   it("lists Zomato, Swiggy (coming soon) and the Kitchen Display", () => {
-    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds"]);
+    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm"]);
     const [zomato, swiggy] = INTEGRATIONS;
     expect(zomato).toMatchObject({ status: "available", setupPage: "zomato", category: "delivery" });
     expect(swiggy).toMatchObject({ status: "coming_soon", setupPage: null, category: "delivery" });
@@ -15,6 +15,11 @@ describe("integration registry", () => {
       description: "Show KOTs on kitchen screens and tablets so the kitchen can see what to cook and mark tickets done.",
       category: "kitchen", status: "available", setupPage: null, feature: "kds",
     });
+  });
+
+  it("offers CRM & Loyalty on every plan", () => {
+    expect(INTEGRATIONS.find((i) => i.id === "crm")).toMatchObject({ name: "CRM & Loyalty", category: "customers", status: "available", setupPage: null });
+    expect(INTEGRATIONS.find((i) => i.id === "crm")!.feature).toBeUndefined();
   });
 
   it("recognises only registered ids", () => {

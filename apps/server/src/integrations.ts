@@ -11,6 +11,17 @@ export function integrationEnabled(db: Database, id: IntegrationId): boolean {
   return row?.enabled === 1;
 }
 
+/** A route pre-handler that refuses requests while an add-on is turned off in the Marketplace. Put it after the permission check. */
+export function requireIntegration(app: FastifyInstance, id: IntegrationId) {
+  const name = INTEGRATIONS.find((integration) => integration.id === id)!.name;
+  return async () => {
+    if (!integrationEnabled(app.db, id)) throw httpError(409, `${name} is turned off in the Marketplace`, "integration_off");
+  };
+}
+
+/** CRM & Loyalty: customers, discount slabs, points, tiers, feedback and segments. */
+export const crmEnabled = (db: Database) => integrationEnabled(db, "crm");
+
 function listIntegrations(db: Database): IntegrationInfo[] {
   const rows = new Map((db.prepare("SELECT id, enabled, updated_at FROM integration_state").all() as StateRow[]).map((r) => [r.id, r]));
   return INTEGRATIONS.map((def) => {

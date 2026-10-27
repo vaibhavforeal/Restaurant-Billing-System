@@ -27,7 +27,7 @@ describe("GET /api/integrations", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["cache-control"]).toBe("no-store");
     const list = res.json().integrations as { id: string; enabled: boolean; licensed: boolean; updatedAt: number | null }[];
-    expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds"]);
+    expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm"]);
     expect(list.every((i) => i.enabled === false && i.updatedAt === null && i.licensed === true)).toBe(true);
     expect((await get()).statusCode).toBe(401);
     expect((await get(waiter.token)).statusCode).toBe(403);

@@ -49,6 +49,11 @@ describe("integrations model", () => {
     expect(navTabVisible("tables", "admin", () => false)).toBe(true);
   });
 
+  it("navTabVisible shows Customers only while CRM & Loyalty is on", () => {
+    expect(navTabVisible("customers", "cashier", () => false)).toBe(false);
+    expect(navTabVisible("customers", "admin", (id) => id === "crm")).toBe(true);
+  });
+
   it("nextList fails closed before the first load but keeps the last list after a failed refetch", () => {
     expect(nextList([], null, false)).toEqual([]);
     expect(nextList([zomato], null, false)).toEqual([]);

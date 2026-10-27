@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { requireIntegration } from "./integrations.js";
 import { loyaltySettings, loyaltyTiers } from "./loyalty.js";
 import { reportRange } from "./sales-reports.js";
 import { segmentCustomers } from "./customer-segments.js";
@@ -10,7 +11,7 @@ import { segmentCustomers } from "./customer-segments.js";
  */
 export function registerCrmReports(app: FastifyInstance): void {
   const db = app.db;
-  app.get("/api/reports/crm", { preHandler: app.requirePermission("reports.read") }, async (req) => {
+  app.get("/api/reports/crm", { preHandler: [app.requirePermission("reports.read"), requireIntegration(app, "crm")] }, async (req) => {
     const { from, to, bounds: [start, end] } = reportRange(req.query);
     const bills = db.prepare(`SELECT COUNT(*) AS bills, COUNT(customer_id) AS withCustomer FROM bills WHERE status <> 'void' AND created_at >= ? AND created_at < ?`)
       .get(start, end) as { bills: number; withCustomer: number };

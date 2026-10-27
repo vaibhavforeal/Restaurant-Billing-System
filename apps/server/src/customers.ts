@@ -5,6 +5,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { crmEnabled, requireIntegration } from "./integrations.js";
 import { currentTier, customerSpend, earnExpiry, loyaltySettings, pointsExpiringSoon, sweepExpiry } from "./loyalty.js";
 import { customerJson, loadOrderJson, pointsBalance } from "./mappers.js";
 
@@ -58,9 +59,11 @@ export function reverseLoyalty(db: Database, input: { billId: string; creditNote
 
 export function registerCustomers(app: FastifyInstance): void {
   const db = app.db;
-  const read = app.requirePermission("customers.read");
-  const manage = app.requirePermission("customers.manage");
-  const admin = app.requirePermission("settings.manage");
+  // Every customer route needs CRM & Loyalty on in the Marketplace, after the usual permission.
+  const crm = requireIntegration(app, "crm");
+  const read = [app.requirePermission("customers.read"), crm];
+  const manage = [app.requirePermission("customers.manage"), crm];
+  const admin = [app.requirePermission("settings.manage"), crm];
   const typeExists = (id: string | null | undefined) => {
     if (id && !db.prepare("SELECT 1 FROM customer_types WHERE id = ?").get(id)) throw httpError(400, "Choose a customer type");
   };
@@ -226,6 +229,7 @@ export function registerCustomers(app: FastifyInstance): void {
       if (order.status !== "open") throw httpError(409, "order is not open");
       if (order.type === "zomato") throw httpError(409, "Zomato orders belong to Zomato's customer", "zomato_order");
       const chosen = body.customerId ? db.prepare("SELECT is_active FROM customers WHERE id = ?").get(body.customerId) as { is_active: number } | undefined : null;
+      if (body.customerId && !crmEnabled(db)) throw httpError(409, "CRM & Loyalty is turned off in the Marketplace", "integration_off");
       if (body.customerId && !chosen) throw httpError(400, "Choose a saved customer");
       if (chosen && !chosen.is_active) throw httpError(409, "This customer is marked inactive");
       db.prepare("UPDATE orders SET customer_id = ? WHERE id = ?").run(body.customerId, id);

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@forkflow/domain";
-import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 import { sweepAllExpiry } from "./loyalty.js";
 
 describe("CRM profiles, tiers and points expiry", () => {
@@ -9,7 +9,7 @@ describe("CRM profiles, tiers and points expiry", () => {
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 0, 15, 12));
-    app = freshApp(); ({ token } = await setupAdmin(app));
+    app = freshApp(); ({ token } = await setupAdmin(app)); enableIntegration(app, "crm");
     const c = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const p = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: c.json().category.id, pricePaise: 50000, gstRate: 5, kotStationId: null } });
     productId = p.json().product.id;

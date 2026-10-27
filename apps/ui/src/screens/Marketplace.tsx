@@ -7,7 +7,7 @@ import type { Page } from "../NavBar";
 import { ZomatoSettingsDialog } from "./ZomatoConnection";
 import "../marketplace.css";
 
-const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen" };
+const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen", customers: "Customers" };
 
 export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { integrations, ready, setEnabled, refresh } = useIntegrations();

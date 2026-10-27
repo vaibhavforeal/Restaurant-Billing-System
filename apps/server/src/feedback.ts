@@ -2,6 +2,7 @@ import { FeedbackSubmit, uuidv7, type Database } from "@forkflow/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { crmEnabled, requireIntegration } from "./integrations.js";
 import { loyaltySettings } from "./loyalty.js";
 import { lanUrls } from "./system.js";
 
@@ -22,7 +23,7 @@ export function feedbackUrl(token: string): string {
 /** The feedback link for a bill, when feedback is on and the bill can still be rated. */
 export function billFeedbackUrl(db: Database, billId: string): string | undefined {
   const row = db.prepare("SELECT feedback_token, status FROM bills WHERE id = ?").get(billId) as { feedback_token: string | null; status: string } | undefined;
-  if (!row?.feedback_token || row.status === "void" || !loyaltySettings(db).feedbackEnabled) return undefined;
+  if (!row?.feedback_token || row.status === "void" || !loyaltySettings(db).feedbackEnabled || !crmEnabled(db)) return undefined;
   return feedbackUrl(row.feedback_token);
 }
 
@@ -32,10 +33,11 @@ export function registerFeedback(app: FastifyInstance, port = 4100): void {
   serverPort = port;
   const db = app.db;
   const billFor = (token: string) => {
-    if (!TOKEN.test(token) || !loyaltySettings(db).feedbackEnabled) return undefined;
+    if (!TOKEN.test(token) || !loyaltySettings(db).feedbackEnabled || !crmEnabled(db)) return undefined;
     return db.prepare(`SELECT b.id, b.bill_no, b.created_at, b.status, b.customer_id, s.restaurant_name FROM bills b, settings s
       WHERE s.id = 1 AND b.feedback_token = ?`).get(token) as TokenBill | undefined;
   };
+  const crm = requireIntegration(app, "crm");
   const submitted = (billId: string) => db.prepare("SELECT 1 FROM customer_feedback WHERE bill_id = ?").get(billId) !== undefined;
 
   // A restaurant Wi-Fi shares one IP, so the limits allow a busy dining room; tokens are unguessable either way.
@@ -73,7 +75,7 @@ export function registerFeedback(app: FastifyInstance, port = 4100): void {
   });
 
   /** Staff record a guest's rating for a bill, for example from a paper card. */
-  app.post("/api/bills/:id/feedback", { preHandler: app.requirePermission("customers.manage") }, async (req, reply) => {
+  app.post("/api/bills/:id/feedback", { preHandler: [app.requirePermission("customers.manage"), crm] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = FeedbackSubmit.parse(req.body);
     const bill = db.prepare("SELECT id, customer_id, status FROM bills WHERE id = ?").get(id) as { id: string; customer_id: string | null; status: string } | undefined;
@@ -86,7 +88,7 @@ export function registerFeedback(app: FastifyInstance, port = 4100): void {
     return reply.status(201).send({ ok: true });
   });
 
-  app.get("/api/feedback", { preHandler: app.requirePermission("customers.read") }, async (req) => {
+  app.get("/api/feedback", { preHandler: [app.requirePermission("customers.read"), crm] }, async (req) => {
     const q = z.object({
       from: z.coerce.number().int().min(0).optional(), to: z.coerce.number().int().min(0).optional(),
       maxRating: z.coerce.number().int().min(1).max(5).optional(), limit: z.coerce.number().int().min(1).max(500).default(200),

@@ -2,14 +2,14 @@ import { z } from "zod";
 import type { Feature } from "./licensing.js";
 
 /** Static registry of integrations and add-ons the Marketplace can turn on or off. Only on/off state is stored (integration_state). */
-export type IntegrationId = "zomato" | "swiggy" | "kds";
+export type IntegrationId = "zomato" | "swiggy" | "kds" | "crm";
 export type IntegrationStatus = "available" | "coming_soon";
 
 export interface IntegrationDef {
   id: IntegrationId;
   name: string;
   description: string;
-  category: "delivery" | "kitchen";
+  category: "delivery" | "kitchen" | "customers";
   status: IntegrationStatus;
   /** Page the "Set up" action opens once the integration is on; null when there is nothing to configure yet. */
   setupPage: "zomato" | null;
@@ -49,6 +49,14 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     status: "available",
     setupPage: null,
     feature: "kds",
+  },
+  {
+    id: "crm",
+    name: "CRM & Loyalty",
+    description: "Customer profiles, loyalty points and tiers, customer-type discounts, feedback on receipts, segments and customer insights.",
+    category: "customers",
+    status: "available",
+    setupPage: null,
   },
 ];
 
