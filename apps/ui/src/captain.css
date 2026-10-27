@@ -36,6 +36,12 @@ html[data-theme] .captain-shell .tables-filter-bar .tabs button { flex: none; wh
 html[data-theme] .captain-shell .tables-search-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .55fr); gap: var(--space-4); }
 html[data-theme] .captain-shell .tables-search-controls :is(.search-field, input, select) { width: 100%; min-width: 0; }
 html[data-theme] .captain-shell .tables-search-controls .search-field { max-width: none; }
+/* The shared table overview uses a horizontal flex basis. In Captain's vertical
+   filter bar that basis becomes a 250px-tall search row; reset it explicitly. */
+html[data-theme] .captain-shell .tables-screen.table-overview .tables-search-controls { flex: none; align-items: center; }
+html[data-theme] .captain-shell .tables-screen.table-overview .tables-search-controls .search-field { width: 100%; max-width: none; min-width: 0; }
+html[data-theme] .captain-shell .tables-screen.table-overview .tables-search-controls :is(input, select) { width: 100%; height: var(--captain-touch); font-size: var(--captain-input); }
+html[data-theme] .captain-shell .tables-screen.table-overview :is(.tables-header button, .tables-request-summary > button, .tabs > button) { min-height: var(--captain-touch); }
 html[data-theme] .captain-shell .table-grid { grid-template-columns: repeat(auto-fill, minmax(var(--captain-tile-width), 1fr)); gap: var(--space-4); }
 html[data-theme] .captain-shell .table-card { min-height: var(--captain-tile); padding: var(--space-6); }
 html[data-theme] .captain-shell .table-area > h3 { margin: var(--space-4) 0; }
@@ -58,8 +64,8 @@ html[data-theme] .captain-shell .menu-card { padding: var(--space-6); min-height
 html[data-theme] .captain-shell .menu-card-name { line-height: 1.4; }
 html[data-theme] .captain-shell .menu-card-bottom > span:first-child { white-space: nowrap; }
 html[data-theme] .captain-shell .cart-heading { min-height: var(--captain-touch); padding: var(--space-4) var(--space-6); }
-html[data-theme] .captain-shell .cart-section { padding: var(--space-4) var(--space-6); }
-html[data-theme] .captain-shell .draft-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); padding-block: var(--space-4); }
+html[data-theme] .captain-shell .cart-section { padding: var(--space-2) var(--space-4); }
+html[data-theme] .captain-shell .draft-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); padding-block: var(--space-2); }
 html[data-theme] .captain-shell .cart-item-name { grid-row: 1; grid-column: 1; padding: 0; align-self: center; }
 html[data-theme] .captain-shell .cart-item-name small { display: block; color: var(--muted); font-size: var(--text-secondary); }
 html[data-theme] .captain-shell .cart-remove { grid-row: 1; grid-column: 2; width: var(--captain-touch); height: var(--captain-touch); }
@@ -68,6 +74,15 @@ html[data-theme] .captain-shell .qty-stepper :is(button, input) { width: var(--c
 html[data-theme] .captain-shell .draft-row > .pos-money { grid-row: 2; grid-column: 2; align-self: center; text-align: right; }
 html[data-theme] .captain-shell .cart-row-notice { grid-column: 1 / -1; }
 html[data-theme] .captain-shell .saved-item-name { font-size: var(--text-base); }
+/* Keep every part of the order review readable at phone viewing distance. */
+html[data-theme] .captain-shell .order-cart {
+  --text-base: 16px;
+  --text-secondary: 15px;
+  --text-heading: 18px;
+  font-size: var(--text-base);
+}
+html[data-theme] .captain-shell .order-cart :is(.cart-item-name, .saved-item-name, .saved-item-edit, .pos-money) { font-size: var(--text-base); }
+html[data-theme] .captain-shell .order-cart .qty-stepper :is(button, input) { font-size: 18px; }
 html[data-theme] .captain-shell .status.ready { background: var(--pos-success-bg); color: var(--pos-success); }
 html[data-theme] .captain-shell .cart-total { padding: var(--space-4) var(--space-6); }
 html[data-theme] .captain-shell .captain-send { padding: var(--space-4) var(--space-6) var(--space-6); }
