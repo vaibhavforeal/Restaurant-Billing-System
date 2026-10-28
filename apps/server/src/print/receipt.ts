@@ -118,6 +118,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
       row(item.name, values);
       if (paperWidth === 58) line(`  @ ${money(item.pricePaise)} each`);
     }
+    for (const held of item.contents ?? []) line(`  - ${held}`);
   });
   rule();
   pair(`Subtotal (${quantity(bill)} qty)`, money(bill.subtotalPaise));
@@ -196,7 +197,7 @@ export function receiptHtml(bill: Bill): string {
     ${bill.payments.length ? `<div><dt>Payment mode</dt><dd>${e(paymentModes(bill))}</dd></div>` : ""}</dl>
   <p class="currency-note">All amounts in INR (₹)</p>
   <table class="items" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th><th scope="col">Amount</th></tr></thead><tbody>
-    ${r.items.map((i) => `<tr><td>${e(i.name)}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td><td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
+    ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td><td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
   </tbody></table>
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>

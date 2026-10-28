@@ -671,4 +671,34 @@ describe("guest QR ordering", () => {
     expect((await f.submit(overflow)).statusCode).toBe(201);
     expect((await f.api("GET", "/api/qr/requests")).json().requests).toHaveLength(10);
   });
+
+  it("lets a guest choose a combo's items, adds them under the combo and tracks it by the items in it", async () => {
+    const f = await fixture();
+    const created = await f.api("POST", "/api/products", { name: "Thali", categoryId: f.category.id, pricePaise: 25000, gstRate: 5, kind: "combo", combo: [
+      { name: "Main", minPicks: 1, maxPicks: 1, options: [{ productId: f.meal.id, variantId: f.meal.variants[0]!.id, extraPricePaise: 3000 }, { productId: f.meal.id, variantId: f.meal.variants[1]!.id }] },
+      { name: "With it", minPicks: 1, maxPicks: 1, options: [{ productId: f.water.id }] },
+    ] });
+    expect(created.statusCode, created.body).toBe(201);
+    const thali = (await f.menu()).products.find((p) => p.name === "Thali")!;
+    expect(thali.combo!.map((g) => g.options.map((o) => o.name))).toEqual([["Rice bowl (Large)", "Rice bowl (Small)"], ["Water"]]);
+    const missing = await f.submit(await f.submission([{ productId: thali.id, variantId: null, qty: 1, note: "", comboPicks: [] }]));
+    expect(missing.statusCode, missing.body).toBe(409);
+    expect(missing.json().code).toBe("menu_changed");
+    const { body, request } = await f.request([{ productId: thali.id, variantId: null, qty: 2, note: "", comboPicks: [thali.combo![0]!.options[0]!.id] }]);
+    expect(request.items[0]).toMatchObject({ name: "Thali", pricePaise: 28000, contents: ["Rice bowl (Large)", "Water"] });
+    expect(request.subtotalPaise).toBe(56000);
+    const accepted = await f.accept(request.id);
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    const items = accepted.json().order.items as Array<{ id: string; name: string; qty: number; pricePaise: number; parentItemId: string | null }>;
+    const line = items.find((i) => !i.parentItemId)!;
+    expect(line).toMatchObject({ name: "Thali", qty: 2, pricePaise: 28000 });
+    expect(items.filter((i) => i.parentItemId === line.id).map((i) => [i.name, i.qty])).toEqual([["Rice bowl (Large)", 2], ["Water", 2]]);
+    const preparation = async () => ((await f.receipt(request.id, body.receiptToken)).json().request as GuestReceipt).preparation!;
+    // The rice bowl waits for the kitchen and the water is with staff, so the combo is with staff until it is sent.
+    expect((await preparation()).items).toEqual([{ name: "Thali", qty: 2, state: "with_staff" }]);
+    const sent = await f.api("POST", `/api/orders/${accepted.json().order.id}/send`);
+    expect(sent.statusCode, sent.body).toBe(200);
+    expect(await preparation()).toMatchObject({ state: "preparing", items: [{ name: "Thali", qty: 2, state: "preparing" }], hasChanges: false });
+    expect(f.balance()).toBe(9.5);
+  });
 });
