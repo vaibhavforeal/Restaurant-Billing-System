@@ -6,7 +6,9 @@ customers for offers. Available on Basic and Pro.
 
 ## Turn it on (admin)
 
-CRM & Loyalty is an add-on: open **Marketplace** and switch on **CRM & Loyalty**. While it is off,
+CRM & Loyalty is an add-on, included on both plans unless ForkFlow has blocked it for your
+restaurant (see [Feature controls](feature-controls.md)): open **Marketplace** and switch on
+**CRM & Loyalty**. While it is off,
 **Customers** is hidden from the menu, orders have no customer picker, and bills get no customer
 discount, loyalty points or feedback QR code. Customers, points and ratings already saved are kept
 and come back when it is switched on again. Installations that already had customers or loyalty

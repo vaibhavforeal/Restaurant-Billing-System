@@ -1,18 +1,20 @@
 # Marketplace
 
-The **Marketplace** is where an administrator turns online-order integrations and
-add-ons such as the Kitchen Display on or off. It is in the sidebar for administrators and cashiers. Waiters and the kitchen do
+The **Marketplace** is where an administrator turns online-order integrations,
+add-ons such as the Kitchen Display, and the POS modules on or off. ForkFlow decides which
+of them each restaurant may use; see [Feature controls](feature-controls.md). It is in the sidebar for administrators and cashiers. Waiters and the kitchen do
 not see it, and the server refuses them (403) if they ask for it directly.
 
-Every integration starts **off** after an upgrade. Nothing is shown or requested for
+Every add-on starts **off** until an administrator turns it on. Nothing is shown or requested for
 an integration until an administrator turns it on, and its live webhook events are
 refused. Only live events are refused: CSV imports are still accepted.
 
 ## What you see
 
 Each integration is a card with its name, a **Delivery** or **Kitchen** tag, a short
-description, a status (**Enabled**, **Disabled**, **Coming soon** or **Pro plan**) and an
-on/off switch. When Zomato is on, administrators also get a **Settings** button on the
+description, a status (**Enabled**, **Disabled**, **Coming soon** or **Not included**) and an
+on/off switch. Below the add-ons are the **Service modules** and **Back-office modules**
+(see [Feature controls](feature-controls.md)). When Zomato is on, administrators also get a **Settings** button on the
 Zomato card, which opens the Zomato connection settings in a dialog. There is no
 separate Zomato page in the sidebar: Zomato orders are handled in the Zomato section of
 **Tables & orders** (see [Zomato desk](zomato-desk.md)) and reconciled in
@@ -55,14 +57,12 @@ changed by the Marketplace.
 
 ## What turning the Kitchen Display on or off does
 
-The Kitchen Display (KDS) is a paid add-on: it needs a licence that includes the
-`kds` feature (the **Pro** plan; development and demo builds include it). Licences
-issued before the Kitchen Display became an add-on do not include it, so those
-installations need a reissued licence. Without the feature the card shows **Pro plan**,
-the note "Upgrade to Pro to use the Kitchen Display" and, for admins, **View licence**;
-the switch can only be turned off (a downgraded plan may have left it on).
+The Kitchen Display (KDS) is included on the **Pro** plan, and ForkFlow can allow it for
+any restaurant (development and demo builds include it). When ForkFlow has not included it
+the card shows **Not included**, the note "Not included for this restaurant. Contact
+ForkFlow to add it." and, for admins, **View licence**; the switch can only be turned off.
 
-| | Kitchen Display off (or not in the plan) | Kitchen Display on |
+| | Kitchen Display off (or not included) | Kitchen Display on |
 | --- | --- | --- |
 | Sidebar | No **kitchen** item for admins and cashiers | **kitchen** item |
 | Kitchen board (`/kitchen/`, ForkFlow Kitchen app, kitchen tab) | "Kitchen Display is turned off. Ask an admin to turn it on in the Marketplace." | Open tickets, each with a **Done** button |
@@ -89,8 +89,9 @@ An integration is one registry entry plus the screen and data source behind it.
 1. **Registry.** Add an entry to `INTEGRATIONS` in `packages/domain/src/integrations.ts`
    and its id to `IntegrationId`: `id`, `name`, `description`, `category`, `status`
    (`available` or `coming_soon`), `setupPage` (`null` for anything new; the Zomato card
-   opens its settings dialog from `apps/ui/src/screens/Marketplace.tsx` instead) and, for a
-   paid add-on, `feature` (the licence feature it needs). Only on/off state is stored, in the
+   opens its settings dialog from `apps/ui/src/screens/Marketplace.tsx` instead). Add the same
+   id to `MODULES` in `packages/domain/src/modules.ts` (group `addon`, with its Basic and Pro
+   defaults) so ForkFlow can allow it per restaurant. Only on/off state is stored, in the
    `integration_state` table (no migration is needed for a new id).
 2. **Screen.** Add the page, make it reachable only when
    `useIntegrations().isEnabled("<id>")` is true, and show `IntegrationOff` otherwise,
@@ -109,10 +110,11 @@ An integration is one registry entry plus the screen and data source behind it.
 - `integrations.configure` (administrators only) changes one:
   `PATCH /api/integrations/:id` with exactly `{ "enabled": true | false }`. A body that
   is empty, not a boolean or has extra keys returns 400; an unknown id returns 404;
-  enabling a "Coming soon" integration returns 409; enabling one whose licence
-  feature the plan lacks returns 403. Each listed integration has `licensed`.
-- A change broadcasts `integrations.changed` only when the stored value actually
-  changes. The record keeps the time and the user who made the change.
+  enabling a "Coming soon" integration returns 409; enabling one ForkFlow has not
+  included returns 403. Each listed integration has `licensed`, which is whether ForkFlow
+  allows it for this restaurant.
+- A change broadcasts `modules.changed` and `integrations.changed` only when the stored
+  value actually changes. The record keeps the time and the user who made the change.
 - Migration 026 only creates `integration_state`; it adds no rows and no dependencies.
 
 ## Rollback

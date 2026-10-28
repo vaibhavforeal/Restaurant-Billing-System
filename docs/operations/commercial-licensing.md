@@ -10,9 +10,12 @@ the public internet: its PIN authentication and database are single-outlet.
 | Entitlement | Basic | Pro |
 |---|---|---|
 | Registered devices per outlet | 2 | 5 |
-| Recipe editing | No | Included for administrators |
-| Guest QR ordering | Menu browsing only | Included |
-| Billing, basic inventory, backups | Included | Included |
+| Modules | Takeaway, reservations, inventory, reports, sales dashboard, Zomato, CRM & Loyalty | Every module, adding QR guest ordering, guest assistance, recipes, dish costing and the Kitchen Display |
+| Billing, tables, catalogue, staff, backups | Included | Included |
+
+The modules a licence carries are the plan's defaults with ForkFlow's per-restaurant
+choices applied, set in the owner control panel or with `--allow` / `--deny`. See
+[Feature controls](feature-controls.md).
 
 The main PC's browser/Electron profile uses one slot. Other counter browsers,
 waiter phones, and kitchen displays each use a slot. Multiple tabs in one profile
@@ -147,15 +150,15 @@ illustrative, and dates are Unix milliseconds:
 ```
 
 Use the installation ID shown in Plan and devices. The helper resolves Basic to
-2 devices with menu browsing, and Pro to 5 devices with recipes and QR ordering.
+2 devices and Pro to 5, each with its plan's modules; add `--allow kds,qrOrdering` or
+`--deny reservations` to change the modules for this restaurant.
 Signed `maxDevices` and `features`
 overrides support negotiated entitlements. Do not accept overrides from a customer
 request in the future hosted issuer: derive them from the paid subscription.
 
-`qrOrdering` controls guest request submission and staff acceptance. Guest menus
-on Basic remain readable without registering customer phones as staff devices.
-Older signed grants without this feature still verify but default it to false;
-issue a newer revision to enable it. See [QR ordering](qr-ordering.md).
+The `qrOrdering` module controls guest request submission and staff acceptance. Guest
+menus remain readable without it, and without registering customer phones as staff
+devices. See [QR ordering](qr-ordering.md).
 
 ```powershell
 node --import tsx tools/issue-license.ts C:\secure\license-private.pem claims.json license.txt

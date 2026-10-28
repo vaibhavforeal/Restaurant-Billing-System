@@ -10,6 +10,9 @@ import { SECRET_HEADER } from "./secret.js";
 import { getInstallation, upsertOwnerSettingsStatement } from "./store.js";
 import { memoryD1 } from "./testing/d1.js";
 import { TEST_SECRET } from "./testing/secret.js";
+// Test-only: the Worker source never imports the counter server or the domain index.
+import { MIGRATIONS, migrate, openDb } from "../../../packages/domain/src/index.js";
+import { buildServer } from "../../server/src/server.js";
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 9, 10, 10, 0, 0);
@@ -144,5 +147,33 @@ describe("owner control panel", () => {
     const { cookie } = await login();
     const res = await send("PATCH", `/owner/api/restaurants/${installationId}`, { modules: { kds: true }, expectedUpdatedAt: T0 }, { cookie });
     expect((await res.json() as { issuedRevision: number | null }).issuedRevision).toBeNull();
+  });
+
+  it("reaches a real counter: the owner blocks a module and the counter refuses it after its next check", async () => {
+    const db = openDb(":memory:"); migrate(db, MIGRATIONS);
+    const counter = buildServer({ db, licensing: {
+      publicKey: publicPem, installationId, installationSecret: TEST_SECRET, serviceUrl: ORIGIN, now: () => Date.now(),
+      fetch: (async (input: string | URL | Request, init?: RequestInit) => worker.fetch(new Request(String(input), init), env)) as typeof fetch,
+    } });
+    try {
+      const device = "f".repeat(64);
+      const setup = await counter.inject({ method: "POST", url: "/api/setup", payload: { restaurantName: "Spice Route", adminName: "Asha", pin: "1234" }, headers: { "x-forkflow-device": device } });
+      const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+      expect((await counter.licensing.fetchLatest()).outcome).toBe("installed");
+      expect((await counter.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Counter" }, headers })).statusCode).toBe(200);
+      const reservations = async () => (await counter.inject({ url: "/api/modules", headers })).json().modules.find((m: { id: string }) => m.id === "reservations");
+      expect(await reservations()).toMatchObject({ allowed: true, active: true });
+
+      const { cookie } = await login();
+      expect((await send("PATCH", `/owner/api/restaurants/${installationId}`, { modules: { reservations: false }, expectedUpdatedAt: null }, { cookie })).status).toBe(200);
+      expect((await counter.licensing.fetchLatest()).outcome).toBe("installed");
+      expect(await reservations()).toMatchObject({ allowed: false, active: false, reason: "Not included for this restaurant" });
+      const booking = await counter.inject({ method: "POST", url: "/api/reservations", headers, payload: { customerName: "Priya", phone: "9876543210", partySize: 2, startsAt: Date.now() + 86_400_000 } });
+      expect(booking.statusCode).toBe(403);
+      expect(booking.json().code).toBe("module_off");
+      // The panel now shows the restaurant has collected the change.
+      const list = await (await send("GET", "/owner/api/restaurants", undefined, { cookie })).json() as { restaurants: Array<{ licence: { delivered: boolean } }> };
+      expect(list.restaurants[0]!.licence.delivered).toBe(true);
+    } finally { await counter.close(); db.close(); }
   });
 });
