@@ -8,7 +8,7 @@ import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
-import { reliablePost } from "../retry-queue";
+import { enqueueRequest, outcomeOrSaved } from "../retry-queue";
 import { SegmentedControl } from "../PosControls";
 import { useIntegrations } from "../integrations";
 import { UpiQrPreview } from "./UpiQrPreview";
@@ -45,6 +45,8 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
     {compact ? <>{amounts}{payable}{includes}<details className="bill-tax-details"><summary>Tax details</summary>{breakdown}</details></> : <>{amounts}{payable}{includes}{breakdown}</>}
   </div>;
 }
+
+const WHEN_BACK = "it reaches the hub when the connection returns";
 
 export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
@@ -180,7 +182,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
-    const { bill: value, job: printJob, printError } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>(`/api/orders/${order.id}/bill`, createRequest.current, "Issue bill");
+    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>({ path: `/api/orders/${order.id}/bill`, body: createRequest.current, label: "Issue bill" }));
+    if (outcome.saved) { setPreview(null); setMessage(`Bill saved on this device · ${WHEN_BACK}.`); return; }
+    const { bill: value, job: printJob, printError } = outcome.value;
     acceptBill(value); setPreview(null); setApproverPin(""); setRedeem(""); setJob(printJob);
     setMessage(`Bill #${value.billNo} issued. Record payment below.${printError ? ` ${printError}. Use Print receipt to try again.` : ""}`);
     await onChanged();
@@ -191,13 +195,21 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     const received = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview.totalPaise;
     if (quickMode === "cash" && (received === null || received < preview.totalPaise)) throw new Error("Cash received must cover the total");
     const rows = preview.totalPaise ? [{ mode: quickMode, amountPaise: preview.totalPaise, refNote: "" }] : [];
-    // Print after recording payment so the quick-flow receipt includes payment.
-    const { bill: issued } = await reliablePost<{ bill: Bill; job: PrintJobInfo | null }>(`/api/orders/${order.id}/bill`, { ...request, printerId: null }, "Issue takeaway bill");
-    acceptBill(issued); setPreview(null);
-    setPayments(rows.map((row) => ({ id: uuid(), mode: row.mode, amount: paiseToRupees(row.amountPaise), refNote: row.refNote })));
+    // Print after recording payment so the quick-flow receipt includes payment. Both steps are saved together: the
+    // payment waits for the bill and uses its id, so a reload or a lost connection between them still finishes both.
     const fingerprint = JSON.stringify(rows);
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
-    const { bill: paid } = await reliablePost<{ bill: Bill }>(`/api/bills/${issued.id}/settle`, { clientRef: settlement.current.clientRef, payments: rows }, "Record takeaway payment");
+    const issuing = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null }>({ path: `/api/orders/${order.id}/bill`, body: { ...request, printerId: null }, label: "Issue takeaway bill" });
+    issuing.done.catch(() => { /* reported through the payment below and in the saved-actions list */ });
+    if (!issuing.id) await issuing.done;
+    const paying = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({
+      path: "/api/bills/{after:bill.id}/settle", after: issuing.id, lane: order.id, label: "Record takeaway payment",
+      body: { clientRef: settlement.current.clientRef, payments: rows },
+    }));
+    setPreview(null);
+    setPayments(rows.map((row) => ({ id: uuid(), mode: row.mode, amount: paiseToRupees(row.amountPaise), refNote: row.refNote })));
+    if (paying.saved) { setMessage(`Bill and payment saved on this device · ${WHEN_BACK}.`); return; }
+    const paid = paying.value.bill;
     acceptBill(paid);
     setMessage(`Payment recorded.${quickMode === "cash" && received !== null && received > paid.totalPaise ? ` Change: ${money(received - paid.totalPaise)}.` : ""}`);
     try { await onChanged(); }
@@ -219,7 +231,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     if (rows.reduce((sum, p) => sum + p.amountPaise, 0) !== bill.totalPaise) throw new Error("Payments must exactly match the bill total");
     const fingerprint = JSON.stringify(rows);
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
-    const { bill: value } = await reliablePost<{ bill: Bill }>(`/api/bills/${bill.id}/settle`, { clientRef: settlement.current.clientRef, payments: rows }, "Record payment");
+    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({ path: `/api/bills/${bill.id}/settle`, body: { clientRef: settlement.current.clientRef, payments: rows }, label: "Record payment", lane: order.id }));
+    if (outcome.saved) { setMessage(`Payment saved on this device · ${WHEN_BACK}.`); return; }
+    const value = outcome.value.bill;
     acceptBill(value); setMessage("Payment recorded. This group is settled."); await onChanged();
   }
   function creditIssued(result: { bill: Bill }) {

@@ -110,6 +110,8 @@
   .status.occupied, .status.pending, .status.open { background: #fff5e1; color: #a77719; }
   .status.billed, .status.unpaid { background: var(--red-light); color: var(--red); }
   .status.cancelled { background: #f1f2f5; color: #878c96; }
+  .status.saved-actions { background: #eaf1fb; color: #2d5c99; text-transform: none; } .status.saved-actions.attention { background: var(--red-light); color: var(--red); }
+  .offline-banner { border-color: #bcd0ea; background: #f2f7fd; color: #2d5c99; }
   .parcel-grid { display: flex; flex-wrap: wrap; gap: 12px; } .parcel-grid button { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
   .split-picker { margin-top: 18px; border-color: #efd1d5; }
   .order-header h2 { display: flex; align-items: center; gap: 14px; }

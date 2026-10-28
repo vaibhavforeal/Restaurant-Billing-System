@@ -14,7 +14,8 @@ import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { queuedRequests, reliablePost, subscribeQueue } from "../retry-queue";
+import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
+import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, saveCatalogCopy, saveOrderCopy, type CatalogCache } from "../offline-cache";
 import { useNavigationGuard } from "../navigation-guard";
 import { useIntegrations } from "../integrations";
 import "../product-editor.css";
@@ -58,6 +59,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftItem[]>(readDraft);
   const [, refreshQueue] = useState(0);
+  /** When the screen shows this device's saved copy because the hub cannot be reached: the time of that copy. */
+  const [copyAt, setCopyAt] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const actionLock = useRef(false);
@@ -123,7 +126,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   useNavigationGuard(canLeave);
   function holdOrder() {
     if (!canLeave()) return;
-    if (isQuick && queuedRequests(user.id).some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
+    if (isQuick && queuedRequests(user.id).some((request) => request.lane === orderId)) {
       setError("Review this order's saved actions before holding it and starting another takeaway.");
       return;
     }
@@ -138,25 +141,67 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     return () => window.removeEventListener("beforeunload", warn);
   }, [locked]);
 
-  const queuedRefs = new Set(queuedRequests(user.id).filter((r) => r.draftKey === draftKey).flatMap((r) => (JSON.parse(r.body).items as Array<{ clientRef: string }>).map((item) => item.clientRef)));
+  /** This order's saved actions as the screen needs them: cart rows and kitchen items already saved, item changes waiting. */
+  function laneState() {
+    const entries = queuedRequests(user.id).filter((r) => r.lane === orderId);
+    const bodyOf = (r: { body: string }): { items?: Array<{ clientRef: string }>; itemRefs?: string[] } => { try { return JSON.parse(r.body); } catch { return {}; } };
+    return {
+      entries,
+      needsReview: entries.some((r) => r.status === "attention"),
+      punchedRefs: new Set(entries.filter((r) => r.draftKey === draftKey).flatMap((r) => (bodyOf(r).items ?? []).map((item) => item.clientRef))),
+      kitchenRefs: new Set(entries.filter((r) => r.path.endsWith("/send")).flatMap((r) => bodyOf(r).itemRefs ?? [])),
+      itemActions: new Map(entries.flatMap((r) => { const m = /^\/api\/order-items\/([^/]+)\//.exec(r.path); return m ? [[m[1]!, r.label] as const] : []; })),
+    };
+  }
+  const lane = laneState();
+  const queuedRefs = lane.punchedRefs;
+
+  /** Sends an action through the saved-actions queue. `null`: saved on this device, sent when the hub is back. */
+  async function queued<T>(request: QueueRequest): Promise<T | null> {
+    const outcome = await outcomeOrSaved(enqueueRequest<T>(request));
+    return outcome.saved ? null : outcome.value;
+  }
+  /** Shows a change the hub has not confirmed yet, and keeps it in this device's copy of the order. */
+  function keepLocally(next: Order) { setOrder(next); saveOrderCopy(user.id, next); }
+  const WHEN_BACK = "sends when the connection returns";
+
+  function show(current: Order, catalog: Omit<CatalogCache, "at">) {
+    setOrder(current);
+    setCaptains(catalog.captains);
+    setCategories(catalog.categories.filter((cat) => cat.isActive));
+    setProducts(catalog.products.filter((prod) => prod.isActive).map((prod) => ({ ...prod,
+      pricePaise: priceForTier(prod, current.priceTier),
+      variants: prod.variants.map((variant) => ({ ...variant, pricePaise: priceForTier(variant, current.priceTier) })),
+    })));
+    setSelectedCat((cur) => cur ?? catalog.categories.filter((x) => x.isActive)[0]?.id ?? null);
+  }
 
   async function reload() {
     const revision = ++reloadRevision.current;
-    const [o, c, p, staff] = await Promise.all([
-      apiFetch<{ order: Order }>(`/api/orders/${orderId}`),
-      apiFetch<{ categories: Category[] }>("/api/categories"),
-      apiFetch<{ products: Product[] }>("/api/products"),
-      apiFetch<{ captains: Array<{ id: string; name: string }> }>("/api/captains"),
-    ]);
+    let loaded: [{ order: Order }, { categories: Category[] }, { products: Product[] }, { captains: Array<{ id: string; name: string }> }];
+    try {
+      loaded = await Promise.all([
+        apiFetch<{ order: Order }>(`/api/orders/${orderId}`),
+        apiFetch<{ categories: Category[] }>("/api/categories"),
+        apiFetch<{ products: Product[] }>("/api/products"),
+        apiFetch<{ captains: Array<{ id: string; name: string }> }>("/api/captains"),
+      ]);
+    } catch (error) {
+      // Unreachable hub, or an order started offline that the hub has not received yet: work from this device's copy.
+      const notYetSent = error instanceof ApiError && error.status === 404 && queuedRequests(user.id).some((r) => r.path === "/api/orders" && r.lane === orderId);
+      const copy = readOrderCopy(user.id, orderId), catalog = readCatalogCopy(user.id);
+      if (!(isUnreachable(error) || notYetSent) || !copy || !catalog) throw error;
+      if (revision !== reloadRevision.current) return;
+      show(copy.order, catalog);
+      setCopyAt(copy.at);
+      return;
+    }
     if (revision !== reloadRevision.current) return;
-    setOrder(o.order);
-    setCaptains(staff.captains);
-    setCategories(c.categories.filter((cat) => cat.isActive));
-    setProducts(p.products.filter((prod) => prod.isActive).map((prod) => ({ ...prod,
-      pricePaise: priceForTier(prod, o.order.priceTier),
-      variants: prod.variants.map((variant) => ({ ...variant, pricePaise: priceForTier(variant, o.order.priceTier) })),
-    })));
-    setSelectedCat((cur) => cur ?? c.categories.filter((x) => x.isActive)[0]?.id ?? null);
+    const [o, c, p, staff] = loaded;
+    const catalog = { categories: c.categories, products: p.products, captains: staff.captains };
+    saveOrderCopy(user.id, o.order); saveCatalogCopy(user.id, catalog);
+    setCopyAt(null);
+    show(o.order, catalog);
   }
 
   useEffect(() => {
@@ -192,7 +237,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     actionLock.current = true; setPending(true); setError(""); setMessage("");
     try {
       await action();
-      await reload();
+      await reload().catch((e) => { if (!isUnreachable(e)) throw e; });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Request failed");
     } finally { actionLock.current = false; setPending(false); }
@@ -201,9 +246,11 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   function chooseOrderType(orderTypeId: string) {
     if (!order || orderTypeId === order.orderTypeId) return;
     void run(async () => {
-      const { order: saved } = await apiFetch<{ order: Order }>(`/api/orders/${order.id}/order-type`, { method: "PATCH", body: JSON.stringify({ orderTypeId }) });
-      setOrder(saved);
-      setMessage(`Order type: ${saved.orderTypeName ?? "Takeaway"}`);
+      const result = await queued<{ order: Order }>({ method: "PATCH", path: `/api/orders/${order.id}/order-type`, body: { orderTypeId }, label: "Change order type" });
+      if (result) { setOrder(result.order); setMessage(`Order type: ${result.order.orderTypeName ?? "Takeaway"}`); return; }
+      const name = takeawayTypes.find((t) => t.id === orderTypeId)?.name ?? order.orderTypeName;
+      keepLocally({ ...order, orderTypeId, orderTypeName: name });
+      setMessage(`Order type ${name ?? ""} saved · ${WHEN_BACK}`);
     });
   }
 
@@ -213,12 +260,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     setCaptainError("");
     void run(async () => {
       try {
-        const { order: saved } = await apiFetch<{ order: Order }>(`/api/orders/${order.id}/captain`, {
-          method: "PATCH", body: JSON.stringify({ captainId, expectedCaptainId: order.captainId ?? null }),
+        const result = await queued<{ order: Order }>({
+          method: "PATCH", path: `/api/orders/${order.id}/captain`, body: { captainId, expectedCaptainId: order.captainId ?? null }, label: "Change captain",
         });
-        setOrder(saved);
         setCaptainPickerOpen(false);
-        setMessage(captainId ? "Captain saved for this order." : "Captain removed from this order.");
+        if (result) { setOrder(result.order); setMessage(captainId ? "Captain saved for this order." : "Captain removed from this order."); return; }
+        keepLocally({ ...order, captainId, captainName: captainId ? captains.find((c) => c.id === captainId)?.name ?? (captainId === user.id ? user.name : null) : null });
+        setMessage(`Captain change saved · ${WHEN_BACK}`);
       } catch (error) {
         setCaptainError(error instanceof Error ? error.message : "Could not save captain. Please retry.");
         // Refresh stale assignments after conflicts without hiding the original error.
@@ -254,10 +302,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     }
   }
 
-  async function punchDraft() {
+  /** Adds the cart to the order. `saved`: the hub does not have every row yet (they are saved on this device). */
+  async function punchDraft(): Promise<{ saved: boolean }> {
     const current = readDraft();
-    if (!current.length) return;
-    const items = current.map((d) => ({
+    const already = laneState().punchedRefs;
+    const fresh = current.filter((d) => !already.has(d.clientRef));
+    if (!fresh.length) return { saved: current.length > 0 };
+    const items = fresh.map((d) => ({
       clientRef: d.clientRef,
       productId: d.productId,
       variantId: d.variantId,
@@ -265,30 +316,58 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       note: d.note || undefined,
     }));
     if (!saveDraft(current)) throw new Error("Cart could not be saved");
-    await reliablePost(`/api/orders/${orderId}/items`, { items }, `Punch ${items.length} cart rows`, draftKey);
+    const result = await queued({ path: `/api/orders/${orderId}/items`, body: { items }, label: `Add ${items.length} ${items.length === 1 ? "item" : "items"}`, draftKey });
     setDraft(readDraft());
+    return { saved: result === null || already.size > 0 };
   }
 
   function punch() {
     if (!draft.length) return;
-    void run(punchDraft);
+    void run(async () => { if ((await punchDraft()).saved) setMessage(`Items saved on this device · ${WHEN_BACK}`); });
+  }
+
+  /**
+   * Adds the cart and sends everything waiting for a kitchen station. Works from this device's copy when the hub is
+   * unreachable: items are named by the references the counter gave them, so the send can wait behind the punch.
+   */
+  async function sendPending(label: string): Promise<{ kots: number; printErrors: string[]; saved: boolean; none: boolean }> {
+    if (!order) throw new Error("Order is still loading");
+    if (laneState().needsReview) throw new Error("A saved action for this order needs review first. Open Saved actions above.");
+    const cart = readDraft();
+    const punched = await punchDraft();
+    let current = order, catalog = products;
+    if (!punched.saved) {
+      try {
+        const [o, p] = await Promise.all([apiFetch<{ order: Order }>(`/api/orders/${orderId}`), apiFetch<{ products: Product[] }>("/api/products")]);
+        current = o.order; catalog = p.products;
+      } catch (error) { if (!isUnreachable(error) && !(error instanceof ApiError && error.status === 404)) throw error; }
+    }
+    if (current.status !== "open") throw new Error("This order is no longer open. Return to tables to check its status.");
+    const routed = new Set(catalog.filter((product) => product.kotStationId).map((product) => product.id));
+    const waiting = laneState().kitchenRefs;
+    const pendingItems = current.items.filter((item) => item.status === "pending" && routed.has(item.productId) && !(item.clientRef && waiting.has(item.clientRef)));
+    const onOrder = new Set(current.items.map((item) => item.clientRef));
+    const itemRefs = [
+      ...pendingItems.flatMap((item) => item.clientRef ? [item.clientRef] : []),
+      ...cart.filter((row) => routed.has(row.productId) && !onOrder.has(row.clientRef) && !waiting.has(row.clientRef)).map((row) => row.clientRef),
+    ];
+    const itemIds = pendingItems.filter((item) => !item.clientRef).map((item) => item.id);
+    const outcome = { kots: 0, printErrors: [] as string[], saved: punched.saved, none: !itemRefs.length && !itemIds.length };
+    for (const items of [itemIds.length ? { itemIds } : null, itemRefs.length ? { itemRefs } : null]) {
+      if (!items) continue;
+      const sent = await queued<{ kots: Array<{ id: string }>; printErrors?: string[] }>({ path: `/api/orders/${orderId}/send`, body: { clientRef: uuid(), ...items }, label });
+      if (!sent) { outcome.saved = true; continue; }
+      outcome.kots += sent.kots.length; outcome.printErrors.push(...(sent.printErrors ?? []));
+    }
+    return outcome;
   }
 
   async function prepareCheckout() {
     if (actionLock.current) throw new Error("Wait for the order to finish saving");
     actionLock.current = true; setPending(true); setError("");
     try {
-      if (queuedRequests(user.id).some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
-        throw new Error("A saved action needs to finish or be reviewed before checkout. Check Saved actions above.");
-      }
-      await punchDraft();
-      const [{ order: current }, { products: latestProducts }] = await Promise.all([
-        apiFetch<{ order: Order }>(`/api/orders/${orderId}`), apiFetch<{ products: Product[] }>("/api/products"),
-      ]);
-      if (current.type !== "parcel" || current.status !== "open") throw new Error("This takeaway is no longer open. Reopen it to check its bill.");
-      const kitchenProducts = new Set(latestProducts.filter((p) => p.kotStationId).map((p) => p.id));
-      const itemIds = current.items.filter((item) => item.status === "pending" && kitchenProducts.has(item.productId)).map((item) => item.id);
-      if (itemIds.length) await reliablePost(`/api/orders/${orderId}/send`, { clientRef: uuid(), itemIds }, "Send takeaway to kitchen");
+      const sent = await sendPending("Send takeaway to kitchen");
+      if (sent.saved) throw new Error("Saved on this device. Connect to the hub to review the bill.");
       await reload();
     } finally { actionLock.current = false; setPending(false); }
   }
@@ -297,13 +376,18 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current || billingLock.current) return;
     if (item.status === "pending") {
       if (!window.confirm(`Cancel ${item.name}?`)) return;
-      void run(() => apiFetch(`/api/order-items/${item.id}/cancel`, { method: "POST", body: JSON.stringify({}) }));
+      void run(() => cancelSaved(item, {}));
     } else if (item.status === "sent") {
       if (!userCan(user, "orders.cancel_sent")) return;
       const reason = window.prompt(`Cancel ${item.name}?\nReason (required):`);
       if (!reason?.trim()) return;
-      void run(() => apiFetch(`/api/order-items/${item.id}/cancel`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }));
+      void run(() => cancelSaved(item, { reason: reason.trim() }));
     }
+  }
+
+  async function cancelSaved(item: OrderItem, body: { reason?: string }) {
+    const result = await queued({ path: `/api/order-items/${item.id}/cancel`, body, label: `Cancel ${item.name}`, lane: orderId });
+    if (result === null) setMessage(`Cancel of ${item.name} saved · ${WHEN_BACK}`);
   }
 
   /** Change a sent item's note, or (admin/cashier) cut its quantity. The removed units are cancelled with the reason. */
@@ -328,30 +412,23 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       reason = value.trim();
     }
     void run(async () => {
-      const { print: rule } = await apiFetch<{ print: "ask" | "always" | "never" }>("/api/kot-edit-settings");
+      let rule: "ask" | "always" | "never" = "ask";
+      try { ({ print: rule } = await apiFetch<{ print: "ask" | "always" | "never" }>("/api/kot-edit-settings")); }
+      catch (error) { if (!isUnreachable(error)) throw error; }
       const print = rule === "ask" ? window.confirm("Print a CHANGED slip to the kitchen?") : rule === "always";
-      const result = await apiFetch<{ printError: string | null }>(`/api/order-items/${item.id}/edit-sent`, { method: "POST", body: JSON.stringify({
+      const result = await queued<{ printError: string | null }>({ path: `/api/order-items/${item.id}/edit-sent`, lane: orderId, label: `Change ${item.name}`, body: {
         clientRef: uuid(), ...(qty !== item.qty ? { qty, reason } : {}), ...(note !== (item.note ?? null) ? { note } : {}), print,
-      }) });
-      setMessage(`${item.name} updated${result.printError ? `. Slip not printed: ${result.printError}` : ""}`);
+      } });
+      setMessage(result ? `${item.name} updated${result.printError ? `. Slip not printed: ${result.printError}` : ""}` : `Change to ${item.name} saved · ${WHEN_BACK}`);
     });
   }
 
   function sendToKitchen() {
     void run(async () => {
-      if (queuedRequests(user.id).some((request) => request.path.startsWith(`/api/orders/${orderId}/`))) {
-        throw new Error("A saved action needs to finish or be reviewed before sending. Check the connection status above.");
-      }
-      await punchDraft();
-      const [{ order: current }, { products: currentProducts }] = await Promise.all([
-        apiFetch<{ order: Order }>(`/api/orders/${orderId}`), apiFetch<{ products: Product[] }>("/api/products"),
-      ]);
-      if (current.status !== "open") throw new Error("This order is no longer open. Return to tables to check its status.");
-      const routedProducts = new Set(currentProducts.filter((product) => product.kotStationId).map((product) => product.id));
-      const itemIds = current.items.filter((item) => item.status === "pending" && routedProducts.has(item.productId)).map((item) => item.id);
-      if (!itemIds.length) { setMessage("Order saved. No items are waiting for a kitchen ticket."); return; }
-      const result = await reliablePost<{ kots: Array<{ id: string }>; printErrors?: string[] }>(`/api/orders/${orderId}/send`, { clientRef: uuid(), itemIds }, "Send to kitchen");
-      setMessage(`Sent to kitchen · ${result.kots.length} ${result.kots.length === 1 ? "ticket" : "tickets"}${result.printErrors?.length ? `. Not printed: ${result.printErrors.join("; ")}` : ""}`);
+      const sent = await sendPending("Send to kitchen");
+      if (sent.saved) setMessage(sent.none ? `Items saved on this device · ${WHEN_BACK}` : "Saved on this device · the kitchen ticket prints when the connection returns");
+      else if (sent.none) setMessage("Order saved. No items are waiting for a kitchen ticket.");
+      else setMessage(`Sent to kitchen · ${sent.kots} ${sent.kots === 1 ? "ticket" : "tickets"}${sent.printErrors.length ? `. Not printed: ${sent.printErrors.join("; ")}` : ""}`);
     });
   }
 
@@ -359,9 +436,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current || billingLock.current || !order) return;
     actionLock.current = true; setPending(true); setError("");
     try {
-      const { order: newOrder } = await apiFetch<{ order: Order }>("/api/orders", { method: "POST", body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId: order.tableId }) });
-      onOpenOrder(newOrder.id);
-    } catch (e) { setError(e instanceof ApiError ? e.message : "Request failed"); }
+      // The counter chooses the new order's id, so the split opens at once even while the hub is unreachable.
+      const id = uuid(), clientRef = uuid();
+      const created = await queued<{ order: Order }>({ path: "/api/orders", body: { id, clientRef, type: "dine_in", tableId: order.tableId }, label: `New split on ${orderLabel(order)}` });
+      if (!created) saveOrderCopy(user.id, placeholderOrder({ id, clientRef, userId: user.id, type: "dine_in",
+        table: order.tableId ? { id: order.tableId, name: order.tableName ?? "", priceTier: order.priceTier as TableInfo["priceTier"] } : null }));
+      onOpenOrder(id);
+    } catch (e) { setError(e instanceof Error ? e.message : "Request failed"); }
     finally { actionLock.current = false; setPending(false); }
   }
 
@@ -411,7 +492,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       const rows: unknown = JSON.parse(localStorage.getItem(`forkflow.draft.${user.id}.${id}`) ?? localStorage.getItem(`forkflow.draft.${id}`) ?? "[]");
       foldedDraftCount = Array.isArray(rows) ? rows.length : 0;
     } catch { /* an unreadable draft is shown as empty, so it cannot block either */ }
-    const foldedQueuedCount = queuedRequests(user.id).filter((request) => request.path.startsWith(`/api/orders/${id}/`)).length;
+    const foldedQueuedCount = queuedRequests(user.id).filter((request) => request.lane === id).length;
     return { foldedDraftCount, foldedQueuedCount };
   }
 
@@ -437,7 +518,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   function cancelOrder() {
     if (actionLock.current || billingLock.current || !window.confirm("Cancel this entire order?")) return;
     void run(async () => {
-      await apiFetch(`/api/orders/${orderId}/cancel`, { method: "POST" });
+      await queued({ path: `/api/orders/${orderId}/cancel`, body: {}, label: "Cancel order" });
       onBack();
     });
   }
@@ -473,7 +554,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   return <section className="screen order-screen">
     <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
-      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : order.orderTypeName ?? "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span></h2>
+      <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : order.orderTypeName ?? "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span>{lane.entries.length > 0 && <span className={`status saved-actions${lane.needsReview ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{lane.needsReview ? "Needs review" : `${lane.entries.length} saved`}</span>}</h2>
         {/* Captains serve their own tables; reassigning is a counter decision. */}
         {user.role === "waiter" && order.type === "dine_in" && order.status === "open" && !order.captainName ? <div className="order-captain-picker">
           <span>Captain</span>
@@ -530,6 +611,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     <MergeOrderDialog open={transferDialog === "merge" && order.status === "open"} order={order} busy={locked} error={transferError} refreshSignal={transferSignal}
       onClose={() => { if (!actionLock.current && !billingLock.current) setTransferDialog(null); }} onConfirm={mergeOrders} />
     <div className="error-message" role="alert">{error}</div>
+    {copyAt !== null && <p className="alert offline-banner" role="status">Working offline · showing this device's copy from {new Date(copyAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Actions are saved and sent when the connection returns.</p>}
     {order.status !== "settled" && order.status !== "cancelled" && order.stockWarnings?.length > 0 && <details className="alert order-stock-warning">
       <summary>Low stock · {order.stockWarnings.length} ingredients. Ordering is still available.</summary><ul>{order.stockWarnings.map((item) => <li key={item.id}>{item.name}: {item.qty} {item.unit} remaining</li>)}</ul>
     </details>}
@@ -571,13 +653,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             <QtyStepper name={d.name} value={d.qty} disabled={locked || queuedRefs.has(d.clientRef)} onChange={(qty) => updateDraft(d.clientRef, { qty })} />
             <span className="pos-money">₹{paiseToRupees(d.pricePaise * d.qty)}</span>
             <button className="cart-remove" title={"Remove " + d.name} aria-label={"Remove " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => removeDraft(d.clientRef)}>×</button>
-            {queuedRefs.has(d.clientRef) && <small className="cart-row-notice">Saved to send</small>}
+            {queuedRefs.has(d.clientRef) && <small className="cart-row-notice">{lane.kitchenRefs.has(d.clientRef) ? "Saved · goes to the kitchen when back online" : "Saved to send"}</small>}
           </div>)}
         </div>}
         {order.items.length > 0 && <div className="cart-section">
           <h3>{captain ? "Saved items" : "Punched items"}</h3>
           {order.items.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
-            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong><span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}</div>
+            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong><span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
             {order.status === "open" && item.status === "sent" && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
             {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || userCan(user, "orders.cancel_sent")) && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}

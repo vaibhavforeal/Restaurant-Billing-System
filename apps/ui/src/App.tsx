@@ -170,7 +170,7 @@ function StaffApp() {
           <div className="app-body">
           <DemoBanner demo={demo} />
           <LicenseGate key={user.id} user={user}>
-          <ConnectionStatus key={user.id} userId={user.id} captain={captain} />
+          <ConnectionStatus key={user.id} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
           <QrNotifications key={user.id} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}

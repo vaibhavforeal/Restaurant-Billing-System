@@ -55,7 +55,7 @@
   };
   try {
     await click("Punch");
-    await waitFor(() => document.body.innerText.includes("Saved; will send when connected"), "queued punch");
+    await waitFor(() => document.body.innerText.includes("Working offline"), "queued punch");
     check((await api(`/orders/${orderId}`)).order.items.length === 0, "Offline punch is saved without reaching the server");
     // New rows remain editable while the original frozen row is queued.
     productButton().click();
@@ -67,7 +67,7 @@
     await click("Punch"); await waitFor(() => !button("Punch"), "second punch");
     losePath = `/api/orders/${orderId}/send`; lost = false;
     await click("Send to kitchen");
-    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "kitchen acknowledgement replay");
+    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v2.")), "kitchen acknowledgement replay");
     const sent = (await api(`/orders/${orderId}`)).order;
     check(sent.items.length === 2 && sent.items.every((i) => i.status === "sent"), "Kitchen retry keeps one saved send request");
     check((await api("/kots")).kots.filter((k) => k.orderId === orderId).length === 1, "Lost kitchen acknowledgement does not duplicate KOTs");
@@ -75,12 +75,12 @@
     losePath = `/api/orders/${orderId}/bill`; lost = false;
     await click("Issue bill");
     await waitFor(() => button("Settle bill"), "bill issued after response loss");
-    await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "bill queue cleared");
+    await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v2.")), "bill queue cleared");
     const { bill } = await api(`/orders/${orderId}/bill`);
     check(bill.status === "unpaid", "Bill issue resolves a lost acknowledgement from the same saved request");
     losePath = `/api/bills/${bill.id}/settle`; lost = false;
     await click("Settle bill");
-    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "settlement replay");
+    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v2.")), "settlement replay");
     const paid = (await api(`/orders/${orderId}/bill`)).bill;
     check(paid.status === "paid" && paid.payments.length === 1, "Lost settlement acknowledgement records payment only once");
   } finally { window.fetch = nativeFetch; }

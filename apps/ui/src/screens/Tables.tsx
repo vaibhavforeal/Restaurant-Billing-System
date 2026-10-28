@@ -3,6 +3,8 @@ import { ApiError, apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
+import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue } from "../retry-queue";
+import { isUnreachable, placeholderOrder, readTablesCopy, saveOrderCopy, saveTablesCopy, withOrdersStartedHere } from "../offline-cache";
 import { Icon } from "../Icon";
 import { paiseToRupees } from "../money";
 import { useNavigationGuard } from "../navigation-guard";
@@ -29,8 +31,15 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const [mobilePane, setMobilePane] = useState<"tables" | "parcels" | "zomato">("tables");
   const { isEnabled } = useIntegrations();
   const [zomatoDialog, setZomatoDialog] = useState(false);
-  const [tables, setTables] = useState<TableInfo[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [loadedTables, setTables] = useState<TableInfo[]>([]);
+  const [loadedOrders, setOrders] = useState<Order[]>([]);
+  /** When the view shows this device's saved copy because the hub cannot be reached: the time of that copy. */
+  const [copyAt, setCopyAt] = useState<number | null>(null);
+  const [, refreshQueue] = useState(0);
+  useEffect(() => subscribeQueue(() => refreshQueue((v) => v + 1)), []);
+  const savedActions = queuedRequests(user.id);
+  const { tables, orders } = withOrdersStartedHere(user.id, loadedTables, loadedOrders, savedActions);
+  const savedFor = (orderIds: string[]) => savedActions.filter((r) => orderIds.includes(r.lane));
   const [managing, setManaging] = useState(false);
   const [managingQr, setManagingQr] = useState(false);
   const [qrBusy, setQrBusy] = useState(false);
@@ -71,12 +80,30 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }
 
   async function reload() {
-    const [t, o] = await Promise.all([
-      apiFetch<{ tables: TableInfo[] }>("/api/tables"),
-      apiFetch<{ orders: Order[] }>("/api/orders"),
-    ]);
-    setTables(t.tables);
-    setOrders(o.orders);
+    try {
+      const [t, o] = await Promise.all([
+        apiFetch<{ tables: TableInfo[] }>("/api/tables"),
+        apiFetch<{ orders: Order[] }>("/api/orders"),
+      ]);
+      saveTablesCopy(user.id, { tables: t.tables, orders: o.orders });
+      setTables(t.tables);
+      setOrders(o.orders);
+      setCopyAt(null);
+    } catch (error) {
+      const copy = isUnreachable(error) ? readTablesCopy(user.id) : null;
+      if (!copy) throw error;
+      setTables(copy.tables); setOrders(copy.orders); setCopyAt(copy.at);
+    }
+  }
+
+  /** Starts an order with an id this counter chooses, so it opens at once even while the hub is unreachable. */
+  async function startOrder(type: "dine_in" | "parcel", table: TableInfo | null): Promise<string> {
+    const id = uuid(), clientRef = uuid();
+    const outcome = await outcomeOrSaved(enqueueRequest<{ order: Order }>({
+      path: "/api/orders", body: { id, clientRef, type, tableId: table?.id ?? null }, label: table ? `New order on ${table.name}` : "New takeaway",
+    }));
+    if (outcome.saved) saveOrderCopy(user.id, placeholderOrder({ id, clientRef, userId: user.id, type, table }));
+    return id;
   }
 
   useEffect(() => {
@@ -98,9 +125,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     setError("");
     try {
       await action();
-      await reload();
+      await reload().catch((e) => { if (!isUnreachable(e)) throw e; });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Request failed");
+      setError(e instanceof Error ? e.message : "Request failed");
     } finally { actionLock.current = false; setActionBusy(false); }
   }
 
@@ -146,11 +173,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       setCreating(true);
       void run(async () => {
         try {
-          const { order } = await apiFetch<{ order: Order }>("/api/orders", {
-            method: "POST",
-            body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId: table.id }),
-          });
-          openOrder(order.id);
+          openOrder(await startOrder("dine_in", table));
         } finally {
           setCreating(false);
         }
@@ -169,12 +192,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     setCreating(true);
     void run(async () => {
       try {
-        const { order } = await apiFetch<{ order: Order }>("/api/orders", {
-          method: "POST",
-          body: JSON.stringify({ clientRef: uuid(), type: "dine_in", tableId }),
-        });
+        const id = await startOrder("dine_in", tables.find((t) => t.id === tableId) ?? null);
         setPickerTableId(null); // close picker
-        openOrder(order.id);
+        openOrder(id);
       } finally {
         setCreating(false);
       }
@@ -186,11 +206,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     setCreating(true);
     void run(async () => {
       try {
-        const { order } = await apiFetch<{ order: Order }>("/api/orders", {
-          method: "POST",
-          body: JSON.stringify({ clientRef: uuid(), type: "parcel", tableId: null }),
-        });
-        openOrder(order.id);
+        openOrder(await startOrder("parcel", null));
       } finally {
         setCreating(false);
       }
@@ -243,6 +259,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       }} disabled={busy}><Icon name="bag" size={15} />{shortcut("takeaway", "Takeaway")}</button>}
     </div></div>
     <div className="error-message" role="alert">{error}</div>
+    {copyAt !== null && <p className="alert offline-banner" role="status">Working offline · showing this device's copy from {new Date(copyAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. New orders and actions are saved and sent when the connection returns.</p>}
     <div className="tables-request-strip">
       {qrOn && <QrRequests compact openSignal={qrInbox} tables={tables} disabled={creating || actionBusy || qrManagerBusy || serviceBusy || !!reservationView} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} onBusyChange={(value) => { qrLock.current = value; setQrBusy(value); }} />}
       {modules.isActive("guestServices") && <ServiceRequests compact disabled={creating || actionBusy || qrBusy || qrManagerBusy || !!reservationView} onBusyChange={(value) => { serviceLock.current = value; setServiceBusy(value); }} />}
@@ -267,8 +284,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
           const minutes = running.length ? Math.max(0, Math.floor((Date.now() - Math.min(...running.map((order) => order.openedAt))) / 60000)) : 0;
           const note = tableCardNote(t), combined = receivingLabel(t, tables), targetCount = tableOpenTargets(t).length;
           const ready = captain && running.some((order) => order.kots.some((kot) => kot.doneAt));
+          const saved = savedFor(tableOpenTargets(t).map((target) => target.orderId));
           return <button key={t.id} className={`table-card ${t.status}`} onClick={() => openTable(t)} disabled={busy}>
-          <div className="table-card-heading"><strong>{combined ?? t.name}</strong><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span></div>
+          <div className="table-card-heading"><strong>{combined ?? t.name}</strong><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span>{saved.length > 0 && <span className={`status saved-actions${saved.some((r) => r.status === "attention") ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{saved.some((r) => r.status === "attention") ? "Review" : "Saved"}</span>}</div>
           <span className="table-state"><span aria-hidden="true" />{({ free: "Available", occupied: "Occupied", reserved: "Reserved", billed: "Billed" })[t.status]}</span>
           <div className="table-card-detail">
             {running.some((o) => o.captainName) && <span className="table-ready-label">Captain: {[...new Set(running.map((o) => o.captainName).filter(Boolean))].join(", ")}</span>}
@@ -284,7 +302,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       </div>
       {hasSide && <div className="tables-side">
       {takeaways.length > 0 && <aside className="tables-parcels" aria-label="Open takeaways"><div className="panel-title"><h3>Open takeaways</h3><span>{takeaways.length}</span></div><div className="parcel-list" id="parcel-list" role="region" aria-label="Takeaway orders" tabIndex={0}>
-        {takeaways.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">{order.type === "zomato" ? `Zomato #${order.zomatoOrderId}` : `Takeaway ${order.clientRef.slice(0, 8)}`}<small>{order.type === "zomato" ? ZOMATO_PILL[order.zomatoStatus ?? "new"] : order.status === "billed" ? "Awaiting payment" : "Open order"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
+        {takeaways.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">{order.type === "zomato" ? `Zomato #${order.zomatoOrderId}` : `Takeaway ${order.clientRef.slice(0, 8)}`}<small>{order.type === "zomato" ? ZOMATO_PILL[order.zomatoStatus ?? "new"] : order.status === "billed" ? "Awaiting payment" : "Open order"}{savedFor([order.id]).length > 0 && " · saved on this device"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
       </div></aside>}
       {showZomatoPanel && <aside className="tables-parcels tables-zomato" id="zomato-list" aria-label="Zomato orders"><ZomatoPanel orders={zomatoList} canCreate={zomatoOn} disabled={busy} onNew={() => setZomatoDialog(true)} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} /></aside>}
       </div>}

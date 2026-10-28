@@ -42,6 +42,12 @@ html[data-theme] {
   .compact-workspace .app-body > .pos-statusbar { max-height: none; padding: var(--space-1) var(--space-4); }
   .pos-connected { color: var(--pos-success); }
   .pos-status-warning { flex-wrap: wrap; background: var(--pos-warning-bg); color: var(--pos-warning); }
+  .pos-status-attention { background: var(--red-light, #fff0f1); color: var(--red, #b42332); }
+  .saved-actions-dialog h3 { font-size: var(--text-secondary); margin: var(--space-4) 0 var(--space-2); }
+  .pos-statusbar .saved-actions-list, .saved-actions-dialog .saved-actions-list { list-style: none; margin: 0; padding: 0; max-height: none; display: grid; gap: var(--space-2); }
+  .saved-actions-list li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: var(--border) solid var(--line); border-radius: 8px; }
+  .saved-actions-list li > div:first-child { display: grid; gap: 2px; min-width: 0; }
+  .saved-actions-buttons { display: flex; gap: var(--space-2); flex: none; }
   .pos-status-warning ul { width: 100%; margin: var(--space-0); padding-left: var(--space-8); max-height: calc(var(--control-touch) * 3); overflow: auto; }
   .page-header, .dashboard .page-header { min-height: var(--header-height); margin-bottom: var(--space-4); gap: var(--space-4); }
   .page-header h2 { margin: var(--space-0); font-size: var(--text-heading); }

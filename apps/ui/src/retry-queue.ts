@@ -176,9 +176,11 @@ export function enqueueRequest<T>(request: QueueRequest): { id: string; done: Pr
   const lane = request.lane ?? laneFor(request.path, request.body);
   if (!lane) return fail("This action cannot be queued");
   const now = Date.now();
+  // Lanes run in saved order; two actions saved in the same millisecond must still keep theirs.
+  const createdAt = Math.max(now, ...listEntries(store).map((e) => e.createdAt + 1));
   const entry: QueueEntry = {
     id: uuid(), userId: actor, generation: localStorage.getItem(GENERATION)!, method, path: request.path, body, label: request.label, lane,
-    createdAt: now, status: "pending", attempts: 0, lastAttemptAt: null, nextAttemptAt: now,
+    createdAt, status: "pending", attempts: 0, lastAttemptAt: null, nextAttemptAt: now,
     ...(request.draftKey ? { draftKey: request.draftKey } : {}), ...(request.after ? { after: request.after } : {}), ...(request.context ? { context: request.context } : {}),
   };
   try { saveEntry(store, entry); }
@@ -190,6 +192,33 @@ export function enqueueRequest<T>(request: QueueRequest): { id: string; done: Pr
 
 export function reliablePost<T>(path: string, body: unknown, label: string, draftKey?: string): Promise<T> {
   return enqueueRequest<T>({ path, body, label, ...(draftKey ? { draftKey } : {}) }).done;
+}
+
+export type Outcome<T> = { saved: false; value: T } | { saved: true };
+/**
+ * The hub's reply when it answers promptly; otherwise `saved` once the action is plainly waiting (the hub could not be
+ * reached, or an earlier action for the same order holds it up), so the screen can carry on. A later refusal shows in
+ * the saved-actions list rather than on a screen the person may have left.
+ */
+export function outcomeOrSaved<T>(handle: { id: string; done: Promise<T> }, patienceMs = 4000): Promise<Outcome<T>> {
+  handle.done.catch(() => { /* reported in the saved-actions list */ });
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const finish = (settle: () => void) => { if (finished) return; finished = true; clearTimeout(timer); unsubscribe(); settle(); };
+    const check = () => {
+      const entries = listEntries(store, actor);
+      const entry = entries.find((e) => e.id === handle.id);
+      if (!entry || entry.status !== "pending") return;
+      const heldUp = entries.some((e) => e.lane === entry.lane && e.id !== entry.id && (e.createdAt < entry.createdAt) && (e.attempts > 0 || e.status === "attention"));
+      // The last check-in could not reach the hub at all, so nothing was even tried.
+      const unreachable = !generationChecked && !pumping;
+      if (entry.attempts > 0 || heldUp || unreachable) finish(() => resolve({ saved: true }));
+    };
+    const unsubscribe = subscribeQueue(check);
+    const timer = setTimeout(() => finish(() => resolve({ saved: true })), patienceMs);
+    handle.done.then((value) => finish(() => resolve({ saved: false, value })), (error: Error) => finish(() => reject(error)));
+    check();
+  });
 }
 
 /** Runs `fn` in at most one window at a time: a Web Lock where available, otherwise a short localStorage lease. */

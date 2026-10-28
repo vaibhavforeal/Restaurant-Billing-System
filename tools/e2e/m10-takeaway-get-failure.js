@@ -73,7 +73,7 @@
     check((await api('/orders/' + result.orderId)).order.status === 'settled', 'Order is settled despite the failed refresh');
     check((await api('/bills?status=all')).bills.filter(row => row.orderId === result.orderId).length === 1, 'One bill is issued');
     check(document.body.innerText.includes('Paid: UPI') && document.body.innerText.includes('Payment recorded.'), 'Paid confirmation remains visible with explicit refresh guidance');
-    check(!Object.keys(localStorage).some(key => key.startsWith('forkflow.queue.v1.')), 'Payment queue drains after success');
+    check(!Object.keys(localStorage).some(key => key.startsWith('forkflow.queue.v2.')), 'Payment queue drains after success');
     await click('View receipt');
     await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('UPI'), 'paid receipt');
     check(actionScope().querySelector('.billing-receipt-frame').contentDocument.body.innerText.includes('25.00'), 'Paid receipt remains available despite order refresh failure');

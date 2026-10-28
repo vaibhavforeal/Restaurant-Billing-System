@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "./api";
-import { discardRequest, enqueueRequest, queuedRequests, reliablePost, retryRequest, startQueue } from "./retry-queue";
+import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, reliablePost, retryRequest, startQueue } from "./retry-queue";
 
 vi.mock("./api", () => ({
   apiFetch: vi.fn(),
@@ -96,5 +96,33 @@ describe("offline queue in the browser", () => {
     discardRequest("refused");
     expect(queuedRequests()).toEqual([]);
     expect(JSON.parse(values.get("forkflow.queue-result.v2.refused")!)).toMatchObject({ status: "discarded" });
+  });
+
+  it("tells the screen an action is saved once the hub cannot be reached, and gives the reply when it can", async () => {
+    values.set("forkflow.generation", "current");
+    stop = startQueue("cashier");
+    await expect(outcomeOrSaved(enqueueRequest({ path: "/api/orders/order-1/cancel", body: {}, label: "Cancel order" }), 60_000)).resolves.toEqual({ saved: true });
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => path === "/api/system/generation" ? { generation: "current" } : { ok: path });
+    await expect(outcomeOrSaved(enqueueRequest({ path: "/api/orders/order-2/cancel", body: {}, label: "Cancel order" }), 60_000))
+      .resolves.toEqual({ saved: false, value: { ok: "/api/orders/order-2/cancel" } });
+  });
+
+  it("finishes a saved bill and its payment after a reload, paying the bill the hub issued", async () => {
+    values.set("forkflow.generation", "current");
+    stop = startQueue("cashier");
+    const bill = enqueueRequest({ path: "/api/orders/order-1/bill", body: { clientRef: "b1" }, label: "Issue bill" });
+    const pay = enqueueRequest({ path: "/api/bills/{after:bill.id}/settle", after: bill.id, lane: "order-1", body: { clientRef: "p1", payments: [] }, label: "Record payment" });
+    bill.done.catch(() => {}); pay.done.catch(() => {});
+    await flush();
+    stop(); // the page reloads while offline
+    const sent: string[] = [];
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/system/generation") return { generation: "current" };
+      sent.push(path);
+      return { bill: { id: "bill-9" } };
+    });
+    stop = startQueue("cashier");
+    await vi.waitFor(() => expect(queuedRequests()).toEqual([]), { timeout: 5000 });
+    expect(sent).toEqual(["/api/orders/order-1/bill", "/api/bills/bill-9/settle"]);
   });
 });

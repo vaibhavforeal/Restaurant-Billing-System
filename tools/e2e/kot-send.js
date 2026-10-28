@@ -19,7 +19,7 @@
   const button = name => [...document.querySelectorAll("button")].find(e => e.textContent.trim() === name);
   const click = async name => { (await wait(() => { const b = button(name); return b && !b.disabled && b; }, name)).click(); await pause(); };
   const kotButton = () => document.querySelector('[data-shortcut="F9"]');
-  const queues = () => Object.keys(localStorage).filter(key => key.startsWith("forkflow.queue.v1.")).map(key => JSON.parse(localStorage.getItem(key)));
+  const queues = () => Object.keys(localStorage).filter(key => key.startsWith("forkflow.queue.v2.")).map(key => JSON.parse(localStorage.getItem(key)));
   const openTable = async name => {
     if (document.querySelector(".order-screen")) await click("← Tables");
     else if (!document.querySelector(".table-card")) await click("tables");

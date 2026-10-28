@@ -61,7 +61,7 @@
     if (!response.ok) throw new Error(path + ': ' + JSON.stringify(result));
     return result;
   };
-  const queues = () => Object.keys(localStorage).filter(key => key.startsWith('forkflow.queue.v1.')).map(key => JSON.parse(localStorage.getItem(key)));
+  const queues = () => Object.keys(localStorage).filter(key => key.startsWith('forkflow.queue.v2.')).map(key => JSON.parse(localStorage.getItem(key)));
   const reloadNext = phase => {
     state.phase = phase; save(); window.__m10NeedsReload = phase; keepFault = true;
     return { status: 'reload-required', nextPhase: phase, passed: state.checks.length, checks: state.checks };
@@ -216,31 +216,24 @@
       await segment('Payment method', 'Cash'); await click('Record payment', true);
       const queued = await wait(() => fault.lost && queues().find(request => request.path === path), 'saved lost bill response');
       const bill = (await api('/orders/' + orderId + '/bill')).bill;
-      check(bill.status === 'unpaid' && bill.payments.length === 0, 'Lost bill response never claims payment was recorded');
+      check(queues().some(request => request.after === queued.id), 'The payment is saved to follow the bill');
       check(queued.body === fault.bodies[0], 'Bill retry keeps the original bill reference and preview snapshot');
       state.billRecovery = { orderId, billId: bill.id, billNo: bill.billNo, body: queued.body };
       return reloadNext('bill_reload');
     }
     if (state.phase === 'bill_reload') {
-      await wait(() => !queues().some(request => request.path === '/api/orders/' + state.billRecovery.orderId + '/bill'), 'bill replay after reload');
-      await home(); await click('Takeaway'); await click('Record payment'); await wait(() => button('Settle bill'), 'unpaid recovered bill');
-      const bill = await currentBill();
-      check(bill.id === state.billRecovery.billId && bill.billNo === state.billRecovery.billNo && bill.status === 'unpaid', 'Reload reconciles the original unpaid bill');
+      // The payment was saved with the bill and waits for it, so after a reload both finish on their own.
+      await wait(() => !queues().some(request => request.lane === state.billRecovery.orderId), 'bill and payment replay after reload');
+      const bill = (await api('/bills/' + state.billRecovery.billId)).bill;
+      check(bill.billNo === state.billRecovery.billNo && bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === 'cash', 'Reload finishes the saved payment on the original bill once');
       check((await api('/bills?status=all')).bills.filter(value => value.orderId === state.billRecovery.orderId).length === 1, 'Bill replay after reload creates no duplicate invoice');
-      await segment('Mode 1', 'Card');
-      const path = '/api/bills/' + bill.id + '/settle', fault = loseResponse(path);
-      await click('Settle bill', true);
-      const queued = await wait(() => fault.lost && queues().find(request => request.path === path), 'saved lost payment response');
-      const paidBill = (await api('/bills/' + bill.id)).bill;
-      check(paidBill.status === 'paid' && paidBill.payments.length === 1 && paidBill.payments[0].mode === 'card', 'Lost settlement response records the intended payment once');
-      check(queued.body === fault.bodies[0], 'Settlement retry retains the immutable reference, method and amount');
-      state.settleRecovery = { billId: bill.id, orderId: bill.orderId, totalPaise: bill.totalPaise, body: queued.body };
-      return reloadNext('settle_reload');
+      state.settleRecovery = { billId: bill.id, orderId: bill.orderId, totalPaise: bill.totalPaise, mode: 'cash' };
+      state.phase = 'settle_reload';
     }
     if (state.phase === 'settle_reload') {
-      await wait(() => !queues().some(request => request.path === '/api/bills/' + state.settleRecovery.billId + '/settle'), 'settlement replay after reload');
+      await wait(() => !queues().some(request => request.lane === state.settleRecovery.orderId), 'settlement replay after reload');
       const bill = (await api('/bills/' + state.settleRecovery.billId)).bill;
-      check(bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === 'card' && bill.payments[0].amountPaise === state.settleRecovery.totalPaise, 'Reloaded settlement replay keeps exactly one correct payment');
+      check(bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === (state.settleRecovery.mode ?? 'card') && bill.payments[0].amountPaise === state.settleRecovery.totalPaise, 'Reloaded settlement replay keeps exactly one correct payment');
       check((await api('/orders/' + state.settleRecovery.orderId)).order.status === 'settled', 'Recovered paid takeaway remains settled');
       check((await stockMoves(state.rice.id, state.settleRecovery.orderId)).length === 1 && (await stockMoves(state.bottles.id, state.settleRecovery.orderId)).length === 1, 'Bill and settlement recovery do not duplicate either stock deduction');
       await closeBilling(); await click('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid'); await click('Open bill #' + bill.billNo);
