@@ -2,6 +2,7 @@
 import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@forkflow/domain";
 import { moduleSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
+import { isUnreachable, readLicenseCopy, saveLicenseCopy } from "../offline-cache";
 import { downloadText } from "../download";
 import { isDesktopShell, openInDesktopShell, showPendingMessage } from "../checkout-window";
 import { useNavigationGuard } from "../navigation-guard";
@@ -24,8 +25,14 @@ function useLicenseStatus(): LicenseContextValue {
     const request = ++sequence.current;
     try {
       const value = await apiFetch<LicenseStatus>("/api/license");
-      if (mounted.current && request === sequence.current) { setStatus(value); setError(""); }
-    } catch (e) { if (mounted.current && request === sequence.current) setError(e instanceof Error ? e.message : "Could not check the license"); }
+      if (mounted.current && request === sequence.current) { setStatus(value); setError(""); saveLicenseCopy(value); }
+    } catch (e) {
+      if (!mounted.current || request !== sequence.current) return;
+      // The hub cannot be reached: keep working under the last plan it confirmed (it checks again on every request).
+      const copy = isUnreachable(e) ? readLicenseCopy<LicenseStatus>() : null;
+      if (copy) setStatus((current) => current ?? copy);
+      else setError(e instanceof Error ? e.message : "Could not check the license");
+    }
   }, []);
   useEffect(() => {
     mounted.current = true; void refresh();

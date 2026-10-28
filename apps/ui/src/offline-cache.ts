@@ -1,3 +1,4 @@
+import type { User } from "./api";
 import type { Category, Order, Product, TableInfo } from "./types";
 
 /**
@@ -21,6 +22,21 @@ export const saveCatalogCopy = (userId: string, catalog: Omit<CatalogCache, "at"
 export const readCatalogCopy = (userId: string) => read<CatalogCache>(`${userId}.catalog`);
 export const saveTablesCopy = (userId: string, data: { tables: TableInfo[]; orders: Order[] }) => write(`${userId}.tables`, { ...data, at: Date.now() });
 export const readTablesCopy = (userId: string) => read<{ tables: TableInfo[]; orders: Order[]; at: number }>(`${userId}.tables`);
+
+/** The person signed in with this session token, so a reload while the hub is unreachable keeps them working. */
+export const saveSignedIn = (token: string, user: User) => write("signed-in", { token, user });
+export function readSignedIn(token: string | null): User | null {
+  const saved = read<{ token: string; user: User }>("signed-in");
+  return token && saved?.token === token ? saved.user : null;
+}
+
+/** The last licence status the hub confirmed. */
+export const saveLicenseCopy = (status: unknown) => write("license", status);
+export const readLicenseCopy = <T>() => read<T>("license");
+
+/** The last feature switches the hub reported. */
+export const saveModulesCopy = (modules: unknown) => write("modules", modules);
+export const readModulesCopy = <T>() => read<T>("modules");
 
 /** True when a request failed because the hub could not be reached, not because it refused. */
 export const isUnreachable = (error: unknown) => !(error && typeof error === "object" && "status" in error && typeof (error as { status: unknown }).status === "number");

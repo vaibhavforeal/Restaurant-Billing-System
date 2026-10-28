@@ -9,6 +9,7 @@ import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
 import { enqueueRequest, outcomeOrSaved } from "../retry-queue";
+import { isUnreachable } from "../offline-cache";
 import { SegmentedControl } from "../PosControls";
 import { useIntegrations } from "../integrations";
 import { UpiQrPreview } from "./UpiQrPreview";
@@ -122,7 +123,11 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       if (revision === billRevision.current) acceptBill(b.bill);
       setPrinters(p.printers);
       setPrinterId((id) => p.printers.some((printer) => printer.id === id) ? id : "");
-    }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Failed to load billing"); });
+    }).catch((e: unknown) => {
+      // Offline (or an order the hub has not received yet) there is simply no bill to show.
+      if (!active || isUnreachable(e) || (e instanceof ApiError && e.status === 404)) return;
+      setError(e instanceof Error ? e.message : "Failed to load billing");
+    });
     return () => { active = false; };
   }, [order.id, order.status]);
   useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin, redeem, order.customer?.id]);

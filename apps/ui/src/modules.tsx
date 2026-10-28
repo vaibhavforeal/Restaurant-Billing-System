@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ModuleId, ModuleInfo } from "@forkflow/domain/modules";
 import { apiFetch, session } from "./api";
+import { readModulesCopy, saveModulesCopy } from "./offline-cache";
 import { connectWs } from "./ws";
 
 interface ModulesValue {
@@ -33,8 +34,12 @@ export function ModulesProvider({ children }: { children: ReactNode }) {
     const request = ++latest.current;
     try {
       const result = (await apiFetch<{ modules: ModuleInfo[] }>("/api/modules", { cache: "no-store" })).modules;
-      if (request === latest.current) setModules(result);
-    } catch { /* keep the last known states */ }
+      if (request === latest.current) { setModules(result); saveModulesCopy(result); }
+    } catch {
+      // Keep the last known states; after a reload while the hub is unreachable, the last ones this device saw.
+      const copy = readModulesCopy<ModuleInfo[]>();
+      if (copy && request === latest.current) setModules((current) => current.length ? current : copy);
+    }
     if (request === latest.current) setReady(true);
   }, []);
 

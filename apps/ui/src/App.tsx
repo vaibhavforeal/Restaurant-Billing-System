@@ -36,6 +36,7 @@ import { DemoBanner } from "./DemoBanner";
 import "./compact-workspace.css";
 import { CurrentUserProvider, userCan } from "./permissions";
 import { connectWs } from "./ws";
+import { isUnreachable, readSignedIn, saveSignedIn } from "./offline-cache";
 
 type State =
   | { kind: "loading" }
@@ -95,9 +96,11 @@ function StaffApp() {
   const captainEntry = isCaptainPath();
   const androidBack = useRef<() => boolean>(() => false);
   useEffect(() => { if (captainAndroid()) listenForAndroidBack(() => androidBack.current()); }, []);
-  function enter(user: User) {
+  function enter(user: User, offline = false) {
     if (user.role === "waiter" && !captainEntry) { window.location.replace("/captain/"); return; }
-    const page: Page = user.role === "kitchen" ? { name: "kitchen" } : captainEntry || user.role === "waiter" ? { name: "tables" } : { name: "home" };
+    if (!offline && session.token) saveSignedIn(session.token, user);
+    // Offline, open where work can continue from this device's copies.
+    const page: Page = user.role === "kitchen" ? { name: "kitchen" } : captainEntry || user.role === "waiter" || offline ? { name: "tables" } : { name: "home" };
     setState({ kind: "in", user, page });
   }
   // When an admin changes this person's role or permissions, refresh what they may do without signing them out.
@@ -130,12 +133,17 @@ function StaffApp() {
             const { user } = await apiFetch<{ user: User }>("/api/me");
             return enter(user);
           } catch (error) {
+            const known = isUnreachable(error) ? readSignedIn(session.token) : null;
+            if (known) return enter(known, true);
             if (captainEntry && !(error instanceof ApiError && error.status === 401)) return setState({ kind: "offline" });
             /* token expired — fall through to login */
           }
         }
         setState({ kind: "login" });
-      } catch {
+      } catch (error) {
+        // The hub cannot be reached: the same person on the same session keeps working from this device's copies.
+        const known = isUnreachable(error) ? readSignedIn(session.token) : null;
+        if (known) return enter(known, true);
         setState({ kind: captainEntry ? "offline" : "login" });
       }
     })();

@@ -13,6 +13,17 @@ function age(since: number, now: number): string {
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min ago`;
 }
 
+/** The hub's reason for refusing a saved action, in words for the person at the counter. */
+function explain(error: string | undefined): string {
+  if (!error) return "The server refused this action.";
+  if (/order is not open/i.test(error)) return "The order was billed, settled or cancelled on another counter, so this was not applied. Open the order to check it.";
+  if (/Kitchen items changed/i.test(error)) return "The order's kitchen items changed on another counter. Open the order and send again if needed.";
+  if (/Captain changed on another counter/i.test(error)) return "Another counter changed the captain first. Open the order to choose again.";
+  if (/already used/i.test(error)) return "This was already saved for a different order. Discard it and check both orders.";
+  if (/fresh bill preview|Order changed/i.test(error)) return "The order changed after the bill was previewed. Open the order and preview the bill again.";
+  return error;
+}
+
 /** Which order a saved action belongs to, in the words the counter uses, from this device's copy of the order. */
 function orderOf(userId: string, entry: QueuedRequest): { id: string; label: string } | null {
   if (entry.lane.includes(":")) return null;
@@ -60,7 +71,7 @@ export function ConnectionStatus({ userId, captain = false, onOpenOrder }: { use
       <p className="muted">These were saved on this device and are sent to the server in order, one order at a time. {online ? "The server is connected." : "The server cannot be reached right now; they will send when it is back."}</p>
       {attention.length > 0 && <section aria-label="Needs review"><h3>Needs review</h3><ul className="saved-actions-list">
         {attention.map((entry) => { const order = orderOf(userId, entry); return <li key={entry.id}>
-          <div><strong>{entry.label}</strong>{order && <span className="muted"> · {order.label}</span>}<small>{entry.error}</small><small className="muted">Saved {age(entry.createdAt, now)}{entry.attempts ? ` · tried ${entry.attempts} ${entry.attempts === 1 ? "time" : "times"}` : ""}</small></div>
+          <div><strong>{entry.label}</strong>{order && <small className="muted">{order.label}</small>}<small>{explain(entry.error)}</small><small className="muted">Saved {age(entry.createdAt, now)}{entry.attempts ? ` · tried ${entry.attempts} ${entry.attempts === 1 ? "time" : "times"}` : ""}</small></div>
           <div className="saved-actions-buttons">
             <button type="button" onClick={() => retryRequest(entry.id)}>Retry</button>
             {order && onOpenOrder && <button type="button" onClick={() => { setReviewing(false); onOpenOrder(order.id); }}>Open order</button>}
@@ -70,7 +81,7 @@ export function ConnectionStatus({ userId, captain = false, onOpenOrder }: { use
       </ul></section>}
       {entries.length > attention.length && <section aria-label="Waiting to send"><h3>Waiting to send</h3><ul className="saved-actions-list">
         {entries.filter((entry) => entry.status !== "attention").map((entry) => { const order = orderOf(userId, entry); return <li key={entry.id}>
-          <div><strong>{entry.label}</strong>{order && <span className="muted"> · {order.label}</span>}{entry.lastError && <small>Last problem: {entry.lastError}</small>}<small className="muted">Saved {age(entry.createdAt, now)}{entry.attempts ? ` · tried ${entry.attempts} ${entry.attempts === 1 ? "time" : "times"}` : ""}</small></div>
+          <div><strong>{entry.label}</strong>{order && <small className="muted">{order.label}</small>}{entry.lastError && <small>Last problem: {entry.lastError}</small>}<small className="muted">Saved {age(entry.createdAt, now)}{entry.attempts ? ` · tried ${entry.attempts} ${entry.attempts === 1 ? "time" : "times"}` : ""}</small></div>
           {entry.attempts > 0 && <div className="saved-actions-buttons"><button type="button" onClick={() => retryRequest(entry.id)}>Try now</button></div>}
         </li>; })}
       </ul></section>}
