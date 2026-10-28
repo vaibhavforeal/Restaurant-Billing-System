@@ -13,6 +13,7 @@ import { useLicense } from "./LicenseSettings";
 import { Icon } from "../Icon";
 import "../recipes.css";
 import { useModules } from "../modules";
+import { userCan } from "../permissions";
 
 type InventoryTab = "stock" | "recipes" | "costing";
 const TAB_LABELS: Record<InventoryTab, string> = { stock: "Stock", recipes: "Recipes", costing: "Dish costing" };
@@ -27,7 +28,7 @@ function number(text: string) {
 }
 
 export function Inventory({ user }: { user: User }) {
-  const canManage = user.role === "admin";
+  const canManage = userCan(user, "stock.manage");
   const [items, setItems] = useState<StockItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selected, setSelected] = useState<StockItem | null>(null);
@@ -50,7 +51,7 @@ export function Inventory({ user }: { user: User }) {
   const { status } = useLicense();
   const modules = useModules();
   const recipesOn = modules.isActive("recipes");
-  const canSeeCosts = user.role === "admin" && modules.isActive("costing");
+  const canSeeCosts = userCan(user, "costs.read") && modules.isActive("costing");
   const [costData, setCostData] = useState<{ items: StockCost[]; totalValuePaise: number } | null>(null);
   const [costError, setCostError] = useState("");
   // Cost figures are refreshed whenever stock reloads (stock.changed, reconnect, or a save): historyVersion bumps each time.

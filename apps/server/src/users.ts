@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword } from "@forkflow/core";
-import { PermissionOverridesSchema, UserCreate, UserUpdate, effectivePermissions, normaliseOverrides, roleDefaults, uuidv7, type RoleName } from "@forkflow/domain";
+import { ADMIN_ONLY_PERMISSIONS, PERMISSION_AREAS, PermissionOverridesSchema, UserCreate, UserUpdate, effectivePermissions, normaliseOverrides, roleDefaults, uuidv7, type RoleName } from "@forkflow/domain";
 import { z } from "zod";
 import { permissionOverrides } from "./auth.js";
 import type { FastifyInstance } from "fastify";
@@ -51,7 +51,7 @@ export function registerUsers(app: FastifyInstance): void {
   /** A person's permissions: their role's defaults, the admin's changes for them, and the result. */
   const permissionsJson = (row: UserRow) => {
     const overrides = permissionOverrides(app.db, row.id);
-    return { role: row.role, defaults: roleDefaults(row.role), overrides, effective: effectivePermissions(row.role, overrides) };
+    return { role: row.role, areas: PERMISSION_AREAS, adminOnly: ADMIN_ONLY_PERMISSIONS, defaults: roleDefaults(row.role), overrides, effective: effectivePermissions(row.role, overrides) };
   };
   app.get("/api/users/:id/permissions", { preHandler: manage }, async (req) => {
     const row = getUser((req.params as { id: string }).id);

@@ -5,6 +5,8 @@ import { useIntegrations } from "./integrations";
 import { useModules } from "./modules";
 import { navTabVisible } from "./integrations-model";
 import { readPreference, useShortcutLabels } from "./pos-shortcuts";
+import { STAFF_TABS, staffTabVisible } from "./integrations-model";
+import { userCan } from "./permissions";
 
 export type Page =
   | { name: "home" }
@@ -50,37 +52,16 @@ export function NavBar({
     }
   }
 
-  // Role→tab matrix per contracts
+  // Waiters work in the Captain app and kitchen staff on the kitchen board; everyone else gets the tabs their permissions open.
   const roleTabs: Array<{ page: Page; label: string }> =
-    user.role === "admin"
+    user.role === "waiter"
       ? [
           { page: { name: "home" }, label: "home" },
           { page: { name: "tables" }, label: "tables" },
-          { page: { name: "reports" }, label: "reports" },
-          { page: { name: "customers" }, label: "customers" },
-          { page: { name: "inventory" }, label: "inventory" },
-          { page: { name: "kitchen" }, label: "kitchen" },
-          { page: { name: "catalog" }, label: "catalog" },
-          { page: { name: "users" }, label: "users" },
-          { page: { name: "marketplace" }, label: "marketplace" },
-          { page: { name: "settings" }, label: "settings" },
         ]
-      : user.role === "cashier"
-        ? [
-            { page: { name: "home" }, label: "home" },
-            { page: { name: "tables" }, label: "tables" },
-            { page: { name: "reports" }, label: "reports" },
-            { page: { name: "customers" }, label: "customers" },
-            { page: { name: "inventory" }, label: "inventory" },
-            { page: { name: "kitchen" }, label: "kitchen" },
-            { page: { name: "marketplace" }, label: "marketplace" },
-          ]
-        : user.role === "waiter"
-          ? [
-              { page: { name: "home" }, label: "home" },
-              { page: { name: "tables" }, label: "tables" },
-            ]
-          : [{ page: { name: "kitchen" }, label: "kitchen" }]; // kitchen role
+      : user.role === "kitchen"
+        ? [{ page: { name: "kitchen" }, label: "kitchen" }]
+        : STAFF_TABS.filter((tab) => staffTabVisible(tab, (slug) => userCan(user, slug))).map((name) => ({ page: { name } as Page, label: name }));
 
   const tabs = roleTabs.filter((t) => navTabVisible(t.page.name, user.role, isEnabled) && (t.page.name !== "inventory" || modules.isActive("inventory")));
 

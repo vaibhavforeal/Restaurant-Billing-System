@@ -15,7 +15,7 @@ const TABS = ["Customers", "Segments", "Feedback", "Insights", "Settings"] as co
 type Tab = typeof TABS[number];
 
 /** CRM and loyalty: customer profiles, segments, feedback, insights and (admin) the loyalty programme's settings. */
-export function Customers({ isAdmin }: { isAdmin: boolean }) {
+export function Customers({ isAdmin, canExport }: { isAdmin: boolean; canExport: boolean }) {
   const [tab, setTab] = useState<Tab>("Customers");
   const [types, setTypes] = useState<CustomerType[]>([]);
   const [tiers, setTiers] = useState<LoyaltyTier[]>([]);
@@ -32,7 +32,7 @@ export function Customers({ isAdmin }: { isAdmin: boolean }) {
       </div>
     </div>
     {tab === "Customers" && <CustomerDirectory types={types} isAdmin={isAdmin} />}
-    {tab === "Segments" && <CustomerSegments types={types} tiers={tiers} canExport={isAdmin} />}
+    {tab === "Segments" && <CustomerSegments types={types} tiers={tiers} canExport={canExport} />}
     {tab === "Feedback" && <CustomerFeedback />}
     {tab === "Insights" && <CrmInsights />}
     {tab === "Settings" && isAdmin && <>

@@ -8,6 +8,7 @@ import type { ModuleGroup, ModuleInfo } from "@forkflow/domain/modules";
 import type { Page } from "../NavBar";
 import { ZomatoSettingsDialog } from "./ZomatoConnection";
 import "../marketplace.css";
+import { userCan } from "../permissions";
 
 const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen", customers: "Customers" };
 
@@ -35,14 +36,14 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
 
   return <section className="screen marketplace-screen">
     <div className="page-header"><div><h2>Marketplace</h2><p>Add-ons and modules for this restaurant</p></div></div>
-    <p className="marketplace-note">ForkFlow decides which add-ons and modules this restaurant can use. {user.role === "admin" ? "You can turn an included one off here and back on later." : "Only an admin can turn them on or off."}</p>
+    <p className="marketplace-note">ForkFlow decides which add-ons and modules this restaurant can use. {userCan(user, "integrations.configure") ? "You can turn an included one off here and back on later." : "Only an admin can turn them on or off."}</p>
     <h3 className="marketplace-section">Add-ons</h3>
     {!ready && <p role="status">Loading integrations…</p>}
     {ready && integrations.length === 0 && <div className="panel marketplace-empty" role="status"><p>Integrations could not be loaded.</p><button onClick={refresh}>Try again</button></div>}
     <ul className="marketplace-grid" aria-label="Integrations">
       {integrations.map((info) => {
         const label = statusLabel(info);
-        const interactive = canToggle(info, user.role);
+        const interactive = canToggle(info, userCan(user, "integrations.configure"));
         const busy = pending.has(info.id);
         const error = errors[info.id];
         return <li key={info.id} className="panel marketplace-card">
@@ -54,8 +55,8 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
           {!info.licensed && info.status === "available" && <p className="marketplace-plan-note">Not included for this restaurant. Contact ForkFlow to add it.</p>}
           {error && <p role="alert" className="marketplace-error">{error}</p>}
           <div className="marketplace-card-foot">
-            {!info.licensed && info.status === "available" && user.role === "admin" ? <button onClick={() => onNavigate({ name: "settings", section: "plan" })}>View licence</button>
-              : info.id === "zomato" && info.enabled && info.status === "available" && user.role === "admin" ? <button onClick={() => setZomatoSettings(true)}>Settings</button> : <span />}
+            {!info.licensed && info.status === "available" && userCan(user, "settings.manage") ? <button onClick={() => onNavigate({ name: "settings", section: "plan" })}>View licence</button>
+              : info.id === "zomato" && info.enabled && info.status === "available" && userCan(user, "zomato.configure") ? <button onClick={() => setZomatoSettings(true)}>Settings</button> : <span />}
             <button
               type="button" role="switch" className="marketplace-switch"
               aria-checked={info.status === "available" && info.enabled}
@@ -70,7 +71,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
     </ul>
     <ModuleSection group="service" title="Service modules" user={user} />
     <ModuleSection group="backoffice" title="Back-office modules" user={user} />
-    {user.role === "admin" && <ZomatoSettingsDialog open={zomatoSettings} canEdit onClose={() => setZomatoSettings(false)} />}
+    {userCan(user, "zomato.configure") && <ZomatoSettingsDialog open={zomatoSettings} canEdit onClose={() => setZomatoSettings(false)} />}
   </section>;
 }
 
@@ -109,7 +110,7 @@ function ModuleSection({ group, title, user }: { group: ModuleGroup; title: stri
     <h3 className="marketplace-section">{title}</h3>
     <ul className="marketplace-grid" aria-label={title}>
       {list.map((m) => {
-        const interactive = user.role === "admin" && (m.enabled || m.allowed);
+        const interactive = userCan(user, "integrations.configure") && (m.enabled || m.allowed);
         const busy = pending.has(m.id);
         return <li key={m.id} className="panel marketplace-card">
           <div className="marketplace-card-head">

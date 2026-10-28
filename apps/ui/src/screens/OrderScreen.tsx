@@ -19,6 +19,7 @@ import { useNavigationGuard } from "../navigation-guard";
 import { useIntegrations } from "../integrations";
 import "../product-editor.css";
 import "../order-screen.css";
+import { userCan } from "../permissions";
 
 // A status line to show on the next order screen: a merge switches screens, which would otherwise drop it.
 let carriedStatus: { orderId: string; text: string; at: number } | null = null;
@@ -112,7 +113,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       focusCartOnSwitch.current = false;
     }
   }, [mobilePane]);
-  const isQuick = quickBilling && order?.type === "parcel" && (user.role === "admin" || user.role === "cashier");
+  const isQuick = quickBilling && order?.type === "parcel" && userCan(user, "bills.settle");
   const locked = pending || billingBusy;
   const canLeave = () => {
     if (!actionLock.current && !billingLock.current) return true;
@@ -298,7 +299,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       if (!window.confirm(`Cancel ${item.name}?`)) return;
       void run(() => apiFetch(`/api/order-items/${item.id}/cancel`, { method: "POST", body: JSON.stringify({}) }));
     } else if (item.status === "sent") {
-      if (user.role !== "admin" && user.role !== "cashier") return;
+      if (!userCan(user, "orders.cancel_sent")) return;
       const reason = window.prompt(`Cancel ${item.name}?\nReason (required):`);
       if (!reason?.trim()) return;
       void run(() => apiFetch(`/api/order-items/${item.id}/cancel`, { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }));
@@ -308,7 +309,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   /** Change a sent item's note, or (admin/cashier) cut its quantity. The removed units are cancelled with the reason. */
   function editSentItem(item: OrderItem) {
     if (actionLock.current || billingLock.current || item.status !== "sent") return;
-    const canCut = user.role === "admin" || user.role === "cashier";
+    const canCut = userCan(user, "orders.cancel_sent");
     let qty = item.qty;
     if (canCut && item.qty > 1) {
       const raw = window.prompt(`${item.name}: new quantity (1 to ${item.qty}). To add more, add the dish again.`, String(item.qty));
@@ -484,7 +485,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             <span>{order.captainName || "Select captain"}</span><span aria-hidden="true">⌄</span>
           </button>
         </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>}
-        {!captain && crm && <OrderCustomer order={order} canAdd={user.role === "admin" || user.role === "cashier"} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
+        {!captain && crm && <OrderCustomer order={order} canAdd={userCan(user, "customers.manage")} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
         {order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
           {takeawayTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select></label>}
@@ -579,7 +580,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong><span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}</div>
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
             {order.status === "open" && item.status === "sent" && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
-            {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || user.role === "admin" || user.role === "cashier") && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
+            {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || userCan(user, "orders.cancel_sent")) && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
           </div>)}
         </div>}
         </div>
@@ -588,7 +589,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total"><div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
         {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || (!draft.length && !hasKitchenPending)}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button></div> : <div className="cart-actions">{!isQuick && draft.length > 0 && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked}>{shortcut("save_items", "Punch")}</button>}{!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || (!draft.length && !hasKitchenPending)}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}{canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}</div>)}
-        {!captain && (user.role === "admin" || user.role === "cashier") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
+        {!captain && userCan(user, "bills.create") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
         {isQuick && order.status === "settled" && onNextTakeaway && <button className="primary next-takeaway" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Next takeaway")} disabled={locked} onClick={() => { if (canLeave()) onNextTakeaway(); }}>Next takeaway</button>}
         </div>
       </aside>

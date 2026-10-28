@@ -99,7 +99,7 @@ export function CreditNoteDialog({ kind, bill, items, role, printers, printerId,
   kind: "void" | "refund" | null;
   bill: Bill;
   items: OrderItem[];
-  role: "admin" | "cashier";
+  role: "admin" | "cashier" | "waiter" | "kitchen";
   printers: Printer[];
   printerId: string;
   onClose: () => void;
@@ -115,7 +115,7 @@ export function CreditNoteDialog({ kind, bill, items, role, printers, printerId,
 }
 
 function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange, onClose, onIssued, onStale }: {
-  kind: "void" | "refund"; bill: Bill; items: OrderItem[]; role: "admin" | "cashier"; printers: Printer[]; printerId: string;
+  kind: "void" | "refund"; bill: Bill; items: OrderItem[]; role: "admin" | "cashier" | "waiter" | "kitchen"; printers: Printer[]; printerId: string;
   onBusyChange: (busy: boolean) => void; onClose: () => void; onIssued: (result: IssuedCredit) => void; onStale: () => void;
 }) {
   const billable = items.filter((item) => item.status !== "cancelled");
@@ -165,7 +165,8 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     : parsed.some((row) => row.amountPaise === null) ? "Enter a valid refund amount"
     : refundRowsError(parsed.filter((row) => row.amountPaise).map((row) => ({ mode: row.mode, amountPaise: row.amountPaise! })), refundTotal, preview.refundable);
   const reason = creditReason(pick, detail);
-  const needsPin = role === "cashier";
+  // Anyone but an admin needs an admin's PIN to void or refund, even with the permission.
+  const needsPin = role !== "admin";
   const pinValid = !needsPin || /^\d{4,6}$/.test(pin);
   const ready = !!preview && preview.key === key && !loadingPreview && !rowsError && reason.length > 0 && reason.length <= 200 && pinValid && (!needsItems || lines.length > 0);
   const confirmLabel = busy ? "Saving…" : kind === "void" ? "Void bill" : preview ? `Refund ${money(preview.totals.totalPaise)} as credit note` : "Refund as credit note";

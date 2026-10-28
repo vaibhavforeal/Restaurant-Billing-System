@@ -8,12 +8,14 @@ import { SalesDashboard } from "../SalesDashboard";
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
 import { useModules } from "../modules";
+import { userCan } from "../permissions";
 
 export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const { isEnabled } = useIntegrations();
   const modules = useModules();
-  const financial = user.role === "admin" || user.role === "cashier";
+  const financial = userCan(user, "reports.read");
+  const canQuickBill = userCan(user, "bills.settle");
   const [stats, setStats] = useState<{ free: number; orders: number; billed: number } | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -32,7 +34,7 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
   }, [financial]);
   const links: Array<{ page: Page; icon: IconName; title: string }> = [
     { page: { name: "tables" }, icon: "tables", title: "Tables" },
-    ...(user.role === "admin" || user.role === "cashier" ? [
+    ...(financial ? [
       ...(isEnabled("kds") ? [{ page: { name: "kitchen" } as Page, icon: "kitchen" as const, title: "Kitchen" }] : []),
       { page: { name: "bills" } as Page, icon: "bills" as const, title: "Bills" },
       { page: { name: "reports" } as Page, icon: "reports" as const, title: "Reports & Analytics" },
@@ -43,11 +45,11 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
       <h2>Dashboard</h2>
       <div className="actions">
         <button className="button-icon" onClick={() => onNavigate({ name: "tables" })}><Icon name="plus" size={17} />New order</button>
-        {(user.role === "admin" || user.role === "cashier") && modules.isActive("takeaway") && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => onNavigate({ name: "takeaway" })}><Icon name="bag" size={17} />{shortcut("takeaway", "Takeaway")}</button>}
+        {canQuickBill && modules.isActive("takeaway") && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => onNavigate({ name: "takeaway" })}><Icon name="bag" size={17} />{shortcut("takeaway", "Takeaway")}</button>}
       </div>
     </div>
     {!financial && error && <p className="alert" role="status">{error}</p>}
-    {financial && modules.isActive("dashboard") && <SalesDashboard onNavigate={onNavigate} canManage={user.role === "admin"} />}
+    {financial && modules.isActive("dashboard") && <SalesDashboard onNavigate={onNavigate} canManage={userCan(user, "integrations.configure")} />}
     {!financial && <div className="stat-grid" aria-label="Live service counts">
       {[
         { label: "Open orders", value: stats?.orders },

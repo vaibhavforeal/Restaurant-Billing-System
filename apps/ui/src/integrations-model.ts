@@ -14,8 +14,20 @@ export function statusLabel(info: IntegrationInfo): "Enabled" | "Disabled" | "Co
 }
 
 /** Admins may switch an available integration; without the licence they may only switch it off (a downgrade can leave it on). */
-export function canToggle(info: IntegrationInfo, role: User["role"]): boolean {
-  return role === "admin" && info.status === "available" && (info.licensed || info.enabled);
+export function canToggle(info: IntegrationInfo, canConfigure: boolean): boolean {
+  return canConfigure && info.status === "available" && (info.licensed || info.enabled);
+}
+
+/** The sidebar tabs for staff in the full POS, in order. */
+export const STAFF_TABS = ["home", "tables", "reports", "customers", "inventory", "kitchen", "catalog", "users", "marketplace", "settings"] as const;
+/** The permission each tab needs; Home is always there. */
+const TAB_PERMISSION: Record<typeof STAFF_TABS[number], string | null> = {
+  home: null, tables: "tables.read", reports: "reports.read", customers: "customers.read", inventory: "stock.read",
+  kitchen: "kots.read", catalog: "catalog.manage", users: "users.manage", marketplace: "integrations.read", settings: "settings.manage",
+};
+export function staffTabVisible(tab: typeof STAFF_TABS[number], can: (slug: string) => boolean): boolean {
+  const needed = TAB_PERMISSION[tab];
+  return needed === null || can(needed);
 }
 
 const TAB_INTEGRATION: Partial<Record<Page["name"], IntegrationId>> = { kitchen: "kds", customers: "crm" };

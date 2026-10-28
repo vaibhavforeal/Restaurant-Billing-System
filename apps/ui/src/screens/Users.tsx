@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch } from "../api";
 import type { AdminUser } from "../types";
 import { DiscountCaps } from "./DiscountCaps";
+import { StaffPermissions } from "./StaffPermissions";
+import "../staff-permissions.css";
 
 const ROLES: AdminUser["role"][] = ["admin", "cashier", "waiter", "kitchen"];
 
@@ -14,6 +16,7 @@ export function Users() {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState<AdminUser | null>(null);
 
   async function reload() {
     const staff = await apiFetch<{ users: AdminUser[] }>("/api/users");
@@ -99,6 +102,7 @@ export function Users() {
               <td>{u.isActive ? "active" : "inactive"}</td>
               <td style={{ display: "flex", gap: 4, padding: 4 }}>
                 <button onClick={() => setUserPin(u)}>Set PIN</button>
+                {u.role !== "admin" && <button aria-pressed={editing?.id === u.id} onClick={() => setEditing(u)}>Permissions{u.permissionChanges ? ` (${u.permissionChanges} changed)` : ""}</button>}
                 <button onClick={() => patchUser(u.id, { isActive: !u.isActive })}>
                   {u.isActive ? "Deactivate" : "Activate"}
                 </button>
@@ -109,6 +113,7 @@ export function Users() {
       </table>
       </div>
       </fieldset>
+      {editing && <StaffPermissions key={editing.id} user={editing} onClose={() => setEditing(null)} onSaved={() => { void reload(); setMessage(`Permissions saved for ${editing.name}.`); }} />}
       <DiscountCaps />
     </div>
   );

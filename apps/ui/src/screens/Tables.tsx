@@ -19,6 +19,7 @@ import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
 import "../tables-overview.css";
 import { useModules } from "../modules";
+import { userCan } from "../permissions";
 
 export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false }: { user: User; qrInbox?: number | undefined; onOpenOrder: (orderId: string) => void; onTakeaway: () => void; captain?: boolean }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
@@ -205,11 +206,12 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     }
   }, [tables, pickerTableId]);
 
-  const isAdmin = !captain && user.role === "admin";
+  // Managing tables and their QR codes; quick billing (takeaway, Zomato) needs "take payment".
+  const isAdmin = !captain && userCan(user, "tables.manage");
   const modules = useModules();
   const takeawayOn = modules.isActive("takeaway");
   const qrOn = modules.isActive("qrOrdering");
-  const canQuickBill = !captain && (isAdmin || user.role === "cashier");
+  const canQuickBill = !captain && userCan(user, "bills.settle");
   // Zomato is for admin and cashier. While it is off, orders still open stay visible so they can be finished, but no new ones start.
   const zomatoList = canQuickBill ? zomatoOrders(orders) : [];
   const zomatoOn = canQuickBill && isEnabled("zomato");

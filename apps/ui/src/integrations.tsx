@@ -3,6 +3,7 @@ import type { IntegrationId, IntegrationInfo } from "@forkflow/domain/integratio
 import { ApiError, apiFetch, session, type User } from "./api";
 import { isEnabled as listHas, nextList } from "./integrations-model";
 import { connectWs } from "./ws";
+import { userCan } from "./permissions";
 
 interface IntegrationsValue {
   integrations: IntegrationInfo[];
@@ -21,7 +22,7 @@ export function useIntegrations(): IntegrationsValue {
 
 /** One shared copy of the Marketplace state. Only admin and cashier can read it; other roles get an empty list. */
 export function IntegrationsProvider({ user, children }: { user: User; children: ReactNode }) {
-  const allowed = user.role === "admin" || user.role === "cashier";
+  const allowed = userCan(user, "integrations.read");
   const [integrations, setIntegrations] = useState<IntegrationInfo[]>([]);
   const [ready, setReady] = useState(!allowed);
   const latest = useRef(0);

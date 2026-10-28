@@ -1,0 +1,11 @@
+.staff-permissions { margin: 16px 0; }
+.staff-permissions-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.staff-permissions-head h3 { margin: 0; }
+.staff-permissions-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 20px; border: 0; padding: 0; margin: 12px 0; min-width: 0; }
+.staff-permissions-area h4 { margin: 0 0 6px; font-size: 14px; }
+.staff-permissions-area p { margin: 0; font-size: 13px; }
+.staff-permission { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 14px; }
+.staff-permission small { padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.staff-permission-added { background: var(--pos-success-bg, #e3f4e8); color: var(--success-text, #1e6b3a); }
+.staff-permission-removed { background: var(--red-light, #fbe3e5); color: var(--danger-text, #9b1c2a); }
+.staff-permissions-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }

@@ -7,6 +7,7 @@ import { isDesktopShell, openInDesktopShell, showPendingMessage } from "../check
 import { useNavigationGuard } from "../navigation-guard";
 import { SystemSettings } from "./SystemSettings";
 import "../license-settings.css";
+import { userCan } from "../permissions";
 
 interface LicenseContextValue { status: LicenseStatus | null; error: string; refresh(): Promise<void> }
 const LicenseContext = createContext<LicenseContextValue | null>(null);
@@ -46,7 +47,7 @@ export function LicenseGate({ user, children }: { user: User; children: ReactNod
     {error && <button onClick={() => { void state.refresh(); }}>Retry license check</button>}</main>;
   return <LicenseContext.Provider value={state}>
     {!status.canOperate ? <main className="workspace license-recovery" id="main-content">
-      {user.role === "admin" ? <><LicenseSettings /><SystemSettings backupOnly /></> : <><p role="alert">{status.message}</p><p>Ask your administrator to activate this installation or register this device.</p>
+      {userCan(user, "settings.manage") ? <><LicenseSettings /><SystemSettings backupOnly /></> : <><p role="alert">{status.message}</p><p>Ask your administrator to activate this installation or register this device.</p>
         <button onClick={() => { void state.refresh(); }}>Check again</button>{error && <p role="alert">{error}</p>}</>}
     </main> : <>
       {error && <p className="panel" role="status">Plan status could not refresh: {error} <button onClick={() => { void state.refresh(); }}>Retry</button></p>}

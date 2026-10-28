@@ -7,6 +7,7 @@ import { uuid } from "../uuid";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import "../reservations.css";
 import { useModules } from "../modules";
+import { userCan } from "../permissions";
 
 interface Editor { id: string | null; version: number; clientRef: string; input: ReservationInput; original: string }
 const statusText = { booked: "Booked", seated: "Seated", cancelled: "Cancelled", no_show: "No-show" };
@@ -16,7 +17,7 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
   onOpenOrder: (id: string) => void; onChanged: () => void;
   onBusyChange: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void;
 }) {
-  const canManage = user.role === "admin" || user.role === "cashier";
+  const canManage = userCan(user, "reservations.manage");
   // Without the Reservations module nothing new is booked or changed; existing bookings can still be seated or cancelled.
   const bookable = useModules().isActive("reservations");
   const [date, setDate] = useState("");

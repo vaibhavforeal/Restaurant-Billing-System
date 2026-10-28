@@ -17,6 +17,7 @@ import { readPreference, savePreference, useShortcutLabels } from "../pos-shortc
 import { billPaymentLabel, billTaxRates, gstNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
+import { useCan } from "../permissions";
 
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
@@ -45,7 +46,7 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
   </div>;
 }
 
-export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Void and refund are offered to admins and cashiers only. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
+export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -53,6 +54,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const [reason, setReason] = useState("");
   const [approverPin, setApproverPin] = useState("");
   const [redeem, setRedeem] = useState("");
+  const can = useCan();
   const crm = useIntegrations().isEnabled("crm");
   // The most points the last preview allowed on this bill; kept while the cashier edits the amount.
   const [redeemCap, setRedeemCap] = useState<number | null>(null);
@@ -263,7 +265,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
   const zomatoDesk = order.type === "zomato";
   const zomatoAction = zomatoCardAction(order);
   const zomatoPill = order.zomatoStatus ?? "new";
-  const canVoid = !!bill && !zomatoBill && (role === "admin" || role === "cashier") && bill.status !== "void" && bill.refundState !== "refunded";
+  const canVoid = !!bill && !zomatoBill && can("bills.refund") && bill.status !== "void" && bill.refundState !== "refunded";
   const canRefund = canVoid && bill?.status === "paid" && bill.totalPaise > 0;
   // A cancelled order with no bill has nothing to bill; a voided bill on a cancelled order stays viewable.
   if (order.status === "cancelled" && !bill) return null;
@@ -370,6 +372,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
       </div>
     </dialog>, document.body)}
     {bill && <UpiQrPreview billId={bill.id} open={showQr && canShowQr} onClose={() => setShowQr(false)} />}
-    {bill && !zomatoBill && (role === "admin" || role === "cashier") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
+    {bill && !zomatoBill && can("bills.refund") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role ?? "cashier"} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
   </section>;
 }

@@ -4,6 +4,7 @@ import { useNavigationGuard } from "../navigation-guard";
 import type { Order } from "../types";
 import { uuid } from "../uuid";
 import { OrderScreen } from "./OrderScreen";
+import { userCan } from "../permissions";
 
 interface SavedTakeaway {
   version: 1;
@@ -72,7 +73,7 @@ export function QuickTakeaway({ user, onBack, onOpenOrder }: {
   onOpenOrder: (orderId: string) => void;
 }) {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
-  if (user.role !== "admin" && user.role !== "cashier") {
+  if (!userCan(user, "bills.settle")) {
     return <section className="screen"><h2>Takeaway</h2><p role="alert">Quick billing is available to cashiers and administrators.</p><button onClick={onBack}>Back to tables</button></section>;
   }
   // The loading component owns its navigation guard only while OrderScreen is

@@ -79,6 +79,8 @@ export interface AdminUser {
   createdAt: number;
   /** Overrides the role's discount limit; null follows the role. */
   maxDiscountPercent: number | null;
+  /** How many permissions differ from the person's role (always 0 for admins). */
+  permissionChanges?: number;
 }
 
 export interface SettingsData {

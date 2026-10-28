@@ -60,4 +60,6 @@ export interface User {
   id: string;
   name: string;
   role: "admin" | "cashier" | "waiter" | "kitchen";
+  /** Every permission this person holds: their role's, with the admin's changes for them applied. */
+  permissions: string[];
 }

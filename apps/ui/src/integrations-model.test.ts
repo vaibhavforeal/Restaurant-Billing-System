@@ -22,10 +22,10 @@ describe("integrations model", () => {
   });
 
   it("canToggle needs an admin and an available integration", () => {
-    expect(canToggle(zomato, "admin")).toBe(true);
-    expect(canToggle(zomato, "cashier")).toBe(false);
-    expect(canToggle(zomato, "waiter")).toBe(false);
-    expect(canToggle(swiggy, "admin")).toBe(false);
+    expect(canToggle(zomato, true)).toBe(true);
+    expect(canToggle(zomato, false)).toBe(false);
+    expect(canToggle(zomato, false)).toBe(false);
+    expect(canToggle(swiggy, true)).toBe(false);
   });
 
   it("treats an add-on ForkFlow has not included as off and labels it Not included", () => {
@@ -36,10 +36,10 @@ describe("integrations model", () => {
   });
 
   it("lets an admin turn an unlicensed integration off but never on", () => {
-    expect(canToggle({ ...kds, licensed: false }, "admin")).toBe(false);
-    expect(canToggle({ ...kds, enabled: true, licensed: false }, "admin")).toBe(true);
-    expect(canToggle({ ...kds, enabled: true, licensed: false }, "cashier")).toBe(false);
-    expect(canToggle(kds, "admin")).toBe(true);
+    expect(canToggle({ ...kds, licensed: false }, true)).toBe(false);
+    expect(canToggle({ ...kds, enabled: true, licensed: false }, true)).toBe(true);
+    expect(canToggle({ ...kds, enabled: true, licensed: false }, false)).toBe(false);
+    expect(canToggle(kds, true)).toBe(true);
   });
 
   it("navTabVisible gates the Kitchen tab but never the kitchen role's own tab", () => {

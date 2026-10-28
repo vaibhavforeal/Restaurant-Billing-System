@@ -33,8 +33,9 @@ import { listenForAndroidBack } from "./android-back";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
-import { canReconcileZomato } from "./zomato-desk";
 import "./compact-workspace.css";
+import { CurrentUserProvider, userCan } from "./permissions";
+import { connectWs } from "./ws";
 
 type State =
   | { kind: "loading" }
@@ -65,7 +66,7 @@ function KitchenRoute({ user, onNavigate }: { user: User; onNavigate: (page: Pag
   const { ready, isEnabled } = useIntegrations();
   if (user.role === "kitchen") return <Kitchen />;
   if (!ready) return <p role="status">Loading kitchen display…</p>;
-  if (!isEnabled("kds")) return <IntegrationOff name="Kitchen Display" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  if (!isEnabled("kds")) return <IntegrationOff name="Kitchen Display" canManage={userCan(user, "integrations.configure")} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
   return <Kitchen />;
 }
 
@@ -73,8 +74,8 @@ function KitchenRoute({ user, onNavigate }: { user: User; onNavigate: (page: Pag
 function CustomersRoute({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { ready, isEnabled } = useIntegrations();
   if (!ready) return <p role="status">Loading customers…</p>;
-  if (!isEnabled("crm")) return <IntegrationOff name="CRM & Loyalty" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
-  return <Customers isAdmin={user.role === "admin"} />;
+  if (!isEnabled("crm")) return <IntegrationOff name="CRM & Loyalty" canManage={userCan(user, "integrations.configure")} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  return <Customers isAdmin={userCan(user, "settings.manage")} canExport={userCan(user, "crm.export")} />;
 }
 
 /** A page that belongs to a module: while the module is not available it explains why instead. */
@@ -82,7 +83,7 @@ function ModuleRoute({ id, user, onNavigate, children }: { id: ModuleId; user: U
   const { ready, modules } = useModules();
   const state = modules.find((m) => m.id === id);
   if (!ready) return <p role="status">Loading…</p>;
-  if (!state?.active) return <ModuleOff module={state ?? null} canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  if (!state?.active) return <ModuleOff module={state ?? null} canManage={userCan(user, "integrations.configure")} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
   return <>{children}</>;
 }
 
@@ -99,6 +100,19 @@ function StaffApp() {
     const page: Page = user.role === "kitchen" ? { name: "kitchen" } : captainEntry || user.role === "waiter" ? { name: "tables" } : { name: "home" };
     setState({ kind: "in", user, page });
   }
+  // When an admin changes this person's role or permissions, refresh what they may do without signing them out.
+  const signedInId = state.kind === "in" ? state.user.id : null;
+  useEffect(() => {
+    if (!signedInId) return;
+    return connectWs({
+      onEvent: (event, data) => {
+        if (event !== "user.changed" || (data as { userId?: string } | null)?.userId !== signedInId) return;
+        void apiFetch<{ user: User }>("/api/me").then(({ user }) => setState((current) => current.kind === "in" && current.user.id === user.id ? { ...current, user } : current)).catch(() => undefined);
+      },
+      onStatus: () => {},
+      onAuthFail: () => session.clear(),
+    });
+  }, [signedInId]);
   const pageKey = state.kind === "in" ? state.page.name === "order" ? state.page.orderId : state.page.name : state.kind;
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); }, [pageKey]);
 
@@ -144,14 +158,14 @@ function StaffApp() {
     case "in": {
       const { user, page } = state;
       const captain = user.role === "waiter" || (captainEntry && user.role !== "kitchen");
-      const canQuickBill = !captain && (user.role === "admin" || user.role === "cashier");
+      const canQuickBill = !captain && userCan(user, "bills.settle");
       const canLeave = () => Array.from(navigationGuard.current).every(guard => guard());
       const go = (next: Page) => { if ((next.name !== "takeaway" || canQuickBill) && canLeave()) setState({ kind: "in", user, page: next }); };
       const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
       const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
       androidBack.current = () => { if (page.name === "tables") return false; if (canLeave()) onBack(); return true; };
       return (
-        <NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><ModulesProvider key={user.id}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
+        <CurrentUserProvider user={user}><NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><ModulesProvider key={user.id}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
@@ -164,19 +178,19 @@ function StaffApp() {
           {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
-          {page.name === "catalog" && <Catalog />}
-          {page.name === "users" && <Users />}
-          {page.name === "settings" && <Settings key={page.section ?? ""} section={page.section} />}
+          {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}
+          {page.name === "users" && userCan(user, "users.manage") && <Users />}
+          {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
-          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} canSettle={user.role === "admin" || user.role === "cashier"} onOpenOrder={onOpenOrder} />}
+          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <ModuleRoute id="inventory" user={user} onNavigate={go}><Inventory user={user} /></ModuleRoute>}
-          {page.name === "customers" && (user.role === "admin" || user.role === "cashier") && <CustomersRoute user={user} onNavigate={go} />}
-          {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
+          {page.name === "customers" && userCan(user, "customers.read") && <CustomersRoute user={user} onNavigate={go} />}
+          {page.name === "marketplace" && userCan(user, "integrations.read") && <Marketplace user={user} onNavigate={go} />}
           </main>
           </QrNotifications>
           </LicenseGate>
           </div>
-        </div></ModulesProvider></IntegrationsProvider></NavigationGuardContext.Provider>
+        </div></ModulesProvider></IntegrationsProvider></NavigationGuardContext.Provider></CurrentUserProvider>
       );
     }
   }
