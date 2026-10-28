@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { can } from "@forkflow/core";
-import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7, roleFor,
+import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7,
   type StockRow, type StockLink, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { httpError } from "./http-error.js";
 import { assertModuleActive, moduleActive, requireModule } from "./modules.js";
+import { userCan } from "./auth.js";
 
 /** Publish only after the caller has committed the transaction. */
 export function publishStock(app: FastifyInstance, ids: string[]) {
@@ -74,7 +74,7 @@ export function registerStock(app: FastifyInstance) {
     const requestJson = JSON.stringify({ stockItemId: id, ...body });
     // Priced receiving needs the cost permission and Dish costing; refuse before anything is written.
     if (body.costPaise !== undefined) {
-      if (!can(roleFor(req.user.role), "costs.read")) throw httpError(403, "Not allowed to record cost");
+      if (!userCan(req.user, "costs.read")) throw httpError(403, "Not allowed to record cost");
       assertModuleActive(db, "costing");
     }
     const result = db.transaction(() => {
@@ -101,7 +101,7 @@ export function registerStock(app: FastifyInstance) {
     const { id } = req.params as { id: string }; item(id);
     const { before } = z.object({ before: z.string().min(1).max(64).optional() }).parse(req.query);
     // Cost is admin-only and part of Dish costing; everyone else gets no cost keys at all.
-    const showCost = can(roleFor(req.user.role), "costs.read") && moduleActive(db, "costing");
+    const showCost = userCan(req.user, "costs.read") && moduleActive(db, "costing");
     const moves = db.prepare(`SELECT m.id, m.stock_item_id AS stockItemId, m.delta, m.reason, m.note,
       m.order_item_id AS orderItemId, oi.order_id AS orderId, m.reversal_of AS reversalOf,
       m.created_at AS createdAt, u.name AS createdByName, m.balance_after AS balanceAfter${showCost ? ", m.cost_paise AS costPaise" : ""}

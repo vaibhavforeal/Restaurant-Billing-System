@@ -1,7 +1,6 @@
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, nextSplitLabel } from "@forkflow/domain";
 import { z } from "zod";
 import { rowPrice, tablePriceTier, type PriceRow } from "./pricing.js";
-import { can } from "@forkflow/core";
 import { readGstSettings } from "./gst-settings.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import type { FastifyInstance } from "fastify";
@@ -16,6 +15,7 @@ import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { integrationEnabled } from "./integrations.js";
 import { takeawayOrderType } from "./order-types.js";
 import { assertModuleActive } from "./modules.js";
+import { userCan } from "./auth.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -48,7 +48,7 @@ export function registerOrders(app: FastifyInstance): void {
   app.post("/api/orders", { preHandler: create }, async (req, reply) => {
     const body = OrderCreate.parse(req.body);
     // Zomato orders are quick-billing work: admin and cashier only (same rule as canQuickBill in the UI).
-    if (body.type === "zomato" && req.user.role !== "admin" && req.user.role !== "cashier") throw httpError(403, "Not allowed to create Zomato orders");
+    if (body.type === "zomato" && !userCan(req.user, "bills.settle")) throw httpError(403, "Not allowed to create Zomato orders");
     const existing = app.db.prepare("SELECT id FROM orders WHERE client_ref = ?").get(body.clientRef) as { id: string } | undefined;
     if (existing) {
       return reply.status(200).send({ order: orderWithDetails(existing.id) });
@@ -285,7 +285,7 @@ export function registerOrders(app: FastifyInstance): void {
     if (item.status === "cancelled") throw httpError(409, "item already cancelled");
 
     if (item.status === "sent") {
-      if (!can(roleFor(req.user.role), "orders.cancel_sent")) {
+      if (!userCan(req.user, "orders.cancel_sent")) {
         return reply.status(403).send({ error: "forbidden", permission: "orders.cancel_sent" });
       }
       if (!body.reason) throw httpError(400, "reason required");

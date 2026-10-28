@@ -17,6 +17,7 @@
     "./licensing": "./src/licensing.ts",
     "./customers": "./src/customers.ts",
     "./modules": "./src/modules.ts",
+    "./staff-permissions": "./src/staff-permissions.ts",
     "./customer-segments": "./src/customer-segments.ts",
     "./updates": "./src/updates.ts"
   },

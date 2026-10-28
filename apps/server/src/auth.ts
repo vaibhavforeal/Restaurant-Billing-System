@@ -1,5 +1,5 @@
-import { hashPassword, verifyPassword, can } from "@forkflow/core";
-import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@forkflow/domain";
+import { hashPassword, verifyPassword } from "@forkflow/core";
+import { KNOWN_PERMISSIONS, LoginBody, SetupBody, effectivePermissions, staffCan, uuidv7, type PermissionOverrides, type RoleName, type Database } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
 import { deviceHash } from "./licensing.js";
@@ -10,6 +10,25 @@ export interface AuthedUser {
   id: string;
   name: string;
   role: RoleName;
+  /** Every known permission this person holds: their role's, with the admin's changes for them applied. */
+  permissions: string[];
+}
+
+/** The admin's per-person changes for one staff member (slug → allowed). */
+export function permissionOverrides(db: Database, userId: string): PermissionOverrides {
+  const rows = db.prepare("SELECT permission, allowed FROM user_permissions WHERE user_id = ?").all(userId) as Array<{ permission: string; allowed: number }>;
+  return Object.fromEntries(rows.map((r) => [r.permission, r.allowed === 1]));
+}
+
+export const authedUser = (db: Database, row: { id: string; name: string; role: RoleName }): AuthedUser =>
+  ({ id: row.id, name: row.name, role: row.role, permissions: effectivePermissions(row.role, permissionOverrides(db, row.id)) });
+
+/**
+ * Whether the signed-in person may do something. Known permissions come from their resolved list; anything else falls back
+ * to their role, since per-person changes only exist for known permissions.
+ */
+export function userCan(user: AuthedUser, slug: string): boolean {
+  return KNOWN_PERMISSIONS.includes(slug) ? user.permissions.includes(slug) : staffCan(user.role, {}, slug);
 }
 
 interface SessionRow {
@@ -31,7 +50,7 @@ function sessionRecord(db: Database, token: string): { user: AuthedUser; device:
     )
     .get(token) as SessionRow | undefined;
   if (!row || row.expires_at < Date.now() || !row.is_active) return null;
-  return { user: { id: row.user_id, name: row.name, role: row.role }, device: row.device };
+  return { user: authedUser(db, { id: row.user_id, name: row.name, role: row.role }), device: row.device };
 }
 
 export function sessionUser(db: Database, token: string): AuthedUser | null {
@@ -77,7 +96,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     return async (req, reply) => {
       const user = authenticate(req);
       if (!user) return reply.status(401).send({ error: "unauthenticated" });
-      if (!can(roleFor(user.role), slug)) {
+      if (!userCan(user, slug)) {
         return reply.status(403).send({ error: "forbidden", permission: slug });
       }
       req.user = user;
@@ -117,7 +136,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     write();
 
     const token = createSession(id, req.headers["x-forkflow-device"]);
-    return reply.status(201).send({ token, user: { id, name: body.adminName, role: "admin" } });
+    return reply.status(201).send({ token, user: authedUser(app.db, { id, name: body.adminName, role: "admin" }) });
   });
 
   app.post("/api/login", async (req, reply) => {
@@ -142,7 +161,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
         // Success: reset throttle
         throttle.clearPinFailures(ip);
         const token = createSession(u.id, req.headers["x-forkflow-device"]);
-        return { token, user: { id: u.id, name: u.name, role: u.role } };
+        return { token, user: authedUser(app.db, { id: u.id, name: u.name, role: u.role }) };
       }
     }
 

@@ -4,6 +4,7 @@ import { httpError } from "./http-error.js";
 import { issueBill, loadBill, settleBill } from "./billing.js";
 import { loadOrderJson, type OrderRow } from "./mappers.js";
 import { publishStock } from "./stock.js";
+import { userCan } from "./auth.js";
 
 type ZomatoStatus = NonNullable<OrderRow["zomato_status"]>;
 type Target = "ready" | "picked_up";
@@ -37,7 +38,7 @@ export function registerZomatoDesk(app: FastifyInstance): void {
   const db = app.db;
   // Not gated on the Marketplace switch: orders already on the desk must still close after Zomato is turned off.
   app.post("/api/orders/:id/zomato-status", { preHandler: app.requirePermission("bills.settle") }, async (req) => {
-    if (req.user.role !== "admin" && req.user.role !== "cashier") throw httpError(403, "Not allowed to update Zomato orders");
+    if (!userCan(req.user, "bills.settle")) throw httpError(403, "Not allowed to update Zomato orders");
     const { id } = req.params as { id: string };
     const body = ZomatoStatusUpdate.parse(req.body);
     const requestJson = JSON.stringify({ orderId: id, ...body });

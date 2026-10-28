@@ -1,5 +1,4 @@
-import { can } from "@forkflow/core";
-import { SentItemEdit, returnPartialStock, roleFor, uuidv7 } from "@forkflow/domain";
+import { SentItemEdit, returnPartialStock, uuidv7 } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
@@ -8,6 +7,7 @@ import { readProfile } from "./print/profile.js";
 import { contextLine, editSlip } from "./print/templates.js";
 import { publishStock } from "./stock.js";
 import { orderTableLabel } from "./table-label.js";
+import { userCan } from "./auth.js";
 
 type KotEditPrint = "ask" | "always" | "never";
 
@@ -28,7 +28,7 @@ export function registerKotEdits(app: FastifyInstance): void {
   app.post("/api/order-items/:id/edit-sent", { preHandler: app.requirePermission("orders.update") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = SentItemEdit.parse(req.body);
-    if (body.qty !== undefined && !can(roleFor(req.user.role), "orders.cancel_sent")) {
+    if (body.qty !== undefined && !userCan(req.user, "orders.cancel_sent")) {
       return reply.status(403).send({ error: "forbidden", permission: "orders.cancel_sent" });
     }
     const requestJson = JSON.stringify({ itemId: id, ...body });

@@ -1,5 +1,7 @@
 import { hashPassword, verifyPassword } from "@forkflow/core";
-import { UserCreate, UserUpdate, uuidv7, type RoleName } from "@forkflow/domain";
+import { PermissionOverridesSchema, UserCreate, UserUpdate, effectivePermissions, normaliseOverrides, roleDefaults, uuidv7, type RoleName } from "@forkflow/domain";
+import { z } from "zod";
+import { permissionOverrides } from "./auth.js";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 
@@ -42,7 +44,36 @@ export function registerUsers(app: FastifyInstance): void {
 
   app.get("/api/users", { preHandler: manage }, async () => {
     const rows = app.db.prepare("SELECT * FROM users ORDER BY created_at").all() as UserRow[];
-    return { users: rows.map(toUser) };
+    const changes = new Map((app.db.prepare("SELECT user_id, COUNT(*) AS n FROM user_permissions GROUP BY user_id").all() as Array<{ user_id: string; n: number }>).map((r) => [r.user_id, r.n]));
+    return { users: rows.map((r) => ({ ...toUser(r), permissionChanges: r.role === "admin" ? 0 : changes.get(r.id) ?? 0 })) };
+  });
+
+  /** A person's permissions: their role's defaults, the admin's changes for them, and the result. */
+  const permissionsJson = (row: UserRow) => {
+    const overrides = permissionOverrides(app.db, row.id);
+    return { role: row.role, defaults: roleDefaults(row.role), overrides, effective: effectivePermissions(row.role, overrides) };
+  };
+  app.get("/api/users/:id/permissions", { preHandler: manage }, async (req) => {
+    const row = getUser((req.params as { id: string }).id);
+    if (!row) throw httpError(404, "user not found");
+    return { permissions: permissionsJson(row) };
+  });
+  /** Replaces a person's changes. Admins always have everything; only real differences from the role are stored. */
+  app.put("/api/users/:id/permissions", { preHandler: manage }, async (req) => {
+    const row = getUser((req.params as { id: string }).id);
+    if (!row) throw httpError(404, "user not found");
+    if (row.role === "admin") throw httpError(409, "Admins always have every permission");
+    const { overrides } = z.object({ overrides: PermissionOverridesSchema }).strict().parse(req.body);
+    const changes = normaliseOverrides(row.role, overrides);
+    const now = Date.now();
+    app.db.transaction(() => {
+      app.db.prepare("DELETE FROM user_permissions WHERE user_id = ?").run(row.id);
+      const insert = app.db.prepare("INSERT INTO user_permissions (user_id, permission, allowed, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)");
+      for (const [permission, allowed] of Object.entries(changes)) insert.run(row.id, permission, allowed ? 1 : 0, now, req.user.id);
+    })();
+    // Screens of that person refresh what they can do without signing out.
+    app.broadcast("user.changed", { userId: row.id });
+    return { permissions: permissionsJson(row) };
   });
 
   app.post("/api/users", { preHandler: manage }, async (req, reply) => {
@@ -84,6 +115,7 @@ export function registerUsers(app: FastifyInstance): void {
       app.wsRevalidate();
     }
     if (body.isActive === false || (body.role !== undefined && body.role !== "waiter")) app.broadcast("table.changed", {});
+    if (body.role !== undefined && body.role !== row.role) app.broadcast("user.changed", { userId: id });
 
     return { user: toUser(getUser(id)!) };
   });

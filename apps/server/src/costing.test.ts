@@ -3,18 +3,10 @@ import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type OperationalReport, type StockItem, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { freshApp, setupAdmin, auth, createUser } from "./test-helpers.js";
 
-// Roles are code and only admins hold stock.manage, so a test hook lets one role name behave as a stock
-// manager without cost access.
-const roleOverrides = vi.hoisted(() => new Map<string, { name: string; permissions: string[] }>());
-vi.mock("@forkflow/domain", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@forkflow/domain")>();
-  return { ...actual, roleFor: (name: string) => roleOverrides.get(name) ?? actual.roleFor(name as Parameters<typeof actual.roleFor>[0]) };
-});
-
 describe("stock costing", () => {
   let app: FastifyInstance; let token: string;
   beforeEach(async () => { app = freshApp(); ({ token } = await setupAdmin(app)); });
-  afterEach(async () => { roleOverrides.clear(); await app.close(); app.db.close(); });
+  afterEach(async () => { await app.close(); app.db.close(); });
   const request = (method: "GET" | "POST" | "PATCH" | "PUT", url: string, payload?: object, as = token) =>
     app.inject({ method, url, headers: auth(as), ...(payload ? { payload } : {}) });
   async function stock(qty = 10, name = "Paneer"): Promise<StockItem> {
@@ -154,8 +146,10 @@ describe("stock costing", () => {
 
   it("refuses a priced purchase from a stock manager without cost access", async () => {
     const item = await stock();
-    const { token: manager } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
-    roleOverrides.set("cashier", { name: "cashier", permissions: ["stock.read", "stock.manage"] });
+    const { id: managerId, token: manager } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+    // A cashier the admin let edit stock, without cost access.
+    const granted = await request("PUT", `/api/users/${managerId}/permissions`, { overrides: { "stock.manage": true, "costs.read": false } });
+    expect(granted.statusCode, granted.body).toBe(200);
     const body = { clientRef: uuidv7(), expectedVersion: item.version, reason: "purchase", quantity: 5, note: "Invoice 9" };
     const priced = await request("POST", `/api/stock-items/${item.id}/movements`, { ...body, costPaise: 50_000 }, manager);
     expect(priced.statusCode).toBe(403);

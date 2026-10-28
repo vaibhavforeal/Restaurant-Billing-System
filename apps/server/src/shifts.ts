@@ -4,6 +4,7 @@ import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { dayBounds, dayEndReport } from "./reports.js";
 import { reportRange } from "./sales-reports.js";
+import { userCan } from "./auth.js";
 
 interface ShiftRow {
   id: string; cashier_id: string; opened_at: number; opening_float_paise: number; open_client_ref: string;
@@ -56,10 +57,10 @@ export function registerShifts(app: FastifyInstance): void {
   const db = app.db;
   const cashier = app.requirePermission("bills.settle");
   const getShift = (id: string) => db.prepare("SELECT * FROM shifts WHERE id = ?").get(id) as ShiftRow | undefined;
-  /** Staff work their own drawer; an admin may act on anyone's (for example to close a shift left open). */
+  /** Staff work their own drawer; whoever may close the day may act on anyone's (for example to close a shift left open). */
   function ownShift(req: FastifyRequest, id: string): ShiftRow {
     const shift = getShift(id);
-    if (!shift || (shift.cashier_id !== req.user.id && req.user.role !== "admin")) throw httpError(404, "shift not found");
+    if (!shift || (shift.cashier_id !== req.user.id && !userCan(req.user, "reports.close_day"))) throw httpError(404, "shift not found");
     return shift;
   }
 
