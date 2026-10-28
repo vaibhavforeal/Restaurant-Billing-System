@@ -2,7 +2,7 @@ import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
-  type Bill, type LicenseClaims, type RecipeUpdateInput, type StockItem, type StockLink, type StockUnit } from "@forkflow/domain";
+  type Bill, type LicenseClaims, type RecipeUpdateInput, type StockItem, type StockLink, type StockUnit, planModules } from "@forkflow/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP } from "./test-helpers.js";
@@ -35,10 +35,10 @@ async function fixture() {
   const request = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
-    revision: 1, plan: "pro", features: PLANS.pro.features, maxDevices: PLANS.pro.maxDevices,
+    revision: 1, plan: "pro", features: PLANS.pro.features, modules: planModules("pro"), maxDevices: PLANS.pro.maxDevices,
     issuedAt: now - 1000, expiresAt: now + 600_000, graceUntil: now + 1_200_000 };
   async function activate(plan: "basic" | "pro", revision: number) {
-    const next: LicenseClaims = { ...claims, plan, revision, features: PLANS[plan].features, maxDevices: PLANS[plan].maxDevices };
+    const next: LicenseClaims = { ...claims, plan, revision, features: PLANS[plan].features, modules: planModules(plan), maxDevices: PLANS[plan].maxDevices };
     const message = `ff1.${Buffer.from(JSON.stringify(next)).toString("base64url")}`;
     const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
     const response = await request("PUT", "/api/license", { license });

@@ -2,10 +2,25 @@
 import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { buildClaims as buildClaimsFromTerms, encodeEnvelope, type ActivationRequest } from "../packages/license-issuer/src/index.js";
 import type { LicenseClaims, Plan } from "../packages/domain/src/licensing.js";
+import { isModuleId, type ModuleOverrides } from "../packages/domain/src/modules.js";
 
 export { ActivationRequest, parseActivationRequest } from "../packages/license-issuer/src/index.js";
 
-export interface LicenseTerms { plan: Plan; months: number; graceDays: number }
+/** `modules` are the owner's choices for this restaurant; anything left out follows the plan. */
+export interface LicenseTerms { plan: Plan; months: number; graceDays: number; modules?: ModuleOverrides }
+
+/** Comma-separated module ids from --allow / --deny, e.g. "kds,crm". */
+export function moduleOverrides(allow = "", deny = ""): ModuleOverrides {
+  const overrides: ModuleOverrides = {};
+  for (const [list, value] of [[allow, true], [deny, false]] as const) {
+    for (const id of list.split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (!isModuleId(id)) throw new Error(`Unknown module "${id}"`);
+      if (overrides[id] !== undefined && overrides[id] !== value) throw new Error(`"${id}" is both allowed and denied`);
+      overrides[id] = value;
+    }
+  }
+  return overrides;
+}
 
 /** Adds calendar months in UTC, keeping the time of day. */
 function addMonths(ms: number, months: number): number {
@@ -18,7 +33,7 @@ export function buildClaims(request: ActivationRequest, terms: LicenseTerms, now
   if (!Number.isInteger(terms.months) || terms.months < 1 || terms.months > 120) throw new Error("Choose a whole number of months from 1 to 120");
   if (!Number.isInteger(terms.graceDays) || terms.graceDays < 0 || terms.graceDays > 90) throw new Error("Choose grace days from 0 to 90");
   const expiresAt = addMonths(now, terms.months);
-  return buildClaimsFromTerms(request, { plan: terms.plan, expiresAt, graceUntil: expiresAt + terms.graceDays * 24 * 60 * 60 * 1000 }, now, uuid);
+  return buildClaimsFromTerms(request, { plan: terms.plan, expiresAt, graceUntil: expiresAt + terms.graceDays * 24 * 60 * 60 * 1000, ...(terms.modules ? { modules: terms.modules } : {}) }, now, uuid);
 }
 
 function ed25519PrivateKey(privatePem: string) {

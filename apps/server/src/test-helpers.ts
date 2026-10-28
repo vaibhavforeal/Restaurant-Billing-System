@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { MIGRATIONS, PLANS, migrate, openDb, type IntegrationId, type Plan } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, migrate, openDb, planModules, type IntegrationId, type Plan } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer, type ServerOptions } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -98,7 +98,7 @@ export async function commercialApp(plan: Plan) {
   const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
   const now = Date.now();
   const claims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), revision: 1, plan,
-    maxDevices: PLANS[plan].maxDevices, features: PLANS[plan].features, issuedAt: now - 1000, expiresAt: now + 86_400_000, graceUntil: now + 2 * 86_400_000 };
+    maxDevices: PLANS[plan].maxDevices, features: PLANS[plan].features, modules: planModules(plan), issuedAt: now - 1000, expiresAt: now + 86_400_000, graceUntil: now + 2 * 86_400_000 };
   const message = `ff1.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
   const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
   const activated = await app.inject({ method: "PUT", url: "/api/license", payload: { license }, headers });

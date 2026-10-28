@@ -1,6 +1,6 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb } from "@forkflow/domain";
+import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb, planModules } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import type { LicensingOptions } from "./licensing.js";
 import { buildServer } from "./server.js";
@@ -32,7 +32,7 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
   expect(setup.statusCode).toBe(201);
   const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
-  const claims: LicenseClaims = { version: 1, ...scope, revision: 1, plan: "basic", features: PLANS.basic.features, maxDevices: PLANS.basic.maxDevices,
+  const claims: LicenseClaims = { version: 1, ...scope, revision: 1, plan: "basic", features: PLANS.basic.features, modules: planModules("basic"), maxDevices: PLANS.basic.maxDevices,
     issuedAt: now - 1000, expiresAt: now + 60_000, graceUntil: now + 120_000 };
   const clean = LicenseClaims.parse(claims);
   const activate = (c: LicenseClaims = clean) => app.inject({ method: "PUT", url: "/api/license", payload: { license: signed(c) }, headers });
@@ -61,7 +61,7 @@ describe("commercial licensing", () => {
   });
 
   it("shows downgrade impact and rejects previews made before device or license changes", async () => {
-    const f = await fixture(); await f.activate({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features }); await f.register();
+    const f = await fixture(); await f.activate({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro") }); await f.register();
     const second = await f.login("b".repeat(64)); await f.register(second, "Kitchen");
     const third = await f.login("c".repeat(64)); await f.register(third, "Waiter");
     const license = signed({ ...f.claims, revision: 3 });
@@ -72,7 +72,7 @@ describe("commercial licensing", () => {
     const apply = (previewKey: string) => f.app.inject({ method: "PUT", url: "/api/license", headers: f.headers, payload: { license, previewKey } });
     expect((await apply(before.previewKey)).statusCode).toBe(409);
     const next = f.app.licensing.preview(license);
-    await f.activate({ ...f.claims, revision: 2, plan: "pro", maxDevices: 5, features: PLANS.pro.features });
+    await f.activate({ ...f.claims, revision: 2, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro") });
     expect((await apply(next.previewKey)).statusCode).toBe(409);
     const fresh = f.app.licensing.preview(license);
     expect((await apply(fresh.previewKey)).statusCode).toBe(200);
@@ -205,7 +205,7 @@ describe("commercial licensing", () => {
     expect((await f.register()).statusCode).toBe(200);
     expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(200);
     expect((await f.app.inject({ url: "/api/test-recipes", headers: f.headers })).statusCode).toBe(403);
-    const pro = { ...f.claims, revision: 2, plan: "pro" as const, features: PLANS.pro.features, maxDevices: 5 };
+    const pro = { ...f.claims, revision: 2, plan: "pro" as const, features: PLANS.pro.features, modules: planModules("pro"), maxDevices: 5 };
     expect((await f.activate(pro)).statusCode).toBe(200);
     expect((await f.app.inject({ url: "/api/test-recipes", headers: f.headers })).statusCode).toBe(200);
     // Plan entitlement never substitutes for the staff permission.
@@ -227,7 +227,7 @@ describe("commercial licensing", () => {
 
   it("reads grants issued before kds as not licensed for the kitchen display", async () => {
     const f = await fixture();
-    const old = { ...f.claims, plan: "pro" as const, maxDevices: 5, features: { recipes: true, qrOrdering: true } };
+    const old = { ...f.claims, plan: "pro" as const, maxDevices: 5, features: { recipes: true, qrOrdering: true }, modules: planModules("pro") };
     expect(LicenseClaims.parse(old).features.kds).toBe(false);
     expect((await f.activate(old as unknown as LicenseClaims)).statusCode).toBe(200);
     expect(f.app.licensing.status().features.kds).toBe(false);
@@ -235,7 +235,7 @@ describe("commercial licensing", () => {
 
   it("reports a trial licence as trial and older grants as paid", async () => {
     const f = await fixture();
-    const pro = { ...f.claims, plan: "pro" as const, features: PLANS.pro.features, maxDevices: 5 };
+    const pro = { ...f.claims, plan: "pro" as const, features: PLANS.pro.features, modules: planModules("pro"), maxDevices: 5 };
     const preview = await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: signed({ ...pro, trial: true }) } });
     expect(preview.json().trial).toBe(true);
     expect((await f.activate({ ...pro, trial: true })).statusCode).toBe(200);
@@ -312,7 +312,7 @@ describe("commercial licensing", () => {
 
   it("applies a reduced device allowance without deleting devices or restaurant data", async () => {
     const f = await fixture();
-    await f.activate({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features });
+    await f.activate({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro") });
     await f.register();
     for (const letter of ["b", "c"]) { const headers = await f.login(letter.repeat(64)); await f.register(headers, letter); }
     expect((await f.activate({ ...f.claims, revision: 2 })).statusCode).toBe(200);
@@ -320,7 +320,7 @@ describe("commercial licensing", () => {
     expect(devices).toHaveLength(3);
     expect(devices.filter((d) => d.allowed)).toHaveLength(2);
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM users").get()).toEqual({ n: 1 });
-    expect((await f.activate({ ...f.claims, revision: 3, plan: "pro", maxDevices: 5, features: PLANS.pro.features })).statusCode).toBe(200);
+    expect((await f.activate({ ...f.claims, revision: 3, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro") })).statusCode).toBe(200);
     expect(f.app.licensing.devices(device).every((d) => d.allowed)).toBe(true);
   });
 
@@ -379,7 +379,7 @@ describe("licence renewal from the licensing service", () => {
     let next = "";
     const s = service(() => reply(200, { license: next }));
     const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
-    next = `${signed({ ...f.claims, revision: 2, plan: "pro", maxDevices: 5, features: PLANS.pro.features })}\n`;
+    next = `${signed({ ...f.claims, revision: 2, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro") })}\n`;
     const result = await f.app.licensing.fetchLatest();
     expect(result).toEqual({ outcome: "installed", message: "A new licence was installed." });
     expect(f.app.licensing.status(device)).toMatchObject({ revision: 2, plan: "pro", canOperate: true });
@@ -600,7 +600,7 @@ describe("checkout sessions from the licensing service", () => {
     let known = false, trial = "";
     const s = service((url) => url.endsWith("/v1/activate") ? (known = true, reply(200, { license: trial })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
     const f = await fixture({ serviceUrl, fetch: s.fetch });
-    trial = `${signed({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features, trial: true })}
+    trial = `${signed({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro"), trial: true })}
 `;
     const broadcast = vi.spyOn(f.app, "broadcast"), revalidate = vi.spyOn(f.app, "wsRevalidate");
     expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });

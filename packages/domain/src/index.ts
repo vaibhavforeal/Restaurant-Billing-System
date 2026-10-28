@@ -10,7 +10,8 @@ export { CATALOG_CSV_LIMIT, CATALOG_CSV_COLUMNS, catalogCsv, parseCatalogCsv, ty
 export { GuestSubmission, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "./guest-ordering.js";
 export { ServiceSubmission, type ServiceReceipt, type ServiceRequest } from "./guest-services.js";
 export { RecipeUpdate, type RecipeUpdateInput } from "./stock-schemas.js";
-export { PLANS, LicenseClaims, type Plan, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "./licensing.js";
+export { PLANS, LicenseClaims, featuresFromModules, type Plan, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "./licensing.js";
+export { MODULES, MODULE_IDS, ModuleMapSchema, ModuleOverridesSchema, ModuleToggle, isModuleId, moduleDef, planModules, resolveModules, resolveModuleStates, allModules, type ModuleId, type ModuleGroup, type ModuleDef, type ModuleMap, type ModuleOverrides, type ModuleInfo } from "./modules.js";
 export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, UnitCostSet, type StockUnit, type StockItem, type StockWarning, type StockLink, type StockMove } from "./stock-schemas.js";
 export { stockJson, appendStockMove, consumeStock, reverseStock, returnPartialStock, orderStockWarnings, type StockRow } from "./stock.js";
 export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";

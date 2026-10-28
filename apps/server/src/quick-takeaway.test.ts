@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot, planModules } from "@forkflow/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP } from "./test-helpers.js";
@@ -32,7 +32,7 @@ async function fixture(gstMode: GstMode = "included") {
   const api = (method: "GET" | "POST" | "PATCH" | "PUT", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
-    revision: 1, plan: "basic", features: PLANS.basic.features, maxDevices: PLANS.basic.maxDevices,
+    revision: 1, plan: "basic", features: PLANS.basic.features, modules: planModules("basic"), maxDevices: PLANS.basic.maxDevices,
     issuedAt: now - 1000, expiresAt: now + 600_000, graceUntil: now + 1_200_000 };
   const message = `ff1.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
   const activated = await api("PUT", "/api/license", { license: `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}` });

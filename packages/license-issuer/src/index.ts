@@ -1,6 +1,7 @@
 // Shared by the operator tools (Node) and the licensing Worker. WebCrypto only: no node: imports, no Buffer.
 import { z } from "zod";
-import { LicenseClaims, PLANS, type Plan } from "@forkflow/domain/licensing";
+import { LicenseClaims, PLANS, featuresFromModules, type Plan } from "@forkflow/domain/licensing";
+import { resolveModules, type ModuleOverrides } from "@forkflow/domain/modules";
 import { fromBase64, toBase64Url } from "./base64url.js";
 
 export const ActivationRequest = z.object({
@@ -21,7 +22,8 @@ export function parseActivationRequest(text: string): ActivationRequest {
   catch { throw new Error("This is not a ForkFlow activation request. Download it from Settings > Plan and devices > Activation details."); }
 }
 
-export interface ClaimTerms { plan: Plan; expiresAt: number; graceUntil: number; trial?: boolean }
+/** `modules` holds the ForkFlow owner's choices for this restaurant; anything left out follows the plan. */
+export interface ClaimTerms { plan: Plan; expiresAt: number; graceUntil: number; trial?: boolean; modules?: ModuleOverrides }
 
 /**
  * A first activation gets fresh identifiers at revision 1. A request that already
@@ -31,6 +33,7 @@ export function buildClaims(request: ActivationRequest, terms: ClaimTerms, now: 
   const plan = PLANS[terms.plan];
   if (!plan) throw new Error("Choose plan basic or pro");
   const renewal = request.licenseId !== null && request.organizationId !== null && request.outletId !== null;
+  const modules = resolveModules(terms.plan, terms.modules);
   return LicenseClaims.parse({
     version: 1,
     licenseId: renewal ? request.licenseId : uuid(),
@@ -40,7 +43,8 @@ export function buildClaims(request: ActivationRequest, terms: ClaimTerms, now: 
     revision: renewal ? request.currentRevision + 1 : 1,
     plan: terms.plan,
     maxDevices: plan.maxDevices,
-    features: plan.features,
+    features: featuresFromModules(modules),
+    modules,
     issuedAt: now,
     expiresAt: terms.expiresAt,
     graceUntil: terms.graceUntil,

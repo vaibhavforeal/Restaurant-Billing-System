@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ModuleMapSchema, type ModuleMap } from "./modules.js";
 
 export const PLANS = {
   basic: { name: "Basic", maxDevices: 2, features: { recipes: false, qrOrdering: false, kds: false } },
@@ -6,6 +7,9 @@ export const PLANS = {
 } as const;
 export type Plan = keyof typeof PLANS;
 export type Feature = keyof typeof PLANS.basic.features;
+
+/** The older plan flags, kept in step with the module map they now come from. */
+export const featuresFromModules = (modules: ModuleMap) => ({ recipes: modules.recipes, qrOrdering: modules.qrOrdering, kds: modules.kds });
 
 // Signed grants contain resolved entitlements so later price/plan changes do not
 // silently change an already-issued offline subscription.
@@ -19,6 +23,8 @@ export const LicenseClaims = z.object({
   plan: z.enum(["basic", "pro"]),
   maxDevices: z.number().int().min(1).max(100),
   features: z.object({ recipes: z.boolean(), qrOrdering: z.boolean().default(false), kds: z.boolean().default(false) }).strict(),
+  /** What the ForkFlow owner allows this restaurant to use: the plan's defaults with the owner's choices applied. */
+  modules: ModuleMapSchema,
   issuedAt: z.number().int().nonnegative().max(8_640_000_000_000_000),
   expiresAt: z.number().int().positive().max(8_640_000_000_000_000),
   graceUntil: z.number().int().positive().max(8_640_000_000_000_000),
@@ -34,6 +40,8 @@ export interface LicenseStatus {
   plan: Plan | null;
   maxDevices: number | null;
   features: { recipes: boolean; qrOrdering: boolean; kds: boolean };
+  /** Modules the licence allows; every module in development builds. */
+  modules: ModuleMap;
   expiresAt: number | null;
   graceUntil: number | null;
   deviceRegistered: boolean;
@@ -53,7 +61,7 @@ export interface LicensedDevice {
 }
 export interface LicensePreview {
   previewKey: string; alreadyInstalled: boolean; currentPlan: Plan | null;
-  plan: Plan; revision: number; maxDevices: number; features: LicenseStatus["features"];
+  plan: Plan; revision: number; maxDevices: number; features: LicenseStatus["features"]; modules: ModuleMap;
   expiresAt: number; graceUntil: number; trial: boolean;
   blockedDevices: Array<{ id: string; name: string }>;
 }

@@ -1,9 +1,12 @@
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { LicenseClaims, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
+import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
 import { verifyLicenseSignature } from "@forkflow/core";
 import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+
+/** Nothing allowed: an installation without a valid licence. */
+const noModules = (): ModuleMap => Object.fromEntries(MODULE_IDS.map((id) => [id, false])) as ModuleMap;
 
 const FEATURE_NAMES: Record<Feature, string> = { recipes: "recipe editing", qrOrdering: "QR ordering", kds: "the Kitchen Display" };
 
@@ -90,13 +93,13 @@ export class Licensing {
     const base: LicenseStatus = {
       mode: this.enabled ? "commercial" : "development", state: "unactivated",
       installationId: this.options?.installationId ?? null, plan: null, maxDevices: null,
-      features: { recipes: false, qrOrdering: false, kds: false }, expiresAt: null, graceUntil: null,
+      features: { recipes: false, qrOrdering: false, kds: false }, modules: noModules(), expiresAt: null, graceUntil: null,
       deviceRegistered: false, canOperate: false, message: "Activate this installation to start billing.",
       serverTime: now, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, revision: null, registeredDevices: 0, trial: false,
       subscriptionAvailable: !!this.options?.serviceUrl,
     };
     if (!this.enabled) return { ...base, state: "development", canOperate: true, deviceRegistered: true,
-      features: { recipes: true, qrOrdering: true, kds: true }, message: "Development build. Commercial license checks are not enabled." };
+      features: { recipes: true, qrOrdering: true, kds: true }, modules: allModules(), message: "Development build. Commercial license checks are not enabled." };
     const saved = this.saved();
     const devices = this.activeDevices();
     base.registeredDevices = devices.length;
@@ -118,7 +121,7 @@ export class Licensing {
     if (deviceRegistered && currentDevice && state !== "expired" && (currentDevice.last_seen_at === null || now - currentDevice.last_seen_at >= 60_000)) {
       this.app.db.prepare("UPDATE licensed_devices SET last_seen_at = ? WHERE id = ?").run(now, currentDevice.id);
     }
-    return { ...base, state, plan: claims.plan, maxDevices: claims.maxDevices, features: claims.features,
+    return { ...base, state, plan: claims.plan, maxDevices: claims.maxDevices, features: claims.features, modules: claims.modules,
       expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, deviceRegistered, trial: claims.trial === true,
       canOperate: state !== "expired" && deviceRegistered,
       message: state === "expired" ? "Your offline license has expired. Renew it to resume billing."
@@ -143,7 +146,7 @@ export class Licensing {
     const previewKey = createHash("sha256").update(JSON.stringify({ envelope, saved: { envelope: saved.envelope, revision: saved.revision },
       devices: devices.map((d) => ({ id: d.id, name: d.name, version: d.version })) })).digest("hex");
     return { previewKey, alreadyInstalled, currentPlan, plan: claims.plan, revision: claims.revision, maxDevices: claims.maxDevices,
-      features: claims.features, expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, trial: claims.trial === true,
+      features: claims.features, modules: claims.modules, expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, trial: claims.trial === true,
       blockedDevices: devices.slice(claims.maxDevices).map((d) => ({ id: d.id, name: d.name })) };
   }
   activate(envelope: string, actorName = "Administrator", previewKey?: string) {
