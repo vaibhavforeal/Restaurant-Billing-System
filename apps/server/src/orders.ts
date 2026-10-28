@@ -51,8 +51,10 @@ export function registerOrders(app: FastifyInstance): void {
     if (body.type === "zomato" && !userCan(req.user, "bills.settle")) throw httpError(403, "Not allowed to create Zomato orders");
     const existing = app.db.prepare("SELECT id FROM orders WHERE client_ref = ?").get(body.clientRef) as { id: string } | undefined;
     if (existing) {
+      if (body.id && body.id !== existing.id) throw httpError(409, "Order reference already used for a different order");
       return reply.status(200).send({ order: orderWithDetails(existing.id) });
     }
+    if (body.id && app.db.prepare("SELECT 1 FROM orders WHERE id = ?").get(body.id)) throw httpError(409, "An order with this id already exists");
 
     // Only starting takeaway is gated: open takeaway orders can always be finished and billed.
     if (body.type === "parcel") assertModuleActive(app.db, "takeaway");
@@ -74,7 +76,7 @@ export function registerOrders(app: FastifyInstance): void {
       // No longer checking for occupied — splits allowed
     }
 
-    const id = uuidv7();
+    const id = body.id ?? uuidv7();
     const now = Date.now();
     // A captain opening a table from the Captain app serves it; counter staff choose explicitly.
     const captainId = body.captainId ?? (body.type === "dine_in" && req.user.role === "waiter" ? req.user.id : null);
@@ -155,15 +157,20 @@ export function registerOrders(app: FastifyInstance): void {
     const body = OrderItemsAdd.parse(req.body);
     const order = getOrder(id);
     if (!order) throw httpError(404, "order not found");
-    if (order.status !== "open") throw httpError(409, "order is not open");
 
     const incomingRefs = body.items.map((i) => i.clientRef).filter((r): r is string => !!r);
     const placeholders = incomingRefs.map(() => "?").join(",");
-    const existingRefs = new Set(
-      incomingRefs.length
-        ? (app.db.prepare(`SELECT client_ref FROM order_items WHERE client_ref IN (${placeholders})`).all(...incomingRefs) as Array<{ client_ref: string }>).map((r) => r.client_ref)
-        : [],
-    );
+    const saved = incomingRefs.length
+      ? app.db.prepare(`SELECT client_ref, order_id FROM order_items WHERE client_ref IN (${placeholders})`).all(...incomingRefs) as Array<{ client_ref: string; order_id: string }>
+      : [];
+    // A replayed reference must belong to this order; one from another order is a different request.
+    if (saved.some((r) => r.order_id !== id)) throw httpError(409, "Item reference already used on another order");
+    const existingRefs = new Set(saved.map((r) => r.client_ref));
+    // A replay of a punch the hub already saved succeeds even after the order was billed or closed.
+    if (order.status !== "open") {
+      if (incomingRefs.length === body.items.length && body.items.every((i) => existingRefs.has(i.clientRef!))) return { order: orderWithDetails(id)! };
+      throw httpError(409, "order is not open");
+    }
 
     interface ProductRow extends PriceRow {
       id: string;
@@ -281,8 +288,9 @@ export function registerOrders(app: FastifyInstance): void {
     if (!item) throw httpError(404, "item not found");
     const order = getOrder(item.order_id);
     if (!order) throw httpError(404, "order not found");
+    // Repeating a cancel (for example a saved action replayed after a lost reply) changes nothing and succeeds.
+    if (item.status === "cancelled") return reply.status(200).send({ order: orderWithDetails(item.order_id)!, printError: null });
     if (order.status !== "open") throw httpError(409, "order is not open");
-    if (item.status === "cancelled") throw httpError(409, "item already cancelled");
 
     if (item.status === "sent") {
       if (!userCan(req.user, "orders.cancel_sent")) {
@@ -373,6 +381,8 @@ export function registerOrders(app: FastifyInstance): void {
     const body = ItemCancel.parse(req.body ?? {});
     const order = getOrder(id);
     if (!order) throw httpError(404, "order not found");
+    // Repeating a cancel changes nothing and succeeds.
+    if (order.status === "cancelled") return { order: orderWithDetails(id)! };
     if (order.status !== "open") throw httpError(409, "order is not open");
 
     const sentItem = app.db

@@ -134,8 +134,8 @@ describe("quick takeaway orchestration", () => {
     expect((await f.api("POST", `/api/bills/${bill.id}/settle`, payment)).json()).toEqual(paid.json());
     expect((await f.api("POST", `/api/orders/${punched.order.id}/bill`, issueBody)).json().bill.status).toBe("paid");
     expect((await f.api("POST", `/api/orders/${punched.order.id}/send`, sent.sendBody)).statusCode).toBe(200);
-    // Once billed, recovery resumes the saved step; item addition is closed.
-    expect((await f.api("POST", `/api/orders/${punched.order.id}/items`, punched.addBody)).statusCode).toBe(409);
+    // Once billed, a replay of the saved punch succeeds without adding anything; new items stay closed.
+    expect((await f.api("POST", `/api/orders/${punched.order.id}/items`, punched.addBody)).statusCode).toBe(200);
     expect(f.balances()).toEqual([4.75, 19]);
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM orders").get()).toEqual({ n: 1 });
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM order_items").get()).toEqual({ n: 2 });

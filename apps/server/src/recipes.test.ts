@@ -279,7 +279,8 @@ describe("recipe editing", () => {
     expect(f.app.db.prepare("SELECT r.stock_item_id, r.delta, s.delta AS original_delta FROM stock_moves r JOIN stock_moves s ON s.id = r.reversal_of WHERE r.reason = 'cancel_reversal' ORDER BY r.id").all()).toEqual([
       { stock_item_id: rice.id, delta: 0.375, original_delta: -0.375 }, { stock_item_id: oil.id, delta: 0.15, original_delta: -0.15 },
     ]);
-    expect((await f.request("POST", `/api/order-items/${order.items[0]!.id}/cancel`, { reason: "Retry" })).statusCode).toBe(409);
+    // A repeated cancel succeeds without reversing stock again.
+    expect((await f.request("POST", `/api/order-items/${order.items[0]!.id}/cancel`, { reason: "Retry" })).statusCode).toBe(200);
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM stock_moves WHERE reason = 'cancel_reversal'").get()).toEqual({ n: 2 });
   });
 

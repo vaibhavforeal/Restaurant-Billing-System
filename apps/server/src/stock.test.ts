@@ -92,7 +92,8 @@ describe("inventory", () => {
     expect((await request("PATCH", `/api/stock-items/${original.id}`, { expectedVersion: current.version, isActive: false })).statusCode).toBe(200);
     const result = await request("POST", `/api/order-items/${o.items[0]!.id}/cancel`, { reason: "Customer cancelled" }); expect(result.statusCode).toBe(200);
     expect(balance(original.id)).toBe(5); expect(balance(replacement.id)).toBe(8);
-    expect((await request("POST", `/api/order-items/${o.items[0]!.id}/cancel`, { reason: "Retry" })).statusCode).toBe(409);
+    // A repeated cancel succeeds without reversing stock again.
+    expect((await request("POST", `/api/order-items/${o.items[0]!.id}/cancel`, { reason: "Retry" })).statusCode).toBe(200);
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM stock_moves WHERE reason = 'cancel_reversal'").get()).toEqual({ n: 1 });
   });
   it("does not deduct/reverse pending cancellations or untracked products", async () => {

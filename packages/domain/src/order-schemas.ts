@@ -28,6 +28,8 @@ export type TableUpdateInput = z.infer<typeof TableUpdate>;
 export const OrderCreate = z
   .object({
     clientRef: ClientRef,
+    /** A counter working offline chooses the new order's id, so it can queue items and sends for it straight away. */
+    id: z.string().uuid().optional(),
     captainId: z.string().min(1).nullable().optional(),
     type: z.enum(["dine_in", "parcel", "zomato"]),
     tableId: z.string().min(1).nullable().default(null),

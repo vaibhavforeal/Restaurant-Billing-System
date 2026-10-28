@@ -8,6 +8,13 @@ export interface WsHandlers {
 
 /** How long the socket stays open after its last subscriber leaves, so a screen swap does not reconnect. */
 const CLOSE_GRACE_MS = 1000;
+/** The hub sends a heartbeat every 20 s; this long without any message means the connection silently died. */
+export const SILENCE_LIMIT_MS = 45_000;
+let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+function watchSilence(socket: WebSocket) {
+  if (silenceTimer) clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(() => { if (ws === socket) socket.close(); }, SILENCE_LIMIT_MS);
+}
 
 const subscribers = new Set<WsHandlers>();
 let ws: WebSocket | null = null;
@@ -28,7 +35,8 @@ function notify(call: (handlers: WsHandlers) => void) {
 function teardown() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (closeTimer) clearTimeout(closeTimer);
-  reconnectTimer = closeTimer = null;
+  if (silenceTimer) clearTimeout(silenceTimer);
+  reconnectTimer = closeTimer = silenceTimer = null;
   if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); }
   ws = null; socketToken = null; connected = false; backoffMs = 1000;
 }
@@ -42,11 +50,14 @@ function connect() {
   socket.onopen = () => {
     // Send auth frame immediately
     socket.send(JSON.stringify({ type: "auth", token, device: deviceCredential() }));
+    watchSilence(socket);
   };
 
   socket.onmessage = (e) => {
     let message: { event: string; data: unknown };
     try { message = JSON.parse(e.data); } catch { return; } // ignore malformed messages
+    watchSilence(socket);
+    if (message.event === "ping") return; // the hub's heartbeat: proof of life, nothing to forward
     // Intercept auth.ok
     if (message.event === "auth.ok") {
       backoffMs = 1000; connected = true;
@@ -59,6 +70,7 @@ function connect() {
 
   socket.onclose = (e) => {
     if (ws !== socket) return;
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
     connected = false; ws = null;
     // Fatal close on auth failure
     if (e.code === 4401) {

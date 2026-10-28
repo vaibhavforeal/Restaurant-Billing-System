@@ -9,6 +9,9 @@ interface ClientInfo {
   device: unknown;
 }
 
+/** How often connected screens hear from the hub, even when nothing else happens. */
+export const HEARTBEAT_MS = 20_000;
+
 export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): void {
   const clients = new Map<WebSocket, ClientInfo>();
 
@@ -39,7 +42,10 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
     app.wsRevalidate();
   }, 60000);
   revalidateInterval.unref();
-  app.addHook("onClose", () => clearInterval(revalidateInterval));
+  // A heartbeat every 20 s lets counters tell a live connection from one the network silently dropped.
+  const heartbeat = setInterval(() => app.broadcast("ping", {}), HEARTBEAT_MS);
+  heartbeat.unref();
+  app.addHook("onClose", () => { clearInterval(revalidateInterval); clearInterval(heartbeat); });
 
   app.register(websocket);
   app.register(async (scope) => {
