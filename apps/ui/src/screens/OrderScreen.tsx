@@ -17,6 +17,8 @@ import { savePreference, useShortcutLabels } from "../pos-shortcuts";
 import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, saveCatalogCopy, saveOrderCopy, type CatalogCache } from "../offline-cache";
 import { useNavigationGuard } from "../navigation-guard";
+import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
+import { cartRowForKitchen, comboContents, comboExtraPaise, isComboLine, kitchenLines } from "../combo-cart";
 import { useIntegrations } from "../integrations";
 import "../product-editor.css";
 import "../order-screen.css";
@@ -39,6 +41,9 @@ interface DraftItem {
   pricePaise: number;
   qty: number;
   note: string;
+  /** A combo's chosen options, and what it holds for the cart to show. */
+  comboPicks?: string[];
+  contents?: string[];
 }
 
 export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling = false, onNextTakeaway, onHold, captain = false }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void; quickBilling?: boolean; onNextTakeaway?: () => void; onHold?: () => void; captain?: boolean }) {
@@ -74,6 +79,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const menuResults = useRef<HTMLDivElement>(null);
   const [removed, setRemoved] = useState<DraftItem | null>(null);
   const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string } | null>(null);
+  /** The combo whose slots staff are choosing before it goes in the cart. */
+  const [comboPicking, setComboPicking] = useState<{ product: Product; picks: string[] } | null>(null);
   const [message, setMessage] = useState(() => carriedStatusFor(orderId));
   const [transferDialog, setTransferDialog] = useState<"move" | "merge" | null>(null);
   const [transferError, setTransferError] = useState("");
@@ -276,7 +283,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     });
   }
 
-  function addToDraft(productId: string, variantId: string | null, name: string, pricePaise: number) {
+  function addToDraft(productId: string, variantId: string | null, name: string, pricePaise: number, combo?: Pick<DraftItem, "comboPicks" | "contents">) {
     if (actionLock.current || billingLock.current) return;
     if (products.find((product) => product.id === productId)?.isSoldOut) {
       setError(`${name} is sold out and cannot be added to a new order.`); return;
@@ -285,7 +292,23 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       setError("A bill is queued for this order. Wait for it to finish before starting another order."); return;
     }
     setMessage("");
-    saveDraft([...readDraft(), { clientRef: uuid(), productId, variantId, name, pricePaise, qty: 1, note: "" }]);
+    saveDraft([...readDraft(), { clientRef: uuid(), productId, variantId, name, pricePaise, qty: 1, note: "", ...combo }]);
+  }
+
+  /** A combo goes in the cart once its slots are chosen; one with only fixed items goes straight in. */
+  function chooseCombo(product: Product) {
+    if (actionLock.current || billingLock.current) return;
+    const groups = product.combo ?? [];
+    if (comboPickProblem(groups, []) === null) { addCombo(product, []); return; }
+    setComboPicking({ product, picks: [] });
+  }
+
+  function addCombo(product: Product, picks: string[]) {
+    const chosen = comboChoice(product.combo ?? [], picks);
+    if (!chosen) return;
+    addToDraft(product.id, null, product.name, product.pricePaise + chosen.extraPaise,
+      { comboPicks: picks, contents: chosen.items.map((item) => item.qty > 1 ? `${item.qty} × ${item.name}` : item.name) });
+    setComboPicking(null);
   }
 
   function updateDraft(clientRef: string, update: Partial<Pick<DraftItem, "qty" | "note">>) {
@@ -314,6 +337,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       variantId: d.variantId,
       qty: d.qty,
       note: d.note || undefined,
+      ...(d.comboPicks ? { comboPicks: d.comboPicks } : {}),
     }));
     if (!saveDraft(current)) throw new Error("Cart could not be saved");
     const result = await queued({ path: `/api/orders/${orderId}/items`, body: { items }, label: `Add ${items.length} ${items.length === 1 ? "item" : "items"}`, draftKey });
@@ -343,13 +367,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       } catch (error) { if (!isUnreachable(error) && !(error instanceof ApiError && error.status === 404)) throw error; }
     }
     if (current.status !== "open") throw new Error("This order is no longer open. Return to tables to check its status.");
-    const routed = new Set(catalog.filter((product) => product.kotStationId).map((product) => product.id));
     const waiting = laneState().kitchenRefs;
-    const pendingItems = current.items.filter((item) => item.status === "pending" && routed.has(item.productId) && !(item.clientRef && waiting.has(item.clientRef)));
+    // A combo is named by its own line; the hub sends the kitchen dishes in it.
+    const pendingItems = kitchenLines(current.items, catalog).filter((item) => !(item.clientRef && waiting.has(item.clientRef)));
     const onOrder = new Set(current.items.map((item) => item.clientRef));
     const itemRefs = [
       ...pendingItems.flatMap((item) => item.clientRef ? [item.clientRef] : []),
-      ...cart.filter((row) => routed.has(row.productId) && !onOrder.has(row.clientRef) && !waiting.has(row.clientRef)).map((row) => row.clientRef),
+      ...cart.filter((row) => cartRowForKitchen(row, catalog) && !onOrder.has(row.clientRef) && !waiting.has(row.clientRef)).map((row) => row.clientRef),
     ];
     const itemIds = pendingItems.filter((item) => !item.clientRef).map((item) => item.id);
     const outcome = { kots: 0, printErrors: [] as string[], saved: punched.saved, none: !itemRefs.length && !itemIds.length };
@@ -535,6 +559,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   if (!order) return <p className="loading-state" role="status">Loading order…</p>;
   const query = search.toLocaleLowerCase().trim();
+  // The items inside a combo show under its line, not as lines of their own.
+  const lines = order.items.filter((item) => !item.parentItemId);
   const activeProducts = products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query));
   const hasSentItems = order.items.some((i) => i.status === "sent");
   const canCancelOrder = order.status === "open" && !hasSentItems;
@@ -544,12 +570,19 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const pricedDraft = draft.map((item) => {
     const product = products.find((p) => p.id === item.productId);
     const priced = item.variantId ? product?.variants.find((v) => v.id === item.variantId) : product;
-    return { ...item, pricePaise: priced?.pricePaise ?? item.pricePaise };
+    const extra = product?.combo && item.comboPicks ? comboExtraPaise(product.combo, item.comboPicks) : 0;
+    return { ...item, pricePaise: priced ? priced.pricePaise + extra : item.pricePaise };
   });
   const draftTotal = order.status === "open" ? pricedDraft.reduce((sum, item) => sum + item.pricePaise * item.qty, 0) : 0;
-  const itemCount = (order.status === "open" ? draft.reduce((sum, item) => sum + item.qty, 0) : 0) + order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.qty, 0);
-  const hasKitchenPending = order.items.some((item) => item.status === "pending" && products.some((product) => product.id === item.productId && product.kotStationId));
-  const itemStatus = (item: OrderItem) => captain && item.status === "sent" && order.kots.some((kot) => kot.id === item.kotId && kot.doneAt) ? "ready" : item.status;
+  const itemCount = (order.status === "open" ? draft.reduce((sum, item) => sum + item.qty, 0) : 0) + lines.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.qty, 0);
+  const hasKitchenPending = kitchenLines(order.items, products).length > 0;
+  const kotDone = (item: OrderItem) => order.kots.some((kot) => kot.id === item.kotId && kot.doneAt);
+  // A combo is ready when every kitchen dish in it is.
+  const itemStatus = (item: OrderItem) => {
+    if (!captain || item.status !== "sent") return item.status;
+    const cooked = order.items.filter((held) => held.parentItemId === item.id && held.status !== "cancelled" && held.kotId);
+    return (cooked.length ? cooked.every(kotDone) : kotDone(item)) ? "ready" : item.status;
+  };
 
   return <section className="screen order-screen">
     <div className="page-header order-header">
@@ -637,6 +670,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         <div className="menu-results" ref={menuResults} role="region" tabIndex={0} aria-label="Menu items"><div className="menu-grid">{activeProducts.flatMap((p) => {
           const variants = p.variants.filter((v) => v.isActive);
           const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
+          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
           return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
           : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
         })}</div>
@@ -649,19 +683,19 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           <h3>{captain ? "Not sent" : "Cart"} ({draft.length} items)</h3>
           {!draft.length && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>Select a dish.</p>}
           {pricedDraft.map((d) => <div className="cart-row draft-row" key={d.clientRef}>
-            <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong>{d.note ? <small>{d.note}</small> : captain && <small>Add cooking note</small>}</button>
+            <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong>{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : captain && <small>Add cooking note</small>}</button>
             <QtyStepper name={d.name} value={d.qty} disabled={locked || queuedRefs.has(d.clientRef)} onChange={(qty) => updateDraft(d.clientRef, { qty })} />
             <span className="pos-money">₹{paiseToRupees(d.pricePaise * d.qty)}</span>
             <button className="cart-remove" title={"Remove " + d.name} aria-label={"Remove " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => removeDraft(d.clientRef)}>×</button>
             {queuedRefs.has(d.clientRef) && <small className="cart-row-notice">{lane.kitchenRefs.has(d.clientRef) ? "Saved · goes to the kitchen when back online" : "Saved to send"}</small>}
           </div>)}
         </div>}
-        {order.items.length > 0 && <div className="cart-section">
+        {lines.length > 0 && <div className="cart-section">
           <h3>{captain ? "Saved items" : "Punched items"}</h3>
-          {order.items.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
-            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong><span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
+          {lines.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
+            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong>{isComboLine(order.items, item) && <small className="cart-combo-contents">{comboContents(order.items, item).join(", ")}</small>}<span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
-            {order.status === "open" && item.status === "sent" && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
+            {order.status === "open" && item.status === "sent" && !isComboLine(order.items, item) && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
             {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || userCan(user, "orders.cancel_sent")) && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
           </div>)}
         </div>}
@@ -677,6 +711,18 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       </aside>
     </div>
     {order.status === "open" && mobilePane === "menu" && <button className="mobile-cart-link" onClick={() => { focusCartOnSwitch.current = true; setMobilePane("cart"); }}><span>{captain ? "Review order" : "View cart"} · {itemCount} items</span><strong>₹{paiseToRupees(total + draftTotal)}</strong></button>}
+    <WorkspaceDialog open={comboPicking !== null} title={comboPicking ? `Choose · ${comboPicking.product.name}` : "Choose combo items"} className="combo-dialog" busy={locked} onClose={() => setComboPicking(null)}>
+      {comboPicking && (() => {
+        const groups = comboPicking.product.combo ?? [];
+        const problem = comboPickProblem(groups, comboPicking.picks);
+        const price = comboPicking.product.pricePaise + comboExtraPaise(groups, comboPicking.picks);
+        return <form onSubmit={(event) => { event.preventDefault(); if (!locked) addCombo(comboPicking.product, comboPicking.picks); }}>
+          <ComboChoices groups={groups} picks={comboPicking.picks} disabled={locked} money={(paise) => `₹${paiseToRupees(paise)}`} onChange={(picks) => setComboPicking({ ...comboPicking, picks })} />
+          <div className="combo-dialog-footer"><p role="status">{problem ?? "Ready to add"}</p>
+            <div><button type="button" onClick={() => setComboPicking(null)}>Cancel</button> <button className="primary" disabled={locked || problem !== null}>Add · ₹{paiseToRupees(price)}</button></div></div>
+        </form>;
+      })()}
+    </WorkspaceDialog>
     {captain && <WorkspaceDialog open={noteEditor !== null} title={`Cooking note${noteEditor ? ` · ${noteEditor.name}` : ""}`} onClose={() => setNoteEditor(null)} busy={locked} className="captain-dialog captain-note-dialog">
       {noteEditor && <form onSubmit={(event) => { event.preventDefault(); if (locked || queuedRefs.has(noteEditor.clientRef)) return; updateDraft(noteEditor.clientRef, { note: noteEditor.note.trim() }); setNoteEditor(null); }}>
         <label>Instructions for the kitchen<textarea aria-label="Cooking instructions" maxLength={200} rows={3} disabled={locked} value={noteEditor.note} onChange={(event) => setNoteEditor({ ...noteEditor, note: event.target.value })} /></label>
