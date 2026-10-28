@@ -366,7 +366,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
                 <label>Reference {index + 1} <input maxLength={200} value={p.refNote} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, refNote: e.target.value } : r))} /></label>
                 <button className="billing-remove-payment" aria-label={`Remove payment ${index + 1}`} onClick={() => setPayments((rows) => rows.filter((r) => r.id !== p.id))}>Remove</button>
               </div>)}
-              {bill.totalPaise > 0 && <button disabled={payments.length >= 20} onClick={() => setPayments((rows) => [...rows, { id: uuid(), mode: "upi", amount: paiseToRupees(Math.max(0, bill.totalPaise - entered)), refNote: "" }])}>Add payment method</button>}
+              {bill.totalPaise > 0 && <button disabled={payments.length >= 20} onClick={() => setPayments((rows) => [...rows, { id: uuid(), mode: "upi", amount: paiseToRupees(Math.max(0, bill.totalPaise - entered)), refNote: "" }])}>Split payment</button>}
               <p className="billing-remaining">Remaining: {money(bill.totalPaise - entered)}</p>
               <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Record the entered payment amounts")} disabled={entered !== bill.totalPaise} onClick={() => void run(settle)}>{shortcut("billing", "Settle bill")}</button>
             </fieldset>}

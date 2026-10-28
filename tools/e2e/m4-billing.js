@@ -58,7 +58,7 @@
   await mode('included');
   const included = await checkout();
   check(included.totalPaise === 10500 && included.cgstPaise === 250 && included.receipt.gstMode === 'included', 'GST-included bill totals correct');
-  await payMode(1, 'Cash'); await fill('Amount 1', '50'); await click('Add payment method');
+  await payMode(1, 'Cash'); await fill('Amount 1', '50'); await click('Split payment');
   await waitFor(() => field('Amount 2'), 'second payment'); await payMode(2, 'UPI');
   check(field('Amount 2').value === '55.00', 'Remaining balance fills second payment');
   await click('Settle bill'); await waitFor(() => document.body.innerText.includes('PAID:') || document.body.innerText.includes('Paid:'), 'paid receipt');
