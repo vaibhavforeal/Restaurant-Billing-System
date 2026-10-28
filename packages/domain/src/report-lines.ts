@@ -18,21 +18,24 @@ export function allocatePaise(total: number, weights: number[]): number[] {
   return parts.map((part) => sign * part.value);
 }
 
-/** Called inside bill creation's transaction; reports never reprice historical sales. */
+/** Called inside bill creation's transaction; reports never reprice historical sales. `legacy`: migration 017's backfill, before combos existed. */
 export function saveReportLines(db: Database, billId: string, legacy = false) {
   const bill = db.prepare("SELECT order_id, receipt_json, rounding_paise FROM bills WHERE id = ?").get(billId) as {
     order_id: string; receipt_json: string | null; rounding_paise: number;
   };
   // Legacy exclusive bills (taxInclusive === false, or no snapshot at all as migration 017 backfills) have a discount that excludes GST.
   const exclusive = bill.receipt_json ? JSON.parse(bill.receipt_json).taxInclusive === false : true;
-  const items = db.prepare(`SELECT oi.id, oi.product_id, oi.variant_id, oi.name_snapshot, oi.qty,
+  const rows = db.prepare(`SELECT oi.id, oi.product_id, oi.variant_id, oi.name_snapshot, oi.qty, ${legacy ? "NULL" : "oi.parent_item_id"} AS parent_item_id,
     oi.price_paise_snapshot * oi.qty AS subtotal, oi.gst_rate_snapshot AS rate,
     c.id AS category_id, c.name AS category_name
     FROM order_items oi JOIN products p ON p.id = oi.product_id JOIN categories c ON c.id = p.category_id
     WHERE oi.order_id = ? AND oi.status != 'cancelled' ORDER BY oi.id`).all(bill.order_id) as Array<{
-      id: string; product_id: string; variant_id: string | null; name_snapshot: string; qty: number;
+      id: string; product_id: string; variant_id: string | null; name_snapshot: string; qty: number; parent_item_id: string | null;
       subtotal: number; rate: number; category_id: string; category_name: string;
     }>;
+  // The money is spread over billed lines only. A combo's items are kept as ₹0 lines that name the combo, so item
+  // reports can count what was sold inside combos without counting the money twice.
+  const items = rows.filter((row) => !row.parent_item_id);
   const lines = items.map((item) => ({ ...item, discount: 0, taxable: 0, cgst: 0, sgst: 0, rounding: 0 }));
   const taxes = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_taxes WHERE bill_id = ?").all(billId) as Array<{
     gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number;
@@ -49,9 +52,11 @@ export function saveReportLines(db: Database, billId: string, legacy = false) {
   }
   const rounding = allocatePaise(bill.rounding_paise, lines.map((line) => line.taxable + line.cgst + line.sgst));
   const insert = db.prepare(`INSERT INTO bill_report_lines (bill_id, order_item_id, product_id, variant_id, name,
-    category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise${legacy ? "" : ", parent_order_item_id"})
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${legacy ? "" : ", ?"})`);
   lines.forEach((line, i) => insert.run(billId, line.id, line.product_id, line.variant_id, line.name_snapshot,
     legacy ? null : line.category_id, legacy ? "Historical category unavailable" : line.category_name,
-    line.qty, line.subtotal, line.discount, line.taxable, line.cgst, line.sgst, rounding[i]!, line.taxable + line.cgst + line.sgst + rounding[i]!));
+    line.qty, line.subtotal, line.discount, line.taxable, line.cgst, line.sgst, rounding[i]!, line.taxable + line.cgst + line.sgst + rounding[i]!, ...(legacy ? [] : [null])));
+  for (const item of rows.filter((row) => row.parent_item_id)) insert.run(billId, item.id, item.product_id, item.variant_id, item.name_snapshot,
+    item.category_id, item.category_name, item.qty, 0, 0, 0, 0, 0, 0, 0, item.parent_item_id);
 }
