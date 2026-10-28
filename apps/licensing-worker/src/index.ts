@@ -8,6 +8,7 @@ import { subscribePage } from "./subscribe-page.js";
 import { handleCreateSubscription } from "./subscriptions.js";
 import { handleCreateSession, resolveSession } from "./sessions.js";
 import { handleWebhook } from "./webhook.js";
+import { ownerRoute } from "./owner.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const html = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -42,6 +43,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   const { method } = request;
   const deps = async (): Promise<Deps> => ({ db: env.DB, signer: await signerFor(env), now: Date.now, uuid: () => crypto.randomUUID() });
 
+  if (url.pathname === "/owner" || url.pathname.startsWith("/owner/")) return (await ownerRoute(request, { ...(await deps()), env }))!;
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);

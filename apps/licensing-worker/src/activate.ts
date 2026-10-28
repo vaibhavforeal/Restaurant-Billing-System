@@ -1,4 +1,4 @@
-import { ActivationRequest } from "@forkflow/license-issuer";
+import { ActivationRequest, readClaims } from "@forkflow/license-issuer";
 import { issueLicense, type Deps } from "./issue.js";
 import { isWellFormedSecret, sha256Hex, verifyInstallationSecret } from "./secret.js";
 import { createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";
@@ -59,9 +59,11 @@ export async function handleActivate(deps: ActivateDeps, body: unknown, secret: 
   }
   // A current paid licence at or below the hand-issued revision would never reach the counter, so its terms are re-signed above it.
   // Never a trial or an expired licence; the payment id stays on the original row only (it is UNIQUE).
-  if (handIssued && latest?.reason === "charge" && latest.revision <= request.currentRevision && latest.expiresAt > deps.now()) {
+  // A paid licence re-issued for an owner change counts as paid here too; a re-issued trial still does not.
+  const paid = latest !== null && (latest.reason === "charge" || (latest.reason === "owner" && readClaims(latest.envelope).trial !== true));
+  if (handIssued && latest && paid && latest.revision <= request.currentRevision && latest.expiresAt > deps.now()) {
     const { row } = await issueLicense(deps, {
-      installation, plan: latest.plan, expiresAt: latest.expiresAt, graceUntil: latest.graceUntil, trial: false, reason: "charge",
+      installation, plan: latest.plan, expiresAt: latest.expiresAt, graceUntil: latest.graceUntil, trial: false, reason: latest.reason,
       subscriptionId: latest.razorpaySubscriptionId, paymentId: null,
     });
     await insertLicenseIfAbsentStatement(db, row).run();

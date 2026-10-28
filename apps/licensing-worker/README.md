@@ -150,6 +150,15 @@ npx wrangler secret put RAZORPAY_WEBHOOK_SECRET
 Get-Content C:\secure\license-private.pem -Raw | npx wrangler secret put LICENSE_SIGNING_KEY
 ```
 
+For the owner control panel (see "Owner control panel" below), also set a long owner password in each environment. Use a password manager to generate one of at least 16 characters, different per environment:
+
+```powershell
+npx wrangler secret put OWNER_PASSWORD --env test
+npx wrangler secret put OWNER_PASSWORD
+```
+
+Without it the panel stays closed (its login answers `503`); licensing itself does not need it.
+
 The test Worker gets `license-test-private.pem`, never `license-private.pem` (see the warning under "What you need"). `RAZORPAY_WEBHOOK_SECRET` is a string you choose, different per environment; you enter the same string in the Razorpay webhook settings in step 6. Secrets live only in Cloudflare: never put them in the repo, in `wrangler.jsonc`, in a counter build or in browser code.
 
 ## 5. Deploy
@@ -198,6 +207,14 @@ Clear both variables (or open a new terminal) between a test build and a product
 A build without `FORKFLOW_LICENSE_SERVICE_URL` never contacts the service: no automatic trial, no renewals, and Settings hides Subscribe, Manage plan and Check for renewal. When running the server from source, set the same variable (plain `http://127.0.0.1` is accepted there, never in a packaged build).
 
 A counter asks for its licence when the server starts, every 6 hours, and when an admin presses **Check for renewal** in Settings, Plan and devices. Billing never depends on the answer.
+
+## Owner control panel
+
+`https://<worker-url>/owner` is where ForkFlow decides which modules each restaurant may use: takeaway, reservations, QR guest ordering, guest assistance, inventory, recipes, dish costing, reports, the sales dashboard, Zomato, the Kitchen Display and CRM & Loyalty. Sign in with `OWNER_PASSWORD`; a session lasts 8 hours, and sign-in attempts share the service's rate limit (20 a minute per address).
+
+Every restaurant appears the first time its ForkFlow contacts the service. For each module choose **Follow the plan** (Basic or Pro defaults), **Allow** or **Block**, and press **Save**. Saving signs the restaurant's current terms (plan, dates, trial, subscription) with the new modules as the next licence revision; renaming a restaurant issues nothing. The card shows "Waiting for the restaurant to check in" until the counter has collected that revision, which happens within an hour, or at once when an admin presses **Check for renewal**. A restaurant whose licence has run out gets no new revision; its next trial or payment carries the change, because every licence the service issues includes the owner's choices.
+
+Within what you allow, the restaurant's admin can still switch a module off in its Marketplace and back on later. **Change history** on each card lists every change with the licence revision it went into.
 
 ## Running it locally
 

@@ -52,6 +52,13 @@ export function buildClaims(request: ActivationRequest, terms: ClaimTerms, now: 
   });
 }
 
+/** The claims inside an envelope this service issued itself. The signature is not checked: use only on envelopes read back from our own store. */
+export function readClaims(envelope: string): LicenseClaims {
+  const payload = envelope.trim().split(".")[1];
+  if (!payload) throw new Error("Not a licence envelope");
+  return LicenseClaims.parse(JSON.parse(new TextDecoder().decode(fromBase64(payload))));
+}
+
 export type Signer = (message: Uint8Array) => Promise<Uint8Array>;
 
 export async function encodeEnvelope(claims: LicenseClaims, sign: Signer): Promise<string> {

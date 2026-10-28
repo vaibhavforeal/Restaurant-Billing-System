@@ -1,4 +1,5 @@
 import type { Plan } from "@forkflow/domain/licensing";
+import { ModuleOverridesSchema, type ModuleId, type ModuleOverrides } from "@forkflow/domain/modules";
 import type { D1Like, D1StatementLike, Period } from "./env.js";
 
 export interface InstallationRow {
@@ -7,7 +8,7 @@ export interface InstallationRow {
 }
 export interface LicenseRow {
   installationId: string; revision: number; plan: Plan; issuedAt: number; expiresAt: number; graceUntil: number;
-  envelope: string; reason: "trial" | "charge"; razorpaySubscriptionId: string | null; razorpayPaymentId: string | null;
+  envelope: string; reason: "trial" | "charge" | "owner"; razorpaySubscriptionId: string | null; razorpayPaymentId: string | null;
 }
 export interface SubscriptionRow {
   razorpaySubscriptionId: string; installationId: string; plan: Plan; period: Period;
@@ -111,4 +112,45 @@ export async function olderOpenSubscriptions(db: D1Like, installationId: string,
     WHERE installation_id = ? AND razorpay_subscription_id != ? AND created_at < ? AND status NOT IN ('cancelled', 'completed', 'expired')`)
     .bind(installationId, exceptId, beforeCreatedAt).all<SubscriptionRow>();
   return results;
+}
+
+/** The owner's choices for a restaurant: its display name and the modules allowed or blocked beyond its plan. */
+export interface OwnerSettings { displayName: string | null; overrides: ModuleOverrides; updatedAt: number | null }
+
+export async function getOwnerSettings(db: D1Like, installationId: string): Promise<OwnerSettings> {
+  const row = await db.prepare(`SELECT display_name AS displayName, overrides, updated_at AS updatedAt FROM owner_settings WHERE installation_id = ?`)
+    .bind(installationId).first<{ displayName: string | null; overrides: string; updatedAt: number }>();
+  if (!row) return { displayName: null, overrides: {}, updatedAt: null };
+  // A row written by an older catalogue keeps working: unknown modules are dropped rather than failing issuance.
+  const parsed = ModuleOverridesSchema.safeParse(JSON.parse(row.overrides));
+  return { displayName: row.displayName, overrides: parsed.success ? parsed.data : {}, updatedAt: row.updatedAt };
+}
+
+export const upsertOwnerSettingsStatement = (db: D1Like, installationId: string, displayName: string | null, overrides: ModuleOverrides, now: number): D1StatementLike =>
+  db.prepare(`INSERT INTO owner_settings (installation_id, display_name, overrides, updated_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(installation_id) DO UPDATE SET display_name = excluded.display_name, overrides = excluded.overrides, updated_at = excluded.updated_at`)
+    .bind(installationId, displayName, JSON.stringify(overrides), now);
+
+export const insertOwnerEventStatement = (db: D1Like, installationId: string, moduleId: ModuleId, allowed: boolean | null, revision: number | null, at: number): D1StatementLike =>
+  db.prepare(`INSERT INTO owner_events (installation_id, module_id, allowed, revision, at) VALUES (?, ?, ?, ?, ?)`)
+    .bind(installationId, moduleId, allowed === null ? null : allowed ? 1 : 0, revision, at);
+
+export interface OwnerEvent { id: number; moduleId: string; allowed: boolean | null; revision: number | null; at: number }
+export async function ownerEvents(db: D1Like, installationId: string, limit = 100): Promise<OwnerEvent[]> {
+  const { results } = await db.prepare(`SELECT id, module_id AS moduleId, allowed, revision, at FROM owner_events WHERE installation_id = ? ORDER BY id DESC LIMIT ?`)
+    .bind(installationId, limit).all<{ id: number; moduleId: string; allowed: number | null; revision: number | null; at: number }>();
+  return results.map((r) => ({ ...r, allowed: r.allowed === null ? null : r.allowed === 1 }));
+}
+
+export const listInstallations = async (db: D1Like) =>
+  (await db.prepare(`SELECT ${INSTALLATION_COLUMNS} FROM installations ORDER BY created_at DESC`).all<InstallationRow>()).results;
+
+export const insertOwnerSessionStatement = (db: D1Like, tokenHash: string, expiresAt: number): D1StatementLike =>
+  db.prepare(`INSERT INTO owner_sessions (token_hash, expires_at) VALUES (?, ?)`).bind(tokenHash, expiresAt);
+export const deleteExpiredOwnerSessionsStatement = (db: D1Like, now: number): D1StatementLike =>
+  db.prepare(`DELETE FROM owner_sessions WHERE expires_at <= ?`).bind(now);
+export const deleteOwnerSessionStatement = (db: D1Like, tokenHash: string): D1StatementLike =>
+  db.prepare(`DELETE FROM owner_sessions WHERE token_hash = ?`).bind(tokenHash);
+export async function ownerSessionValid(db: D1Like, tokenHash: string, now: number): Promise<boolean> {
+  return (await db.prepare(`SELECT 1 AS hit FROM owner_sessions WHERE token_hash = ? AND expires_at > ?`).bind(tokenHash, now).first()) !== null;
 }

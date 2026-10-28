@@ -57,7 +57,7 @@ export const moduleDef = (id: ModuleId) => MODULES.find((m) => m.id === id)!;
 /** The allowed map: true for each module the restaurant may use. */
 export type ModuleMap = Record<ModuleId, boolean>;
 /** The owner's per-restaurant choices; a module left out follows the plan. */
-export type ModuleOverrides = Partial<Record<ModuleId, boolean>>;
+export type ModuleOverrides = { [K in ModuleId]?: boolean | undefined };
 
 /** Every module, as the licence carries it: all keys present. */
 export const ModuleMapSchema = z.object(Object.fromEntries(MODULE_IDS.map((id) => [id, z.boolean()])) as Record<ModuleId, z.ZodBoolean>).strict();
