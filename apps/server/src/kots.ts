@@ -17,10 +17,18 @@ export function registerKots(app: FastifyInstance): void {
 
   app.post("/api/orders/:id/send", { preHandler: create }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = z.object({ clientRef: z.uuid(), itemIds: z.array(z.uuid()).min(1).max(500) }).optional().parse(req.body);
-    const fingerprint = body ? JSON.stringify([...new Set(body.itemIds)].sort()) : "";
-    if (body) {
-      const previous = app.db.prepare("SELECT * FROM kot_requests WHERE client_ref = ?").get(body.clientRef) as { order_id: string; user_id: string; fingerprint: string; kot_ids: string } | undefined;
+    // Items are named by id, or by the references the counter gave them, so a counter that punched them while offline
+    // (and so never learned their ids) can send them in the same saved action.
+    const parsed = z.object({
+      clientRef: z.uuid(),
+      itemIds: z.array(z.uuid()).min(1).max(500).optional(),
+      itemRefs: z.array(z.string().min(8).max(64)).min(1).max(500).optional(),
+    }).refine((b) => !!b.itemIds !== !!b.itemRefs, "Name the items by id or by reference").optional().parse(req.body);
+    const fingerprint = !parsed ? "" : parsed.itemIds ? JSON.stringify([...new Set(parsed.itemIds)].sort()) : `refs:${JSON.stringify([...new Set(parsed.itemRefs)].sort())}`;
+    let body: { clientRef: string; itemIds: string[] } | undefined;
+    if (parsed?.itemIds) body = { clientRef: parsed.clientRef, itemIds: parsed.itemIds };
+    if (parsed) {
+      const previous = app.db.prepare("SELECT * FROM kot_requests WHERE client_ref = ?").get(parsed.clientRef) as { order_id: string; user_id: string; fingerprint: string; kot_ids: string } | undefined;
       if (previous) {
         if (previous.order_id !== id || previous.user_id !== req.user.id || previous.fingerprint !== fingerprint) throw httpError(409, "Kitchen request reference was already used for different items");
         const saved = JSON.parse(previous.kot_ids) as string[];
@@ -30,6 +38,12 @@ export function registerKots(app: FastifyInstance): void {
     const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow | undefined;
     if (!order) throw httpError(404, "order not found");
     if (order.status !== "open") throw httpError(409, "order is not open");
+    if (parsed?.itemRefs) {
+      const refs = [...new Set(parsed.itemRefs)];
+      const found = app.db.prepare(`SELECT id FROM order_items WHERE order_id = ? AND client_ref IN (${refs.map(() => "?").join(",")})`).all(id, ...refs) as Array<{ id: string }>;
+      if (found.length !== refs.length) throw httpError(409, "Kitchen items changed; review the order before sending again");
+      body = { clientRef: parsed.clientRef, itemIds: found.map((r) => r.id) };
+    }
 
     interface PendingItem {
       id: string;

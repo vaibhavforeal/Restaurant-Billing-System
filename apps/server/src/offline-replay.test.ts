@@ -59,4 +59,25 @@ describe("replaying saved offline actions", () => {
     expect(twice.statusCode).toBe(200);
     expect(twice.json().order.status).toBe("cancelled");
   });
+
+  it("sends items to the kitchen by the references the counter gave them, once", async () => {
+    const kitchen = (await request("GET", "/api/kot-stations")).json().stations[0].id as string;
+    const c = (await request("POST", "/api/categories", { name: "Mains" })).json().category.id as string;
+    const dish = (await request("POST", "/api/products", { name: "Thali", categoryId: c, pricePaise: 50000, gstRate: 5, kotStationId: kitchen })).json().product.id as string;
+    const orderId = uuidv7();
+    // Everything below could have been saved offline: the order id and item references are the counter's own.
+    await request("POST", "/api/orders", { id: orderId, clientRef: uuidv7(), type: "dine_in", tableId });
+    const refs = [uuidv7(), uuidv7()];
+    await request("POST", `/api/orders/${orderId}/items`, { items: refs.map((clientRef) => ({ productId: dish, qty: 1, clientRef })) });
+    const send = { clientRef: uuidv7(), itemRefs: refs };
+    const first = await request("POST", `/api/orders/${orderId}/send`, send);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().kots).toHaveLength(1);
+    const replay = await request("POST", `/api/orders/${orderId}/send`, send);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().kots.map((k: { id: string }) => k.id)).toEqual(first.json().kots.map((k: { id: string }) => k.id));
+    expect((app.db.prepare("SELECT COUNT(*) AS n FROM kots").get() as { n: number }).n).toBe(1);
+    expect((await request("POST", `/api/orders/${orderId}/send`, { clientRef: uuidv7(), itemRefs: [uuidv7()] })).statusCode).toBe(409);
+    expect((await request("POST", `/api/orders/${orderId}/send`, { clientRef: uuidv7(), itemRefs: refs, itemIds: [uuidv7()] })).statusCode).toBe(400);
+  });
 });
