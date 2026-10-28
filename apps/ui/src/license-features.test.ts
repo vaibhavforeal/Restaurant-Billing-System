@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { featureSummary } from "./license-features";
+import { allModules, planModules } from "@forkflow/domain/modules";
+import { moduleSummary } from "./license-features";
 
-describe("featureSummary", () => {
-  it("lists every paid feature, including the Kitchen Display", () => {
-    expect(featureSummary({ recipes: true, qrOrdering: true, kds: true })).toBe("Recipe editing: included. QR ordering: included. Kitchen Display: included.");
-    expect(featureSummary({ recipes: false, qrOrdering: false, kds: false })).toBe("Recipe editing: not included. QR ordering: not included. Kitchen Display: not included.");
+describe("moduleSummary", () => {
+  it("names the modules a licence includes and leaves out", () => {
+    expect(moduleSummary(allModules())).toBe("Included: Takeaway, Reservations, QR guest ordering, Guest assistance, Inventory, Recipes, Dish costing, Reports & analytics, Sales dashboard, Zomato, Kitchen Display (KDS), CRM & Loyalty.");
+    expect(moduleSummary(planModules("basic"))).toBe("Included: Takeaway, Reservations, Inventory, Reports & analytics, Sales dashboard, Zomato, CRM & Loyalty. Not included: QR guest ordering, Guest assistance, Recipes, Dish costing, Kitchen Display (KDS).");
   });
 });

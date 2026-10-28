@@ -1,5 +1,6 @@
 .marketplace-screen { max-width: 1100px; }
 .marketplace-note { color: var(--muted); font-size: var(--text-secondary); margin: 0 0 var(--space-6); }
+.marketplace-section { margin: var(--space-8, 20px) 0 var(--space-4, 10px); font-size: var(--text-heading, 17px); }
 .marketplace-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-8); }
 .marketplace-card { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
 .marketplace-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }

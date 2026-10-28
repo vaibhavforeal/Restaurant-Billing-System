@@ -6,6 +6,7 @@ import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import "../reservations.css";
+import { useModules } from "../modules";
 
 interface Editor { id: string | null; version: number; clientRef: string; input: ReservationInput; original: string }
 const statusText = { booked: "Booked", seated: "Seated", cancelled: "Cancelled", no_show: "No-show" };
@@ -16,6 +17,8 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
   onBusyChange: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void;
 }) {
   const canManage = user.role === "admin" || user.role === "cashier";
+  // Without the Reservations module nothing new is booked or changed; existing bookings can still be seated or cancelled.
+  const bookable = useModules().isActive("reservations");
   const [date, setDate] = useState("");
   const [tableFilter, setTableFilter] = useState(initialTableId ?? "");
   const [data, setData] = useState<ReservationList | null>(null);
@@ -131,10 +134,11 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
         <label>Reservation date<input type="date" value={date} disabled={busy} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setError(""); setMessage(""); } }} /></label>
         <label>Show table<select value={tableFilter} disabled={busy} onChange={(e) => setTableFilter(e.target.value)}><option value="">All tables</option>{tables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         <button disabled={busy} onClick={() => { void run(async () => {}); }}>Refresh</button>
-        {canManage && <button className="primary" disabled={busy || loading || !data || !tables.some((t) => t.isActive)} onClick={() => startEditor()}>New reservation</button>}
+        {canManage && bookable && <button className="primary" disabled={busy || loading || !data || !tables.some((t) => t.isActive)} onClick={() => startEditor()}>New reservation</button>}
       </div>
       {loading && <p role="status">Updating reservations…</p>}
       {!canManage && <p className="reservation-help">An admin or cashier can create, change or seat a reservation.</p>}
+      {canManage && !bookable && <p className="reservation-help">Reservations are not available, so new bookings and changes are off. Existing bookings can still be seated or cancelled.</p>}
       {!loading && !loadError && !visible.length && <p className="reservation-empty">No reservations for this date{tableFilter ? " and table" : ""}.</p>}
       <div className="reservation-list">{visible.map((r) => <article key={r.id} className={`reservation-card ${r.status}`}>
         <div className="reservation-card-top"><strong>{time(r.startsAt)} – {time(r.endsAt)}{r.startsLocal.slice(0, 10) !== date ? " (starts previous day)" : ""}</strong><span className="reservation-status">{statusText[r.status]}</span></div>
@@ -147,7 +151,7 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
               const result = await apiFetch<{ order: Order }>(`/api/reservations/${r.id}/seat`, { method: "POST", body: JSON.stringify({ version: r.version }) });
               return { orderId: result.order.id };
             }); }}>Seat & open bill</button>
-            <button disabled={busy} onClick={() => startEditor(r)}>Edit</button>
+            {bookable && <button disabled={busy} onClick={() => startEditor(r)}>Edit</button>}
             <button disabled={busy || now < r.startsAt} onClick={() => changeStatus(r, "no_show")}>No-show</button>
             <button disabled={busy} onClick={() => changeStatus(r, "cancelled")}>Cancel reservation</button>
           </>}

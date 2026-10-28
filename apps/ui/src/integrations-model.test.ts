@@ -28,11 +28,11 @@ describe("integrations model", () => {
     expect(canToggle(swiggy, "admin")).toBe(false);
   });
 
-  it("treats an unlicensed integration as off and labels it with the plan it needs", () => {
+  it("treats an add-on ForkFlow has not included as off and labels it Not included", () => {
     expect(isEnabled([{ ...kds, enabled: true, licensed: false }], "kds")).toBe(false);
     expect(isEnabled([{ ...kds, enabled: true }], "kds")).toBe(true);
-    expect(statusLabel({ ...kds, licensed: false })).toBe("Pro plan");
-    expect(statusLabel({ ...kds, enabled: true, licensed: false })).toBe("Pro plan");
+    expect(statusLabel({ ...kds, licensed: false })).toBe("Not included");
+    expect(statusLabel({ ...kds, enabled: true, licensed: false })).toBe("Not included");
   });
 
   it("lets an admin turn an unlicensed integration off but never on", () => {

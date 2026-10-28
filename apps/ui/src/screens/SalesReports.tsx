@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useModules } from "../modules";
 import { OPERATIONAL_REPORTS, type OperationalReportKind } from "@forkflow/domain/operational-reports";
 import { OperationalReports, PROFIT_REPORT_TITLE } from "./OperationalReports";
 import { COSTING_PRO_NOTE } from "../dish-costing";
@@ -16,7 +17,36 @@ import { CustomReports } from "./CustomReports";
 import { OverflowMenu } from "../PosControls";
 import "../sales-dashboard.css";
 
-export function SalesReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZomato = false, canSettle = false, onOpenOrder }: { canSeeCosts: boolean; /** Cashiers and admins work a cash drawer shift; only admins (canSeeCosts) close a day. */ canSettle?: boolean; /** Admins and cashiers may open the Zomato reconciliation tab, whether Zomato is on or off (receivables from closed orders stay reconcilable). */ canSeeZomato?: boolean; initialTab?: SalesReportKind | "day-end" | "analytics" | "bills" | "zomato" | "cash" | "custom" | undefined; initialPeriod?: ReportPeriod | undefined; onOpenOrder: (id: string) => void }) {
+type SalesReportsProps = { canSeeCosts: boolean; /** Cashiers and admins work a cash drawer shift; only admins (canSeeCosts) close a day. */ canSettle?: boolean; /** Admins and cashiers may open the Zomato reconciliation tab, whether Zomato is on or off (receivables from closed orders stay reconcilable). */ canSeeZomato?: boolean; initialTab?: SalesReportKind | "day-end" | "analytics" | "bills" | "zomato" | "cash" | "custom" | undefined; initialPeriod?: ReportPeriod | undefined; onOpenOrder: (id: string) => void };
+
+/**
+ * Reports & Analytics. With the Reports & analytics module off, only what the restaurant must keep is shown: bills, the
+ * day-end GST summary, the cash drawer and Zomato reconciliation. The profit report also needs Dish costing.
+ */
+export function SalesReports(props: SalesReportsProps) {
+  const modules = useModules();
+  if (!modules.isActive("reports")) return <EssentialReports {...props} />;
+  return <FullReports {...props} canSeeCosts={props.canSeeCosts && modules.isActive("costing")} />;
+}
+
+function EssentialReports({ initialTab, initialPeriod, canSeeCosts, canSeeZomato = false, canSettle = false, onOpenOrder }: SalesReportsProps) {
+  type Essential = "bills" | "day-end" | "cash" | "zomato";
+  const start: Essential = initialTab === "day-end" || initialTab === "cash" || initialTab === "zomato" ? initialTab : "bills";
+  const [tab, setTab] = useState<Essential>(start);
+  const tabs: Array<{ id: Essential; title: string }> = [{ id: "bills", title: "Bills" }, { id: "day-end", title: "Day-end / GST" }, { id: "cash", title: "Cash & day close" },
+    ...(canSeeZomato ? [{ id: "zomato" as const, title: "Zomato reconciliation" }] : [])];
+  return <section className="sales-reports">
+    <div className="page-header"><h2>Reports &amp; Analytics</h2></div>
+    <p className="sales-report-empty">Sales reports and analytics are not available. Bills and the day-end GST summary are always here.</p>
+    <div className="report-navigation" aria-label="Report type">
+      <div className="report-tabs">{tabs.map(({ id, title }) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{title}</button>)}</div>
+    </div>
+    {tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={canSeeCosts} />
+      : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : <DayEnd initialDate={initialPeriod?.to} />}
+  </section>;
+}
+
+function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZomato = false, canSettle = false, onOpenOrder }: SalesReportsProps) {
   const [view, setView] = useState<"reports" | "analytics">(initialTab === "analytics" ? "analytics" : "reports");
   const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | "custom" | OperationalReportKind | "profit">(initialTab === "analytics" ? "sales" : initialTab);
   const { status } = useLicense();

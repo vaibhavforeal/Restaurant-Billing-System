@@ -18,6 +18,7 @@ import { ZomatoPanel } from "../ZomatoPanel";
 import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
 import "../tables-overview.css";
+import { useModules } from "../modules";
 
 export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false }: { user: User; qrInbox?: number | undefined; onOpenOrder: (orderId: string) => void; onTakeaway: () => void; captain?: boolean }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
@@ -205,6 +206,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }, [tables, pickerTableId]);
 
   const isAdmin = !captain && user.role === "admin";
+  const modules = useModules();
+  const takeawayOn = modules.isActive("takeaway");
+  const qrOn = modules.isActive("qrOrdering");
   const canQuickBill = !captain && (isAdmin || user.role === "cashier");
   // Zomato is for admin and cashier. While it is off, orders still open stay visible so they can be finished, but no new ones start.
   const zomatoList = canQuickBill ? zomatoOrders(orders) : [];
@@ -230,16 +234,16 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   return <section className="screen tables-screen table-overview">
     <div className="page-header tables-header"><div className="tables-heading"><h2>{captain ? "Tables" : "Tables & orders"}</h2><p><span className="tables-available-dot" aria-hidden="true" />{active.filter((table) => table.status === "free").length} available <span aria-hidden="true">·</span> {active.length} tables across {areas.length} {areas.length === 1 ? "area" : "areas"}</p></div><div className="actions">
       <button disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>Reservations</button>
-      {isAdmin && <><button disabled={busy} aria-haspopup="dialog" onClick={() => setManagingQr(true)}>Table QR codes</button><button disabled={busy} aria-haspopup="dialog" onClick={() => setManaging(true)}>Manage tables</button></>}
-      <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => {
+      {isAdmin && <>{qrOn && <button disabled={busy} aria-haspopup="dialog" onClick={() => setManagingQr(true)}>Table QR codes</button>}<button disabled={busy} aria-haspopup="dialog" onClick={() => setManaging(true)}>Manage tables</button></>}
+      {takeawayOn && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => {
         if (busy || actionLock.current || qrLock.current || qrManagerLock.current || serviceLock.current || reservationLock.current) return;
         if (canQuickBill) onTakeaway(); else newParcel();
-      }} disabled={busy}><Icon name="bag" size={15} />{shortcut("takeaway", "Takeaway")}</button>
+      }} disabled={busy}><Icon name="bag" size={15} />{shortcut("takeaway", "Takeaway")}</button>}
     </div></div>
     <div className="error-message" role="alert">{error}</div>
     <div className="tables-request-strip">
-      <QrRequests compact openSignal={qrInbox} tables={tables} disabled={creating || actionBusy || qrManagerBusy || serviceBusy || !!reservationView} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} onBusyChange={(value) => { qrLock.current = value; setQrBusy(value); }} />
-      <ServiceRequests compact disabled={creating || actionBusy || qrBusy || qrManagerBusy || !!reservationView} onBusyChange={(value) => { serviceLock.current = value; setServiceBusy(value); }} />
+      {qrOn && <QrRequests compact openSignal={qrInbox} tables={tables} disabled={creating || actionBusy || qrManagerBusy || serviceBusy || !!reservationView} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} onBusyChange={(value) => { qrLock.current = value; setQrBusy(value); }} />}
+      {modules.isActive("guestServices") && <ServiceRequests compact disabled={creating || actionBusy || qrBusy || qrManagerBusy || !!reservationView} onBusyChange={(value) => { serviceLock.current = value; setServiceBusy(value); }} />}
     </div>
     {hasSide && <div className="tables-pane-switch" aria-label="Tables view">
       <button aria-pressed={visiblePane === "tables"} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>

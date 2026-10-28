@@ -10,6 +10,7 @@ import { WorkspaceDialog } from "../WorkspaceDialog";
 import { QrNotificationControls } from "../QrNotifications";
 import "../qr-staff.css";
 import "../tables-requests.css";
+import { useModules } from "../modules";
 
 type RequestStatus = GuestRequest["status"];
 const money = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
@@ -31,7 +32,8 @@ interface InboxProps {
 
 export function QrRequests({ tables, disabled, onOpenOrder, onChanged, onBusyChange, compact = false, openSignal }: InboxProps) {
   const { status: license } = useLicense();
-  const canAccept = license?.canOperate === true && license.features.qrOrdering;
+  const qrOrdering = useModules().isActive("qrOrdering");
+  const canAccept = license?.canOperate === true && qrOrdering;
   const [expanded, setExpanded] = useState(false);
   const [filter, setFilter] = useState<RequestStatus>("pending");
   const [pending, setPending] = useState<GuestRequest[]>([]);

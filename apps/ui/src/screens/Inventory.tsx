@@ -12,6 +12,7 @@ import { DishCosting } from "./DishCosting";
 import { useLicense } from "./LicenseSettings";
 import { Icon } from "../Icon";
 import "../recipes.css";
+import { useModules } from "../modules";
 
 type InventoryTab = "stock" | "recipes" | "costing";
 const TAB_LABELS: Record<InventoryTab, string> = { stock: "Stock", recipes: "Recipes", costing: "Dish costing" };
@@ -47,7 +48,9 @@ export function Inventory({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [reloadInventory, setReloadInventory] = useState(0);
   const { status } = useLicense();
-  const canSeeCosts = user.role === "admin" && status?.features.recipes === true;
+  const modules = useModules();
+  const recipesOn = modules.isActive("recipes");
+  const canSeeCosts = user.role === "admin" && modules.isActive("costing");
   const [costData, setCostData] = useState<{ items: StockCost[]; totalValuePaise: number } | null>(null);
   const [costError, setCostError] = useState("");
   // Cost figures are refreshed whenever stock reloads (stock.changed, reconnect, or a save): historyVersion bumps each time.
@@ -62,7 +65,8 @@ export function Inventory({ user }: { user: User }) {
   const costById = new Map((costData?.items ?? []).map((c) => [c.stockItemId, c]));
   const valueSummary = costData ? stockValueSummary(costData.items) : null;
   // Dish costing shows cost data, so only administrators get the tab (Basic plans see the upgrade prompt inside it).
-  const tabs: InventoryTab[] = user.role === "admin" ? ["stock", "recipes", "costing"] : ["stock", "recipes"];
+  // The Recipes tab always shows (without the Recipes module it offers simple stock links); Dish costing needs its module.
+  const tabs: InventoryTab[] = canSeeCosts ? ["stock", "recipes", "costing"] : ["stock", "recipes"];
   function canLeaveRecipe() {
     if (recipeBusy) return false;
     return !recipeDirty || window.confirm("Discard your unsaved recipe or stock-item changes?");
@@ -124,10 +128,10 @@ export function Inventory({ user }: { user: User }) {
     {!connected && <p role="status">Reconnecting…</p>}
     {error && <div className="recipe-error"><p role="alert">{error}</p><button disabled={recipeBusy} onClick={() => setReloadInventory((value) => value + 1)}>Retry inventory load</button></div>}<p role="status">{tab === "stock" ? message : ""}</p>
     {tab === "recipes" ? <div id="inventory-recipes-panel" role="tabpanel" aria-labelledby="inventory-recipes-tab">
-      <RecipesWorkspace products={products} items={items} loading={loading} canManage={canManage && status?.canOperate === true} fullRecipe={status?.features.recipes === true} refresh={recipeRefresh}
+      <RecipesWorkspace products={products} items={items} loading={loading} canManage={canManage && status?.canOperate === true} fullRecipe={recipesOn} refresh={recipeRefresh}
         onDirtyChange={setRecipeDirty} onBusyChange={setRecipeBusy} canLeave={canLeaveRecipe} onStockCreated={(item) => setItems((old) => [...old.filter((entry) => entry.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name)))} />
     </div> : tab === "costing" && canManage ? <div id="inventory-costing-panel" role="tabpanel" aria-labelledby="inventory-costing-tab">
-      <DishCosting fullRecipe={status?.features.recipes === true} refresh={recipeRefresh} />
+      <DishCosting fullRecipe={modules.isActive("costing")} refresh={recipeRefresh} />
     </div> : <div id="inventory-stock-panel" role="tabpanel" aria-labelledby="inventory-stock-tab">
     <p role="status" style={{ color: low.length ? "var(--warning-text, #874500)" : "var(--success-text, #176336)" }}>{low.length ? `${low.length} active stock item${low.length === 1 ? " is" : "s are"} low or out of stock.` : "No low-stock items."}</p>
     {canManage && <details className="pos-section" aria-label="Add stock item"><summary>Add stock item</summary><div className="pos-section-body">

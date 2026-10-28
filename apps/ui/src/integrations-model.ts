@@ -6,9 +6,10 @@ export function isEnabled(list: IntegrationInfo[], id: IntegrationId): boolean {
   return list.some((info) => info.id === id && info.enabled && info.licensed);
 }
 
-export function statusLabel(info: IntegrationInfo): "Enabled" | "Disabled" | "Coming soon" | "Pro plan" {
+/** `licensed` is whether ForkFlow allows the add-on for this restaurant (from the licence). */
+export function statusLabel(info: IntegrationInfo): "Enabled" | "Disabled" | "Coming soon" | "Not included" {
   if (info.status === "coming_soon") return "Coming soon";
-  if (!info.licensed) return "Pro plan";
+  if (!info.licensed) return "Not included";
   return info.enabled ? "Enabled" : "Disabled";
 }
 

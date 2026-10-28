@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ApiError, apiFetch, session, type User } from "./api";
 import { NavBar, type Page } from "./NavBar";
 import { Catalog } from "./screens/Catalog";
@@ -13,8 +13,10 @@ import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
 import { SalesReports } from "./screens/SalesReports";
 import { Inventory } from "./screens/Inventory";
-import { IntegrationOff, Marketplace } from "./screens/Marketplace";
+import { IntegrationOff, Marketplace, ModuleOff } from "./screens/Marketplace";
 import { IntegrationsProvider, useIntegrations } from "./integrations";
+import { ModulesProvider, useModules } from "./modules";
+import type { ModuleId } from "@forkflow/domain/modules";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";
@@ -73,6 +75,15 @@ function CustomersRoute({ user, onNavigate }: { user: User; onNavigate: (page: P
   if (!ready) return <p role="status">Loading customers…</p>;
   if (!isEnabled("crm")) return <IntegrationOff name="CRM & Loyalty" canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
   return <Customers isAdmin={user.role === "admin"} />;
+}
+
+/** A page that belongs to a module: while the module is not available it explains why instead. */
+function ModuleRoute({ id, user, onNavigate, children }: { id: ModuleId; user: User; onNavigate: (page: Page) => void; children: ReactNode }) {
+  const { ready, modules } = useModules();
+  const state = modules.find((m) => m.id === id);
+  if (!ready) return <p role="status">Loading…</p>;
+  if (!state?.active) return <ModuleOff module={state ?? null} canManage={user.role === "admin"} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
+  return <>{children}</>;
 }
 
 function StaffApp() {
@@ -140,7 +151,7 @@ function StaffApp() {
       const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
       androidBack.current = () => { if (page.name === "tables") return false; if (canLeave()) onBack(); return true; };
       return (
-        <NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
+        <NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><ModulesProvider key={user.id}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
@@ -150,7 +161,7 @@ function StaffApp() {
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
           {page.name === "tables" && <Tables user={user} captain={captain} qrInbox={page.qrInbox} onOpenOrder={onOpenOrder} onTakeaway={() => go({ name: "takeaway" })} />}
-          {page.name === "takeaway" && canQuickBill && <QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} />}
+          {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
           {page.name === "catalog" && <Catalog />}
@@ -158,14 +169,14 @@ function StaffApp() {
           {page.name === "settings" && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={user.role === "admin"} canSeeZomato={canReconcileZomato(user.role)} canSettle={user.role === "admin" || user.role === "cashier"} onOpenOrder={onOpenOrder} />}
-          {page.name === "inventory" && <Inventory user={user} />}
+          {page.name === "inventory" && <ModuleRoute id="inventory" user={user} onNavigate={go}><Inventory user={user} /></ModuleRoute>}
           {page.name === "customers" && (user.role === "admin" || user.role === "cashier") && <CustomersRoute user={user} onNavigate={go} />}
           {page.name === "marketplace" && (user.role === "admin" || user.role === "cashier") && <Marketplace user={user} onNavigate={go} />}
           </main>
           </QrNotifications>
           </LicenseGate>
           </div>
-        </div></IntegrationsProvider></NavigationGuardContext.Provider>
+        </div></ModulesProvider></IntegrationsProvider></NavigationGuardContext.Provider>
       );
     }
   }

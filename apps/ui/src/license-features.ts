@@ -1,9 +1,8 @@
-import type { LicenseStatus } from "@forkflow/domain";
+import { MODULES, type ModuleMap } from "@forkflow/domain/modules";
 
-const FEATURE_LABELS: Record<keyof LicenseStatus["features"], string> = { recipes: "Recipe editing", qrOrdering: "QR ordering", kds: "Kitchen Display" };
-
-/** One line naming every paid feature and whether a licence includes it, e.g. for the active plan or a licence preview. */
-export function featureSummary(features: LicenseStatus["features"]): string {
-  return (Object.keys(FEATURE_LABELS) as Array<keyof typeof FEATURE_LABELS>)
-    .map((feature) => `${FEATURE_LABELS[feature]}: ${features[feature] ? "included" : "not included"}.`).join(" ");
+/** Which modules a licence includes, in catalogue order, e.g. for the active plan or a licence preview. */
+export function moduleSummary(modules: ModuleMap): string {
+  const included = MODULES.filter((m) => modules[m.id]).map((m) => m.name);
+  const excluded = MODULES.filter((m) => !modules[m.id]).map((m) => m.name);
+  return [included.length ? `Included: ${included.join(", ")}.` : "No modules included.", excluded.length ? `Not included: ${excluded.join(", ")}.` : ""].filter(Boolean).join(" ");
 }
