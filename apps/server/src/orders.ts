@@ -15,6 +15,7 @@ import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, ty
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { integrationEnabled } from "./integrations.js";
 import { takeawayOrderType } from "./order-types.js";
+import { assertModuleActive } from "./modules.js";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -53,6 +54,8 @@ export function registerOrders(app: FastifyInstance): void {
       return reply.status(200).send({ order: orderWithDetails(existing.id) });
     }
 
+    // Only starting takeaway is gated: open takeaway orders can always be finished and billed.
+    if (body.type === "parcel") assertModuleActive(app.db, "takeaway");
     if (body.type === "zomato") {
       // Only creating is gated: Ready and Picked up keep working for open orders when Zomato is turned off.
       if (!integrationEnabled(app.db, "zomato")) throw httpError(409, "Zomato is turned off in the Marketplace.");

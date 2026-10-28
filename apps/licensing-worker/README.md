@@ -206,7 +206,7 @@ Clear both variables (or open a new terminal) between a test build and a product
 
 A build without `FORKFLOW_LICENSE_SERVICE_URL` never contacts the service: no automatic trial, no renewals, and Settings hides Subscribe, Manage plan and Check for renewal. When running the server from source, set the same variable (plain `http://127.0.0.1` is accepted there, never in a packaged build).
 
-A counter asks for its licence when the server starts, every 6 hours, and when an admin presses **Check for renewal** in Settings, Plan and devices. Billing never depends on the answer.
+A counter asks for its licence when the server starts, every hour, and when an admin presses **Check for renewal** in Settings, Plan and devices. Billing never depends on the answer.
 
 ## Owner control panel
 

@@ -36,8 +36,10 @@ async function fixture() {
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
     revision: 1, plan: "pro", features: PLANS.pro.features, modules: planModules("pro"), maxDevices: PLANS.pro.maxDevices,
     issuedAt: now - 1000, expiresAt: now + 600_000, graceUntil: now + 1_200_000 };
-  async function activate(plan: "basic" | "pro", revision: number, features: object = PLANS[plan].features) {
-    const next = { ...claims, plan, revision, features, maxDevices: PLANS[plan].maxDevices };
+  /** A licence for `plan`; `features` narrows the modules, as when the ForkFlow owner leaves QR ordering out. */
+  async function activate(plan: "basic" | "pro", revision: number, features: { recipes?: boolean; qrOrdering?: boolean; kds?: boolean } = PLANS[plan].features) {
+    const modules = { ...planModules(plan), recipes: features.recipes === true, qrOrdering: features.qrOrdering === true, kds: features.kds === true };
+    const next = { ...claims, plan, revision, features: { recipes: modules.recipes, qrOrdering: modules.qrOrdering, kds: modules.kds }, modules, maxDevices: PLANS[plan].maxDevices };
     const message = `ff1.${Buffer.from(JSON.stringify(next)).toString("base64url")}`;
     const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
     const response = await api("PUT", "/api/license", { license });
@@ -301,7 +303,7 @@ describe("guest QR ordering", () => {
     expect((await f.api("GET", `/api/qr/tables/${f.diningTable.id}/image?origin=${encodeURIComponent(origins[0]!)}`, undefined, waiter)).statusCode).toBe(403);
   });
 
-  it("allows Basic menu browsing but denies new guest ordering, and treats older grants without qrOrdering as disabled", async () => {
+  it("allows Basic menu browsing but denies new guest ordering, and treats a licence without QR ordering as disabled", async () => {
     const f = await fixture(); const body = await f.submission();
     const basic = await f.activate("basic", 2);
     expect(basic.features.qrOrdering).toBe(false);

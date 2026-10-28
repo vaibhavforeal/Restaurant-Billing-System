@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { localDateKey } from "@forkflow/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { requireModule } from "./modules.js";
 
 interface Sales {
   billCount: number; subtotalPaise: number; discountPaise: number; cgstPaise: number;
@@ -37,7 +38,7 @@ export function reportRange(query: unknown) {
  * (void ones too); credit notes subtract on their own date, and refunds subtract from collections on their date by method.
  */
 export function registerSalesReports(app: FastifyInstance) {
-  app.get("/api/reports/sales", { preHandler: app.requirePermission("reports.read") }, async (req) => {
+  app.get("/api/reports/sales", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req) => {
     const { from, to, dates, bounds } = reportRange(req.query);
     const db = app.db;
     const localDate = (column: string) => `strftime('%Y-%m-%d', ${column} / 1000, 'unixepoch', 'localtime')`;

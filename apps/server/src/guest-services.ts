@@ -3,6 +3,7 @@ import { ServiceSubmission, uuidv7, type ServiceReceipt, type ServiceRequest } f
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { moduleActive } from "./modules.js";
 
 const TTL = 10 * 60 * 1000;
 const COOLDOWN = 60 * 1000;
@@ -44,7 +45,7 @@ export function registerGuestServices(app: FastifyInstance) {
   function requireGuestPlan() {
     const status = app.licensing.status();
     if (!["development", "active", "grace"].includes(status.state)) throw httpError(403, "The restaurant is temporarily unavailable. Please ask a member of staff.");
-    if (!status.features.qrOrdering) throw httpError(403, "Please ask a member of staff for assistance.");
+    if (!moduleActive(app.db, "guestServices")) throw httpError(403, "Please ask a member of staff for assistance.");
   }
 
   app.post("/api/guest/service-requests", { bodyLimit: 4096, onRequest: noStore }, async (req, reply) => {

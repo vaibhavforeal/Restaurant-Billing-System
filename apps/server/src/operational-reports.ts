@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { localDateKey, type OperationalReport, type ReportColumn, type ReportTable, type ReportCell } from "@forkflow/domain";
 import { z } from "zod";
 import { reportRange } from "./sales-reports.js";
+import { requireModule } from "./modules.js";
 
 type Row = Record<string, ReportCell>;
 const column = (key: string, label: string, format?: ReportColumn["format"]): ReportColumn => format ? { key, label, format } : { key, label };
@@ -9,7 +10,7 @@ const sum = (rows: Row[], keys: string[]) => Object.fromEntries(keys.map((key) =
 const salesColumns = [column("qty", "Quantity", "quantity"), column("bills", "Bills"), column("subtotal", "Subtotal", "money"), column("discount", "Discount", "money"), column("taxable", "Taxable", "money"), column("gst", "GST", "money"), column("rounding", "Round off", "money"), column("total", "Sales", "money")];
 
 export function registerOperationalReports(app: FastifyInstance) {
-  app.get("/api/reports/operations/:kind", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
+  app.get("/api/reports/operations/:kind", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req, reply) => {
     const { kind } = z.object({ kind: z.enum(["items", "cashiers", "hourly", "order-types", "kots", "cancellations", "stock", "credit-notes"]) }).parse(req.params);
     const { from, to, bounds } = reportRange(req.query);
     const [start, end] = bounds;

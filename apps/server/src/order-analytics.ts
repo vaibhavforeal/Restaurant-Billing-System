@@ -3,13 +3,14 @@ import { localDateKey } from "@forkflow/domain";
 import type { AnalyticsDay, AnalyticsHour, CategoryAnalytics, ItemAnalytics, OrderAnalyticsReport, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
 import { z } from "zod";
 import { reportRange } from "./sales-reports.js";
+import { requireModule } from "./modules.js";
 
 /**
  * Read stored bill totals and immutable reporting lines in one snapshot. Bills (void ones too) count on their issue
  * date; credit notes and their lines subtract on the credit-note date, attributed to the credited bill's order type.
  */
 export function registerOrderAnalytics(app: FastifyInstance) {
-  app.get("/api/reports/analytics", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
+  app.get("/api/reports/analytics", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req, reply) => {
     const { from, to, dates, bounds } = reportRange(req.query);
     const { type: orderType } = z.object({ type: z.enum(["all", "parcel", "dine_in", "zomato"]).default("all") }).parse(req.query);
     const db = app.db;

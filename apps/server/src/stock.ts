@@ -4,6 +4,7 @@ import { can } from "@forkflow/core";
 import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7, roleFor,
   type StockRow, type StockLink, type StockMove, type StockCostChange } from "@forkflow/domain";
 import { httpError } from "./http-error.js";
+import { assertModuleActive, moduleActive, requireModule } from "./modules.js";
 
 /** Publish only after the caller has committed the transaction. */
 export function publishStock(app: FastifyInstance, ids: string[]) {
@@ -24,6 +25,8 @@ export function registerStock(app: FastifyInstance) {
   const db = app.db;
   const read = app.requirePermission("stock.read");
   const manage = app.requirePermission("stock.manage");
+  // Stock records and links are the Inventory module; sales keep deducting stock while it is off.
+  const inventory = requireModule(app, "inventory");
   function item(id: string): StockRow {
     const row = db.prepare("SELECT * FROM stock_items WHERE id = ?").get(id) as StockRow | undefined;
     if (!row) throw httpError(404, "Stock item not found");
@@ -35,7 +38,7 @@ export function registerStock(app: FastifyInstance) {
   app.get("/api/stock-items", { preHandler: read }, async () => ({
     items: (db.prepare("SELECT * FROM stock_items ORDER BY name COLLATE NOCASE, id").all() as StockRow[]).map(stockJson),
   }));
-  app.post("/api/stock-items", { preHandler: manage }, async (req, reply) => {
+  app.post("/api/stock-items", { preHandler: [manage, inventory] }, async (req, reply) => {
     const body = StockCreate.parse(req.body);
     const requestJson = JSON.stringify(body);
     const result = db.transaction(() => {
@@ -53,7 +56,7 @@ export function registerStock(app: FastifyInstance) {
     if (result.created) publishStock(app, [result.id]);
     return reply.status(result.created ? 201 : 200).send({ item: stockJson(item(result.id)) });
   });
-  app.patch("/api/stock-items/:id", { preHandler: manage }, async (req) => {
+  app.patch("/api/stock-items/:id", { preHandler: [manage, inventory] }, async (req) => {
     const { id } = req.params as { id: string };
     const body = StockUpdate.parse(req.body);
     db.transaction(() => {
@@ -65,14 +68,14 @@ export function registerStock(app: FastifyInstance) {
     })();
     publishStock(app, [id]); return { item: stockJson(item(id)) };
   });
-  app.post("/api/stock-items/:id/movements", { preHandler: manage }, async (req, reply) => {
+  app.post("/api/stock-items/:id/movements", { preHandler: [manage, inventory] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = StockAdjust.parse(req.body);
     const requestJson = JSON.stringify({ stockItemId: id, ...body });
-    // Priced receiving needs the cost permission and the recipes plan; refuse before anything is written.
+    // Priced receiving needs the cost permission and Dish costing; refuse before anything is written.
     if (body.costPaise !== undefined) {
       if (!can(roleFor(req.user.role), "costs.read")) throw httpError(403, "Not allowed to record cost");
-      app.licensing.assertFeature("recipes", req.headers["x-forkflow-device"]);
+      assertModuleActive(db, "costing");
     }
     const result = db.transaction(() => {
       const old = db.prepare("SELECT id, request_json FROM stock_moves WHERE client_ref = ?").get(body.clientRef) as { id: string; request_json: string } | undefined;
@@ -97,8 +100,8 @@ export function registerStock(app: FastifyInstance) {
   app.get("/api/stock-items/:id/movements", { preHandler: read }, async (req) => {
     const { id } = req.params as { id: string }; item(id);
     const { before } = z.object({ before: z.string().min(1).max(64).optional() }).parse(req.query);
-    // Cost is admin-only and part of the recipes plan; everyone else gets no cost keys at all.
-    const showCost = can(roleFor(req.user.role), "costs.read") && app.licensing.status(req.headers["x-forkflow-device"]).features.recipes;
+    // Cost is admin-only and part of Dish costing; everyone else gets no cost keys at all.
+    const showCost = can(roleFor(req.user.role), "costs.read") && moduleActive(db, "costing");
     const moves = db.prepare(`SELECT m.id, m.stock_item_id AS stockItemId, m.delta, m.reason, m.note,
       m.order_item_id AS orderItemId, oi.order_id AS orderId, m.reversal_of AS reversalOf,
       m.created_at AS createdAt, u.name AS createdByName, m.balance_after AS balanceAfter${showCost ? ", m.cost_paise AS costPaise" : ""}
@@ -123,7 +126,7 @@ export function registerStock(app: FastifyInstance) {
     if (!product) throw httpError(404, "Product not found");
     return { links: links(id), version: product.stock_version };
   });
-  app.put("/api/products/:id/stock-links", { preHandler: manage }, async (req) => {
+  app.put("/api/products/:id/stock-links", { preHandler: [manage, inventory] }, async (req) => {
     const { id } = req.params as { id: string };
     const body = StockLinkUpdate.parse(req.body);
     const changedIds = db.transaction(() => {
@@ -144,7 +147,7 @@ export function registerStock(app: FastifyInstance) {
     return { links: links(id), version: (db.prepare("SELECT stock_version FROM products WHERE id = ?").get(id) as { stock_version: number }).stock_version };
   });
 
-  app.put("/api/products/:id/recipe", { preHandler: [manage, app.requireFeature("recipes")] }, async (req) => {
+  app.put("/api/products/:id/recipe", { preHandler: [manage, requireModule(app, "recipes")] }, async (req) => {
     const { id } = req.params as { id: string };
     const body = RecipeUpdate.parse(req.body);
     const changedIds = db.transaction(() => {

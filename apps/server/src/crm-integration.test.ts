@@ -31,7 +31,7 @@ describe("CRM & Loyalty as a Marketplace add-on", () => {
       ["GET", "/api/feedback"], ["GET", "/api/reports/crm"]] as const) {
       const res = await request(method, url);
       expect(res.statusCode, url).toBe(409);
-      expect(res.json().code).toBe("integration_off");
+      expect(res.json().code).toBe("module_off");
     }
     expect((await toggle(true)).json().integration).toMatchObject({ id: "crm", enabled: true, licensed: true });
     expect((await request("GET", "/api/customers")).statusCode).toBe(200);

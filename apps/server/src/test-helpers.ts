@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { MIGRATIONS, PLANS, migrate, openDb, planModules, type IntegrationId, type Plan } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type ModuleOverrides, type IntegrationId, type Plan } from "@forkflow/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer, type ServerOptions } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -87,8 +87,11 @@ export function enableIntegration(app: FastifyInstance, id: IntegrationId): void
     ON CONFLICT(id) DO UPDATE SET enabled=1, updated_at=excluded.updated_at, updated_by=excluded.updated_by`).run(id, Date.now(), admin.id);
 }
 
-/** A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device). */
-export async function commercialApp(plan: Plan) {
+/**
+ * A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device).
+ * `overrides` are the ForkFlow owner's module choices signed into the licence.
+ */
+export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {}) {
   const keys = generateKeyPairSync("ed25519");
   const installationId = randomUUID(), device = "d".repeat(64);
   const db = openDb(":memory:");
@@ -98,7 +101,7 @@ export async function commercialApp(plan: Plan) {
   const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
   const now = Date.now();
   const claims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), revision: 1, plan,
-    maxDevices: PLANS[plan].maxDevices, features: PLANS[plan].features, modules: planModules(plan), issuedAt: now - 1000, expiresAt: now + 86_400_000, graceUntil: now + 2 * 86_400_000 };
+    maxDevices: PLANS[plan].maxDevices, features: featuresFromModules(resolveModules(plan, overrides)), modules: resolveModules(plan, overrides), issuedAt: now - 1000, expiresAt: now + 86_400_000, graceUntil: now + 2 * 86_400_000 };
   const message = `ff1.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
   const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
   const activated = await app.inject({ method: "PUT", url: "/api/license", payload: { license }, headers });

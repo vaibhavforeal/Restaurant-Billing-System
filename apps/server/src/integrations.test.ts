@@ -28,7 +28,9 @@ describe("GET /api/integrations", () => {
     expect(res.headers["cache-control"]).toBe("no-store");
     const list = res.json().integrations as { id: string; enabled: boolean; licensed: boolean; updatedAt: number | null }[];
     expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm"]);
-    expect(list.every((i) => i.enabled === false && i.updatedAt === null && i.licensed === true)).toBe(true);
+    expect(list.every((i) => i.enabled === false && i.updatedAt === null)).toBe(true);
+    // Allowed in development builds; Swiggy is not a module yet, so it is never allowed.
+    expect(list.map((i) => i.licensed)).toEqual([true, false, true, true]);
     expect((await get()).statusCode).toBe(401);
     expect((await get(waiter.token)).statusCode).toBe(403);
     expect((await get(kitchen.token)).statusCode).toBe(403);
@@ -51,7 +53,7 @@ describe("kds licensing", () => {
     const c = await commercialApp("basic"); app = c.app;
     const on = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: true } });
     expect(on.statusCode).toBe(403);
-    expect(on.json().error).toBe("Kitchen Display requires the Pro plan");
+    expect(on.json().error).toBe("Kitchen Display (KDS) is not included for this restaurant. Contact ForkFlow to add it.");
     enableIntegration(app, "kds"); // a plan downgrade can leave the stored switch on
     const off = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: false } });
     expect(off.statusCode, off.body).toBe(200);
@@ -107,7 +109,7 @@ describe("PATCH /api/integrations/:id", () => {
     try {
       expect((await patch("zomato", admin.token, { enabled: true })).statusCode).toBe(200);
       await new Promise((r) => setTimeout(r, 50));
-      expect(messages).toEqual([{ event: "integrations.changed", data: {} }]);
+      expect(messages).toEqual([{ event: "modules.changed", data: {} }, { event: "integrations.changed", data: {} }]);
       messages.length = 0;
       expect((await patch("zomato", admin.token, { enabled: true })).statusCode).toBe(200);
       await new Promise((r) => setTimeout(r, 50));

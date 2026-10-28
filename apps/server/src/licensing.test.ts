@@ -4,6 +4,7 @@ import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb, planModules } from "
 import type { FastifyInstance } from "fastify";
 import type { LicensingOptions } from "./licensing.js";
 import { buildServer } from "./server.js";
+import { requireModule } from "./modules.js";
 import { SETUP, freshApp } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
@@ -26,8 +27,8 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
   const app = buildServer({ db, ...(logs ? { logger: { level: "trace", stream: { write: (line: string) => { logs.push(line); } } } } : {}),
     licensing: { publicKey, installationId, installationSecret, now: () => now, ...service } });
   // Exercise the same permission + entitlement guard that future paid routes use.
-  app.get("/api/test-recipes", { preHandler: [app.requirePermission("stock.manage"), app.requireFeature("recipes")] }, async () => ({ allowed: true }));
-  app.get("/api/test-kds", { preHandler: [app.requirePermission("kots.read"), app.requireFeature("kds")] }, async () => ({ allowed: true }));
+  app.get("/api/test-recipes", { preHandler: [app.requirePermission("stock.manage"), requireModule(app, "recipes")] }, async () => ({ allowed: true }));
+  app.get("/api/test-kds", { preHandler: [app.requirePermission("kots.read"), requireModule(app, "kds")] }, async () => ({ allowed: true }));
   apps.push(app);
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
   expect(setup.statusCode).toBe(201);
@@ -252,11 +253,11 @@ describe("commercial licensing", () => {
     expect((await f.activate({ ...f.claims, trial: "yes" } as unknown as LicenseClaims)).statusCode).toBe(400);
   });
 
-  it("names the kitchen display in the missing-feature error", async () => {
+  it("names the module and the reason when the licence leaves it out", async () => {
     const f = await fixture(); await f.activate(); await f.register();
     const res = await f.app.inject({ url: "/api/test-kds", headers: f.headers });
     expect(res.statusCode).toBe(403);
-    expect(res.json().error).toBe("This feature requires a plan with the Kitchen Display");
+    expect(res.json()).toMatchObject({ code: "module_off", error: "Kitchen Display (KDS) is not available: Not included for this restaurant." });
   });
 
   it("rejects forged, altered, wrong-installation, stale, future and cross-outlet licenses", async () => {
@@ -483,14 +484,14 @@ describe("licence renewal from the licensing service", () => {
     const stop = f.app.licensing.startRenewalChecks((m) => log.push(m));
     await vi.advanceTimersByTimeAsync(0);
     expect(s.spy).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000 - 1);
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000 - 1);
     expect(s.spy).toHaveBeenCalledTimes(1);
     next = `${signed({ ...f.claims, revision: 2 })}\n`;
     await vi.advanceTimersByTimeAsync(1);
     expect(s.spy).toHaveBeenCalledTimes(2);
     expect(f.app.licensing.status(device).revision).toBe(2);
     next = `${signed({ ...f.claims, revision: 3, installationId: randomUUID() })}\n`;
-    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
     expect(log.length).toBeGreaterThanOrEqual(2);
     expect(log.join("\n")).toContain("A new licence was installed.");
     expect(log.join("\n")).not.toContain("ff1.");

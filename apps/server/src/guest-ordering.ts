@@ -9,6 +9,7 @@ import { loadOrderJson, type OrderRow } from "./mappers.js";
 import { lanUrls } from "./system.js";
 import { menuPhotoUrl } from "./menu-photo.js";
 import { readGstSettings } from "./gst-settings.js";
+import { moduleActive, requireModule } from "./modules.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 const TTL = 2 * 60 * 60 * 1000;
@@ -89,8 +90,9 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
   function guestLicense(ordering = false) {
     const status = app.licensing.status();
     if (!["development", "active", "grace"].includes(status.state)) throw httpError(403, "The restaurant menu is temporarily unavailable. Please ask a member of staff.");
-    if (ordering && !status.features.qrOrdering) throw httpError(403, "Please ask a member of staff to place your order.");
-    return status.features.qrOrdering;
+    const qrOrdering = moduleActive(app.db, "qrOrdering");
+    if (ordering && !qrOrdering) throw httpError(403, "Please ask a member of staff to place your order.");
+    return qrOrdering;
   }
   function qrTable(req: FastifyRequest) {
     const token = credential(req.headers["x-qr-token"]);
@@ -212,7 +214,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       .run(reason, Date.now(), req.user.id, id);
     changed(); return { request: requestJson(app.db, getRequest(id)!) };
   });
-  app.post("/api/qr/requests/:id/accept", { preHandler: [app.requirePermission("orders.update"), app.requirePermission("orders.create"), app.requireFeature("qrOrdering")] }, async (req) => {
+  app.post("/api/qr/requests/:id/accept", { preHandler: [app.requirePermission("orders.update"), app.requirePermission("orders.create"), requireModule(app, "qrOrdering")] }, async (req) => {
     const { id } = idParams.parse(req.params);
     const body = z.object({ orderId: z.string().uuid().nullable() }).strict().parse(req.body);
     const decision = JSON.stringify(body);

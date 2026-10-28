@@ -4,12 +4,13 @@ import { readGstSettings } from "./gst-settings.js";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { publishStock, versionCheck } from "./stock.js";
+import { requireModule } from "./modules.js";
 
 const PRICE_TIERS: PriceTier[] = ["non_ac", "ac", "takeaway", "zomato"];
 
-/** Every costing route needs the admin-only `costs.read` permission and the `recipes` plan. */
+/** Every costing route needs the admin-only `costs.read` permission and the Dish costing module. */
 export function costGuards(app: FastifyInstance) {
-  return [app.requirePermission("costs.read"), app.requireFeature("recipes")];
+  return [app.requirePermission("costs.read"), requireModule(app, "costing")];
 }
 
 export function registerCosting(app: FastifyInstance): void {

@@ -1,14 +1,13 @@
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
+import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
 import { verifyLicenseSignature } from "@forkflow/core";
-import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 
 /** Nothing allowed: an installation without a valid licence. */
 const noModules = (): ModuleMap => Object.fromEntries(MODULE_IDS.map((id) => [id, false])) as ModuleMap;
 
-const FEATURE_NAMES: Record<Feature, string> = { recipes: "recipe editing", qrOrdering: "QR ordering", kds: "the Kitchen Display" };
 
 export interface LicensingOptions {
   publicKey: string;
@@ -29,7 +28,8 @@ export interface LicenseCheckResult {
   /** Why a licence was rejected, for the log; never contains licence text. */
   detail?: string;
 }
-const RENEWAL_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Hourly, so module changes the ForkFlow owner makes reach the counter within an hour; a check is one small request.
+const RENEWAL_INTERVAL_MS = 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
 const AUTOMATIC_ACTOR = "Automatic renewal";
 const CHECK_MESSAGES = {
@@ -279,7 +279,7 @@ export class Licensing {
       return response.ok ? { session: sessionReply.parse(await response.json()).session } : { status: response.status };
     } catch { return { status: 0 }; }
   }
-  /** Checks now and every 6 hours; failures are only logged. Returns a function that stops the checks. */
+  /** Checks now and every hour; failures are only logged. Returns a function that stops the checks. */
   startRenewalChecks(log: (message: string) => void): () => void {
     let stopped = false;
     const check = () => { void this.fetchLatest().then((r) => {
@@ -319,18 +319,10 @@ export class Licensing {
     const status = this.status(req.headers["x-forkflow-device"]);
     if (!status.canOperate) throw httpError(403, status.message);
   }
-  assertFeature(feature: Feature, credential: unknown) {
-    const status = this.status(credential);
-    if (!status.canOperate) throw httpError(403, status.message);
-    if (!status.features[feature]) throw httpError(403, `This feature requires a plan with ${FEATURE_NAMES[feature]}`);
-  }
 }
 
 export function configureLicensing(app: FastifyInstance, options?: LicensingOptions) {
   app.decorate("licensing", new Licensing(app, options));
-  app.decorate("requireFeature", (feature: Feature): preHandlerHookHandler => async (req) => {
-    app.licensing.assertFeature(feature, req.headers["x-forkflow-device"]);
-  });
 }
 export function registerLicensing(app: FastifyInstance) {
   const manage = app.requirePermission("settings.manage");
@@ -392,6 +384,5 @@ export function registerLicensing(app: FastifyInstance) {
 declare module "fastify" {
   interface FastifyInstance {
     licensing: Licensing;
-    requireFeature(feature: Feature): preHandlerHookHandler;
   }
 }

@@ -6,6 +6,7 @@ import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
 import { assertReservationSlot, localMinute, reservationTime } from "./reservation-rules.js";
 import { activeLinkForTable } from "./table-label.js";
+import { requireModule } from "./modules.js";
 
 interface Row {
   id: string; client_ref: string; request_json: string; table_id: string; table_name: string; area: string | null;
@@ -55,7 +56,9 @@ export function registerReservations(app: FastifyInstance) {
     return { date, reservations: rows.map(json), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, now, nowLocal: localMinute(now) };
   });
 
-  app.post("/api/reservations", { preHandler: manage }, async (req, reply) => {
+  // Booking and editing need the Reservations module; existing ones can still be seated or cancelled without it.
+  const reservations = requireModule(app, "reservations");
+  app.post("/api/reservations", { preHandler: [manage, reservations] }, async (req, reply) => {
     const body = ReservationCreate.parse(req.body), fingerprint = JSON.stringify(body);
     let created = false;
     const id = app.db.transaction(() => {
@@ -73,7 +76,7 @@ export function registerReservations(app: FastifyInstance) {
     return reply.status(created ? 201 : 200).send({ reservation: json(requireRow(id)) });
   });
 
-  app.patch("/api/reservations/:id", { preHandler: manage }, async (req) => {
+  app.patch("/api/reservations/:id", { preHandler: [manage, reservations] }, async (req) => {
     const id = idOf(req.params), body = ReservationUpdate.parse(req.body);
     const oldTableId = app.db.transaction(() => {
       const row = requireRow(id); current(row, body.version);

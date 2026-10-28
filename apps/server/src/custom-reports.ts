@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
+import { requireModule } from "./modules.js";
 
 type Row = Record<string, ReportCell>;
 const AGG = { sum: "SUM", avg: "AVG", max: "MAX" } as const;
@@ -186,7 +187,9 @@ const toSaved = (r: SavedRow): SavedCustomReport => ({ id: r.id, name: r.name, c
 
 export function registerCustomReports(app: FastifyInstance): void {
   const db = app.db;
-  const read = app.requirePermission("reports.read"), manage = app.requirePermission("reports.manage");
+  // Custom reports belong to the Reports & analytics module.
+  const reports = requireModule(app, "reports");
+  const read = [app.requirePermission("reports.read"), reports], manage = [app.requirePermission("reports.manage"), reports];
   const get = (id: string) => db.prepare("SELECT * FROM saved_reports WHERE id = ?").get(id) as SavedRow | undefined;
   const nameTaken = (name: string, exceptId = "") => db.prepare("SELECT 1 FROM saved_reports WHERE name = ? COLLATE NOCASE AND id <> ?").get(name, exceptId) !== undefined;
   const checked = (config: CustomReportConfigValue) => { const problem = customReportProblem(config); if (problem) throw httpError(400, problem); return config; };
