@@ -6,7 +6,7 @@ import { activationBlocker, orderById, orderByCodes, orderTerms, type LicensingO
 import { isWellFormedSecret, sha256Hex, verifyInstallationSecret } from "./secret.js";
 import {
   activityStatement, createInstallation, getInstallation, latestLicense, raiseRevisionFloorStatement, setOverridesStatement,
-  type InstallationRow,
+  type InstallationRow, type LicenseRow,
 } from "./store.js";
 
 // A client-reported revision can become the floor, so it is capped far below Number.MAX_SAFE_INTEGER.
@@ -73,40 +73,57 @@ export async function handleEnroll(deps: Deps, body: unknown, secret: string | n
   if (order.kind === "trial" && installation.orderId !== null && await holdsPaidLicence(deps, installation)) return refuse("already_licensed");
   if (order.seatsUsed >= order.outlets) return refuse("seats_full");
 
-  const now = deps.now();
+  try {
+    const row = await assignSeat(deps, installation, order, { actorId: null, outletName: request.outletName ?? null, appVersion: request.appVersion ?? null, handedOut: true });
+    return json(reply(order, row.envelope, row.expiresAt));
+  } catch (error) {
+    // Lost a race: for the last seat, or to this same counter enrolling twice at once.
+    const fresh = await getInstallation(db, installation.installationId);
+    if (fresh?.orderId === order.id) return handOut(deps, fresh, order, request.currentRevision);
+    if (await orderFull(deps, order.id)) return refuse("seats_full");
+    throw error;
+  }
+}
+
+/** Whether every seat of the order is taken right now. */
+export async function orderFull(deps: Deps, orderId: string): Promise<boolean> {
+  const current = await orderById(deps.db, orderId);
+  return current !== null && current.seatsUsed >= current.outlets;
+}
+
+/**
+ * Gives a counter one seat of a new or trial order and signs the order's licence for it, the term counted from now. A counter that
+ * held a seat on another order of the same customer gives that seat back. One batch: when the order is already full its seat CHECK
+ * fails and nothing is written (the caller sees the error). `handedOut` raises the revision floor because the licence goes straight
+ * to the counter (in the enrol reply, or as a file) rather than at its next check.
+ */
+export async function assignSeat(deps: Deps, installation: InstallationRow, order: LicensingOrder,
+  opts: { actorId: string | null; outletName: string | null; appVersion: string | null; handedOut: boolean }): Promise<LicenseRow> {
+  const { db } = deps, now = deps.now();
   const terms = orderTerms(order, now);
   const next: InstallationRow = {
     ...installation, customerId: order.customerId, orderId: order.id, maxDevices: order.maxDevices, activatedAt: now,
-    outletName: request.outletName ?? installation.outletName,
+    outletName: opts.outletName ?? installation.outletName,
   };
   const { row, statement } = await issueLicense(deps, { installation: next, ...terms, reason: "order", orderId: order.id, modules: order.modules });
   const outlet = next.outletName ?? "A counter";
-  try {
-    await db.batch([
-      // Taking the seat goes first: when the order is already full its CHECK fails and nothing below is written.
-      db.prepare(`UPDATE orders SET seats_used = seats_used + 1, updated_at = ? WHERE id = ?`).bind(now, order.id),
-      ...(installation.orderId ? [db.prepare(`UPDATE orders SET seats_used = seats_used - 1, updated_at = ? WHERE id = ?`).bind(now, installation.orderId)] : []),
-      db.prepare(`UPDATE installations SET customer_id = ?, order_id = ?, max_devices = ?, activated_at = ?, outlet_name = ?, last_seen_at = ?,
-        app_version = COALESCE(?, app_version) WHERE installation_id = ?`)
-        .bind(next.customerId, next.orderId, next.maxDevices, now, next.outletName, now, request.appVersion ?? null, next.installationId),
-      setOverridesStatement(db, next.installationId, order.modules, now),
-      statement,
-      raiseRevisionFloorStatement(db, next.installationId, row.revision),
-      activityStatement(db, now, {
-        actorId: null, action: "installation.enrolled", entityType: "installation", entityId: next.installationId, customerId: order.customerId,
-        summary: installation.orderId ? `${outlet} moved to order ${order.code}` : `${outlet} activated with order ${order.code}`,
-        data: { orderId: order.id, revision: row.revision },
-      }),
-    ]);
-  } catch (error) {
-    // Lost a race: for the last seat, or to this same counter enrolling twice at once.
-    const fresh = await getInstallation(db, next.installationId);
-    if (fresh?.orderId === order.id) return handOut(deps, fresh, order, request.currentRevision);
-    const current = await orderById(db, order.id);
-    if (current && current.seatsUsed >= current.outlets) return refuse("seats_full");
-    throw error;
-  }
-  return json(reply(order, row.envelope, row.expiresAt));
+  await db.batch([
+    // Taking the seat goes first: when the order is already full its CHECK fails and nothing below is written.
+    db.prepare(`UPDATE orders SET seats_used = seats_used + 1, updated_at = ? WHERE id = ?`).bind(now, order.id),
+    ...(installation.orderId ? [db.prepare(`UPDATE orders SET seats_used = seats_used - 1, updated_at = ? WHERE id = ?`).bind(now, installation.orderId)] : []),
+    db.prepare(`UPDATE installations SET customer_id = ?, order_id = ?, max_devices = ?, activated_at = ?, outlet_name = ?,
+      last_seen_at = CASE WHEN ? THEN ? ELSE last_seen_at END, app_version = COALESCE(?, app_version) WHERE installation_id = ?`)
+      .bind(next.customerId, next.orderId, next.maxDevices, now, next.outletName, opts.actorId === null ? 1 : 0, now, opts.appVersion, next.installationId),
+    setOverridesStatement(db, next.installationId, order.modules, now),
+    statement,
+    ...(opts.handedOut ? [raiseRevisionFloorStatement(db, next.installationId, row.revision)] : []),
+    activityStatement(db, now, {
+      actorId: opts.actorId, action: "installation.enrolled", entityType: "installation", entityId: next.installationId, customerId: order.customerId,
+      summary: installation.orderId ? `${outlet} moved to order ${order.code}` : `${outlet} activated with order ${order.code}`,
+      data: { orderId: order.id, revision: row.revision },
+    }),
+  ]);
+  return row;
 }
 
 /** The counter already holds this order's seat: hand back its newest licence if the counter does not have it yet. */

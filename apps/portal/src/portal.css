@@ -220,6 +220,18 @@ dialog.dialog > header h2 { font-size: 18px; font-weight: 600; }
 .seat-fill.grace { background: #e9b6bd; }
 .seat-today { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--text); }
 
+/* ---------- setup card: the two IDs a restaurant types at first run; prints on its own ---------- */
+.setup-card { border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--card-pad); display: grid; gap: 12px; }
+.setup-card .panel-head { margin-bottom: 0; }
+.setup-card .ids { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.setup-id { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: 0.04em; }
+@media print {
+  body * { visibility: hidden !important; }
+  .setup-card, .setup-card * { visibility: visible !important; }
+  .setup-card { position: fixed; top: 24px; left: 24px; width: 640px; border: 2px solid #000; }
+  .setup-card .no-print { display: none !important; }
+}
+
 /* ---------- bars in reports ---------- */
 .bar-row { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr) 110px; gap: 12px; align-items: center; padding: 6px 0; }
 .bar-track { height: 10px; border-radius: 999px; background: var(--raised); overflow: hidden; }

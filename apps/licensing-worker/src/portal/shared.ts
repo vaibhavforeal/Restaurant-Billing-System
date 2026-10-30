@@ -60,3 +60,67 @@ export function parseRupees(text: string): number | null {
   const [whole, fraction = ""] = clean.split(".");
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
+
+/** A priced line before GST. Rates are in basis points: 1800 is 18%. */
+export interface PricedLine { quantity: number; unitPricePaise: number; discountPaise: number; gstRateBp: number }
+export interface TaxedLine { taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number }
+export interface Totals { lines: TaxedLine[]; subtotalPaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; taxPaise: number; totalPaise: number }
+
+/** Half up to the paisa. */
+const round = (value: number) => Math.floor(value + 0.5);
+
+/**
+ * GST on each line, then the order's totals as the sum of the lines as shown. Within the seller's state the tax is CGST and SGST,
+ * each half the rate on the line's taxable value; otherwise one IGST at the full rate.
+ */
+export function computeTotals(lines: PricedLine[], intraState: boolean): Totals {
+  const taxed = lines.map((l) => {
+    const taxablePaise = Math.max(0, l.quantity * l.unitPricePaise - l.discountPaise);
+    const half = round((taxablePaise * l.gstRateBp) / 20_000);
+    return intraState ? { taxablePaise, cgstPaise: half, sgstPaise: half, igstPaise: 0 } : { taxablePaise, cgstPaise: 0, sgstPaise: 0, igstPaise: round((taxablePaise * l.gstRateBp) / 10_000) };
+  });
+  const sum = (key: keyof TaxedLine) => taxed.reduce((total, l) => total + l[key], 0);
+  const subtotalPaise = sum("taxablePaise"), cgstPaise = sum("cgstPaise"), sgstPaise = sum("sgstPaise"), igstPaise = sum("igstPaise");
+  const taxPaise = cgstPaise + sgstPaise + igstPaise;
+  return { lines: taxed, subtotalPaise, cgstPaise, sgstPaise, igstPaise, taxPaise, totalPaise: subtotalPaise + taxPaise };
+}
+
+/** The buyer's GST state: from their GSTIN when they have one, else the state on their address. */
+export const buyerState = (customer: { gstin: string | null; stateCode: string | null }) => customer.gstin?.slice(0, 2) || customer.stateCode || null;
+
+export const PLAN_NAMES = { basic: "Basic", pro: "Pro" } as const;
+export const termLabel = (o: { termMonths: number | null; termDays: number | null }) =>
+  o.termDays !== null ? `${o.termDays} days` : o.termMonths === 1 ? "1 month" : o.termMonths! % 12 === 0 ? (o.termMonths === 12 ? "1 year" : `${o.termMonths! / 12} years`) : `${o.termMonths} months`;
+
+/** Devices each plan includes per outlet; the same numbers as PLANS in @forkflow/domain/licensing (a test keeps them equal). */
+export const PLAN_DEVICES = { basic: 2, pro: 5 } as const;
+
+export interface DraftLine extends PricedLine { kind: "licence" | "extra"; description: string; sac: string }
+export interface OrderChoices {
+  kind: "new" | "renewal" | "trial"; plan: "basic" | "pro"; termMonths: number; outlets: number; maxDevices: number;
+  pricePerOutletPaise: number; discountPaise: number; extras: Array<{ description: string; sac: string; quantity: number; unitPricePaise: number }>;
+  installationIds: string[];
+}
+
+/**
+ * An order's invoice lines from what staff chose: the licence per outlet (or per renewed counter), extra devices beyond the plan's,
+ * then any extra lines, all at the settings' GST rate. A trial has no lines. The portal's preview and the Worker both use this.
+ */
+export function draftLines(o: OrderChoices, settings: { invoice: { sac: string; gstRateBp: number }; extraDevicePaise: number }): DraftLine[] {
+  if (o.kind === "trial") return [];
+  const renewal = o.kind === "renewal";
+  const quantity = renewal ? o.installationIds.length : o.outlets;
+  const term = termLabel({ termMonths: o.termMonths, termDays: null });
+  const { sac, gstRateBp } = settings.invoice;
+  const lines: DraftLine[] = [{
+    kind: "licence", description: `ForkFlow ${PLAN_NAMES[o.plan]} licence${renewal ? " renewal" : ""}, ${term}, per outlet`, sac,
+    quantity, unitPricePaise: o.pricePerOutletPaise, discountPaise: o.discountPaise, gstRateBp,
+  }];
+  const extraDevices = o.maxDevices - PLAN_DEVICES[o.plan];
+  if (extraDevices > 0 && settings.extraDevicePaise > 0 && quantity > 0) lines.push({
+    kind: "licence", description: `Extra devices beyond the plan's ${PLAN_DEVICES[o.plan]}, ${term}`, sac,
+    quantity: quantity * extraDevices, unitPricePaise: settings.extraDevicePaise, discountPaise: 0, gstRateBp,
+  });
+  for (const extra of o.extras) lines.push({ kind: "extra", ...extra, discountPaise: 0, gstRateBp });
+  return lines;
+}

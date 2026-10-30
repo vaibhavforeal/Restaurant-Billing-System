@@ -4,10 +4,14 @@ import { activityRoutes } from "./activity.js";
 import { changePassword, currentUser, signIn, signOut } from "./auth.js";
 import { assertCan, type Route } from "./context.js";
 import { HttpError, json, notFound, SECURITY_HEADERS } from "./http.js";
+import { customersRoutes } from "./customers.js";
+import { installationsRoutes } from "./installations.js";
+import { orderRoutes } from "./order-routes.js";
+import { searchRoutes } from "./search.js";
 import { settingsRoutes } from "./settings.js";
 import { usersRoutes } from "./users.js";
 
-const ROUTES: Route[] = [...usersRoutes, ...settingsRoutes, ...activityRoutes];
+const ROUTES: Route[] = [...usersRoutes, ...settingsRoutes, ...activityRoutes, ...customersRoutes, ...orderRoutes, ...installationsRoutes, ...searchRoutes];
 
 /** Everything under /portal: the JSON API for signed-in staff, and the web app itself. */
 export async function portalRoute(request: Request, env: Env, deps: Deps): Promise<Response> {
