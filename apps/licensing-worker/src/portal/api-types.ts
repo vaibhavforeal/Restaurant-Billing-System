@@ -107,3 +107,16 @@ export interface OrderInput {
   installationIds: string[]; notes: string;
 }
 export interface SearchHit { kind: "customer" | "order" | "lead" | "ticket"; id: string; title: string; detail: string }
+
+export interface InvoiceParty { name: string; gstin: string | null; address: string; stateCode: string | null; stateName: string | null; email: string | null; phone: string | null }
+export interface InvoiceSeller extends InvoiceParty { bankDetails: string; terms: string }
+export interface InvoiceBuyer extends InvoiceParty { code: string }
+export interface InvoiceLine {
+  description: string; sac: string; quantity: number; unitPricePaise: number; discountPaise: number; gstRateBp: number;
+  taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number;
+}
+export interface InvoiceDetail extends InvoiceSummary {
+  seller: InvoiceSeller; buyer: InvoiceBuyer; lines: InvoiceLine[]; placeOfSupply: string; intraState: boolean;
+  subtotalPaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; amountInWords: string;
+  cancelReason: string | null; issuedBy: Ref | null;
+}

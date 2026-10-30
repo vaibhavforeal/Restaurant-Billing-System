@@ -3,6 +3,7 @@ import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
 import type { Deps } from "./issue.js";
 import { handleEnroll } from "./enroll.js";
+import { razorpayFor } from "./portal/payments.js";
 import { portalRoute } from "./portal/router.js";
 import { SECRET_HEADER } from "./secret.js";
 import { handleWebhook } from "./webhook.js";
@@ -51,7 +52,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return body.ok ? handleEnroll(await deps(), body.body, request.headers.get(SECRET_HEADER)) : json({ error: "bad_request" }, 400);
   }
   if (method === "POST" && url.pathname === "/webhooks/razorpay") {
-    return handleWebhook({ ...(await deps()), webhookSecret: env.RAZORPAY_WEBHOOK_SECRET, log: (message) => console.warn(message) }, request);
+    return handleWebhook({ ...(await deps()), webhookSecret: env.RAZORPAY_WEBHOOK_SECRET, razorpay: razorpayFor(env), log: (message) => console.warn(message) }, request);
   }
   return json({ error: "not_found" }, 404);
 }

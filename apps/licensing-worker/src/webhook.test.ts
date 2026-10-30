@@ -18,7 +18,7 @@ beforeAll(async () => { signer = await webCryptoSigner(keys.privatePem); });
 beforeEach(() => {
   db = memoryD1();
   logs = [];
-  deps = { db, signer, now: () => T0, uuid: () => randomUUID(), webhookSecret: SECRET, log: (m) => logs.push(m) };
+  deps = { db, signer, now: () => T0, uuid: () => randomUUID(), webhookSecret: SECRET, razorpay: null, log: (m) => logs.push(m) };
 });
 
 const deliver = (body: string, eventId: string | null = "evt_1", signature = createHmac("sha256", SECRET).update(body).digest("hex")) =>

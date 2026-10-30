@@ -10,6 +10,7 @@ import type { InvoiceSummary, OrderDetail, OrderLine, OrderSummary, PaymentLinkR
 import { withFreshCode } from "./codes.js";
 import { logBy, path, queryInt, type Ctx, type Route } from "./context.js";
 import { fulfilmentStatements } from "./fulfil.js";
+import { cancelOpenLinks, razorpayFor } from "./payments.js";
 import { conflict, HttpError, json, notFound, readBody } from "./http.js";
 import { installationsWhere } from "./installations.js";
 import { ownedBy, visibleCustomer } from "./scope.js";
@@ -273,6 +274,8 @@ export const orderRoutes: Route[] = [
       db.prepare(`UPDATE orders SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?`).bind(now, now, before.id),
       logBy(ctx, { action: "order.cancelled", entityType: "order", entityId: before.id, customerId: before.customerId, summary: `Cancelled order ${before.code} (${reason})` }),
     ]);
+    const razorpay = razorpayFor(ctx.env);
+    if (razorpay) await cancelOpenLinks(ctx.deps, razorpay, before.id, (m) => console.warn(m));
     return json({ order: await orderDetail(ctx, before.id) });
   } },
 ];

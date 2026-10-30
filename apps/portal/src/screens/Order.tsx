@@ -6,6 +6,7 @@ import { date, dateTime, isoDay, money, plural, startOfIsoDay } from "../format"
 import { Link, navigate } from "../router";
 import { CopyButton, Dialog, Field, LoadError, PageHead, useData, useRun } from "../ui";
 import { CounterDialog, counterName, download, LicenceState, SeatStrip } from "./Counter";
+import { OrderMoney } from "./Money";
 import { OrderStatusMark } from "./Orders";
 
 const KIND_NAMES = { new: "New outlets", renewal: "Renewal", trial: "Trial" } as const;
@@ -20,7 +21,6 @@ export function Order({ id, me }: { id: string; me: StaffUser }) {
   if (!o) return <PageHead title="Loading…" back={<Link to="/orders">Orders</Link>} />;
   const set = (order: OrderDetail) => setData({ order });
   const usable = o.kind !== "renewal" && (o.status === "paid" || (o.status === "confirmed" && (o.kind === "trial" || (o.creditUntil !== null && o.creditUntil > Date.now()))));
-  const owing = Math.max(0, o.totalPaise - o.paidPaise);
   const can = (p: Parameters<typeof roleCan>[1]) => roleCan(me.role, p);
   return <>
     <PageHead back={<><Link to="/orders">Orders</Link> / <Link to={`/customers/${o.customer.id}`}>{o.customer.name}</Link></>}
@@ -60,17 +60,7 @@ export function Order({ id, me }: { id: string; me: StaffUser }) {
           <p className="muted small" style={{ marginTop: 8 }}>{o.status === "paid" ? "Extended when the order was paid." : "Each gets the term added to its end date when the order is paid."}</p></section>}
       </div>
       <aside className="rail stack">
-        <section><h2>Payment</h2>
-          <dl className="kv">
-            <dt>Total</dt><dd className="num" style={{ textAlign: "left" }}>{money(o.totalPaise)}</dd>
-            <dt>Received</dt><dd>{money(o.paidPaise)}</dd>
-            {o.status === "confirmed" && o.kind !== "trial" && <><dt>Still to pay</dt><dd><strong>{money(owing)}</strong></dd></>}
-            {o.creditUntil && <><dt>On credit until</dt><dd>{date(o.creditUntil)}{o.creditApprovedBy && <span className="muted"> · {o.creditApprovedBy.name}</span>}</dd></>}
-            {o.paidAt && <><dt>Paid</dt><dd>{dateTime(o.paidAt)}</dd></>}
-          </dl>
-          {o.payments.length > 0 && <ul className="stack" style={{ marginTop: 12, gap: 6 }}>{o.payments.map((p) => <li key={p.id}>{money(p.amountPaise)} by {p.method}
-            <span className="muted"> · {date(p.receivedAt)}{p.status !== "cleared" ? ` · ${p.status}` : ""}{p.reference ? ` · ${p.reference}` : ""}</span></li>)}</ul>}
-        </section>
+        <OrderMoney order={o} me={me} onChanged={set} />
         <section><h2>Order</h2><dl className="kv">
           <dt>Customer</dt><dd><Link to={`/customers/${o.customer.id}`}>{o.customer.name}</Link></dd>
           <dt>Devices</dt><dd>{o.maxDevices} per outlet</dd>

@@ -14,6 +14,7 @@ const paths = {
   logout: "M6.5 2.5h-4v11h4M10.5 5l3 3-3 3M13.5 8h-7",
   search: "M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM14 14l-3.5-3.5",
   menu: "M2 4h12M2 8h12M2 12h12",
+  invoices: "M4 1.5h6l2.5 2.5v10.5H4zM10 1.5V4h2.5M6 7.5h4M6 10h4M6 12.5h2",
   followups: "M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM8 4.5V8l2.5 1.5",
 } as const;
 export type IconName = keyof typeof paths;

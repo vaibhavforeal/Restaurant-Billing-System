@@ -8,6 +8,7 @@ import { Search } from "./Search";
 import { Activity } from "./screens/Activity";
 import { Customer } from "./screens/Customer";
 import { Customers } from "./screens/Customers";
+import { Invoices } from "./screens/Money";
 import { Order } from "./screens/Order";
 import { OrderEditor } from "./screens/OrderEditor";
 import { Orders } from "./screens/Orders";
@@ -42,6 +43,7 @@ interface NavItem { to: string; label: string; icon: IconName; permission?: Perm
 const WORK: NavItem[] = [
   { to: "/customers", label: "Customers", icon: "customers", permission: "customers.read" },
   { to: "/orders", label: "Orders", icon: "orders", permission: "orders.read" },
+  { to: "/invoices", label: "Invoices", icon: "invoices", permission: "orders.read" },
 ];
 const ADMIN: NavItem[] = [
   { to: "/admin/users", label: "Staff", icon: "users", permission: "users.manage" },
@@ -84,6 +86,7 @@ function route(path: string, search: URLSearchParams, user: StaffUser, onUser: (
   if (match("/customers", path) && can("customers.read")) return <Customers me={user} />;
   if ((m = match("/customers/:id", path)) && can("customers.read")) return <Customer key={m["id"]} id={m["id"]!} me={user} />;
   if (match("/orders", path) && can("orders.read")) return <Orders me={user} />;
+  if (match("/invoices", path) && can("orders.read")) return <Invoices />;
   if (match("/orders/new", path) && can("orders.write")) {
     const kind = search.get("kind");
     return <OrderEditor key={search.toString()} customerId={search.get("customerId")} {...(kind === "trial" || kind === "renewal" ? { kind } : {})} />;
