@@ -3,6 +3,7 @@ import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
 import type { Deps } from "./issue.js";
 import { handleEnroll } from "./enroll.js";
+import { portalRoute } from "./portal/router.js";
 import { SECRET_HEADER } from "./secret.js";
 import { handleWebhook } from "./webhook.js";
 
@@ -38,6 +39,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   const { method } = request;
   const deps = async (): Promise<Deps> => ({ db: env.DB, signer: await signerFor(env), now: Date.now, uuid: () => crypto.randomUUID() });
 
+  if (url.pathname === "/portal" || url.pathname.startsWith("/portal/")) return portalRoute(request, env, await deps());
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);

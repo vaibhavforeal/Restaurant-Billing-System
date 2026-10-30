@@ -5,9 +5,13 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "forkflow-licensing", "database_id": "<set by wrangler d1 create>", "migrations_dir": "migrations" }
   ],
+  // The ForkFlow Portal web app: build it first (npm run build -w @forkflow/portal), which writes dist/portal. The Worker runs first on
+  // every request, serves /portal pages itself (with security headers) and leaves /v1 and the webhook untouched.
+  "assets": { "directory": "../portal/dist", "binding": "ASSETS", "run_worker_first": true },
   // period must be 10 or 60 seconds; namespace_id is a string holding a positive integer.
   "ratelimits": [
-    { "name": "LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }
+    { "name": "LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "LOGIN_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
   ],
   "env": {
     "test": {
@@ -15,7 +19,8 @@
         { "binding": "DB", "database_name": "forkflow-licensing-test", "database_id": "<set by wrangler d1 create>", "migrations_dir": "migrations" }
       ],
       "ratelimits": [
-        { "name": "LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
+        { "name": "LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+        { "name": "LOGIN_LIMITER", "namespace_id": "1004", "simple": { "limit": 10, "period": 60 } }
       ]
     }
   }
