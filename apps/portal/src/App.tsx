@@ -5,6 +5,12 @@ import { api, ApiError, post, session } from "./api";
 import { Icon, Mark, type IconName } from "./icons";
 import { Link, match, navigate, useLocation } from "./router";
 import { Search } from "./Search";
+import { FollowUps } from "./screens/FollowUps";
+import { Home } from "./screens/Home";
+import { Lead, Leads } from "./screens/Leads";
+import { Renewals } from "./screens/Renewals";
+import { Reports } from "./screens/Reports";
+import { Ticket, Tickets } from "./screens/Tickets";
 import { Activity } from "./screens/Activity";
 import { Customer } from "./screens/Customer";
 import { Customers } from "./screens/Customers";
@@ -41,9 +47,15 @@ export function App() {
 
 interface NavItem { to: string; label: string; icon: IconName; permission?: Permission }
 const WORK: NavItem[] = [
+  { to: "/home", label: "Today", icon: "home" },
+  { to: "/follow-ups", label: "Follow-ups", icon: "followups", permission: "followups.write" },
+  { to: "/leads", label: "Leads", icon: "leads", permission: "leads.read" },
   { to: "/customers", label: "Customers", icon: "customers", permission: "customers.read" },
   { to: "/orders", label: "Orders", icon: "orders", permission: "orders.read" },
   { to: "/invoices", label: "Invoices", icon: "invoices", permission: "orders.read" },
+  { to: "/renewals", label: "Renewals", icon: "renewals", permission: "customers.read" },
+  { to: "/tickets", label: "Support", icon: "tickets", permission: "tickets.read" },
+  { to: "/reports", label: "Reports", icon: "reports", permission: "reports.read" },
 ];
 const ADMIN: NavItem[] = [
   { to: "/admin/users", label: "Staff", icon: "users", permission: "users.manage" },
@@ -83,13 +95,22 @@ function Shell({ user, onSignedOut, onUser }: { user: StaffUser; onSignedOut: ()
 function route(path: string, search: URLSearchParams, user: StaffUser, onUser: (user: StaffUser) => void): ReactNode {
   const can = (p: Permission) => roleCan(user.role, p);
   let m: Record<string, string> | null;
+  if (match("/home", path)) return <Home me={user} />;
+  if (match("/follow-ups", path) && can("followups.write")) return <FollowUps me={user} />;
+  if (match("/leads", path) && can("leads.read")) return <Leads me={user} />;
+  if ((m = match("/leads/:id", path)) && can("leads.read")) return <Lead key={m["id"]} id={m["id"]!} me={user} />;
+  if (match("/renewals", path) && can("customers.read")) return <Renewals me={user} />;
+  if (match("/tickets", path) && can("tickets.read")) return <Tickets me={user} />;
+  if ((m = match("/tickets/:id", path)) && can("tickets.read")) return <Ticket key={m["id"]} id={m["id"]!} me={user} />;
+  if (match("/reports", path) && can("reports.read")) return <Reports />;
   if (match("/customers", path) && can("customers.read")) return <Customers me={user} />;
   if ((m = match("/customers/:id", path)) && can("customers.read")) return <Customer key={m["id"]} id={m["id"]!} me={user} />;
   if (match("/orders", path) && can("orders.read")) return <Orders me={user} />;
   if (match("/invoices", path) && can("orders.read")) return <Invoices />;
   if (match("/orders/new", path) && can("orders.write")) {
     const kind = search.get("kind");
-    return <OrderEditor key={search.toString()} customerId={search.get("customerId")} {...(kind === "trial" || kind === "renewal" ? { kind } : {})} />;
+    return <OrderEditor key={search.toString()} customerId={search.get("customerId")} {...(kind === "trial" || kind === "renewal" ? { kind } : {})}
+      installationIds={search.get("installations")?.split(",").filter(Boolean) ?? []} />;
   }
   if ((m = match("/orders/:id/edit", path)) && can("orders.write")) return <OrderEditor key={m["id"]} customerId={null} orderId={m["id"]!} />;
   if ((m = match("/orders/:id", path)) && can("orders.read")) return <Order key={m["id"]} id={m["id"]!} me={user} />;

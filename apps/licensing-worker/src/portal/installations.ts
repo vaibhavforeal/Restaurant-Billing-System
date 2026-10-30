@@ -21,8 +21,11 @@ interface Row {
   plan: "basic" | "pro" | null; revision: number | null; expiresAt: number | null; graceUntil: number | null; envelope: string | null; licenceOrderCode: string | null;
 }
 
-/** Counters matching `where` (columns of `i`, the installation), with each one's newest licence. The caller has checked scope. */
-export async function installationsWhere(ctx: Ctx, where: string, binds: unknown[]): Promise<InstallationSummary[]> {
+/**
+ * Counters matching `where`, with each one's newest licence. `where` may use `i` (the installation), `c` (its customer), `l` (its newest
+ * licence) and `lo` (the order that licence came from). The caller has checked scope.
+ */
+export async function installationsWhere(ctx: Ctx, where: string, binds: unknown[], order = "i.order_id IS NULL, COALESCE(i.activated_at, i.created_at) DESC", limit = 500): Promise<InstallationSummary[]> {
   const { results } = await ctx.deps.db.prepare(`SELECT i.installation_id AS id, i.outlet_name AS outletName, i.customer_id AS customerId, c.business_name AS customerName,
       i.order_id AS orderId, o.code AS orderCode, i.activated_at AS activatedAt, i.last_seen_at AS lastSeenAt, i.app_version AS appVersion, i.created_at AS createdAt,
       i.revision_floor AS revisionFloor, i.secret_hash IS NOT NULL AS paired,
@@ -30,7 +33,7 @@ export async function installationsWhere(ctx: Ctx, where: string, binds: unknown
     FROM installations i LEFT JOIN customers c ON c.id = i.customer_id LEFT JOIN orders o ON o.id = i.order_id
       LEFT JOIN licenses l ON l.installation_id = i.installation_id AND l.revision = (SELECT MAX(revision) FROM licenses WHERE installation_id = i.installation_id)
       LEFT JOIN orders lo ON lo.id = l.order_id
-    WHERE ${where} ORDER BY i.order_id IS NULL, COALESCE(i.activated_at, i.created_at) DESC`).bind(...binds).all<Row>();
+    WHERE ${where} ORDER BY ${order} LIMIT ?`).bind(...binds, limit).all<Row>();
   const now = ctx.deps.now();
   return results.map((r) => {
     const claims = r.envelope ? readClaims(r.envelope) : null;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ActivityPage, Colleague, CustomerDetail, InstallationSummary, OrderSummary, StaffUser } from "../../../licensing-worker/src/portal/api-types";
+import type { ActivityPage, Colleague, CustomerDetail, FollowUp, InstallationSummary, OrderSummary, StaffUser } from "../../../licensing-worker/src/portal/api-types";
 import { GST_STATES, roleCan } from "../../../licensing-worker/src/portal/shared";
 import { api, query } from "../api";
 import { date, money, plural } from "../format";
@@ -8,9 +8,11 @@ import { CopyButton, LoadError, PageHead, Person, Tabs, useData } from "../ui";
 import { ActivityTable } from "./Activity";
 import { CounterDialog, counterName, LicenceState, SeatStrip } from "./Counter";
 import { CustomerDialog, Renewal } from "./Customers";
+import { AddFollowUp, FollowUpRows } from "./FollowUps";
 import { OrdersTable } from "./Orders";
+import { Tickets } from "./Tickets";
 
-type Tab = "overview" | "orders" | "counters" | "activity";
+type Tab = "overview" | "orders" | "counters" | "followups" | "tickets" | "activity";
 
 export function Customer({ id, me }: { id: string; me: StaffUser }) {
   const { data, error, reload, setData } = useData(() => api<{ customer: CustomerDetail }>(`/customers/${id}`), id);
@@ -39,7 +41,8 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
     </div>
     <Tabs label="Customer" value={tab} onChange={setTab} tabs={[
       { id: "overview", label: "Overview" }, { id: "orders", label: <>Orders<span className="count">{c.orders}</span></> },
-      { id: "counters", label: <>Counters<span className="count">{list.length}</span></> }, { id: "activity", label: "Activity" },
+      { id: "counters", label: <>Counters<span className="count">{list.length}</span></> }, { id: "followups", label: "Follow-ups" },
+      ...(roleCan(me.role, "tickets.read") ? [{ id: "tickets" as const, label: "Support" }] : []), { id: "activity", label: "Activity" },
     ]} />
     {tab === "overview" && <div className="grid-main">
       <div className="stack">
@@ -65,6 +68,8 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
     </div>}
     {tab === "orders" && <CustomerOrders customerId={c.id} />}
     {tab === "counters" && <CountersTable counters={list} onOpen={(i) => setCounter(i.id)} />}
+    {tab === "followups" && <CustomerFollowUps customerId={c.id} me={me} />}
+    {tab === "tickets" && <Tickets me={me} customerId={c.id} />}
     {tab === "activity" && <CustomerActivity customerId={c.id} />}
     {editing && <CustomerDialog me={me} staff={staff.data?.staff ?? []} customer={c} onClose={() => setEditing(false)} onSaved={(next) => { setEditing(false); setData({ customer: next }); }} />}
     {counter && <CounterDialog id={counter} me={me} onClose={() => setCounter(null)} onChanged={() => { void counters.reload(); void reload(); }} />}
@@ -101,4 +106,15 @@ function CustomerActivity({ customerId }: { customerId: string }) {
   const { data, error, reload } = useData(() => api<ActivityPage>(`/customers/${customerId}/activity`), customerId);
   if (error) return <LoadError message={error} retry={reload} />;
   return <ActivityTable entries={data?.entries ?? []} loaded={!!data} compact />;
+}
+
+function CustomerFollowUps({ customerId, me }: { customerId: string; me: StaffUser }) {
+  const { data, error, reload } = useData(() => api<{ followUps: FollowUp[] }>(`/customers/${customerId}/follow-ups`), customerId);
+  const [adding, setAdding] = useState(false);
+  if (error) return <LoadError message={error} retry={reload} />;
+  return <>
+    {roleCan(me.role, "followups.write") && <div className="toolbar"><span className="spacer" /><button className="secondary" onClick={() => setAdding(true)}>Add follow-up</button></div>}
+    <FollowUpRows items={data?.followUps ?? []} loaded={!!data} showAbout={false} onChanged={() => void reload()} />
+    {adding && <AddFollowUp about={{ customerId }} me={me} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload(); }} />}
+  </>;
 }

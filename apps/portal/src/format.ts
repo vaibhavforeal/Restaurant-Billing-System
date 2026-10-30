@@ -32,7 +32,16 @@ export function relativeDay(at: number | null | undefined, now = Date.now()): st
   return date(at);
 }
 
+/** "Today", "In 15 days", "3 days ago": how far a date is, in whole India days. */
+export function inDays(at: number, now = Date.now()): string {
+  const days = daysFromToday(at, now);
+  return days === 0 ? "Today" : days === 1 ? "Tomorrow" : days === -1 ? "Yesterday" : days > 0 ? `In ${days} days` : `${-days} days ago`;
+}
+
 /** Money in rupees with Indian grouping, "₹1,23,456.00". */
 export const money = (paise: number | null | undefined) => (paise === null || paise === undefined ? "—" : formatPaise(paise, "₹"));
 
 export const plural = (count: number, one: string, many = `${one}s`) => `${count.toLocaleString("en-IN")} ${count === 1 ? one : many}`;
+
+/** "4:05 pm" in India time. */
+export const timeOfDay = (at: number) => timeFmt.format(at);

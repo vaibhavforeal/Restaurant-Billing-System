@@ -17,7 +17,7 @@ interface Form {
 }
 
 /** Drafting or editing an order for one customer, with the GST worked out as it will be invoiced. */
-export function OrderEditor({ customerId, orderId, kind }: { customerId: string | null; orderId?: string; kind?: OrderKind }) {
+export function OrderEditor({ customerId, orderId, kind, installationIds = [] }: { customerId: string | null; orderId?: string; kind?: OrderKind; installationIds?: string[] }) {
   const existing = useData(() => orderId ? api<{ order: OrderDetail }>(`/orders/${orderId}`) : Promise.resolve(null), orderId ?? "new");
   const id = orderId ? existing.data?.order.customer.id ?? null : customerId;
   const customer = useData(() => id ? api<{ customer: CustomerDetail }>(`/customers/${id}`) : Promise.resolve(null), id ?? "none");
@@ -28,11 +28,11 @@ export function OrderEditor({ customerId, orderId, kind }: { customerId: string 
   if (error) return <><PageHead title="New order" /><LoadError message={error} retry={() => { void customer.reload(); void settings.reload(); }} /></>;
   if (!customer.data || !settings.data || !counters.data || (orderId && !existing.data)) return <PageHead title={orderId ? "Edit order" : "New order"} sub="Loading…" />;
   return <EditorForm customer={customer.data.customer} settings={settings.data.settings} counters={counters.data.installations}
-    order={existing.data?.order ?? null} initialKind={kind ?? "new"} />;
+    order={existing.data?.order ?? null} initialKind={kind ?? "new"} initialTargets={installationIds} />;
 }
 
-function EditorForm({ customer, settings, counters, order, initialKind }: {
-  customer: CustomerDetail; settings: PortalSettingsData; counters: InstallationSummary[]; order: OrderDetail | null; initialKind: OrderKind;
+function EditorForm({ customer, settings, counters, order, initialKind, initialTargets }: {
+  customer: CustomerDetail; settings: PortalSettingsData; counters: InstallationSummary[]; order: OrderDetail | null; initialKind: OrderKind; initialTargets: string[];
 }) {
   const priceFor = (plan: "basic" | "pro", months: number) => settings.prices.find((p) => p.plan === plan && p.termMonths === months)?.pricePaise;
   const [form, setForm] = useState<Form>(() => {
@@ -46,7 +46,7 @@ function EditorForm({ customer, settings, counters, order, initialKind }: {
       };
     }
     return { kind: initialKind, plan: "pro", termMonths: 12, outlets: "1", maxDevices: String(PLAN_DEVICES.pro), price: rupees(priceFor("pro", 12) ?? 0), discount: "0",
-      modules: {}, extras: [], installationIds: [], notes: "" };
+      modules: {}, extras: [], installationIds: initialTargets, notes: "" };
   });
   const [touched, setTouched] = useState(false);
   const { busy, run, status, setError } = useRun();

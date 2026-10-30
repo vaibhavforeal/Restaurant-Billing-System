@@ -1,5 +1,5 @@
 // The portal API's request and response shapes, shared with the portal web app (apps/portal imports this file type-only).
-// Plain interfaces: no imports beyond shared.ts, so the web app can compile it without the Worker's dependencies.
+// Plain types and constants: no imports beyond shared.ts, so the web app can compile it without the Worker's dependencies.
 import type { Role } from "./shared.js";
 
 export interface StaffUser { id: string; email: string; name: string; role: Role; mustChangePassword: boolean }
@@ -119,4 +119,64 @@ export interface InvoiceDetail extends InvoiceSummary {
   seller: InvoiceSeller; buyer: InvoiceBuyer; lines: InvoiceLine[]; placeOfSupply: string; intraState: boolean;
   subtotalPaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; amountInWords: string;
   cancelReason: string | null; issuedBy: Ref | null;
+}
+
+export const LEAD_STAGES = ["new", "contacted", "demo_scheduled", "demo_done", "proposal", "won", "lost"] as const;
+export type LeadStage = (typeof LEAD_STAGES)[number];
+export type LeadSource = "walk_in" | "referral" | "website" | "call" | "partner" | "event" | "other";
+export interface LeadSummary {
+  id: string; businessName: string; contactName: string | null; phone: string | null; city: string | null; source: LeadSource; stage: LeadStage;
+  expectedPlan: "basic" | "pro" | null; expectedOutlets: number | null; estimatedValuePaise: number | null; owner: Ref | null;
+  nextFollowUpAt: number | null; createdAt: number; stageChangedAt: number; customerId: string | null;
+}
+export interface LeadDetail extends LeadSummary {
+  email: string | null; stateCode: string | null; lostReason: string | null; notes: string | null; closedAt: number | null; followUps: FollowUp[];
+}
+export interface LeadInput {
+  businessName: string; contactName: string; phone: string; email: string; city: string; stateCode: string; source: LeadSource;
+  expectedPlan: "basic" | "pro" | null; expectedOutlets: number | null; estimatedValuePaise: number | null; notes: string; ownerId?: string | null;
+}
+
+export type FollowUpKind = "call" | "visit" | "demo" | "whatsapp" | "email" | "renewal" | "payment" | "other";
+export interface FollowUp {
+  id: string; kind: FollowUpKind; dueAt: number; note: string; status: "open" | "done" | "cancelled"; outcome: string | null; doneAt: number | null;
+  owner: Ref; lead: Ref | null; customer: Ref | null; phone: string | null;
+}
+
+export type TicketStatus = "open" | "in_progress" | "waiting" | "resolved" | "closed";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
+export type TicketCategory = "activation" | "licence" | "billing" | "printing" | "hardware" | "training" | "bug" | "other";
+export interface TicketSummary {
+  id: string; number: number; subject: string; category: TicketCategory; priority: TicketPriority; status: TicketStatus;
+  customer: Ref; assignee: Ref | null; createdAt: number; updatedAt: number; resolvedAt: number | null;
+}
+export interface TicketDetail extends TicketSummary {
+  description: string | null; installation: { id: string; name: string } | null; createdBy: Ref | null;
+  comments: Array<{ id: number; body: string; author: Ref | null; createdAt: number }>;
+}
+
+export interface RenewalRow {
+  installation: InstallationSummary; customer: Ref & { code: string; owner: Ref | null }; openRenewal: { id: string; code: string; status: OrderStatus } | null;
+  nextFollowUpAt: number | null;
+}
+
+export interface HomeData {
+  followUps: { overdue: number; dueToday: number; items: FollowUp[] };
+  renewals: { due30: number; expired: number; items: RenewalRow[] };
+  orders: { waiting: number; owedPaise: number; items: OrderSummary[] };
+  tickets: { open: number; urgent: number; items: TicketSummary[] } | null;
+  leads: { open: number; byStage: Record<string, number> } | null;
+  month: { receivedPaise: number; invoices: number; newCustomers: number };
+}
+
+export interface ReportData {
+  from: number; to: number;
+  revenueByMonth: Array<{ month: string; paise: number }>;
+  revenueByPlan: Array<{ plan: "basic" | "pro"; paise: number; orders: number }>;
+  funnel: Array<{ stage: LeadStage; count: number }>;
+  sources: Array<{ source: LeadSource; leads: number; won: number }>;
+  reps: Array<{ rep: Ref; leadsWon: number; ordersPaid: number; revenuePaise: number }>;
+  renewals: { due: number; renewed: number };
+  trials: { started: number; converted: number };
+  tickets: { opened: number; resolved: number; medianHoursToResolve: number | null; openByPriority: Record<string, number> };
 }

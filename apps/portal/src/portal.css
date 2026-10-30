@@ -41,7 +41,7 @@ table, .num, .kpi-value { font-variant-numeric: tabular-nums; }
 .num { text-align: right; white-space: nowrap; }
 .muted { color: var(--muted); }
 .small { font-size: var(--fs-small); line-height: 16px; }
-.mono { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 13px; letter-spacing: 0; }
+.mono { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---------- shell ---------- */
@@ -237,6 +237,24 @@ dialog.dialog > header h2 { font-size: 18px; font-weight: 600; }
 .bar-track { height: 10px; border-radius: 999px; background: var(--raised); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 999px; background: var(--accent); }
 .bar-fill.quiet { background: #b9bcc2; }
+
+/* ---------- payments by month: one series, columns on one scale, 4 round ticks, the accent on the data ---------- */
+.month-chart { margin: 0; }
+.month-plot { position: relative; height: 220px; margin-left: 56px; }
+.month-grid { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.month-gridline { position: relative; border-top: 1px solid #ececec; height: 0; }
+.month-gridline:last-child { border-top-color: #cfcfcf; }
+.month-gridline span { position: absolute; right: calc(100% + 8px); top: -8px; font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.month-bars { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: end; }
+.month-col { height: 100%; display: flex; align-items: flex-end; }
+.month-col:hover .month-bar { background: #8f1a29; }
+.month-bar { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 0; }
+.month-labels { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; margin: 6px 0 8px 56px; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* ---------- home ---------- */
+.home-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; border-top: 1px solid var(--rule); }
+.home-row:first-child { border-top: 0; }
+.home-row .num { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ---------- phone and tablet ---------- */
 @media (max-width: 1100px) {
