@@ -29,6 +29,9 @@ export const LicenseClaims = z.object({
   expiresAt: z.number().int().positive().max(8_640_000_000_000_000),
   graceUntil: z.number().int().positive().max(8_640_000_000_000_000),
   trial: z.boolean().optional(),
+  /** The ForkFlow Portal's Customer ID and the Order ID these terms come from, shown on the counter for support calls. */
+  customerCode: z.string().min(1).max(20).optional(),
+  orderCode: z.string().min(1).max(20).optional(),
 }).strict().refine((c) => c.issuedAt < c.expiresAt && c.expiresAt <= c.graceUntil,
   "License dates must be ordered: issued, expires, grace");
 export type LicenseClaims = z.infer<typeof LicenseClaims>;
@@ -75,4 +78,6 @@ export interface ActivationRequest {
   format: "forkflow-activation-request"; version: 1; installationId: string;
   licenseId: string | null; organizationId: string | null; outletId: string | null;
   currentRevision: number; generatedAt: number; verificationKeyFingerprint: string;
+  /** Reported so ForkFlow support can see which version and restaurant a counter is; neither affects the licence. */
+  appVersion?: string; outletName?: string;
 }

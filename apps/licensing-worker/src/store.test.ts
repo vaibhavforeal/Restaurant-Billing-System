@@ -3,10 +3,9 @@ import type { D1Like } from "./env.js";
 import { createInstallation, getInstallation, insertLicenseStatement, latestLicense, nextRevision, recordEventStatement, type LicenseRow } from "./store.js";
 import { memoryD1 } from "./testing/d1.js";
 
-const install = (id: string, revisionFloor = 0) => ({ installationId: id, licenseId: `lic-${id}`, organizationId: "org", outletId: "out", trialStartedAt: null, revisionFloor, createdAt: 1, secretHash: null });
+const install = (id: string, revisionFloor = 0) => ({ installationId: id, licenseId: `lic-${id}`, organizationId: "org", outletId: "out", revisionFloor, createdAt: 1, secretHash: null });
 const licence = (installationId: string, revision: number, over: Partial<LicenseRow> = {}): LicenseRow => ({
-  installationId, revision, plan: "pro", issuedAt: 1, expiresAt: 2, graceUntil: 3, envelope: `env-${revision}`, reason: "charge",
-  razorpaySubscriptionId: null, razorpayPaymentId: null, ...over,
+  installationId, revision, plan: "pro", issuedAt: 1, expiresAt: 2, graceUntil: 3, envelope: `env-${revision}`, reason: "order", orderId: null, ...over,
 });
 
 describe("licensing store", () => {
@@ -43,9 +42,9 @@ describe("licensing store", () => {
     expect(await latestLicense(db, "i1")).toBeNull();
   });
 
-  it("payment ids are unique", async () => {
+  it("a licence's reason and plan are checked", async () => {
     await createInstallation(db, install("i1"));
-    await db.batch([insertLicenseStatement(db, licence("i1", 1, { razorpayPaymentId: "pay_1" }))]);
-    await expect(db.batch([insertLicenseStatement(db, licence("i1", 2, { razorpayPaymentId: "pay_1" }))])).rejects.toThrow();
+    await expect(db.batch([insertLicenseStatement(db, licence("i1", 1, { reason: "charge" as never }))])).rejects.toThrow();
+    await expect(db.batch([insertLicenseStatement(db, licence("i1", 1, { plan: "gold" as never }))])).rejects.toThrow();
   });
 });

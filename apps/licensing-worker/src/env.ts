@@ -10,7 +10,6 @@ export interface D1Like {
   batch(statements: D1StatementLike[]): Promise<unknown[]>;
 }
 export interface RateLimiter { limit(options: { key: string }): Promise<{ success: boolean }> }
-export type Period = "monthly" | "yearly";
 export interface Env {
   DB: D1Like;
   LIMITER: RateLimiter;
@@ -18,10 +17,4 @@ export interface Env {
   RAZORPAY_KEY_SECRET: string;
   RAZORPAY_WEBHOOK_SECRET: string;
   LICENSE_SIGNING_KEY: string;
-  /** Password for the owner control panel at /owner (at least 16 characters); the panel stays closed while it is unset. */
-  OWNER_PASSWORD?: string;
-  RAZORPAY_PLAN_BASIC_MONTHLY: string;
-  RAZORPAY_PLAN_BASIC_YEARLY: string;
-  RAZORPAY_PLAN_PRO_MONTHLY: string;
-  RAZORPAY_PLAN_PRO_YEARLY: string;
 }
