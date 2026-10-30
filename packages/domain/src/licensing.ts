@@ -55,8 +55,11 @@ export interface LicenseStatus {
   revision: number | null;
   registeredDevices: number;
   trial: boolean;
-  /** Whether an administrator can start checkout (this build has a licensing service); the checkout URL itself is minted per click. */
-  subscriptionAvailable: boolean;
+  /** The ForkFlow Portal's Customer ID and Order ID from the installed licence, for support calls. */
+  customerCode: string | null;
+  orderCode: string | null;
+  /** Whether this build talks to the licensing service, so it can activate with a Customer ID and Order ID and check for renewals. */
+  onlineActivation: boolean;
 }
 export interface LicensedDevice {
   id: string; name: string; createdAt: number; current: boolean; allowed: boolean;
