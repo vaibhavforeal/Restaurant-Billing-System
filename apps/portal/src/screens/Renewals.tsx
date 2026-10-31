@@ -21,12 +21,12 @@ export function Renewals({ me }: { me: StaffUser }) {
   const canOrder = roleCan(me.role, "orders.write"), canFollow = roleCan(me.role, "followups.write");
   return <>
     <PageHead title="Renewals" sub={counts ? `${plural(counts["30"], "counter")} end in the next 30 days; ${plural(counts.expired, "counter")} already ended in the last 90 days.` : "Loading renewals…"} />
-    <Tabs label="When" value={window} onChange={setWindow} tabs={[
+    <div className="record-controls renewal-controls"><Tabs label="When" value={window} onChange={setWindow} tabs={[
       { id: "7", label: <>Next 7 days<span className="count">{counts?.["7"] ?? ""}</span></> }, { id: "30", label: <>Next 30 days<span className="count">{counts?.["30"] ?? ""}</span></> },
       { id: "60", label: <>Next 60 days<span className="count">{counts?.["60"] ?? ""}</span></> }, { id: "expired", label: <>Ended<span className="count">{counts?.expired ?? ""}</span></> },
       { id: "trials", label: <>Trials<span className="count">{counts?.trials ?? ""}</span></> },
     ]} />
-    {data && rows.length > 0 && <p className="muted" style={{ marginBottom: 12 }}>{handled ? `${handled} of ${rows.length} already have a renewal order.` : "None of these has a renewal order yet."}</p>}
+    {data && rows.length > 0 && <p className="queue-summary">{handled ? `${handled} of ${rows.length} already have a renewal order.` : "None of these has a renewal order yet."}</p>}</div>
     {error && <LoadError message={error} retry={reload} />}
     <div className="table-wrap"><table className="data stack-phone">
       <thead><tr><th>Counter</th><th className="phone-hide">Plan</th><th className="phone-hide">Rep</th><th className="phone-hide">In hand</th><th className="num">Ends</th><th className="num phone-hide"></th></tr></thead>

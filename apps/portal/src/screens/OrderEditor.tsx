@@ -88,19 +88,19 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
   const setTerm = (termMonths: number) => update({ termMonths, price: rupees(priceFor(form.plan, termMonths) ?? (parseRupees(form.price) ?? 0)) });
   const trial = form.kind === "trial";
 
-  return <form onSubmit={submit}>
+  return <form className="order-editor" onSubmit={submit}>
     <PageHead back={<><Link to="/orders">Orders</Link> / <Link to={`/customers/${customer.id}`}>{customer.businessName}</Link></>}
       title={order ? `Edit ${order.code}` : trial ? "Start a trial" : "New order"}
       sub={trial ? `${settings.trialDays} days of ${PLAN_NAMES[form.plan]}, free. It's ready as soon as you save it.` : "Saved as a draft. Confirm it when the customer agrees to the price."}
       actions={<><button type="button" className="secondary" onClick={() => navigate(order ? `/orders/${order.id}` : `/customers/${customer.id}`)}>Cancel</button>
         <button className="primary" disabled={busy}>{trial ? "Start trial" : order ? "Save draft" : "Save draft"}</button></>} />
     {status}
-    <div className="grid-main">
-      <div className="stack">
+    <div className="grid-main record-workspace">
+      <div className="stack form-sheet">
         {!order && <Tabs label="Kind of order" value={form.kind} onChange={(kind) => update({ kind })} tabs={[
           { id: "new", label: "New outlets" }, { id: "renewal", label: `Renewal${enrolled.length ? "" : " (no counters yet)"}` }, { id: "trial", label: "Trial" },
         ]} />}
-        <div className="form-grid">
+        <div className="form-grid record-section">
           <Field label="Plan"><select value={form.plan} onChange={(e) => setPlan(e.target.value as "basic" | "pro")} disabled={busy}>
             <option value="pro">Pro: {PLAN_DEVICES.pro} devices, every module</option><option value="basic">Basic: {PLAN_DEVICES.basic} devices</option></select></Field>
           {!trial && <Field label="Term"><select value={form.termMonths} onChange={(e) => setTerm(Number(e.target.value))} disabled={busy}>
@@ -112,14 +112,14 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
             <input inputMode="decimal" required value={form.price} onChange={(e) => update({ price: e.target.value })} disabled={busy} /></Field>}
           {!trial && <Field label="Discount on the licence (Rs.)"><input inputMode="decimal" value={form.discount} onChange={(e) => update({ discount: e.target.value })} disabled={busy} /></Field>}
         </div>
-        {form.kind === "renewal" && <section><h2 className="section-title" style={{ marginBottom: 8 }}>Counters to renew</h2>
+        {form.kind === "renewal" && <section className="record-section"><h2 className="section-title">Counters to renew</h2>
           {enrolled.length === 0 ? <p className="empty-block">This customer has no activated counters to renew. Draft a new-outlets order instead.</p>
             : <ul className="stack" style={{ gap: 6 }}>{enrolled.map((c) => <li key={c.id}><label className="check">
               <input type="checkbox" checked={form.installationIds.includes(c.id)} disabled={busy}
                 onChange={(e) => update({ installationIds: e.target.checked ? [...form.installationIds, c.id] : form.installationIds.filter((x) => x !== c.id) })} />
-              {counterName(c)} <span className="muted">· {c.licence ? `ends ${date(c.licence.expiresAt)}` : "no licence"}</span></label></li>)}</ul>}
+              {counterName(c)} <span className="muted">{c.licence ? `ends ${date(c.licence.expiresAt)}` : "no licence"}</span></label></li>)}</ul>}
           <p className="muted small" style={{ marginTop: 8 }}>Each counter gets the term added to its current end date (or to the payment date if it has already ended).</p></section>}
-        {!trial && <details><summary><strong>Modules</strong> <span className="muted">{Object.keys(form.modules).length ? `${Object.keys(form.modules).length} changed from the plan` : `as in the ${PLAN_NAMES[form.plan]} plan`}</span></summary>
+        {!trial && <details className="record-section"><summary><strong>Modules</strong> <span className="muted">{Object.keys(form.modules).length ? `${Object.keys(form.modules).length} changed from the plan` : `as in the ${PLAN_NAMES[form.plan]} plan`}</span></summary>
           <table className="data" style={{ marginTop: 12 }}><thead><tr><th>Module</th><th>{PLAN_NAMES[form.plan]} plan</th><th>On this order</th></tr></thead><tbody>
             {MODULES.map(({ id, name, plans }) => { const inPlan = plans[form.plan]; const value = form.modules[id];
               return <tr key={id}><td>{name}</td><td>{inPlan ? "Included" : <span className="muted">Not included</span>}</td><td>
@@ -127,11 +127,11 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
                   onChange={(e) => { const next = { ...form.modules }; if (e.target.value === "") delete next[id]; else next[id] = e.target.value === "true"; update({ modules: next }); }}>
                   <option value="">Follow the plan</option><option value="true">Allow</option><option value="false">Block</option></select></td></tr>; })}
           </tbody></table></details>}
-        {!trial && <section><div className="panel-head"><h2>Extra lines</h2><button type="button" className="ghost small" disabled={busy}
+        {!trial && <section className="record-section"><div className="panel-head"><h2>Extra lines</h2><button type="button" className="ghost small" disabled={busy}
           onClick={() => update({ extras: [...form.extras, { description: "", sac: settings.invoice.sac, quantity: "1", price: "" }] })}>Add a line</button></div>
           {form.extras.length === 0 ? <p className="muted">Installation, training or anything else on the same invoice.</p> : form.extras.map((e, i) => {
             const set = (change: Partial<Form["extras"][number]>) => update({ extras: form.extras.map((x, j) => j === i ? { ...x, ...change } : x) });
-            return <div key={i} className="form-grid" style={{ gridTemplateColumns: "minmax(0, 3fr) 110px 80px 130px auto", alignItems: "end", marginBottom: 8 }}>
+            return <div key={i} className="form-grid extra-line">
               <Field label="Description"><input maxLength={200} value={e.description} onChange={(ev) => set({ description: ev.target.value })} disabled={busy} /></Field>
               <Field label="SAC / HSN"><input maxLength={8} inputMode="numeric" value={e.sac} onChange={(ev) => set({ sac: ev.target.value })} disabled={busy} /></Field>
               <Field label="Qty"><input type="number" min={1} value={e.quantity} onChange={(ev) => set({ quantity: ev.target.value })} disabled={busy} /></Field>
@@ -141,7 +141,8 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
           })}</section>}
         <Field label="Notes" hint="For the team; not printed on the invoice."><textarea rows={2} maxLength={2000} value={form.notes} onChange={(e) => update({ notes: e.target.value })} disabled={busy} /></Field>
       </div>
-      <aside className="rail">
+      <aside className="rail invoice-preview">
+        <dl className="kv preview-customer"><dt>Customer</dt><dd>{customer.businessName}</dd><dt>Customer ID</dt><dd className="mono">{customer.code}</dd></dl>
         <h2>{trial ? "Trial" : "Invoice preview"}</h2>
         {trial ? <p className="muted">Free for {settings.trialDays} days from the day the restaurant activates. No invoice.</p> : <>
           <table className="data"><tbody>
@@ -150,12 +151,11 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
             <tr><td>Taxable value</td><td className="num">{money(totals.subtotalPaise)}</td></tr>
             {intra === false ? <tr><td>IGST {settings.invoice.gstRateBp / 100}%</td><td className="num">{money(totals.igstPaise)}</td></tr>
               : <><tr><td>CGST {settings.invoice.gstRateBp / 200}%</td><td className="num">{money(totals.cgstPaise)}</td></tr><tr><td>SGST {settings.invoice.gstRateBp / 200}%</td><td className="num">{money(totals.sgstPaise)}</td></tr></>}
-            <tr><td><strong>Total</strong></td><td className="num"><strong>{money(totals.totalPaise)}</strong></td></tr>
+            <tr className="total-row"><td><strong>Total</strong></td><td className="num"><strong>{money(totals.totalPaise)}</strong></td></tr>
           </tbody></table>
           {intra === null && <p className="notice warning" style={{ marginTop: 12 }}>{!seller ? "The seller's state isn't set in Settings yet." : "This customer has no state or GSTIN yet."} The preview assumes the same state; add it before confirming.</p>}
           {typeof input === "string" && <p className="notice warning" style={{ marginTop: 12 }}>{input}</p>}
         </>}
-        <dl className="kv" style={{ marginTop: 16 }}><dt>Customer</dt><dd>{customer.businessName}</dd><dt>Customer ID</dt><dd className="mono">{customer.code}</dd></dl>
       </aside>
     </div>
   </form>;

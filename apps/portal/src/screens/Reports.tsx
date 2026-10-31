@@ -30,7 +30,7 @@ export function Reports() {
   const { data, error, reload } = useData(() => api<ReportData>(`/reports${key}`), period);
   return <>
     <PageHead title="Reports" sub={data ? `${PERIOD_NAMES[period]}: ${date(data.from)} to ${date(data.to - 1)}. Money is payments received; a rep sees their own customers.` : "Loading…"}
-      actions={<select aria-label="Period" value={period} onChange={(e) => setPeriod(e.target.value as Period)} style={{ width: 210, height: 34 }}>
+      actions={<select className="report-period" aria-label="Period" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
         {Object.entries(PERIOD_NAMES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>} />
     {error && <LoadError message={error} retry={reload} />}
     {data && <ReportBody data={data} />}
@@ -43,44 +43,49 @@ function ReportBody({ data }: { data: ReportData }) {
   const won = data.funnel.find((f) => f.stage === "won")!.count, lost = data.funnel.find((f) => f.stage === "lost")!.count;
   const leads = data.funnel.reduce((sum, f) => sum + f.count, 0);
   const planTotal = data.revenueByPlan.reduce((sum, p) => sum + p.paise, 0);
-  return <div className="stack" style={{ gap: 24 }}>
-    <div className="kpis">
-      <div className="kpi"><div className="kpi-label">Received, last 12 months</div><div className="kpi-value">{money(received)}</div><div className="kpi-note">{money(lastMonth.paise)} in {monthLabel(lastMonth.month)}</div></div>
+  return <div className="stack report-body">
+    <div className="report-overview">
+      <section className="report-revenue">
+        <div className="report-total"><div className="kpi-label">Received, last 12 months</div><div className="kpi-value">{money(received)}</div><div className="kpi-note">{money(lastMonth.paise)} in {monthLabel(lastMonth.month)}</div></div>
+        <h2 className="section-title">Payments received by month</h2>
+        <MonthChart months={data.revenueByMonth} />
+      </section>
+      <div className="report-summary">
+        <div className="report-metrics">
       <div className="kpi"><div className="kpi-label">Leads won</div><div className="kpi-value">{pct(won, won + lost)}</div><div className="kpi-note">{won} won, {lost} lost of {plural(leads, "lead")} added</div></div>
       <div className="kpi"><div className="kpi-label">Renewed on time</div><div className="kpi-value">{pct(data.renewals.renewed, data.renewals.due)}</div><div className="kpi-note">{data.renewals.renewed} of {plural(data.renewals.due, "counter")} that came due</div></div>
       <div className="kpi"><div className="kpi-label">Trials that bought</div><div className="kpi-value">{pct(data.trials.converted, data.trials.started)}</div><div className="kpi-note">{data.trials.converted} of {plural(data.trials.started, "trial")}</div></div>
-    </div>
-    <div className="grid-main">
-      <section><h2 className="section-title" style={{ marginBottom: 12 }}>Payments received by month</h2><MonthChart months={data.revenueByMonth} /></section>
-      <section className="rail"><h2>Paid orders by plan</h2>
-        {planTotal === 0 ? <p className="muted">No paid orders in this period.</p> : data.revenueByPlan.map((p) => <div key={p.plan} className="bar-row" style={{ gridTemplateColumns: "60px minmax(0, 1fr) 110px" }}>
+        </div>
+      <section className="report-section"><h2 className="section-title">Paid orders by plan</h2>
+        {planTotal === 0 ? <p className="muted">No paid orders in this period.</p> : data.revenueByPlan.map((p) => <div key={p.plan} className="bar-row plan-row">
           <span>{PLAN_NAMES[p.plan]}</span><div className="bar-track"><div className="bar-fill" style={{ width: `${(p.paise / planTotal) * 100}%` }} /></div>
-          <span className="num">{money(p.paise)}<span className="muted small" style={{ display: "block" }}>{plural(p.orders, "order")}</span></span></div>)}
+          <span className="num">{money(p.paise)}<span className="sub muted small">{plural(p.orders, "order")}</span></span></div>)}
       </section>
+      </div>
     </div>
     <div className="grid-2">
-      <section><h2 className="section-title" style={{ marginBottom: 8 }}>Leads added, by where they are now</h2>
+      <section className="report-section"><h2 className="section-title">Leads added, by where they are now</h2>
         {data.funnel.map((f) => { const max = Math.max(1, ...data.funnel.map((x) => x.count));
           return <div key={f.stage} className="bar-row"><span>{STAGE_NAMES[f.stage]}</span>
             <div className="bar-track"><div className={`bar-fill${f.stage === "lost" ? " quiet" : ""}`} style={{ width: `${(f.count / max) * 100}%` }} /></div><span className="num">{f.count}</span></div>; })}
       </section>
-      <section><h2 className="section-title" style={{ marginBottom: 8 }}>Where leads came from</h2>
+      <section className="report-section"><h2 className="section-title">Where leads came from</h2>
         <table className="data"><thead><tr><th>Source</th><th className="num">Leads</th><th className="num">Won</th><th className="num">Win rate</th></tr></thead><tbody>
           {data.sources.map((s) => <tr key={s.source}><td>{SOURCE_NAMES[s.source]}</td><td className="num">{s.leads}</td><td className="num">{s.won}</td><td className="num">{pct(s.won, s.leads)}</td></tr>)}
           {data.sources.length === 0 && <tr className="empty"><td colSpan={4}>No leads added in this period.</td></tr>}
         </tbody></table></section>
     </div>
     <div className="grid-2">
-      {data.reps.length > 0 && <section><h2 className="section-title" style={{ marginBottom: 8 }}>Sales reps</h2>
+      {data.reps.length > 0 && <section className="report-section"><h2 className="section-title">Sales reps</h2>
         <table className="data"><thead><tr><th>Rep</th><th className="num">Leads won</th><th className="num">Orders paid</th><th className="num">Worth</th></tr></thead><tbody>
           {data.reps.map((r) => <tr key={r.rep.id}><td>{r.rep.name}</td><td className="num">{r.leadsWon}</td><td className="num">{r.ordersPaid}</td><td className="num">{money(r.revenuePaise)}</td></tr>)}
         </tbody></table></section>}
-      <section><h2 className="section-title" style={{ marginBottom: 8 }}>Support</h2>
+      <section className="report-section"><h2 className="section-title">Support</h2>
         <dl className="kv">
           <dt>Opened</dt><dd>{plural(data.tickets.opened, "ticket")}</dd>
           <dt>Resolved</dt><dd>{plural(data.tickets.resolved, "ticket")}</dd>
           <dt>Time to resolve</dt><dd>{data.tickets.medianHoursToResolve === null ? "—" : `${data.tickets.medianHoursToResolve} hours (median)`}</dd>
-          <dt>Open now</dt><dd>{(["urgent", "high", "normal", "low"] as const).map((p) => `${data.tickets.openByPriority[p] ?? 0} ${p}`).join(" · ")}</dd>
+          <dt>Open now</dt><dd>{(["urgent", "high", "normal", "low"] as const).map((p) => `${data.tickets.openByPriority[p] ?? 0} ${p}`).join(", ")}</dd>
         </dl></section>
     </div>
   </div>;

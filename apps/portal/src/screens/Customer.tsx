@@ -28,42 +28,44 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
   const enrolled = list.filter((i) => i.enrolled);
   const canOrder = roleCan(me.role, "orders.write");
   return <>
+    <div className="record-heading">
     <PageHead back={<Link to="/customers">Customers</Link>} title={c.businessName}
-      sub={<span className="code-row">Customer ID <span className="code">{c.code}</span><CopyButton text={c.code} />{c.status === "inactive" && " · Inactive"}</span>}
+      sub={<span className="code-row">Customer ID <span className="code">{c.code}</span><CopyButton text={c.code} />{c.status === "inactive" && <span>Inactive</span>}</span>}
       actions={<>{roleCan(me.role, "customers.write") && <button className="secondary" onClick={() => setEditing(true)}>Edit</button>}
         {canOrder && <button className="secondary" onClick={() => navigate(`/orders/new${query({ customerId: c.id, kind: "trial" })}`)}>Start a trial</button>}
         {canOrder && <button className="primary" onClick={() => navigate(`/orders/new${query({ customerId: c.id })}`)}>New order</button>}</>} />
-    <div className="kpis">
-      <div className="kpi"><div className="kpi-label">Outlets</div><div className="kpi-value">{enrolled.length}</div><div className="kpi-note">{plural(c.orders, "order")} so far</div></div>
-      <div className="kpi"><div className="kpi-label">Next renewal</div><div className="kpi-value">{c.nextRenewalAt ? date(c.nextRenewalAt) : "—"}</div><div className="kpi-note">{c.nextRenewalAt ? <Renewal at={c.nextRenewalAt} /> : "No licence yet"}</div></div>
+    <div className="kpis record-summary">
       <div className="kpi"><div className="kpi-label">Paid to date</div><div className="kpi-value">{money(c.paidPaise)}</div><div className="kpi-note">Cleared payments</div></div>
       <div className="kpi"><div className="kpi-label">Waiting for payment</div><div className="kpi-value">{money(c.outstandingPaise)}</div><div className="kpi-note">On confirmed orders</div></div>
+      <div className="kpi"><div className="kpi-label">Next renewal</div><div className="kpi-value">{c.nextRenewalAt ? date(c.nextRenewalAt) : "—"}</div><div className="kpi-note">{c.nextRenewalAt ? <Renewal at={c.nextRenewalAt} /> : "No licence yet"}</div></div>
+      <div className="kpi"><div className="kpi-label">Outlets</div><div className="kpi-value">{enrolled.length}</div><div className="kpi-note">{plural(c.orders, "order")} so far</div></div>
+    </div>
     </div>
     <Tabs label="Customer" value={tab} onChange={setTab} tabs={[
       { id: "overview", label: "Overview" }, { id: "orders", label: <>Orders<span className="count">{c.orders}</span></> },
       { id: "counters", label: <>Counters<span className="count">{list.length}</span></> }, { id: "followups", label: "Follow-ups" },
       ...(roleCan(me.role, "tickets.read") ? [{ id: "tickets" as const, label: "Support" }] : []), { id: "activity", label: "Activity" },
     ]} />
-    {tab === "overview" && <div className="grid-main">
+    {tab === "overview" && <div className="grid-main record-workspace">
       <div className="stack">
+        <section><div className="panel-head"><h2>Recent orders</h2><button className="ghost small" onClick={() => setTab("orders")}>View all</button></div>
+          <CustomerOrders customerId={c.id} limit={5} /></section>
         <section><div className="panel-head"><h2>Licences</h2><button className="ghost small" onClick={() => setTab("counters")}>All counters</button></div>
           {list.some((i) => i.licence) ? <SeatStrip counters={list} onOpen={(i) => setCounter(i.id)} />
             : <p className="empty-block">No counter has activated yet. Give the restaurant the setup card from an order: setup asks for the Customer ID and Order ID.</p>}</section>
-        <section><div className="panel-head"><h2>Recent orders</h2><button className="ghost small" onClick={() => setTab("orders")}>View all</button></div>
-          <CustomerOrders customerId={c.id} limit={5} /></section>
       </div>
       <aside className="rail">
         <h2>Details</h2>
         <dl className="kv">
           <dt>Contact</dt><dd>{c.contactName ?? "—"}</dd>
-          <dt>Phone</dt><dd>{c.phone ? <><a href={`tel:${c.phone.replace(/\s/g, "")}`}>{c.phone}</a> · <a href={`https://wa.me/${whatsapp(c.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></> : "—"}</dd>
+          <dt>Phone</dt><dd>{c.phone ? <span className="link-cluster"><a href={`tel:${c.phone.replace(/\s/g, "")}`}>{c.phone}</a><a href={`https://wa.me/${whatsapp(c.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></span> : "—"}</dd>
           <dt>Email</dt><dd>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : "—"}</dd>
           <dt>GSTIN</dt><dd>{c.gstin ? <span className="mono">{c.gstin}</span> : "Not registered"}</dd>
           <dt>Address</dt><dd>{[c.address, c.city, c.stateCode && GST_STATES[c.stateCode], c.pincode].filter(Boolean).join(", ") || "—"}</dd>
           <dt>Sales rep</dt><dd>{c.owner ? <Person name={c.owner.name} id={c.owner.id} /> : "Not assigned"}</dd>
           <dt>Customer since</dt><dd>{date(c.createdAt)}</dd>
         </dl>
-        {c.notes && <><h2 style={{ marginTop: 20 }}>Notes</h2><p style={{ whiteSpace: "pre-wrap" }}>{c.notes}</p></>}
+        {c.notes && <div className="record-notes"><h2>Notes</h2><p>{c.notes}</p></div>}
       </aside>
     </div>}
     {tab === "orders" && <CustomerOrders customerId={c.id} />}

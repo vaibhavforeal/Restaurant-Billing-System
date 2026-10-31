@@ -1,0 +1,14 @@
+{
+  "scanned": "2026-10-31",
+  "scope": "apps/portal",
+  "findings": {
+    "framework": "React 19, TypeScript, Vite; apps/portal/package.json:14",
+    "fonts": "System sans and identifier mono; apps/portal/src/portal.css:25",
+    "palette": "Existing ForkFlow mark red #b92335; apps/portal/src/icons.tsx:32. Previous green shell was introduced by prior redesign, not locked brand.",
+    "motion": "Short control feedback; reduced motion preserved",
+    "material": "Existing role-scoped staff records and local sandbox; no added pictures, proof or claims",
+    "repository": "Isolated worktree from 129163a; unrelated original checkout changes preserved"
+  },
+  "preserve": ["Routes", "Form wiring", "Role guards", "India dates and paise formatting", "CSP", "Single portal stylesheet", "ForkFlow mark"],
+  "introduce": ["Coral-inspired warm neutral surfaces", "Daily work ledger", "Ruled totals", "Record-oriented detail layouts", "Hallmark verification"]
+}

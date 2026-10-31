@@ -29,14 +29,14 @@ export function Activity() {
   const more = useRun();
   return <>
     <PageHead title="Activity" sub="Every change made in the portal, by a payment or by a counter activating, newest first." />
-    <div className="toolbar">
-      <select aria-label="Who" value={actorId} onChange={(e) => setActorId(e.target.value)} style={{ width: 220 }}>
+    <div className="toolbar record-toolbar">
+      <label className="filter-field"><span>Who</span><select aria-label="Who" value={actorId} onChange={(e) => setActorId(e.target.value)}>
         <option value="">Everyone</option><option value="system">ForkFlow (automatic)</option>
         {staff.data?.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-      </select>
-      <select aria-label="What" value={entityType} onChange={(e) => setEntityType(e.target.value)} style={{ width: 200 }}>
+      </select></label>
+      <label className="filter-field"><span>What</span><select aria-label="What" value={entityType} onChange={(e) => setEntityType(e.target.value)}>
         <option value="">Every kind of record</option>{Object.entries(KINDS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-      </select>
+      </select></label>
     </div>
     {error && <LoadError message={error} retry={reload} />}
     <ActivityTable entries={data?.entries ?? []} loaded={!!data} />

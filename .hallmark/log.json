@@ -1,0 +1,25 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "coral",
+  "axes": "light/grotesk-sans/warm",
+  "nav": "staff sidebar",
+  "footer": "none",
+  "imagery": "existing brand mark",
+  "entry": "daily work ledger",
+  "fingerprint": "ruled totals and working ledger with supporting rail",
+  "sections": [
+   "role-scoped work",
+   "payments",
+   "pipeline",
+   "renewals"
+  ],
+  "signature": "daily work ledger",
+  "waived": [],
+  "prompt": "Rework owner portal with Hallmark while preserving the portal redesign brief",
+  "date": "2026-10-31"
+ }
+]

@@ -25,7 +25,7 @@ export function Order({ id, me }: { id: string; me: StaffUser }) {
   return <>
     <PageHead back={<><Link to="/orders">Orders</Link> / <Link to={`/customers/${o.customer.id}`}>{o.customer.name}</Link></>}
       title={<span className="mono" style={{ fontSize: "inherit" }}>{o.code}</span>}
-      sub={<>{KIND_NAMES[o.kind]} · {PLAN_NAMES[o.plan]}, {termLabel(o)} · <OrderStatusMark order={o} /></>}
+      sub={<span className="record-meta"><span>{KIND_NAMES[o.kind]}</span><span>{PLAN_NAMES[o.plan]}, {termLabel(o)}</span><OrderStatusMark order={o} /></span>}
       actions={<>
         {o.status === "draft" && can("orders.write") && <button className="secondary" onClick={() => navigate(`/orders/${o.id}/edit`)}>Edit</button>}
         {(o.status === "draft" || o.status === "confirmed") && can("orders.approve") && <button className="secondary" onClick={() => setDialog("cancel")}>Cancel order</button>}
@@ -34,11 +34,20 @@ export function Order({ id, me }: { id: string; me: StaffUser }) {
           o.totalPaise === 0 ? "Confirmed. It costs nothing, so it's paid already." : "Confirmed. Send a payment link or record the payment when it arrives.")}>Confirm order</button>}
       </>} />
     {status}
-    <div className="grid-main">
+    <section className="record-summary order-facts"><h2>Order</h2><dl className="kv">
+      <dt>Customer</dt><dd><Link to={`/customers/${o.customer.id}`}>{o.customer.name}</Link></dd>
+      <dt>Devices</dt><dd>{o.maxDevices} per outlet</dd>
+      {Object.keys(o.modules).length > 0 && <><dt>Modules</dt><dd>{Object.entries(o.modules).map(([m, on]) => `${m} ${on ? "allowed" : "blocked"}`).join(", ")}</dd></>}
+      <dt>Sales rep</dt><dd>{o.owner?.name ?? "—"}</dd>
+      <dt>Created</dt><dd>{dateTime(o.createdAt)}</dd>
+      {o.confirmedAt && <><dt>Confirmed</dt><dd>{dateTime(o.confirmedAt)}</dd></>}
+      {o.cancelledAt && <><dt>Cancelled</dt><dd>{dateTime(o.cancelledAt)}</dd></>}
+    </dl>{o.notes && <p style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{o.notes}</p>}</section>
+    <div className="grid-main record-workspace order-workspace">
       <div className="stack">
         {o.kind !== "renewal" && o.status !== "cancelled" && o.status !== "draft" && <SetupCard order={o} usable={usable} />}
         {o.status === "draft" && <p className="notice">A draft can still change. Confirm it when the customer agrees, and its price is fixed.</p>}
-        {o.kind !== "trial" && <section><h2 className="section-title" style={{ marginBottom: 8 }}>Lines</h2>
+        {o.kind !== "trial" && <section className="record-section"><h2 className="section-title" style={{ marginBottom: 8 }}>Lines</h2>
           <div className="table-wrap"><table className="data">
             <thead><tr><th>Description</th><th className="phone-hide">SAC</th><th className="num">Qty</th><th className="num">Price</th><th className="num">Taxable value</th></tr></thead>
             <tbody>
@@ -47,29 +56,20 @@ export function Order({ id, me }: { id: string; me: StaffUser }) {
               <tr><td colSpan={4}>Taxable value</td><td className="num">{money(o.subtotalPaise)}</td></tr>
               {o.intraState === false ? <tr><td colSpan={4}>IGST</td><td className="num">{money(o.igstPaise)}</td></tr>
                 : <><tr><td colSpan={4}>CGST</td><td className="num">{money(o.cgstPaise)}</td></tr><tr><td colSpan={4}>SGST</td><td className="num">{money(o.sgstPaise)}</td></tr></>}
-              <tr><td colSpan={4}><strong>Total</strong></td><td className="num"><strong>{money(o.totalPaise)}</strong></td></tr>
+              <tr className="total-row"><td colSpan={4}><strong>Total</strong></td><td className="num"><strong>{money(o.totalPaise)}</strong></td></tr>
             </tbody></table></div>
           {o.intraState === null && <p className="notice warning" style={{ marginTop: 8 }}>The customer's state or the seller's state is missing, so CGST and SGST are assumed until it's added.</p>}</section>}
-        {o.kind !== "renewal" && <section><div className="panel-head"><h2>Counters on this order</h2><span className="muted">{o.seatsUsed} of {plural(o.outlets, "outlet")} activated</span></div>
+        {o.kind !== "renewal" && <section className="record-section"><div className="panel-head"><h2>Counters on this order</h2><span className="muted">{o.seatsUsed} of {plural(o.outlets, "outlet")} activated</span></div>
           {o.seats.length ? <SeatStrip counters={o.seats} onOpen={(c) => setCounter(c.id)} />
             : <p className="empty-block">{usable ? "None yet. The restaurant activates by entering the Customer ID and Order ID at setup." : "Counters can activate once the order is paid, approved on credit, or a trial."}</p>}
           {usable && o.seatsUsed < o.outlets && can("licences.manage") && <button className="ghost small" style={{ marginTop: 8 }} onClick={() => setDialog("offline")}>Activate a counter without internet</button>}</section>}
-        {o.kind === "renewal" && <section><h2 className="section-title" style={{ marginBottom: 8 }}>Counters this order renews</h2>
+        {o.kind === "renewal" && <section className="record-section"><h2 className="section-title" style={{ marginBottom: 8 }}>Counters this order renews</h2>
           <div className="table-wrap"><table className="data"><tbody>{o.renewalTargets.map((c) => <tr key={c.id} className="clickable" onClick={() => setCounter(c.id)}>
             <td>{counterName(c)}<span className="sub mono">{c.order?.code}</span></td><td className="num"><LicenceState counter={c} /></td></tr>)}</tbody></table></div>
           <p className="muted small" style={{ marginTop: 8 }}>{o.status === "paid" ? "Extended when the order was paid." : "Each gets the term added to its end date when the order is paid."}</p></section>}
       </div>
-      <aside className="rail stack">
+      <aside className="rail stack payment-rail">
         <OrderMoney order={o} me={me} onChanged={set} />
-        <section><h2>Order</h2><dl className="kv">
-          <dt>Customer</dt><dd><Link to={`/customers/${o.customer.id}`}>{o.customer.name}</Link></dd>
-          <dt>Devices</dt><dd>{o.maxDevices} per outlet</dd>
-          {Object.keys(o.modules).length > 0 && <><dt>Modules</dt><dd>{Object.entries(o.modules).map(([m, on]) => `${m} ${on ? "allowed" : "blocked"}`).join(", ")}</dd></>}
-          <dt>Sales rep</dt><dd>{o.owner?.name ?? "—"}</dd>
-          <dt>Created</dt><dd>{dateTime(o.createdAt)}</dd>
-          {o.confirmedAt && <><dt>Confirmed</dt><dd>{dateTime(o.confirmedAt)}</dd></>}
-          {o.cancelledAt && <><dt>Cancelled</dt><dd>{dateTime(o.cancelledAt)}</dd></>}
-        </dl>{o.notes && <p style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{o.notes}</p>}</section>
       </aside>
     </div>
     {dialog === "credit" && <CreditDialog order={o} onClose={() => setDialog(null)} onSaved={(next) => { setDialog(null); set(next); }} />}
@@ -88,7 +88,7 @@ function SetupCard({ order, usable }: { order: OrderDetail; usable: boolean }) {
       <div><div className="kpi-label">Customer ID</div><div className="code-row"><span className="setup-id">{order.customer.code}</span><span className="no-print"><CopyButton text={order.customer.code} /></span></div></div>
       <div><div className="kpi-label">Order ID</div><div className="code-row"><span className="setup-id">{order.code}</span><span className="no-print"><CopyButton text={order.code} /></span></div></div>
     </div>
-    <p className="muted small">{order.customer.name} · {PLAN_NAMES[order.plan]}{order.kind === "trial" ? ` trial, ${termLabel(order)}` : `, ${termLabel(order)}`} from the day each outlet activates.</p>
+    <p className="muted small">{order.customer.name}, {PLAN_NAMES[order.plan]}{order.kind === "trial" ? ` trial, ${termLabel(order)}` : `, ${termLabel(order)}`} from the day each outlet activates.</p>
   </section>;
 }
 

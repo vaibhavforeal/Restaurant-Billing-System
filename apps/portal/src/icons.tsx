@@ -30,5 +30,5 @@ export const Icon = ({ name }: { name: IconName }) =>
 
 /** The ForkFlow mark: a fork in the ForkFlow red, as on the POS app. */
 export const Mark = () =>
-  <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#b92335" />
-    <path d="M11 8v7a3 3 0 0 0 3 3v6M11 8v5M14 8v5M17 8v5M21 8c-1.7 0-3 2-3 5s1.3 4 3 4v7" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)" />
+    <path d="M11 8v7a3 3 0 0 0 3 3v6M11 8v5M14 8v5M17 8v5M21 8c-1.7 0-3 2-3 5s1.3 4 3 4v7" fill="none" stroke="var(--brand-ink)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>;

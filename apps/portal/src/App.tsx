@@ -70,7 +70,7 @@ function Shell({ user, onSignedOut, onUser }: { user: StaffUser; onSignedOut: ()
   const navigation = useRef<HTMLElement>(null);
   useEffect(() => { setMenuOpen(false); }, [path]);
   useEffect(() => {
-    const desktop = window.matchMedia("(min-width: 901px)");
+    const desktop = window.matchMedia("(min-width: 961px)");
     const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
     desktop.addEventListener("change", closeOnDesktop);
     return () => desktop.removeEventListener("change", closeOnDesktop);
@@ -99,7 +99,7 @@ function Shell({ user, onSignedOut, onUser }: { user: StaffUser; onSignedOut: ()
   const current = (to: string) => path === to || path.startsWith(`${to}/`);
   const section = [...work, ...admin].find((item) => current(item.to))?.label ?? "Account";
   const nav = (item: NavItem) => <Link key={item.to} to={item.to} onClick={() => setMenuOpen(false)} className="nav-item" aria-current={current(item.to) ? "page" : undefined}><Icon name={item.icon} />{item.label}</Link>;
-  return <div className={`app${menuOpen ? " menu-open" : ""}`}>
+  return <div data-js className={`app${menuOpen ? " menu-open" : ""}`}>
     <a className="skip-link" href="#main">Skip to content</a>
     {menuOpen && <button className="nav-backdrop" aria-label="Close navigation" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }} />}
     <aside ref={navigation} id="portal-navigation" className="sidebar" aria-label="Portal navigation">

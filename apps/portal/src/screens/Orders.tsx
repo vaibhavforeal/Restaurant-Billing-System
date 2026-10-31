@@ -30,15 +30,17 @@ export function Orders({ me }: { me: StaffUser }) {
   return <>
     <PageHead title="Orders" sub={data ? `${plural(count("confirmed"), "order")} waiting for payment, ${count("draft")} in draft` : "Loading orders…"}
       actions={roleCan(me.role, "orders.write") && <button className="primary" onClick={() => setPicking(true)}>New order</button>} />
-    <Tabs label="Order status" value={filter} onChange={setFilter} tabs={[
-      { id: "confirmed", label: <>Waiting for payment<span className="count">{count("confirmed")}</span></> },
-      { id: "draft", label: <>Drafts<span className="count">{count("draft")}</span></> },
-      { id: "paid", label: <>Paid<span className="count">{count("paid")}</span></> },
-      { id: "cancelled", label: <>Cancelled<span className="count">{count("cancelled")}</span></> },
-      { id: "all", label: <>All<span className="count">{all}</span></> },
-    ]} />
-    <div className="toolbar"><input type="search" className="search-box" aria-label="Search orders" placeholder="Order ID or customer name" value={text} onChange={(e) => setText(e.target.value)} />
-      <span className="spacer" /><span className="total">{data ? plural(data.total, "order") : ""}</span></div>
+    <div className="list-controls">
+      <Tabs label="Order status" value={filter} onChange={setFilter} tabs={[
+        { id: "confirmed", label: <>Waiting for payment<span className="count">{count("confirmed")}</span></> },
+        { id: "draft", label: <>Drafts<span className="count">{count("draft")}</span></> },
+        { id: "paid", label: <>Paid<span className="count">{count("paid")}</span></> },
+        { id: "cancelled", label: <>Cancelled<span className="count">{count("cancelled")}</span></> },
+        { id: "all", label: <>All<span className="count">{all}</span></> },
+      ]} />
+      <div className="toolbar"><input type="search" className="search-box" aria-label="Search orders" placeholder="Order ID or customer name" value={text} onChange={(e) => setText(e.target.value)} />
+        <span className="spacer" /><span className="total">{data ? plural(data.total, "order") : ""}</span></div>
+    </div>
     {error && <LoadError message={error} retry={reload} />}
     <OrdersTable orders={data?.orders ?? []} loaded={!!data} empty={text ? `No order matches “${text}”.` : "No orders here."} />
     {picking && <PickCustomer onClose={() => setPicking(false)} />}
@@ -69,8 +71,8 @@ export function PickCustomer({ onClose }: { onClose: () => void }) {
   const { data } = useData(() => api<{ customers: CustomerSummary[] }>(`/customers${key}`), key);
   return <Dialog title="New order for which customer?" onClose={onClose}>
     <input type="search" autoFocus aria-label="Find a customer" placeholder="Name, phone or Customer ID" value={text} onChange={(e) => setText(e.target.value)} />
-    <ul className="stack" style={{ marginTop: 12, gap: 2 }}>
-      {data?.customers.slice(0, 8).map((c) => <li key={c.id}><button type="button" className="ghost" style={{ width: "100%", justifyContent: "space-between" }}
+    <ul className="stack ledger-list customer-picker">
+      {data?.customers.slice(0, 8).map((c) => <li key={c.id}><button type="button" className="ghost customer-choice"
         onClick={() => navigate(`/orders/new${query({ customerId: c.id })}`)}><span>{c.businessName}</span><span className="mono muted">{c.code}</span></button></li>)}
       {data && data.customers.length === 0 && <li className="empty-block">No customer matches. Add the customer first, from Customers.</li>}
     </ul>
