@@ -34,6 +34,11 @@ export type IconName = keyof typeof paths;
 export function Icon({ name, size = 20, style }: { name: IconName; size?: number; style?: CSSProperties }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}><path d={paths[name]} /></svg>;
 }
-export function Brand() {
-  return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>MasalaPOS</span></div>;
+export function Brand({ tagline = false }: { tagline?: boolean }) {
+  return <div className={`brand${tagline ? " brand-with-tagline" : ""}`}>
+    <span className="brand-mark" aria-hidden="true"><Icon name="catalog" size={22} /></span>
+    <span className="brand-copy"><span className="brand-name"><span className="brand-masala">Masala</span>POS</span>
+      {tagline && <span className="brand-tagline">A little masala. A lot of business.</span>}
+    </span>
+  </div>;
 }

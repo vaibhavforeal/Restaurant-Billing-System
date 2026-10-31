@@ -6,9 +6,9 @@ export const startupStyles = `
   background: var(--startup-bg); color: var(--startup-ink); font: 13px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-synthesis: none; }
 .ff-startup * { box-sizing: border-box; }
 .ff-startup-main { grid-row: 2; width: min(100%, 360px); display: flex; flex-direction: column; align-items: center; text-align: center; }
-.ff-startup-mark { width: 48px; height: 48px; display: grid; place-items: center; background: #b92335; color: #fff; border-radius: 4px; margin-bottom: 24px; box-shadow: 0 2px 4px #0001; }
-.ff-startup .ff-startup-name { font-size: 24px; line-height: 1.2; font-weight: 650; letter-spacing: -.6px; margin: 0 0 4px; color: inherit; }
-.ff-startup .ff-startup-descriptor { font-size: 12px; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; color: var(--startup-muted); margin: 0; }
+.ff-startup .ff-startup-name { font-size: 32px; line-height: 1.2; font-weight: 600; letter-spacing: -.6px; margin: 0 0 8px; color: inherit; }
+.ff-startup-masala { color: #e58a00; }
+.ff-startup .ff-startup-descriptor { font-size: 16px; line-height: 1.5; color: var(--startup-muted); margin: 0; }
 .ff-startup-status { width: 100%; margin-top: 48px; display: flex; flex-direction: column; align-items: center; }
 .ff-startup .ff-startup-title { font-size: 13px; font-weight: 500; line-height: 1.5; margin: 0 0 16px; }
 .ff-startup-line { position: relative; width: min(100%, 240px); height: 2px; overflow: hidden; background: var(--startup-line); border-radius: 4px; }
@@ -18,7 +18,7 @@ export const startupStyles = `
 .ff-startup-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--startup-accent); }
 :root[data-theme="dark"] .ff-startup { --startup-bg: #14171d; --startup-ink: #e8eaf0; --startup-muted: #b3bbc8; --startup-line: #363c48; --startup-accent: #ff8995; }
 @keyframes ff-startup-loading { to { transform: translateX(200%); } }
-@media (max-height: 460px) { .ff-startup { padding: 16px; } .ff-startup-status { margin-top: 24px; } .ff-startup-mark { margin-bottom: 16px; } }
+@media (max-height: 460px) { .ff-startup { padding: 16px; } .ff-startup-status { margin-top: 24px; } }
 @media (prefers-reduced-motion: reduce) { .ff-startup-line::after { animation: none; transform: translateX(50%); } }
 `;
 
@@ -26,8 +26,7 @@ export function startupMarkup(mode: "opening" | "restoring" = "opening") {
   const restoring = mode === "restoring";
   return `<div class="ff-startup">
     <main class="ff-startup-main" aria-label="MasalaPOS startup">
-      <div class="ff-startup-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v5a3 3 0 0 0 6 0V3M7 3v18M18 3c-3 3-3 8 0 8h2M20 3v18"/></svg></div>
-      <h1 class="ff-startup-name">MasalaPOS</h1><p class="ff-startup-descriptor">Restaurant POS</p>
+      <h1 class="ff-startup-name"><span class="ff-startup-masala">Masala</span>POS</h1><p class="ff-startup-descriptor">A little masala. A lot of business.</p>
       <div class="ff-startup-status" role="status" aria-live="polite">
         <p class="ff-startup-title">${restoring ? "Restoring your backup…" : "Preparing your workspace…"}</p>
         <div class="ff-startup-line" aria-hidden="true"></div>
