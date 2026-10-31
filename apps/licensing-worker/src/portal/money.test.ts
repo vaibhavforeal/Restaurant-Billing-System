@@ -302,6 +302,29 @@ describe("payments that land together, and orders that change underneath a reque
     expect(after.cgstPaise + after.sgstPaise + after.igstPaise).toBe(after.taxPaise);
   });
 
+  it("the Payments filter of the activity log includes a Razorpay payment and its link, not only payments recorded by hand", async () => {
+    const { order } = await confirmedOrder();
+    await pay(accounts, order.id, 100_000);
+    await admin.ok("POST", `/orders/${order.id}/payment-link`);
+    await webhook("payment_link.paid", "evt_act", "plink_Test1abc", { id: "pay_ACT", amount: 1_080_000 });
+    const { entries } = await admin.ok<{ entries: Array<{ action: string }> }>("GET", "/activity?entityType=payment");
+    expect(entries.map((e) => e.action).sort()).toEqual(["payment.link_sent", "payment.received", "payment.recorded"]);
+    // Other kinds are unchanged: the order's own rows still list under Orders.
+    const orders = await admin.ok<{ entries: Array<{ action: string }> }>("GET", "/activity?entityType=order");
+    expect(orders.entries.map((e) => e.action)).toContain("order.paid");
+  });
+
+  it("the activity log's ForkFlow (automatic) option shows only what the system did, as the portal asks for it", async () => {
+    const { order } = await confirmedOrder();
+    await admin.ok("POST", `/orders/${order.id}/payment-link`);
+    await webhook("payment_link.paid", "evt_sys", "plink_Test1abc", { id: "pay_SYS", amount: order.totalPaise });
+    type Page = { entries: Array<{ action: string; actor: unknown }> };
+    const everything = await admin.ok<Page>("GET", "/activity"), system = await admin.ok<Page>("GET", "/activity?system=true");
+    expect(system.entries.map((e) => e.action)).toContain("payment.received");
+    expect(system.entries.every((e) => e.actor === null)).toBe(true);
+    expect(system.entries.length).toBeLessThan(everything.entries.length);
+  });
+
   it("an invoice with long terms continues on a second page instead of running off the first", async () => {
     await admin.ok("PUT", "/settings", {
       seller: { legalName: "ForkFlow Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "accounts@forkflow.in", phone: "" },

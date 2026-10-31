@@ -84,6 +84,23 @@ describe("follow-ups", () => {
     expect((await kabir.call("PATCH", `/follow-ups/${followUp.id}`, { status: "open" })).status).toBe(404);
     expect((await kabir.call("POST", "/follow-ups", { customerId: c.id, kind: "call", dueAt: T0, note: "x" })).status).toBe(404);
   });
+
+  it("the Done list includes dropped follow-ups, and the activity log's Follow-ups filter finds every follow-up row", async () => {
+    const ritu = await as(env, "sales");
+    const c = await customer(ritu);
+    const make = async (kind: string, note: string) => (await ritu.ok<{ followUp: FollowUp }>("POST", "/follow-ups", { customerId: c.id, kind, dueAt: T0 + DAY_MS, note })).followUp;
+    const call = await make("call", "Call back"), demo = await make("demo", "Demo");
+    await ritu.ok("PATCH", `/follow-ups/${call.id}`, { status: "done", outcome: "Spoke to the owner" });
+    await ritu.ok("PATCH", `/follow-ups/${demo.id}`, { status: "cancelled" });
+    const done = await ritu.ok<{ followUps: FollowUp[] }>("GET", "/follow-ups?status=done");
+    expect(done.followUps.map((f) => [f.note, f.status]).sort()).toEqual([["Call back", "done"], ["Demo", "cancelled"]]);
+    expect((await ritu.ok<{ followUps: FollowUp[] }>("GET", "/follow-ups")).followUps).toEqual([]);
+    const log = await admin.ok<{ entries: Array<{ action: string }> }>("GET", "/activity?entityType=followup");
+    expect(log.entries.map((e) => e.action).sort()).toEqual(["followup.cancelled", "followup.created", "followup.created", "followup.done"]);
+    // The same rows still list under the customer they are about.
+    const about = await admin.ok<{ entries: Array<{ action: string }> }>("GET", "/activity?entityType=customer");
+    expect(about.entries.map((e) => e.action)).toContain("followup.done");
+  });
 });
 
 describe("tickets", () => {

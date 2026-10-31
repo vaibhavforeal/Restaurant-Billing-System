@@ -32,8 +32,14 @@ export const activityRoutes: Route[] = [
     const q = ctx.url.searchParams, filters: string[] = [], binds: unknown[] = [];
     const add = (sql: string, value: unknown) => { filters.push(sql); binds.push(value); };
     if (q.get("actorId")) add("a.actor_id = ?", q.get("actorId"));
-    if (q.get("system") === "1") filters.push("a.actor_id IS NULL");
-    if (q.get("entityType")) add("a.entity_type = ?", q.get("entityType"));
+    // The portal's query helper writes a true flag as "true".
+    if (q.get("system") === "1" || q.get("system") === "true") filters.push("a.actor_id IS NULL");
+    // "Payments" and "Follow-ups" follow the action as well as the record: a payment through a Razorpay link and a payment link sent or cancelled
+    // are filed under their order, and a follow-up under the lead or customer it is about.
+    const kind = q.get("entityType");
+    if (kind === "payment") filters.push("(a.entity_type = 'payment' OR a.action LIKE 'payment.%')");
+    else if (kind === "followup") filters.push("a.action LIKE 'followup.%'");
+    else if (kind) add("a.entity_type = ?", kind);
     if (q.get("customerId")) add("a.customer_id = ?", q.get("customerId"));
     const from = queryInt(ctx.url, "from"), to = queryInt(ctx.url, "to");
     if (from !== null) add("a.at >= ?", from);

@@ -58,7 +58,9 @@ export const followUpRoutes: Route[] = [
     if (ownerId && ctx.user.role === "admin") { if (ownerId !== "all") { where.push("f.owner_id = ?"); binds.push(ownerId); } }
     else { where.push("f.owner_id = ?"); binds.push(ctx.user.id); }
     const status = q.get("status") ?? "open";
-    if (status !== "all") { where.push("f.status = ?"); binds.push(status); }
+    // The Done list is everything finished, dropped follow-ups included (the screen labels them "dropped").
+    if (status === "done") where.push("f.status IN ('done', 'cancelled')");
+    else if (status !== "all") { where.push("f.status = ?"); binds.push(status); }
     const before = q.get("before");
     if (before) { where.push("f.due_at < ?"); binds.push(Number(before)); }
     return json({ followUps: await followUpsWhere(ctx, where.join(" AND ") || "1 = 1", binds, status === "open" ? "f.due_at" : "f.updated_at DESC") });
