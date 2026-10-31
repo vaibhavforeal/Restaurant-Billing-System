@@ -34,7 +34,7 @@ try {
   const backup = await fetch(base + "/api/system/backups", { method: "POST", headers }); assert.ok(backup.ok);
   const snapshot = await backup.json(); assert.ok(snapshot.name); checks.push("Packaged server creates a verified backup");
   const metrics = await evaluate(`${electron}.app.getAppMetrics().map(m => ({pid:m.pid,type:m.type,name:m.name,serviceName:m.serviceName}))`);
-  const child = metrics.find((m) => m.name === "MasalaPOS POS server" || m.serviceName === "MasalaPOS POS server");
+  const child = metrics.find((m) => m.name === "MasalaPOS server" || m.serviceName === "MasalaPOS server");
   assert.ok(child, JSON.stringify(metrics));
   process.kill(child.pid);
   let restarted;

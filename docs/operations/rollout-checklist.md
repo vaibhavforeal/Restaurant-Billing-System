@@ -60,7 +60,7 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 - [ ] In the router, **reserve the main PC's IP address** (DHCP reservation). Write it down: `______________`.
 - [ ] Set the main PC's Windows network to **Private**.
 - [ ] From another device on the restaurant Wi-Fi, open `http://<main-PC-IP>:4100`. **Expect:** the MasalaPOS login screen loads.
-  - If it doesn't load: check the device is on the staff network, not guest Wi-Fi (guest networks often block devices from seeing each other), and that the Windows Defender Firewall inbound rule **"MasalaPOS POS LAN"** (added by the installer, port 4100, Private networks) exists and is enabled. The rule only applies on Private networks, so the step above matters.
+  - If it doesn't load: check the device is on the staff network, not guest Wi-Fi (guest networks often block devices from seeing each other), and that the Windows Defender Firewall inbound rule **"MasalaPOS LAN"** (added by the installer, port 4100, Private networks) exists and is enabled. The rule only applies on Private networks, so the step above matters.
 - [ ] Restart the router. **Expect:** after it comes back, the same address still works (the reservation held).
 
 ---
