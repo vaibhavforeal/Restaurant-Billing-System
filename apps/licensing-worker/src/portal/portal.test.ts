@@ -58,8 +58,9 @@ describe("portal sign-in", () => {
     const staff = await seedStaff(env, "accounts");
     for (let i = 0; i < 5; i++) expect((await login(staff.email, `wrong ${i}`)).status).toBe(401);
     const locked = await login(staff.email, PASSWORD);
-    expect(locked.status).toBe(429);
-    expect((await locked.json() as { error: string }).error).toContain("15 minutes");
+    // Answered exactly like a wrong password or an unknown address, so the lock does not reveal which staff addresses exist.
+    expect(locked.status).toBe(401);
+    expect(await locked.text()).toBe(await (await login("nobody@forkflow.test", PASSWORD)).text());
     vi.setSystemTime(T0 + LOCK_MS + 1);
     expect((await login(staff.email, PASSWORD)).status).toBe(200);
   });

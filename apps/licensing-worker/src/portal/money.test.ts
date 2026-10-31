@@ -228,3 +228,91 @@ describe("Razorpay payment links", () => {
     for (const id of [COUNTER, OTHER]) expect(await latestLicense(env.DB, id)).toMatchObject({ revision: 2, expiresAt: addMonths(addMonths(T0, 12), 12) });
   });
 });
+
+describe("payments that land together, and orders that change underneath a request", () => {
+  const rows = (client: PortalClient, id: string) => client.ok<{ order: OrderDetail }>("GET", `/orders/${id}`).then((r) => r.order);
+  const hooked = (target: Env) => target.DB as unknown as { batch: Env["DB"]["batch"] };
+  const sqlOf = (statement: unknown) => (statement as { sql: string }).sql;
+
+  it("two payments that together cover an order complete it once, whichever lands last", async () => {
+    const { order } = await confirmedOrder();
+    await admin.ok("POST", `/orders/${order.id}/payment-link`);
+    // The webhook for the other half runs completely between the manual payment's checks and its write: neither sees the other's payment.
+    const real = hooked(env).batch.bind(env.DB);
+    let hookStatus = 0;
+    hooked(env).batch = async (statements) => {
+      if (!hookStatus && statements.some((s) => sqlOf(s).includes("INSERT INTO payments") && sqlOf(s).includes("recorded_by"))) {
+        hookStatus = (await webhook("payment_link.partially_paid", "evt_a", "plink_Test1abc", { id: "pay_HALF", amount: 590_000 })).status;
+      }
+      return real(statements);
+    };
+    const manual = await pay(accounts, order.id, 590_000);
+    expect([manual.status, hookStatus]).toEqual([201, 200]);
+    const detail = await rows(admin, order.id);
+    expect(detail).toMatchObject({ status: "paid", paidPaise: 1_180_000 });
+    expect(detail.payments).toHaveLength(2);
+    expect(await invoices()).toHaveLength(1);
+  });
+
+  it("a payment is recorded and the order completed even when the invoice cannot be built; the invoice follows once the state is fixed", async () => {
+    const { customer, order } = await confirmedOrder();
+    await admin.ok("POST", `/orders/${order.id}/payment-link`);
+    await env.DB.prepare(`UPDATE customers SET gstin = NULL, state_code = NULL WHERE id = ?`).bind(customer.id).run();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const res = await webhook("payment_link.paid", "evt_s", "plink_Test1abc", { id: "pay_S", amount: order.totalPaise });
+    expect([res.status, await res.json()]).toEqual([200, { outcome: "paid" }]);
+    expect(await rows(admin, order.id)).toMatchObject({ status: "paid", paidPaise: order.totalPaise, invoices: [] });
+    await env.DB.prepare(`UPDATE customers SET state_code = '27' WHERE id = ?`).bind(customer.id).run();
+    await admin.ok("POST", `/orders/${order.id}/invoice`);
+    expect(await invoices()).toHaveLength(1);
+  });
+
+  it("a delivery that follows an attempt which recorded the payment but stopped completes the order", async () => {
+    const { order } = await confirmedOrder();
+    await admin.ok("POST", `/orders/${order.id}/payment-link`);
+    await env.DB.prepare(`INSERT INTO payments (id, order_id, amount_paise, method, reference, status, received_at, note, razorpay_payment_id, created_at, updated_at)
+      VALUES (?, ?, ?, 'razorpay', 'pay_LATE', 'cleared', ?, '', 'pay_LATE', ?, ?)`).bind(crypto.randomUUID(), order.id, order.totalPaise, T0, T0, T0).run();
+    expect(await (await webhook("payment_link.paid", "evt_retry", "plink_Test1abc", { id: "pay_LATE", amount: order.totalPaise })).json()).toEqual({ outcome: "duplicate_payment" });
+    expect(await rows(admin, order.id)).toMatchObject({ status: "paid" });
+    expect(await invoices()).toHaveLength(1);
+  });
+
+  it("cancelling an order that is paid between the checks and the write fails; it never cancels a paid order", async () => {
+    const { order } = await confirmedOrder();
+    const real = hooked(env).batch.bind(env.DB);
+    let hit = false;
+    hooked(env).batch = async (statements) => {
+      if (!hit && statements.some((s) => sqlOf(s).includes("SET status = 'cancelled'"))) { hit = true; await pay(accounts, order.id, order.totalPaise); }
+      return real(statements);
+    };
+    const res = await admin.call("POST", `/orders/${order.id}/cancel`, { reason: "customer withdrew" });
+    expect([res.status, await res.json()]).toEqual([409, expect.objectContaining({ code: "changed" })]);
+    expect(await rows(admin, order.id)).toMatchObject({ status: "paid", cancelledAt: null });
+  });
+
+  it("a confirmed order keeps the tax it was priced with when the customer's state changes later", async () => {
+    // An odd taxable value: CGST + SGST round twice, IGST once, so recomputing under the other split would be a paisa out.
+    const { customer, order } = await confirmedOrder({ pricePerOutletPaise: 1_000_050 });
+    expect(order.intraState).toBe(true);
+    await env.DB.prepare(`UPDATE customers SET gstin = NULL, state_code = '29' WHERE id = ?`).bind(customer.id).run();
+    const after = await rows(admin, order.id);
+    expect(after.intraState).toBe(false);
+    expect([after.subtotalPaise, after.taxPaise, after.totalPaise]).toEqual([order.subtotalPaise, order.taxPaise, order.totalPaise]);
+    expect(after.subtotalPaise + after.taxPaise).toBe(after.totalPaise);
+    expect(after.cgstPaise + after.sgstPaise + after.igstPaise).toBe(after.taxPaise);
+  });
+
+  it("an invoice with long terms continues on a second page instead of running off the first", async () => {
+    await admin.ok("PUT", "/settings", {
+      seller: { legalName: "ForkFlow Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "accounts@forkflow.in", phone: "" },
+      invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800, bankDetails: "HDFC Bank, A/c 5020001234", terms: Array.from({ length: 60 }, (_, i) => `Term ${i + 1}`).join("\n") },
+      prices: [], extraDevicePaise: 0, trialDays: 7,
+    });
+    const { order } = await confirmedOrder();
+    await pay(accounts, order.id, order.totalPaise);
+    const [summary] = await invoices();
+    const res = await admin.call("GET", `/invoices/${summary!.id}/pdf`);
+    const pdf = await PDFDocument.load(new Uint8Array(await res.arrayBuffer()));
+    expect(pdf.getPageCount()).toBeGreaterThanOrEqual(2);
+  });
+});

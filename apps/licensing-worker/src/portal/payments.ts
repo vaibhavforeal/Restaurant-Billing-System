@@ -21,18 +21,32 @@ export async function clearedPaise(deps: Deps, orderId: string): Promise<number>
 }
 
 /**
- * When the cleared payments (with `addingPaise`, a payment in the same batch) cover a confirmed order: the statements that complete it,
- * its fulfilment, and its tax invoice unless it already has one. Otherwise nothing.
+ * Completes a confirmed order once its cleared payments cover it: fulfilment (licences) and the tax invoice, in one batch. Call it AFTER
+ * the payment is recorded: it reads the payments on file, so two payments landing together are both counted and neither decides alone.
+ * The batch fails when another request completed the order first (see fulfilmentStatements), so an order completes once. A missing
+ * seller or customer state stops only the invoice, never the payment or the licences; issue the invoice from the order once it is fixed.
+ * Returns whether this call completed the order.
  */
-export async function settlementStatements(deps: Deps, orderId: string, actorId: string | null, addingPaise: number): Promise<D1StatementLike[]> {
+export async function settleOrder(deps: Deps, orderId: string, actorId: string | null, log: (message: string) => void): Promise<boolean> {
   const order = await orderById(deps.db, orderId);
   const row = await deps.db.prepare(`SELECT total_paise AS total FROM orders WHERE id = ?`).bind(orderId).first<{ total: number }>();
-  if (!order || !row || order.status !== "confirmed") return [];
-  if ((await clearedPaise(deps, orderId)) + addingPaise < row.total) return [];
-  return [
-    ...await fulfilmentStatements(deps, order, actorId),
-    ...(row.total > 0 && !(await liveInvoiceExists(deps, orderId)) ? await invoiceStatements(deps, orderId, actorId) : []),
-  ];
+  if (!order || !row || order.status !== "confirmed") return false;
+  if ((await clearedPaise(deps, orderId)) < row.total) return false;
+  let invoice: D1StatementLike[] = [];
+  if (row.total > 0 && !(await liveInvoiceExists(deps, orderId))) {
+    try { invoice = await invoiceStatements(deps, orderId, actorId); }
+    catch (error) {
+      if (!(error instanceof HttpError)) throw error;
+      log(`order ${order.code} is paid but its invoice was not issued: ${error.message}`);
+    }
+  }
+  try { await deps.db.batch([...await fulfilmentStatements(deps, order, actorId), ...invoice]); }
+  catch (error) {
+    // Another request completed the order at the same moment.
+    if ((await orderById(deps.db, orderId))?.status === "paid") return false;
+    throw error;
+  }
+  return true;
 }
 
 /** Open payment links of an order are cancelled once it is paid some other way. Failures are left for a person: the link only expires. */
@@ -79,19 +93,14 @@ export const paymentRoutes: Route[] = [
     const now = ctx.deps.now();
     if (body.receivedAt > now + 86_400_000) throw new HttpError(400, "The payment date can't be in the future");
     const pending = body.pending && body.method === "cheque", id = ctx.deps.uuid(), { db } = ctx.deps;
-    try {
-      await db.batch([
+    await db.batch([
         db.prepare(`INSERT INTO payments (id, order_id, amount_paise, method, reference, status, received_at, note, recorded_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(id, order.id, body.amountPaise, body.method, body.reference, pending ? "pending" : "cleared", body.receivedAt, body.note, ctx.user.id, now, now),
         logBy(ctx, { action: "payment.recorded", entityType: "payment", entityId: id, customerId: order.customerId,
           summary: `Recorded ${formatPaise(body.amountPaise)} by ${body.method}${pending ? " (cheque not cleared yet)" : ""} for order ${order.code}` }),
-        ...(pending ? [] : await settlementStatements(ctx.deps, order.id, ctx.user.id, body.amountPaise)),
-      ]);
-    } catch (error) {
-      // Another payment completed the order at the same moment: this one is still worth recording, on the paid order.
-      if ((await orderById(db, order.id))?.status === "paid") throw conflict("The order was paid in full just now. Reload to see it, and refund this amount if it was taken twice.", "already_paid");
-      throw error;
-    }
+    ]);
+    // The payment is on file whatever happens next; a payment that lands with this one is counted too.
+    if (!pending) await settleOrder(ctx.deps, order.id, ctx.user.id, (m) => console.warn(m));
     await afterPaid(ctx, order.id);
     return json({ order: await orderDetail(ctx, order.id) }, 201);
   } },
@@ -109,8 +118,8 @@ export const paymentRoutes: Route[] = [
       db.prepare(`UPDATE payments SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending'`).bind(status, now, payment.id),
       logBy(ctx, { action: `payment.${status}`, entityType: "payment", entityId: payment.id, customerId: payment.customerId,
         summary: `Cheque of ${formatPaise(payment.amountPaise)} for order ${payment.code} ${status === "cleared" ? "cleared" : "bounced"}` }),
-      ...(status === "cleared" ? await settlementStatements(ctx.deps, payment.orderId, ctx.user.id, payment.amountPaise) : []),
     ]);
+    if (status === "cleared") await settleOrder(ctx.deps, payment.orderId, ctx.user.id, (m) => console.warn(m));
     await afterPaid(ctx, payment.orderId);
     return json({ order: await orderDetail(ctx, payment.orderId) });
   } },

@@ -74,8 +74,8 @@ export async function orderDetail(ctx: Ctx, id: string): Promise<OrderDetail> {
   const { db } = ctx.deps;
   const [extra, lines, payments, links, invoices, settings, seats, targets] = await Promise.all([
     db.prepare(`SELECT o.max_devices AS maxDevices, o.modules, o.notes, o.confirmed_at AS confirmedAt, o.paid_at AS paidAt, o.cancelled_at AS cancelledAt,
-        o.credit_approved_by AS creditApprovedBy, u.name AS creditApprovedByName FROM orders o LEFT JOIN staff_users u ON u.id = o.credit_approved_by WHERE o.id = ?`).bind(id)
-      .first<{ maxDevices: number; modules: string; notes: string | null; confirmedAt: number | null; paidAt: number | null; cancelledAt: number | null; creditApprovedBy: string | null; creditApprovedByName: string | null }>(),
+        o.credit_approved_by AS creditApprovedBy, u.name AS creditApprovedByName, o.subtotal_paise AS storedSubtotal, o.tax_paise AS storedTax FROM orders o LEFT JOIN staff_users u ON u.id = o.credit_approved_by WHERE o.id = ?`).bind(id)
+      .first<{ maxDevices: number; modules: string; notes: string | null; confirmedAt: number | null; paidAt: number | null; cancelledAt: number | null; creditApprovedBy: string | null; creditApprovedByName: string | null; storedSubtotal: number; storedTax: number }>(),
     db.prepare(`SELECT id, kind, description, sac, quantity, unit_price_paise AS unitPricePaise, discount_paise AS discountPaise, gst_rate_bp AS gstRateBp
       FROM order_lines WHERE order_id = ? ORDER BY position`).bind(id).all<Omit<OrderLine, "taxablePaise" | "cgstPaise" | "sgstPaise" | "igstPaise">>(),
     db.prepare(`SELECT p.id, p.amount_paise AS amountPaise, p.method, p.reference, p.status, p.received_at AS receivedAt, p.note, p.recorded_by AS recordedById, u.name AS recordedByName
@@ -90,7 +90,12 @@ export async function orderDetail(ctx: Ctx, id: string): Promise<OrderDetail> {
     installationsWhere(ctx, "i.installation_id IN (SELECT installation_id FROM order_installations WHERE order_id = ?)", [id]),
   ]);
   const intraState = intraStateFor(settings, { gstin: row.customerGstin, stateCode: row.customerState });
-  const totals = computeTotals(lines.results, intraState ?? true);
+  const live = computeTotals(lines.results, intraState ?? true);
+  // A priced order keeps the figures it was confirmed with: a later change to the seller's or the customer's state must not change what is
+  // owed. Only the CGST/SGST/IGST split follows the current state, and it always adds up to the stored tax.
+  const keep = row.status !== "draft", intra = intraState ?? true, taxPaise = keep ? extra!.storedTax : live.taxPaise;
+  const cgstPaise = keep ? (intra ? Math.floor(taxPaise / 2) : 0) : live.cgstPaise;
+  const totals = keep ? { ...live, subtotalPaise: extra!.storedSubtotal, taxPaise, cgstPaise, sgstPaise: intra ? taxPaise - cgstPaise : 0, igstPaise: intra ? 0 : taxPaise } : live;
   const { customerGstin, customerState, ...summary } = row;
   void customerGstin; void customerState;
   return {
@@ -270,10 +275,18 @@ export const orderRoutes: Route[] = [
     if (before.status === "paid" || before.status === "cancelled") throw conflict(`A ${before.status} order can't be cancelled.`, "not_cancellable");
     if (before.paidPaise > 0) throw conflict("This order has payments. Refund them before cancelling it.", "has_payments");
     const { db } = ctx.deps, now = ctx.deps.now();
-    await db.batch([
-      db.prepare(`UPDATE orders SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?`).bind(now, now, before.id),
-      logBy(ctx, { action: "order.cancelled", entityType: "order", entityId: before.id, customerId: before.customerId, summary: `Cancelled order ${before.code} (${reason})` }),
-    ]);
+    try {
+      await db.batch([
+        // seats_used can never be negative, so this breaks its CHECK, and the batch, when the order was paid or took a payment since the checks above.
+        db.prepare(`UPDATE orders SET seats_used = -1 WHERE id = ? AND (status NOT IN ('draft', 'confirmed') OR EXISTS (SELECT 1 FROM payments WHERE order_id = ? AND status = 'cleared'))`).bind(before.id, before.id),
+        db.prepare(`UPDATE orders SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?`).bind(now, now, before.id),
+        logBy(ctx, { action: "order.cancelled", entityType: "order", entityId: before.id, customerId: before.customerId, summary: `Cancelled order ${before.code} (${reason})` }),
+      ]);
+    } catch (error) {
+      const after = await visibleOrder(ctx, before.id);
+      if (after.status === "paid" || after.status === "cancelled" || after.paidPaise > 0) throw conflict("This order changed while you were cancelling it. Reload and check its payments.", "changed");
+      throw error;
+    }
     const razorpay = razorpayFor(ctx.env);
     if (razorpay) await cancelOpenLinks(ctx.deps, razorpay, before.id, (m) => console.warn(m));
     return json({ order: await orderDetail(ctx, before.id) });

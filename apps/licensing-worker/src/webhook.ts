@@ -1,5 +1,5 @@
 import type { Deps } from "./issue.js";
-import { cancelOpenLinks, settlementStatements } from "./portal/payments.js";
+import { cancelOpenLinks, settleOrder } from "./portal/payments.js";
 import { formatPaise } from "./portal/shared.js";
 import { verifyWebhookSignature, type RazorpayApi } from "./razorpay.js";
 import { activityStatement, eventSeen, recordEventStatement } from "./store.js";
@@ -53,24 +53,28 @@ export async function handleWebhook(deps: WebhookDeps, request: Request): Promis
     if (typeof paymentId !== "string" || typeof amount !== "number" || !Number.isSafeInteger(amount) || amount <= 0) {
       return await record("unmatched", `${linkId} paid without a payment id or amount`);
     }
+    // Completes the order from the payments on file. Safe to repeat, so a delivery that follows an attempt which recorded the payment but
+    // stopped before completing the order finishes the job.
+    const settle = async (): Promise<boolean> => {
+      const settled = await settleOrder(deps, link.orderId, null, log);
+      // A link paid while another was still open: the other is cancelled so the customer can't pay twice. A failure only leaves it to expire.
+      if (settled && deps.razorpay) await cancelOpenLinks(deps, deps.razorpay, link.orderId, log);
+      return settled;
+    };
     if (await db.prepare(`SELECT 1 AS hit FROM payments WHERE razorpay_payment_id = ?`).bind(paymentId).first()) {
-      await db.batch([updateLink, recordEventStatement(db, eventId, type, "duplicate_payment", now)]);
-      return json({ outcome: "duplicate_payment" });
+      await updateLink.run();
+      await settle();
+      return await record("duplicate_payment");
     }
     const method = typeof child(payment, "method") === "string" ? child(payment, "method") as string : "online";
-    const settle = await settlementStatements(deps, link.orderId, null, amount);
     await db.batch([
       db.prepare(`INSERT INTO payments (id, order_id, amount_paise, method, reference, status, received_at, note, razorpay_payment_id, created_at, updated_at)
         VALUES (?, ?, ?, 'razorpay', ?, 'cleared', ?, ?, ?, ?, ?)`).bind(deps.uuid(), link.orderId, amount, paymentId, now, `Payment link, by ${method}`, paymentId, now, now),
       updateLink,
       activityStatement(db, now, { actorId: null, action: "payment.received", entityType: "order", entityId: link.orderId, customerId: link.customerId,
         summary: `Received ${formatPaise(amount)} through the payment link for order ${link.code}` }),
-      ...settle,
-      recordEventStatement(db, eventId, type, settle.length ? "paid" : "recorded", now),
     ]);
-    // A link paid while another was still open: the other is cancelled so the customer can't pay twice. A failure only leaves it to expire.
-    if (settle.length && deps.razorpay) await cancelOpenLinks(deps, deps.razorpay, link.orderId, log);
-    return json({ outcome: settle.length ? "paid" : "recorded" });
+    return await record((await settle()) ? "paid" : "recorded");
   } catch (error) {
     log(`webhook ${eventId} failed: ${error instanceof Error ? error.message : String(error)}`);
     return json({ error: "unavailable" }, 500);

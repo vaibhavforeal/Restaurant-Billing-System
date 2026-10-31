@@ -156,8 +156,10 @@ export const installationsRoutes: Route[] = [
     const { db } = ctx.deps, now = ctx.deps.now();
     const order = await orderById(db, installation.orderId);
     await db.batch([
-      db.prepare(`UPDATE orders SET seats_used = seats_used - 1, updated_at = ? WHERE id = ?`).bind(now, installation.orderId),
-      db.prepare(`UPDATE installations SET order_id = NULL WHERE installation_id = ?`).bind(installation.installationId),
+      // Both only while the counter still holds this order's seat, so a second release (a double click, another staff member) changes nothing.
+      db.prepare(`UPDATE orders SET seats_used = seats_used - 1, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM installations WHERE installation_id = ? AND order_id = ?)`)
+        .bind(now, installation.orderId, installation.installationId, installation.orderId),
+      db.prepare(`UPDATE installations SET order_id = NULL WHERE installation_id = ? AND order_id = ?`).bind(installation.installationId, installation.orderId),
       logBy(ctx, { action: "installation.released", entityType: "installation", entityId: installation.installationId, customerId: installation.customerId,
         summary: `Released ${label(installation)}'s seat on order ${order?.code ?? ""}${latest ? `; its current licence still works offline until ${new Date(latest.graceUntil).toISOString().slice(0, 10)}` : ""}` }),
     ]);

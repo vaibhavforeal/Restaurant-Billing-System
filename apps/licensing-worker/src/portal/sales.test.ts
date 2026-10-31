@@ -202,6 +202,22 @@ describe("counters", () => {
     expect(keys.claims((await latestLicense(env.DB, COUNTER))!.envelope).maxDevices).toBe(9);
   });
 
+  it("releasing a seat that another request has just released does not count it twice", async () => {
+    const { order } = await enrolledCounter();
+    const support = await as(env, "support");
+    const hooked = env.DB as unknown as { batch: Env["DB"]["batch"] };
+    const real = hooked.batch.bind(env.DB);
+    hooked.batch = async (statements) => {
+      if (statements.some((s) => (s as unknown as { sql: string }).sql.includes("seats_used = seats_used - 1"))) {
+        hooked.batch = real;
+        await support.call("POST", `/installations/${COUNTER}/release`); // the other staff member's click lands first
+      }
+      return real(statements);
+    };
+    expect((await support.call("POST", `/installations/${COUNTER}/release`)).status).toBe(200);
+    expect(await env.DB.prepare(`SELECT seats_used AS used FROM orders WHERE id = ?`).bind(order.id).first()).toEqual({ used: 0 });
+  });
+
   it("support releases a seat for a reinstall and resets pairing; the new computer then activates", async () => {
     const { customer, order } = await enrolledCounter();
     const support = await as(env, "support");

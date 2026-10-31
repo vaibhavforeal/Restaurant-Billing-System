@@ -37,7 +37,9 @@ export function match(pattern: string, path: string): Record<string, string> | n
   const names: string[] = [];
   const regex = new RegExp(`^${pattern.replace(/:(\w+)/g, (_, name: string) => { names.push(name); return "([^/]+)"; })}/?$`);
   const found = path.match(regex);
-  return found ? Object.fromEntries(names.map((name, i) => [name, decodeURIComponent(found[i + 1]!)])) : null;
+  if (!found) return null;
+  // A malformed escape (/customers/%E0%A4%A) is no match, not a crash of the whole page.
+  try { return Object.fromEntries(names.map((name, i) => [name, decodeURIComponent(found[i + 1]!)])); } catch { return null; }
 }
 
 /** A real link (open in a new tab works) that navigates in place on a plain click. */

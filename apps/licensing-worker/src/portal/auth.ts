@@ -33,6 +33,9 @@ function newToken(): string {
 const Credentials = z.object({ email: z.string().trim().min(3).max(254), password: z.string().min(1).max(512) }).strict();
 export const NewPassword = z.string().min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`).max(200);
 
+/** The one answer to every refused sign-in: an unknown address, a wrong password and a locked account look alike. */
+const SIGN_IN_FAILED = "Wrong email or password, or the account is locked for a few minutes after repeated mistakes";
+
 async function limited(env: Env, request: Request): Promise<boolean> {
   const limiter = env.LOGIN_LIMITER ?? env.LIMITER;
   // Fails open like the licensing routes; the per-account lock below does not depend on it.
@@ -47,15 +50,16 @@ export async function signIn(deps: Deps, env: Env, request: Request): Promise<Re
     FROM staff_users u WHERE u.email = ?`).bind(email).first<UserRecord & { passwordHash: string; active: number; failedAttempts: number; lockedUntil: number | null }>();
   if (!row || row.active !== 1) {
     await verifyPassword(password, await dummyHash());
-    throw new HttpError(401, "Wrong email or password");
+    throw new HttpError(401, SIGN_IN_FAILED);
   }
   if (row.lockedUntil !== null && row.lockedUntil > now) {
-    throw new HttpError(429, `Too many wrong passwords for this account. Try again in ${Math.ceil((row.lockedUntil - now) / 60_000)} minutes.`);
+    await verifyPassword(password, await dummyHash());
+    throw new HttpError(401, SIGN_IN_FAILED);
   }
   if (!(await verifyPassword(password, row.passwordHash))) {
     const failed = row.failedAttempts + 1, lock = failed >= LOCK_AFTER;
     await db.prepare(`UPDATE staff_users SET failed_attempts = ?, locked_until = ? WHERE id = ?`).bind(lock ? 0 : failed, lock ? now + LOCK_MS : null, row.id).run();
-    throw new HttpError(401, "Wrong email or password");
+    throw new HttpError(401, SIGN_IN_FAILED);
   }
   const token = newToken();
   await db.batch([

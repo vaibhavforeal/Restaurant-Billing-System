@@ -49,9 +49,11 @@ export async function invoicePdf(invoice: InvoiceDetail): Promise<Uint8Array> {
     const font = o.font ?? regular, size = o.size ?? 9, safe = plain(font, value);
     page.drawText(safe, { x: o.right ? x - font.widthOfTextAtSize(safe, size) : x, y: at, size, font, color: o.color ?? INK });
   };
+  // Room is kept above the signatory block, which sits at fixed heights on the last page; text that would run into it continues on a new page.
+  const room = (height: number) => { if (y - height < 110) { page = doc.addPage([W, H]); y = H - M; } };
   const block = (value: string, x: number, width: number, o: { size?: number; font?: PDFFont; color?: typeof INK; leading?: number } = {}) => {
     const font = o.font ?? regular, size = o.size ?? 9, leading = o.leading ?? size + 3;
-    for (const line of wrap(font, size, plain(font, value), width)) { text(line, x, y, { ...o, size, font }); y -= leading; }
+    for (const line of wrap(font, size, plain(font, value), width)) { room(leading); text(line, x, y, { ...o, size, font }); y -= leading; }
   };
   const rule = (at: number) => page.drawLine({ start: { x: M, y: at }, end: { x: W - M, y: at }, thickness: 0.6, color: LINE });
   const money = (paise: number) => formatPaise(paise);
@@ -121,8 +123,8 @@ export async function invoicePdf(invoice: InvoiceDetail): Promise<Uint8Array> {
   y -= 4;
   block(`Amount in words: ${invoice.amountInWords}`, M, W - 2 * M, { font: bold });
   y -= 10;
-  if (invoice.seller.bankDetails) { text("Pay by bank transfer", M, y, { color: MUTED }); y -= 13; block(invoice.seller.bankDetails, M, 300); y -= 6; }
-  if (invoice.seller.terms) { text("Terms", M, y, { color: MUTED }); y -= 13; block(invoice.seller.terms, M, W - 2 * M); }
+  if (invoice.seller.bankDetails) { room(40); text("Pay by bank transfer", M, y, { color: MUTED }); y -= 13; block(invoice.seller.bankDetails, M, 300); y -= 6; }
+  if (invoice.seller.terms) { room(40); text("Terms", M, y, { color: MUTED }); y -= 13; block(invoice.seller.terms, M, W - 2 * M); }
 
   // Closing, on the last page.
   text(`For ${invoice.seller.name}`, W - M, 90, { right: true, font: bold });
