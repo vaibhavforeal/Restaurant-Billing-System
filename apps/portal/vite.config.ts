@@ -12,6 +12,10 @@ export default defineConfig({
   server: {
     // `wrangler dev --port 8799` runs the Worker (8787 is taken on the build PC). The Worker only accepts changes whose Origin is its
     // own, so the proxy presents the Worker's origin.
-    proxy: { "/portal/api": { target: worker, changeOrigin: true, headers: { origin: worker } } },
+    proxy: {
+      // The live socket first: the longer path wins only if it is listed before /portal/api.
+      "/portal/api/live": { target: worker.replace(/^http/, "ws"), ws: true, changeOrigin: true, headers: { origin: worker } },
+      "/portal/api": { target: worker, changeOrigin: true, headers: { origin: worker } },
+    },
   },
 });

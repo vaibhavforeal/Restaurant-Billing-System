@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "MasalaPOS Portal: the staff web app for customers, leads, orders, licences, invoices and support. Built into dist/portal and served by the licensing Worker.",
+  "description": "MasalaPOS Portal: the staff web app for customers, leads, orders, licences, invoices and support, plus the restaurants' support chat page. Built into dist/portal and dist/support and served by the licensing Worker.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.support.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
