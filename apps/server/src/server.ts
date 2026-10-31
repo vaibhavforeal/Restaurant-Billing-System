@@ -137,7 +137,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return reply.status(status).send({ error: message, ...(code ? { code } : {}) });
   });
 
-  configureLicensing(app, opts.licensing);
+  configureLicensing(app, opts.licensing, opts.appVersion);
   provideModuleAllowances(app.db, () => app.licensing.status().modules);
   registerAuth(app, opts.demo ?? false);
   registerWs(app, opts.authTimeoutMs);

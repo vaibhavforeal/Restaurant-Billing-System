@@ -1,64 +1,33 @@
-# MasalaPOS licensing service
+# MasalaPOS licensing service and portal
 
-A Cloudflare Worker with a D1 database. It does three jobs:
+A Cloudflare Worker with a D1 database. It does four jobs:
 
-- `POST /v1/activate` hands a counter its latest signed licence. A brand-new installation gets one 14-day Pro trial (once per installation id, ever). It needs the installation secret (see below).
-- `POST /v1/subscribe-sessions` gives a counter a short-lived checkout link; `GET /subscribe?session=<token>` and `POST /v1/subscriptions` take an admin to Razorpay Checkout for a Basic or Pro, monthly or yearly subscription. The only way to reach checkout is **Subscribe** or **Manage plan** in Settings > Plan and devices, as an admin. A link expires after 30 minutes; pressing the button again makes a new one.
-- `POST /webhooks/razorpay` turns a verified Razorpay charge into a new signed licence (expiry = the subscription's `current_end`, plus 7 days of offline grace).
+- **`POST /v1/enroll`** activates a counter. At setup (or later from Settings > Plan and devices) the restaurant types the **Customer ID** and **Order ID** from MasalaPOS's setup card. The order must belong to that customer and be paid, approved on credit, or a trial. The counter takes one of the order's seats and gets the order's licence; the term counts from that moment.
+- **`POST /v1/activate`** is every counter's hourly check. It hands back a newer licence when there is one (a renewal, a module change, a staff adjustment). It records when the counter was last seen and which version it runs. There are no automatic trials any more: a counter that has not enrolled gets `{ "license": null, "enrolled": false }`, and nothing is written.
+- **`POST /webhooks/razorpay`** turns a paid Razorpay **payment link** into a recorded payment. When that payment completes its order, the order is fulfilled: licences extended, tax invoice issued, other open links cancelled.
+- **`/portal`** is the MasalaPOS Portal: the web app staff use for leads, customers, orders, payments, GST invoices, counters, renewals, support tickets and reports. It is served from Workers Static Assets with its API under `/portal/api`. How staff use it is in `docs/operations/vendor-portal.md`.
 
-The counter app never talks to Razorpay. It only asks this service for a licence, and it verifies the Ed25519 signature with the public key baked into its build, exactly as it does for a licence imported by hand. The design is in `docs/superpowers/specs/2026-10-10-licensing-service-design.md`.
+The counter app never talks to Razorpay. It only asks this service for a licence, and it verifies the Ed25519 signature with the public key baked into its build, exactly as it does for a licence imported by hand.
 
-Nothing under `apps/server`, `apps/ui`, `packages/domain` or `packages/core` imports this package. Worker source uses only WebCrypto, `fetch`, `Request`/`Response` and the interfaces in `src/env.ts`.
+Nothing under `apps/server`, `apps/ui`, `packages/domain` or `packages/core` imports this package. Worker source uses only WebCrypto, `fetch`, `Request`/`Response` and the interfaces in `src/env.ts`. The portal web app (`apps/portal`) imports only `src/portal/api-types.ts` and `src/portal/shared.ts`.
+
+> [!IMPORTANT]
+> **The portal needs Cloudflare Workers Paid** (about $5 a month). Workers Free allows 10 ms of CPU per request. Staff sign-in hashes the password with PBKDF2 at 100,000 iterations, about 23 ms. An invoice PDF takes 20 to 80 ms. Both would be cut off on the free plan. Licensing alone (`/v1/*`) fits in the free plan.
 
 ## The installation secret
 
 An installation id alone is not proof of who is asking: it appears in activation requests and licence files that get emailed around. So each counter also holds a secret.
 
-- On first start the counter generates 32 random bytes (64 lowercase hex characters) and stores them in `installation.json` next to the installation id, in its data folder. An older `installation.json` without a secret gets one on the next start; the id does not change. Back this file up with the rest of the data folder.
-- The counter sends it in the `X-MasalaPOS-Installation-Secret` header on `POST /v1/activate` and `POST /v1/subscribe-sessions`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
-- Trust on first use: the Worker stores only the SHA-256 of the secret (`installations.secret_hash`). The first request for an installation that has no hash yet claims it; every later request must present the same secret, or it gets `401` and changes nothing. The secret is never logged or echoed, and the counter never puts it in the activation-request file or in any response to the browser.
-- **Re-pairing a counter** (the data folder was restored from a copy made before the secret existed, or `installation.json` was replaced, so the counter now holds a different secret for the same installation id): clear the stored hash, and the next request from that counter claims it again:
-
-  ```powershell
-  npx wrangler@4 d1 execute masalapos-licensing --remote --command "UPDATE installations SET secret_hash = NULL WHERE installation_id = '<installation id>'"
-  ```
-
-  (Use `masalapos-licensing-test --env test` for the test database.) Do this only for an installation you have verified is the customer's; until the counter makes its next request, whoever asks first becomes its owner.
-- **If someone else registered this installation id first** (the real counter gets `401` on **Check for renewal** and "The licensing service doesn't recognise this installation", and you have not re-paired it): another caller made first contact and now owns the row, so clearing the hash would only let the next caller take it again. Verify the customer first, then delete the hijacked row so the real counter registers fresh on its next start. Check that nothing was paid on it:
-
-  ```powershell
-  npx wrangler@4 d1 execute masalapos-licensing --remote --command "SELECT reason, razorpay_payment_id FROM licenses WHERE installation_id = '<installation id>'; SELECT razorpay_subscription_id, status FROM subscriptions WHERE installation_id = '<installation id>'"
-  ```
-
-  **Stop if any licence has reason `charge`, or any subscription exists beyond an unpaid attempt.** That installation has paid: contact the customer and Razorpay before touching it. Otherwise delete the dependents first (they reference `installations`), then the row itself:
-
-  ```powershell
-  npx wrangler@4 d1 execute masalapos-licensing --remote --command "DELETE FROM subscribe_sessions WHERE installation_id = '<installation id>'; DELETE FROM licenses WHERE installation_id = '<installation id>'; DELETE FROM subscriptions WHERE installation_id = '<installation id>'; DELETE FROM installations WHERE installation_id = '<installation id>'"
-  ```
-
-  The installation's trial is deleted with its row, so the real counter gets a fresh 14-day trial when it registers (the trial was spent by the hijacker, not the customer). Then restart the real counter or press **Check for renewal**, and make sure it is the one that registers.
-- **Upgrading an existing deployment:** migration `0002_installation_secret.sql` adds `secret_hash` and the checkout-session table. Apply it **before** deploying the Worker that needs it, test first:
-
-  ```powershell
-  npx wrangler@4 d1 migrations apply masalapos-licensing-test --env test --remote
-  npx wrangler@4 d1 migrations apply masalapos-licensing --remote
-  ```
-
-  Counters already in the field have no hash on their row, so each one claims it with its first request after it updates. Counters on the previous build send no secret and get `401` from the new Worker until they are updated to a build that does.
-
-  **Rollout check.** After the migration and deploy, every installation that existed before has `secret_hash` NULL, so the first caller to present a well-formed id and secret claims it, and that caller is not necessarily the customer. Once the counters have updated, run:
-
-  ```powershell
-  npx wrangler@4 d1 execute masalapos-licensing --remote --command "SELECT installation_id FROM installations WHERE secret_hash IS NULL"
-  ```
-
-  Any installation still listed has not been claimed by its counter. Investigate each one you recognise as a customer (is the counter on the new build and online?) before it is claimed by someone else; if it was already claimed by the wrong party, use the hijacked-installation procedure above.
-- **Checkout sessions:** `POST /v1/subscribe-sessions` (with the secret header and `{ "installationId": "..." }`) returns `{ "session": "<43-character token>", "expiresAt": <ms> }`. The Worker keeps only the token's SHA-256. `GET /subscribe?session=` and `POST /v1/subscriptions` identify the installation from the session; an installation id in the address is ignored, and one in the request body is rejected with `400` (the body schema is strict). An unknown or expired session gets a 404 page (or `401 { "error": "session_expired" }` from the form's POST) saying "This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again."
+- On first start the counter generates 32 random bytes (64 lowercase hex characters) and stores them in `installation.json` next to the installation id, in its data folder. Back this file up with the rest of the data folder.
+- The counter sends it in the `X-MasalaPOS-Installation-Secret` header on `POST /v1/enroll` and `POST /v1/activate`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
+- Trust on first use: the Worker stores only the SHA-256 of the secret (`installations.secret_hash`). A counter's row is created when it first enrols with a valid Customer ID and Order ID, so a stranger guessing installation ids gets nothing. Every later request must present the same secret, or it gets `401` and changes nothing. The secret is never logged or echoed.
+- **Re-pairing a counter** (the restaurant restored or replaced `installation.json`, so the counter now holds a different secret for the same installation id): in the portal, open the customer's **Counters** tab, then the counter, then **Reset pairing**. Support or an admin can do this. The next check-in from that counter claims it again. Do it only for a counter you have verified is the customer's; until the counter checks in, whoever asks first becomes its owner.
+- **A counter activated offline** (from an activation request file, in the portal) has no secret stored yet. Its first check-in claims it the same way.
 
 ## What you need
 
-- A Cloudflare account and `npx wrangler@4` (never install it into the repo). Run `npx wrangler login` yourself, once.
-- A Razorpay account. Start in **test mode** (test keys, test plans); repeat everything in live mode only after the checklist in `docs/licensing-service-test-mode.md` passes.
+- A Cloudflare account on **Workers Paid**, and `npx wrangler@4` (never install it into the repo). Run `npx wrangler login` yourself, once.
+- A Razorpay account. Start in **test mode** (test keys). Repeat everything in live mode only after the checklist in `docs/licensing-service-test-mode.md` passes.
 - **Two separate Ed25519 key pairs: one for test, one for production.** The production pair is the one your commercial builds already trust (or make one). Always make a new pair for test:
 
   ```powershell
@@ -70,10 +39,10 @@ An installation id alone is not proof of who is asking: it appears in activation
   openssl pkey -in C:\secure\license-test-private.pem -pubout -out C:\secure\license-test-public.pem
   ```
 
-  Each private key goes only into the `LICENSE_SIGNING_KEY` secret (PKCS#8 PEM) of its own Worker: the test key into the test Worker, the production key into the production Worker and nowhere else. Each public key goes into the counter builds for that environment (see step 7). A build whose public key does not match a Worker's signing key is told `409 wrong_key`. Settings shows only "The licensing service returned a licence this installation can't use."; the specific cause ("The licensing service signs with a different key than this build trusts") is in the counter server's log.
+  Each private key goes only into the `LICENSE_SIGNING_KEY` secret (PKCS#8 PEM) of its own Worker: the test key into the test Worker, the production key into the production Worker and nowhere else. Each public key goes into the counter builds for that environment (see step 8). A build whose public key does not match a Worker's signing key is told `409 wrong_key`.
 
 > [!WARNING]
-> **Never load the production signing key into the test Worker.** The test Worker is public and takes Razorpay test-mode payments, which anyone can make with Razorpay's published test card. If it signed with the production key, anyone could send a production counter's activation request to it, "pay" with the test card on its `/subscribe` page, collect a licence that production counters accept and import it by hand. With a separate test key, a licence from the test Worker only works in test builds.
+> **Never load the production signing key into the test Worker.** Anyone with portal access on the test Worker can issue orders and licences. If it signed with the production key, those licences would work on production counters. With a separate test key, a licence from the test Worker only works in test builds.
 
 ## Environments
 
@@ -83,11 +52,12 @@ An installation id alone is not proof of who is asking: it appears in activation
 | --- | --- | --- |
 | Deploy | `npx wrangler deploy --env test` | `npx wrangler deploy` |
 | Database | `masalapos-licensing-test` | `masalapos-licensing` |
-| Razorpay keys and plans | test mode | live mode |
+| Razorpay keys | test mode | live mode |
 | Signing key (`LICENSE_SIGNING_KEY`) | `license-test-private.pem` | `license-private.pem` |
 | Counter builds that use it | test builds (test public key) | production builds (production public key) |
+| Portal staff accounts | their own | their own |
 
-Wrangler does not inherit `vars` or secrets between environments, so every step below is done once per environment. Add `--env test` to each command for the test environment; leave it off for production.
+Wrangler does not inherit secrets or rate limits between environments, so every step below is done once per environment. The `assets` block is inherited. Add `--env test` to each command for the test environment; leave it off for production.
 
 ## 1. Create the database
 
@@ -106,33 +76,9 @@ npx wrangler d1 migrations apply masalapos-licensing-test --env test --remote
 npx wrangler d1 migrations apply masalapos-licensing --remote
 ```
 
-Run this again whenever a new file appears under `migrations/`, before deploying the Worker that needs it.
+Run this again whenever a new file appears under `migrations/`, before deploying the Worker that needs it. `0004` to `0007` add the portal: staff, customers, orders, payments, invoices, leads, follow-ups and tickets. They also drop the old self-serve subscription tables.
 
-## 3. Create the Razorpay plans and set the plan ids
-
-In the Razorpay dashboard (test mode first) create four plans, with the amounts you want to charge:
-
-| Plan | Period | Interval |
-| --- | --- | --- |
-| Basic monthly | monthly | 1 |
-| Basic yearly | yearly | 1 |
-| Pro monthly | monthly | 1 |
-| Pro yearly | yearly | 1 |
-
-The Worker chooses the number of billing cycles itself when it creates a subscription (`total_count` 120 for monthly, 10 for yearly), so leave that out of the plan. Copy the four plan ids into `wrangler.jsonc` as plain variables. `vars` is not inherited by `env.test`, so give each environment its own block:
-
-```jsonc
-"vars": {
-  "RAZORPAY_PLAN_BASIC_MONTHLY": "plan_...",
-  "RAZORPAY_PLAN_BASIC_YEARLY": "plan_...",
-  "RAZORPAY_PLAN_PRO_MONTHLY": "plan_...",
-  "RAZORPAY_PLAN_PRO_YEARLY": "plan_..."
-}
-```
-
-(Put one at the top level for production and one inside `"env": { "test": { ... } }`.)
-
-## 4. Set the four secrets
+## 3. Set the secrets
 
 ```powershell
 npx wrangler secret put RAZORPAY_KEY_ID --env test
@@ -150,16 +96,17 @@ npx wrangler secret put RAZORPAY_WEBHOOK_SECRET
 Get-Content C:\secure\license-private.pem -Raw | npx wrangler secret put LICENSE_SIGNING_KEY
 ```
 
-For the owner control panel (see "Owner control panel" below), also set a long owner password in each environment. Use a password manager to generate one of at least 16 characters, different per environment:
+`RAZORPAY_WEBHOOK_SECRET` is a string you choose, different per environment; you enter the same string in the Razorpay webhook settings in step 7. Without Razorpay keys the portal still works: staff record payments by hand, and **Send payment link** says Razorpay isn't set up. Secrets live only in Cloudflare: never put them in the repo, in `wrangler.jsonc`, in a counter build or in browser code.
+
+## 4. Build the portal
+
+The Worker serves the portal from `apps/portal/dist`, so build it before every deploy:
 
 ```powershell
-npx wrangler secret put OWNER_PASSWORD --env test
-npx wrangler secret put OWNER_PASSWORD
+cd ..\..
+npm.cmd run build -w @masalapos/portal
+cd apps\licensing-worker
 ```
-
-Without it the panel stays closed (its login answers `503`); licensing itself does not need it.
-
-The test Worker gets `license-test-private.pem`, never `license-private.pem` (see the warning under "What you need"). `RAZORPAY_WEBHOOK_SECRET` is a string you choose, different per environment; you enter the same string in the Razorpay webhook settings in step 6. Secrets live only in Cloudflare: never put them in the repo, in `wrangler.jsonc`, in a counter build or in browser code.
 
 ## 5. Deploy
 
@@ -168,21 +115,45 @@ npx wrangler deploy --env test
 npx wrangler deploy
 ```
 
-Wrangler prints the Worker's URL (`https://masalapos-licensing-test.<account>.workers.dev` for the test environment, or a custom domain you attach). The counter requires HTTPS.
+Wrangler prints the Worker's URL (`https://masalapos-licensing-test.<account>.workers.dev` for the test environment, or a custom domain you attach). The counter requires HTTPS. The portal is at `https://<worker-url>/portal/`.
 
-The test Worker is only for the test-mode checklist. Once the checklist passes, take it off the internet: delete it (`npx wrangler delete --env test`), or add `"workers_dev": false` to the `env.test` block of `wrangler.jsonc` and deploy it again so it has no public URL. Deploy it again the same way when you next need a test run.
+**A separate hostname for the portal is worth it.** For example, attach `portal.<your-domain>` and `licence.<your-domain>` to the same Worker. Staff cookies then live on a host that counters and Razorpay never use. Point counter builds at the licence hostname.
 
-## 6. Point the Razorpay webhook at the Worker
+The test Worker is only for test runs. Afterwards, take it off the internet: delete it (`npx wrangler delete --env test`), or add `"workers_dev": false` to the `env.test` block of `wrangler.jsonc` and deploy it again.
+
+## 6. Create the first admin
+
+Staff accounts live in D1. The first admin is created from your PC, so the password never travels to the Worker in clear and no bootstrap secret is needed:
+
+```powershell
+node --import tsx tools\portal-create-admin.ts you@masalapos.in "Your Name"
+```
+
+It asks for the password twice (not shown on screen, at least 10 characters) and prints a `wrangler d1 execute` command with the hashed password. Run that command from `apps\licensing-worker`:
+- For the test Worker, use `masalapos-licensing-test` with `--env test`.
+- For `wrangler dev`, use `--local` instead of `--remote`.
+
+Sign in at `/portal/`. Then go to **Settings** and fill in:
+- the seller details: MasalaPOS's legal name, GSTIN, address and state;
+- the invoice wording;
+- the price list.
+
+Add the rest of the staff under **Staff**.
+
+## 7. Point the Razorpay webhook at the Worker
 
 In the Razorpay dashboard (matching mode) open Settings, then Webhooks, and add:
 
 - URL: `https://<worker-url>/webhooks/razorpay`
 - Secret: the `RAZORPAY_WEBHOOK_SECRET` you set above
-- Events: `subscription.charged`, `subscription.activated`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`
+- Events: `payment_link.paid`, `payment_link.partially_paid`, `payment_link.cancelled`, `payment_link.expired`
 
-Only `subscription.charged` can issue a licence; the other four just update the stored subscription status. A request with a bad signature gets `400` and writes nothing; a duplicate event id gets `200` and is ignored.
+`payment_link.paid` records the payment against the link's order, once per Razorpay payment id. When the order is then paid in full it is fulfilled in the same batch. The other events only update the link's status.
+- A request with a bad signature gets `400` and writes nothing.
+- A duplicate event id gets `200 {"outcome":"duplicate"}`.
+- A link the portal never created is recorded as `unmatched`.
 
-## 7. Build the counter against the service
+## 8. Build the counter against the service
 
 The service URL is baked into commercial builds next to the public key, like the key itself. HTTPS is required. A build's public key and service URL always belong to the same environment.
 
@@ -194,7 +165,7 @@ $env:MASALAPOS_LICENSE_SERVICE_URL = 'https://<production-worker-url>'
 npm.cmd run package:commercial
 ```
 
-Test builds (only for the test-mode checklist, never given to a restaurant) embed the **test** public key and the test Worker's URL:
+Test builds (never given to a restaurant) embed the **test** public key and the test Worker's URL:
 
 ```powershell
 $env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-test-public.pem' -Raw
@@ -204,39 +175,46 @@ npm.cmd run package:commercial
 
 Clear both variables (or open a new terminal) between a test build and a production build.
 
-A build without `MASALAPOS_LICENSE_SERVICE_URL` never contacts the service: no automatic trial, no renewals, and Settings hides Subscribe, Manage plan and Check for renewal. When running the server from source, set the same variable (plain `http://127.0.0.1` is accepted there, never in a packaged build).
+A build without `MASALAPOS_LICENSE_SERVICE_URL` never contacts the service. Setup then goes straight to the admin step, and the licence comes as a file from the portal (**Activate a counter without internet** on the order). When running the server from source, set the same variable; plain `http://127.0.0.1` is accepted there, never in a packaged build.
 
-A counter asks for its licence when the server starts, every hour, and when an admin presses **Check for renewal** in Settings, Plan and devices. Billing never depends on the answer.
-
-## Owner control panel
-
-`https://<worker-url>/owner` is where MasalaPOS decides which modules each restaurant may use: takeaway, reservations, QR guest ordering, guest assistance, inventory, recipes, dish costing, reports, the sales dashboard, Zomato, the Kitchen Display and CRM & Loyalty. Sign in with `OWNER_PASSWORD`; a session lasts 8 hours, and sign-in attempts share the service's rate limit (20 a minute per address).
-
-Every restaurant appears the first time its MasalaPOS contacts the service. For each module choose **Follow the plan** (Basic or Pro defaults), **Allow** or **Block**, and press **Save**. Saving signs the restaurant's current terms (plan, dates, trial, subscription) with the new modules as the next licence revision; renaming a restaurant issues nothing. The card shows "Waiting for the restaurant to check in" until the counter has collected that revision, which happens within an hour, or at once when an admin presses **Check for renewal**. A restaurant whose licence has run out gets no new revision; its next trial or payment carries the change, because every licence the service issues includes the owner's choices.
-
-Within what you allow, the restaurant's admin can still switch a module off in its Marketplace and back on later. **Change history** on each card lists every change with the licence revision it went into.
+A counter asks for its licence when the server starts, every hour, and when an admin presses **Check for renewal** in Settings > Plan and devices. Billing never depends on the answer.
 
 ## Running it locally
 
 ```powershell
+npm.cmd run build -w @masalapos/portal
 cd apps\licensing-worker
 npx wrangler d1 migrations apply masalapos-licensing --local
-npx wrangler dev
+npx wrangler dev --port 8799
 ```
 
-`wrangler dev` reads `.dev.vars` (secrets and variables, same names as above). Both `.dev.vars` and `.wrangler/` are gitignored; keep it that way and use a throwaway signing key and dummy Razorpay values. Never commit `.dev.vars`, a key, or a `database_id` from a local run. Delete `.dev.vars` and `.wrangler/` when you are done.
+Use port 8799. Another local service already uses 8787 on the MasalaPOS build PC.
+- `wrangler dev` reads `.dev.vars`, which holds the secrets above under the same names. Use a throwaway signing key and dummy Razorpay values.
+- Create the first admin with `tools/portal-create-admin.ts` and `--local`.
+- For work on the portal screens, run `npm.cmd run dev -w @masalapos/portal` too. Vite serves the app with hot reload and passes `/portal/api` to the Worker on 8799.
 
-The unit tests run under Node in the root vitest run against a better-sqlite3 stand-in for D1. A local `wrangler dev` run is how Ed25519 signing on the real Workers runtime was checked: `POST /v1/activate` returned a 14-day Pro trial that `verifyLicenseSignature` accepted.
+Both `.dev.vars` and `.wrangler/` are gitignored; keep it that way. Never commit `.dev.vars`, a key, or a `database_id` from a local run.
 
-**The Worker fails open on rate-limiter errors.** If the `LIMITER` binding throws or rejects, the Worker logs `licensing-worker: rate limiter unavailable:` plus the error message (never the IP, headers or body) and lets the request through as if it were allowed; a `{ success: false }` answer still gets `429`. This matters locally: on a Windows machine with wrangler 4.149 every call to the rate-limit binding currently fails with `internal error` under `wrangler dev`, so local runs exercise that fail-open path (expect one "rate limiter unavailable" log line per request) and need no stub. It also means that on a deployed Worker a broken rate-limit binding silently disables rate limiting, so watch the logs for that line (the Setup section of the test-mode checklist checks it).
+The unit tests run under Node in the root vitest run against a better-sqlite3 stand-in for D1 that applies the real migrations. A local `wrangler dev` run is how the Workers runtime itself was checked:
+- the migrations on real D1, including the dropped columns and the rebuilt `licenses` table;
+- Ed25519 signing at enrolment;
+- PBKDF2 sign-in at 100,000 iterations;
+- the invoice PDF from pdf-lib;
+- the portal served from static assets with its CSP.
+
+**The Worker fails open on rate-limiter errors.**
+- If the `LIMITER` or `LOGIN_LIMITER` binding throws or rejects, the Worker lets the request through as if it were allowed. For `LIMITER` it also logs `licensing-worker: rate limiter unavailable:` plus the error message (never the IP, headers or body). A `{ success: false }` answer still gets `429`.
+- Staff sign-in has a second guard that does not depend on the binding: five wrong passwords lock the account for 15 minutes.
+- On a Windows machine with wrangler 4.149, every call to the rate-limit binding currently fails under `wrangler dev`, so local runs take the fail-open path.
 
 ## Operations
 
-- **Logs:** `npx wrangler tail --env test` (or without `--env`). The Worker logs messages only, never request bodies, licences or secrets.
-- **Plan changes leave an old subscription to cancel by hand when something fails.** A superseded older subscription is cancelled only when the newer subscription's first charge arrives. If that cancel fails (it is logged as `could not cancel superseded subscription ...`) or the Worker dies between writing the licence and cancelling, the old subscription stays active in Razorpay and keeps charging. Cancel it by hand in the Razorpay dashboard. After any plan change, look through the Worker logs for "cancel" failures. A charge that does arrive on such an old subscription issues nothing: it is recorded with outcome `superseded` (Razorpay's webhook delivery view shows `{"outcome":"superseded"}`), the Worker tries the cancel again, and logs `could not cancel superseded subscription ...` if that fails too. Refund that charge in the dashboard.
-- **Hand-issuing for an installation the service already knows is fine.** Make the licence with `tools/prepare-license.ts` from the counter's activation request as usual. The counter reports the new revision on its next check, and the service issues every later paid licence above it. If a paid licence from the service is still current when the counter reports the hand-issued one, the service re-signs the paid terms (plan, renewal date, grace) at a higher revision on that check, so a hand-issued extension longer than the paid period, or a different plan, may be replaced by the paid terms. A counter whose licence carries different licence, organisation or outlet ids from the ones the service stored gets no new licence; the Worker logs `activate: installation <id> reported identifiers that differ from the stored ones; nothing issued`.
-- **Abandoned checkouts:** `/v1/subscriptions` creates a Razorpay subscription for every checkout attempt, so subscriptions that were opened and never paid pile up in the `created` state. They are harmless: they are never charged, and they never issue a licence. Clear them out of the dashboard whenever you like.
-- **A webhook that Razorpay keeps retrying** means a `5xx` from D1 or signing; the log line starts `webhook <event id> failed`. Fix the cause and Razorpay's retry delivers the licence. Events for an installation the service has never seen are recorded as `unmatched` and answered `200`.
-- **A counter that reports "The licensing service doesn't recognise this installation":** the Worker answered `401`, so the secret in that counter's `installation.json` differs from the one stored for its installation id. If the customer legitimately restored or replaced its data folder, re-pair it (see "The installation secret"). Otherwise treat it as someone else using that installation id.
-- **Trial already used:** a second `/v1/activate` for the same installation id returns its existing licence or `null`, never a second trial. There is no way to grant another trial short of editing the database.
+- **Logs:** `npx wrangler tail --env test` (or without `--env`). The Worker logs messages only, never request bodies, licences, passwords or secrets.
+- **A counter on a new computer (reinstall):** the old computer still holds the order's seat, so the new one is told "Every outlet on this order is already set up".
+  - In the portal, open the old counter and choose **Release seat**. The restaurant then enters the IDs again on the new computer.
+  - The old computer's licence is signed and offline, so it keeps working until its end date. The activity log records the release with that date.
+- **A webhook that Razorpay keeps retrying** means a `5xx` from D1 or signing; the log line starts `webhook <event id> failed`. Fix the cause and Razorpay's retry records the payment.
+- **A payment link paid while another link for the same order was still open:** the Worker cancels the other link. If that cancel fails, the log says `could not cancel payment link ...` and the link simply expires after 15 days. A second payment on it would be recorded as an overpayment on the order; refund it in the Razorpay dashboard.
+- **Hand-issuing with `tools/prepare-license.ts`** still works for a counter the service knows. The counter reports the new revision on its next check, and the service issues every later licence above it. Prefer the portal: an order's **Activate a counter without internet**, or a counter's **Change this licence**. Both keep the customer, order, devices and modules in the licence and in the activity log.
+- **A counter that reports "The licensing service doesn't recognise this installation":** the Worker answered `401`, so the secret in that counter's `installation.json` differs from the stored one. If the customer legitimately restored or replaced its data folder, reset the pairing in the portal. Otherwise treat it as someone else using that installation id.
 - **Key rotation:** a new signing key means a new public key in a new counter build. Counters on the old build report `rejected` (wrong key) until they are updated, and keep running on their current licence.

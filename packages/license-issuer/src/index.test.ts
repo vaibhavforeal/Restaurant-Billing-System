@@ -46,4 +46,17 @@ describe("buildClaims", () => {
     expect(trial.graceUntil).toBe(trial.expiresAt);
     expect("trial" in buildClaims(request, terms, now)).toBe(false);
   });
+
+  it("sells extra devices and names the portal customer and order; without them the plan's devices apply and no codes appear", () => {
+    const sold = buildClaims(request, { ...terms, plan: "basic", maxDevices: 4, customerCode: "FC-7K3M-9QX", orderCode: "FO-2X8H-PD4" }, now);
+    expect(sold).toMatchObject({ plan: "basic", maxDevices: 4, customerCode: "FC-7K3M-9QX", orderCode: "FO-2X8H-PD4" });
+    const plain = buildClaims(request, terms, now);
+    expect(plain.maxDevices).toBe(5);
+    expect("customerCode" in plain || "orderCode" in plain).toBe(false);
+  });
+
+  it("accepts an activation request that reports the app version and restaurant name", () => {
+    const parsed = parseActivationRequest(JSON.stringify({ ...request, appVersion: "0.7.0", outletName: "Spice Route" }));
+    expect(parsed).toMatchObject({ appVersion: "0.7.0", outletName: "Spice Route" });
+  });
 });

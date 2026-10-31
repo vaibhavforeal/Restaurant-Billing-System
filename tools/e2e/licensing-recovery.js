@@ -19,9 +19,9 @@
   const file = document.querySelector('[aria-label="License file"]'), transfer = new DataTransfer();
   transfer.items.add(new File([window.__licenseFixtures.renewal], 'renewal.lic', { type: 'text/plain' })); file.files = transfer.files; file.dispatchEvent(new Event('change', { bubbles: true }));
   await click('Preview license'); await wait(() => !!document.querySelector('.license-preview'));
-  check(document.querySelector('.license-preview').innerText.includes('Revision 6'), 'Expired installations can preview a signed renewal');
+  check(document.querySelector('.license-preview').innerText.includes('Revision 7'), 'Expired installations can preview a signed renewal');
   await click('Apply license'); await wait(() => !document.querySelector('.license-recovery'));
-  check((await api('/license')).canOperate && (await api('/license')).revision === 6, 'Renewal restores access with existing device registrations');
+  check((await api('/license')).canOperate && (await api('/license')).revision === 7, 'Renewal restores access with existing device registrations');
   check((await fetch('/api/products', { headers })).status === 200, 'Operational APIs resume after renewal');
   check((await api('/license/devices')).devices.length === 2, 'Renewal preserves registered devices');
   // Restoring access remounts Settings on its card grid; reopen Plan and devices.

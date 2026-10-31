@@ -31,7 +31,7 @@ describe("installation secret helpers", () => {
   it("verifyInstallationSecret never claims a NULL-hash row for a malformed, empty or missing secret", async () => {
     const db = memoryD1();
     const installationId = randomUUID();
-    await createInstallation(db, { installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), trialStartedAt: 0, revisionFloor: 0, createdAt: 0, secretHash: null });
+    await createInstallation(db, { installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), revisionFloor: 0, createdAt: 0, secretHash: null });
     for (const bad of [null, "", "nope", "A".repeat(64), "a".repeat(63)]) {
       const row = (await getInstallation(db, installationId))!;
       expect(await verifyInstallationSecret(db, row, bad)).toBeNull();

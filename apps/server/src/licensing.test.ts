@@ -532,7 +532,7 @@ describe("licence renewal from the licensing service", () => {
     expect((await f.app.inject({ method: "POST", url: "/api/license/check", headers: cashier })).statusCode).toBe(403);
     const ok = await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers });
     expect(ok.statusCode, ok.body).toBe(200);
-    expect(ok.json()).toMatchObject({ outcome: "up_to_date", message: "Your licence is up to date.", status: { revision: 1, state: "active", subscriptionAvailable: true } });
+    expect(ok.json()).toMatchObject({ outcome: "up_to_date", message: "Your licence is up to date.", status: { revision: 1, state: "active", onlineActivation: true } });
     next = `${signed({ ...f.claims, revision: 2 })}\n`;
     expect(broadcast).not.toHaveBeenCalled(); // nothing changed, so nobody is told
     const installed = await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers });
@@ -540,16 +540,15 @@ describe("licence renewal from the licensing service", () => {
     expect(broadcast).toHaveBeenCalledWith("license.changed", {});
   });
 
-  it("status says whether a subscription can be started, without exposing a URL or the secret", async () => {
+  it("status says whether the counter can activate online, without exposing the secret", async () => {
     const f = await fixture({ serviceUrl });
-    expect(f.app.licensing.status().subscriptionAvailable).toBe(true);
+    expect(f.app.licensing.status().onlineActivation).toBe(true);
     const body = (await f.app.inject({ url: "/api/license", headers: f.headers })).json();
-    expect(body.subscriptionAvailable).toBe(true);
-    expect(body).not.toHaveProperty("subscribeUrl");
+    expect(body.onlineActivation).toBe(true);
     expect(JSON.stringify(body)).not.toContain(installationSecret);
-    const without = await fixture(); expect(without.app.licensing.status().subscriptionAvailable).toBe(false);
+    const without = await fixture(); expect(without.app.licensing.status().onlineActivation).toBe(false);
     const dev = freshApp(); apps.push(dev);
-    expect(dev.licensing.status().subscriptionAvailable).toBe(false);
+    expect(dev.licensing.status().onlineActivation).toBe(false);
   });
 
   it("refuses to start without a well-formed secret when a service URL is set", () => {
@@ -562,169 +561,177 @@ describe("licence renewal from the licensing service", () => {
   });
 });
 
-describe("checkout sessions from the licensing service", () => {
+describe("activation with a Customer ID and Order ID", () => {
   const serviceUrl = "https://license.example.com";
+  const CUSTOMER = "FC-7M3N-9QK", ORDER = "FO-2X8H-PDD";
   const notRecognised = "The licensing service doesn't recognise this installation. Contact MasalaPOS support.";
   const unreachable = "Couldn't reach the licensing service. Check the internet connection and try again.";
-  const session = "s".repeat(43);
+  const checkCodes = "Check the Customer ID and Order ID. They are on the setup card MasalaPOS gave you.";
   const reply = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
-  const sessionReply = () => reply(200, { session, expiresAt: Date.now() + 1_800_000 });
   function service(answer: (url: string, init?: RequestInit) => Response | Promise<Response>) {
     const spy = vi.fn(async (url: unknown, init?: RequestInit) => answer(String(url), init));
     return { spy, fetch: spy as unknown as typeof fetch };
   }
-  const paths = (spy: ReturnType<typeof service>["spy"]) => spy.mock.calls.map(([url]) => String(url).replace(serviceUrl, ""));
+  const now = Date.now();
+  const licence = (over: Partial<LicenseClaims> = {}) => `${signed(LicenseClaims.parse({ version: 1, ...scope, revision: 1, plan: "pro", features: PLANS.pro.features,
+    modules: planModules("pro"), maxDevices: 3, issuedAt: now - 1000, expiresAt: now + 30 * 86_400_000, graceUntil: now + 37 * 86_400_000,
+    customerCode: CUSTOMER, orderCode: ORDER, ...over }))}\n`;
+  const enrolled = (over: Partial<LicenseClaims> = {}) => reply(200, {
+    license: licence(over), customer: { code: CUSTOMER, name: "Spice Route" }, order: { code: ORDER, plan: "pro", trial: false, expiresAt: now + 30 * 86_400_000 },
+  });
+  /** A counter before setup: no users yet. */
+  function bare(extra: { serviceUrl?: string; fetch?: typeof fetch } = {}) {
+    const db = openDb(":memory:"); migrate(db, MIGRATIONS);
+    const app = buildServer({ db, licensing: { publicKey, installationId, installationSecret, ...extra } });
+    apps.push(app);
+    return app;
+  }
+  const valid = { customerId: "fc 7m3n 9qk", orderId: "2X8HPDD" };
 
-  it("returns the checkout URL for a session minted with the installation secret", async () => {
-    const s = service(() => sessionReply());
+  it("sends the activation request and the codes in canonical form with the secret, and installs the licence it gets back", async () => {
+    const s = service(() => enrolled());
     const f = await fixture({ serviceUrl, fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
-    expect(s.spy).toHaveBeenCalledTimes(1);
+    const broadcast = vi.spyOn(f.app, "broadcast");
+    expect(await f.app.licensing.enroll(valid, "Asha")).toEqual({
+      customer: { code: CUSTOMER, name: "Spice Route" }, order: { code: ORDER, plan: "pro", trial: false, expiresAt: now + 30 * 86_400_000 },
+    });
     const [url, init] = s.spy.mock.calls[0]!;
-    expect(url).toBe(`${serviceUrl}/v1/subscribe-sessions`);
-    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json", "X-MasalaPOS-Installation-Secret": installationSecret } });
-    expect(JSON.parse(init!.body as string)).toEqual({ installationId });
-    expect(init!.signal).toBeInstanceOf(AbortSignal);
-  });
-
-  it("registers the installation with one renewal check and retries once when the service does not know it yet", async () => {
-    let known = false;
-    const s = service((url) => url.endsWith("/v1/activate") ? (known = true, reply(200, { license: null })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
-    const f = await fixture({ serviceUrl, fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
-    expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate", "/v1/subscribe-sessions"]);
-    const [, activate] = s.spy.mock.calls[1]!;
-    expect(activate).toMatchObject({ headers: { "X-MasalaPOS-Installation-Secret": installationSecret } });
-  });
-
-  it("announces a licence installed by the registering check", async () => {
-    let known = false, trial = "";
-    const s = service((url) => url.endsWith("/v1/activate") ? (known = true, reply(200, { license: trial })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
-    const f = await fixture({ serviceUrl, fetch: s.fetch });
-    trial = `${signed({ ...f.claims, plan: "pro", maxDevices: 5, features: PLANS.pro.features, modules: planModules("pro"), trial: true })}
-`;
-    const broadcast = vi.spyOn(f.app, "broadcast"), revalidate = vi.spyOn(f.app, "wsRevalidate");
-    expect(await f.app.licensing.subscribeSession()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
-    expect(f.app.licensing.status().plan).toBe("pro");
+    expect(url).toBe(`${serviceUrl}/v1/enroll`);
+    expect(init).toMatchObject({ method: "POST", headers: { "X-MasalaPOS-Installation-Secret": installationSecret } });
+    const body = JSON.parse(init!.body as string);
+    expect(body).toMatchObject({ customerId: CUSTOMER, orderId: ORDER, activation: { installationId, currentRevision: 0, outletName: SETUP.restaurantName } });
+    expect(f.app.licensing.status(device)).toMatchObject({ plan: "pro", maxDevices: 3, customerCode: CUSTOMER, orderCode: ORDER, onlineActivation: true });
+    expect(f.app.licensing.history().events[0]).toMatchObject({ kind: "license_activated", actorName: "Asha" });
     expect(broadcast).toHaveBeenCalledWith("license.changed", {});
-    expect(revalidate).toHaveBeenCalled();
   });
 
-  it("the 404 retry shares a renewal check already in flight", async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    let known = false;
-    const s = service(async (url) => url.endsWith("/v1/activate") ? (await gate, known = true, reply(200, { license: null })) : known ? sessionReply() : reply(404, { error: "unknown_installation" }));
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    try {
-      const f = await fixture({ serviceUrl, fetch: s.fetch });
-      const stop = f.app.licensing.startRenewalChecks(() => {});
-      await vi.advanceTimersByTimeAsync(0);
-      const pending = f.app.licensing.subscribeSession();
-      await vi.advanceTimersByTimeAsync(0);
-      release();
-      expect(await pending).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
-      stop();
-      expect(paths(s.spy).filter((p) => p === "/v1/activate")).toHaveLength(1);
-    } finally { vi.useRealTimers(); }
+  it("reports the app version it runs to the service", async () => {
+    const s = service(() => reply(200, { license: null, enrolled: true }));
+    const db = openDb(":memory:"); migrate(db, MIGRATIONS);
+    const app = buildServer({ db, appVersion: "0.7.0", licensing: { publicKey, installationId, installationSecret, serviceUrl, fetch: s.fetch } });
+    apps.push(app);
+    await app.licensing.fetchLatest();
+    expect(JSON.parse(s.spy.mock.calls[0]![1]!.body as string)).toMatchObject({ appVersion: "0.7.0" });
   });
 
-  it("gives up after a second 404", async () => {
-    const s = service((url) => url.endsWith("/v1/activate") ? reply(200, { license: null }) : reply(404, { error: "unknown_installation" }));
+  it("catches a typo before going online", async () => {
+    const s = service(() => enrolled());
     const f = await fixture({ serviceUrl, fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ error: unreachable, status: 503 });
-    expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate", "/v1/subscribe-sessions"]);
-  });
-
-  it("a rate-limited session request says the service is busy, not that the internet is down", async () => {
-    const s = service(() => reply(429, { error: "rate_limited" }));
-    const f = await fixture({ serviceUrl, fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ error: "The licensing service is busy. Try again in a minute.", status: 503 });
-    expect(s.spy).toHaveBeenCalledTimes(1);
-  });
-
-  it("a rejected registration check is reported as it is instead of retrying into a second 404", async () => {
-    const s = service((url) => url.endsWith("/v1/activate") ? reply(401, { error: "unauthorized" }) : reply(404, { error: "unknown_installation" }));
-    const f = await fixture({ serviceUrl, fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ error: notRecognised, status: 409 });
-    expect(paths(s.spy)).toEqual(["/v1/subscribe-sessions", "/v1/activate"]);
-  });
-
-  it("a 401 means the installation is not recognised", async () => {
-    const s = service(() => reply(401, { error: "unauthorized" }));
-    const f = await fixture({ serviceUrl, fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ error: notRecognised, status: 409 });
-    expect(s.spy).toHaveBeenCalledTimes(1);
-  });
-
-  it("an unreachable or confused service is a 503", async () => {
-    let next: () => Response | Promise<Response> = () => { throw new TypeError("fetch failed"); };
-    const f = await fixture({ serviceUrl, fetch: service(() => next()).fetch });
-    for (const failure of [
-      () => { throw new TypeError("fetch failed"); },
-      () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); },
-      () => reply(500, { error: "internal" }), () => reply(400, { error: "bad_request" }),
-      () => reply(200, "<html>captive portal</html>"), () => reply(200, { session: 42 }), () => reply(200, { expiresAt: 1 }),
-      () => reply(200, { session: "has spaces & symbols", expiresAt: 1 }),
-    ]) { next = failure; expect(await f.app.licensing.subscribeSession()).toEqual({ error: unreachable, status: 503 }); }
-  });
-
-  it("without a service URL it is a 409 and nothing is fetched", async () => {
-    const s = service(() => sessionReply());
-    const f = await fixture({ fetch: s.fetch });
-    expect(await f.app.licensing.subscribeSession()).toEqual({ error: "Automatic renewal is not set up for this installation.", status: 409 });
-    const dev = freshApp(); apps.push(dev);
-    expect(await dev.licensing.subscribeSession()).toEqual({ error: "Automatic renewal is not set up for this installation.", status: 409 });
+    expect(await f.app.licensing.enroll({ customerId: "FC-7M3N-9QJ", orderId: ORDER }, "Asha")).toEqual({ error: checkCodes, status: 400 });
+    expect(await f.app.licensing.enroll({ customerId: CUSTOMER, orderId: "nope" }, "Asha")).toEqual({ error: checkCodes, status: 400 });
     expect(s.spy).not.toHaveBeenCalled();
   });
 
-  it("the route needs settings.manage, is never cached, and keeps working on an expired licence", async () => {
-    const s = service(() => sessionReply());
+  it("passes the service's refusals on in plain words, and maps everything else", async () => {
+    let next: () => Response = () => reply(404, { error: "not_found", message: "ignored" });
+    const f = await fixture({ serviceUrl, fetch: service(() => next()).fetch });
+    const outcome = async (answer: () => Response) => { next = answer; return f.app.licensing.enroll(valid, "Asha"); };
+    expect(await outcome(() => reply(404, { error: "not_found" }))).toEqual({ error: checkCodes, status: 400 });
+    expect(await outcome(() => reply(409, { error: "not_paid", message: "This order hasn't been paid yet." }))).toEqual({ error: "This order hasn't been paid yet.", status: 409 });
+    expect(await outcome(() => reply(409, { error: "wrong_key" }))).toMatchObject({ status: 409, error: expect.stringContaining("different key") });
+    expect(await outcome(() => reply(401, { error: "unauthorized" }))).toEqual({ error: notRecognised, status: 409 });
+    expect(await outcome(() => reply(429, { error: "rate_limited" }))).toEqual({ error: "The licensing service is busy. Try again in a minute.", status: 503 });
+    for (const failure of [() => { throw new TypeError("fetch failed"); }, () => reply(500, {}), () => reply(200, "<html>captive portal</html>"), () => reply(200, { license: 42 })]) {
+      expect(await outcome(failure)).toEqual({ error: unreachable, status: 503 });
+    }
+    expect(f.app.licensing.status(device).state).toBe("unactivated");
+  });
+
+  it("without a service URL nothing is fetched", async () => {
+    const s = service(() => enrolled());
+    const f = await fixture({ fetch: s.fetch });
+    expect(await f.app.licensing.enroll(valid, "Asha")).toEqual({ error: "Automatic renewal is not set up for this installation.", status: 409 });
+    expect(s.spy).not.toHaveBeenCalled();
+  });
+
+  it("the settings route needs settings.manage, is never cached, and works on an expired licence", async () => {
+    const s = service(() => enrolled({ revision: 2 }));
     const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
     await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", pin: "2345" } });
     const cashier = await f.login(device, "2345");
-    expect((await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: cashier })).statusCode).toBe(403);
-    expect((await f.app.inject({ method: "POST", url: "/api/license/subscribe-session" })).statusCode).toBe(401);
+    const post = (headers?: Record<string, string>) => f.app.inject({ method: "POST", url: "/api/license/enroll", payload: valid, ...(headers ? { headers } : {}) });
+    expect((await post(cashier)).statusCode).toBe(403);
+    expect((await post()).statusCode).toBe(401);
     expect(s.spy).not.toHaveBeenCalled();
-    const ok = await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers });
-    expect(ok.statusCode, ok.body).toBe(200);
-    expect(ok.json()).toEqual({ url: `${serviceUrl}/subscribe?session=${session}` });
-    expect(ok.headers["cache-control"]).toBe("no-store");
     f.setNow(f.claims.graceUntil);
     expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(403);
-    expect((await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers })).statusCode).toBe(200);
+    const ok = await post(f.headers);
+    expect(ok.statusCode, ok.body).toBe(200);
+    expect(ok.headers["cache-control"]).toBe("no-store");
+    expect(ok.json()).toMatchObject({ customer: { name: "Spice Route" }, status: { revision: 2, orderCode: ORDER } });
+    const refused = service(() => reply(409, { error: "seats_full", message: "Every outlet on this order is already set up." }));
+    const g = await fixture({ serviceUrl, fetch: refused.fetch });
+    const res = await g.app.inject({ method: "POST", url: "/api/license/enroll", payload: valid, headers: g.headers });
+    expect([res.statusCode, res.json()]).toEqual([409, { error: "Every outlet on this order is already set up." }]);
   });
 
-  it("the route reports 409 and 503 with the error copy", async () => {
-    let next: () => Response = () => reply(401, { error: "unauthorized" });
-    const f = await fixture({ serviceUrl, fetch: service(() => next()).fetch });
-    const post = () => f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers });
-    let res = await post();
-    expect([res.statusCode, res.json(), res.headers["cache-control"]]).toEqual([409, { error: notRecognised }, "no-store"]);
-    next = () => reply(500, {});
-    res = await post();
-    expect([res.statusCode, res.json(), res.headers["cache-control"]]).toEqual([503, { error: unreachable }, "no-store"]);
-    const without = await fixture();
-    res = await without.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: without.headers });
-    expect([res.statusCode, res.json()]).toEqual([409, { error: "Automatic renewal is not set up for this installation." }]);
+  it("setup starts with activation: then the admin is created and this browser is registered without another step", async () => {
+    const app = bare({ serviceUrl, fetch: service(() => enrolled()).fetch });
+    expect((await app.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "online", licensed: false });
+    const activate = await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } });
+    expect(activate.statusCode, activate.body).toBe(200);
+    expect(activate.json()).toMatchObject({ customer: { code: CUSTOMER, name: "Spice Route" }, order: { code: ORDER } });
+    expect((await app.inject({ url: "/api/needs-setup" })).json()).toMatchObject({ licensed: true });
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
+    expect(setup.statusCode).toBe(201);
+    const status = app.licensing.status(device);
+    expect(status).toMatchObject({ canOperate: true, deviceRegistered: true, registeredDevices: 1 });
+    expect(app.licensing.devices(device)[0]).toMatchObject({ name: "Main counter", current: true });
+    // Once anyone can sign in, activation goes through Settings and its permission check instead.
+    const again = await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } });
+    expect([again.statusCode, again.json()]).toEqual([409, { error: "already set up" }]);
+    expect((await app.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: false });
+  });
+
+  it("setup activation needs a device credential, is throttled, and reports refusals", async () => {
+    const s = service(() => reply(404, { error: "not_found" }));
+    const app = bare({ serviceUrl, fetch: s.fetch });
+    expect((await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid })).statusCode).toBe(400);
+    const tries = [];
+    for (let i = 0; i < 6; i++) tries.push((await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } })).statusCode);
+    expect(tries).toEqual([400, 400, 400, 400, 400, 429]);
+    expect(s.spy).toHaveBeenCalledTimes(5);
+    // Skipping activation (no internet) still lets setup finish; the licence comes later from Settings.
+    const offline = bare({ serviceUrl, fetch: service(() => { throw new TypeError("fetch failed"); }).fetch });
+    expect((await offline.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } })).statusCode).toBe(201);
+    expect(offline.licensing.status(device)).toMatchObject({ state: "unactivated", registeredDevices: 0 });
+  });
+
+  it("a build without the service sets up offline, and development builds need no activation", async () => {
+    expect((await bare().inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "offline", licensed: false });
+    const dev = freshApp(); apps.push(dev);
+    expect((await dev.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "none", licensed: true });
+    expect((await dev.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } })).statusCode).toBe(409);
+  });
+
+  it("an unactivated counter's hourly check is quiet; a released one keeps its licence", async () => {
+    const logs: string[] = [];
+    const s = service(() => reply(200, { license: null, enrolled: false }));
+    const f = await fixture({ serviceUrl, fetch: s.fetch });
+    expect(await f.app.licensing.fetchLatest()).toMatchObject({ outcome: "not_enrolled", message: expect.stringContaining("Customer ID and Order ID") });
+    const stop = f.app.licensing.startRenewalChecks((m) => logs.push(m));
+    await new Promise<void>((resolve) => setImmediate(resolve)); stop();
+    expect(logs).toEqual([]);
+    await f.activate();
+    expect((await f.app.licensing.fetchLatest()).outcome).toBe("up_to_date");
   });
 
   it("never lets the secret reach a browser response or a log line", async () => {
     const logs: string[] = [];
     let mode: "ok" | "unauthorized" = "ok";
     const f = await fixture({ serviceUrl, logs, fetch: service((url) => mode === "unauthorized" ? reply(401, { error: "unauthorized" })
-      : url.endsWith("/v1/activate") ? reply(200, { license: null }) : sessionReply()).fetch });
+      : url.endsWith("/v1/activate") ? reply(200, { license: null, enrolled: true }) : enrolled({ revision: 2 })).fetch });
     await f.activate(); await f.register();
     const responses = [
       await f.app.inject({ url: "/api/license", headers: f.headers }),
       await f.app.inject({ url: "/api/license/activation-request", headers: f.headers }),
-      await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers }),
+      await f.app.inject({ method: "POST", url: "/api/license/enroll", payload: valid, headers: f.headers }),
       await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers }),
       await f.app.inject({ url: "/api/license/history", headers: f.headers }),
       await f.app.inject({ url: "/api/license/devices", headers: f.headers }),
     ];
     mode = "unauthorized";
-    responses.push(await f.app.inject({ method: "POST", url: "/api/license/subscribe-session", headers: f.headers }),
+    responses.push(await f.app.inject({ method: "POST", url: "/api/license/enroll", payload: valid, headers: f.headers }),
       await f.app.inject({ method: "POST", url: "/api/license/check", headers: f.headers }));
     const stop = f.app.licensing.startRenewalChecks((m) => f.app.log.warn(m));
     await new Promise<void>((resolve) => setImmediate(resolve)); await new Promise<void>((resolve) => setImmediate(resolve)); stop();

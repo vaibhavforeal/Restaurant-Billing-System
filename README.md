@@ -29,10 +29,13 @@ Blank service prices use the item's existing price. See
 [service pricing](docs/operations/service-pricing.md) for setup and CSV fields.
 
 Commercial direction: **cloud plus offline**, with Basic (2 devices) and Pro
-(5 devices, recipe editing and QR ordering entitlements). Local licensing includes
+(5 devices, recipe editing and QR ordering entitlements). A counter activates at
+setup with the Customer ID and Order ID from MasalaPOS's setup card. Licences,
+renewals, payments, GST invoices, leads and support are run from the
+[MasalaPOS Portal](docs/operations/vendor-portal.md). Local licensing includes
 verified file import, renewal previews, device management and change history;
-hosted accounts, automatic subscription renewal and business-data sync remain
-to be built. See [commercial licensing](docs/operations/commercial-licensing.md).
+restaurant-facing accounts and business-data sync remain to be built. See
+[commercial licensing](docs/operations/commercial-licensing.md).
 The existing development build still runs without activation.
 
 A local-only desktop POS for restaurants. One Windows PC runs everything —

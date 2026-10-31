@@ -23,7 +23,7 @@ async function setup(a: typeof app) {
 describe("first-run setup", () => {
   it("needs-setup flips after setup creates the admin", async () => {
     app = freshApp();
-    expect((await app.inject({ method: "GET", url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true });
+    expect((await app.inject({ method: "GET", url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "none", licensed: true });
 
     const res = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP });
     expect(res.statusCode).toBe(201);

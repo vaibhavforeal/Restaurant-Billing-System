@@ -1,44 +1,33 @@
-import type { Plan } from "@masalapos/domain/licensing";
-import type { Period } from "./env.js";
-import { issueLicense, type Deps } from "./issue.js";
+import type { Deps } from "./issue.js";
+import { cancelOpenLinks, settleOrder } from "./portal/payments.js";
+import { formatPaise } from "./portal/shared.js";
 import { verifyWebhookSignature, type RazorpayApi } from "./razorpay.js";
-import {
-  eventSeen, getInstallation, getSubscription, latestLicenseForSubscription, newerChargedSubscriptionExists, olderOpenSubscriptions, paymentUsed,
-  recordEventStatement, upsertSubscriptionStatement,
-} from "./store.js";
+import { activityStatement, eventSeen, recordEventStatement } from "./store.js";
 
-export type WebhookDeps = Deps & { razorpay: RazorpayApi; webhookSecret: string; log: (msg: string) => void };
+export type WebhookDeps = Deps & { webhookSecret: string; razorpay: RazorpayApi | null; log: (msg: string) => void };
 
-const GRACE_MS = 7 * 86_400_000;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const child = (v: unknown, key: string): unknown => (isRecord(v) ? v[key] : undefined);
 
-interface Notes { installationId: string; plan: Plan; period: Period }
-/** Razorpay sends `notes: []` when empty, so anything but a plain object with valid values counts as missing. */
-function readNotes(notes: unknown): Notes | null {
-  if (!isRecord(notes)) return null;
-  const { installationId, plan, period } = notes;
-  if (typeof installationId !== "string" || installationId === "") return null;
-  if (plan !== "basic" && plan !== "pro") return null;
-  if (period !== "monthly" && period !== "yearly") return null;
-  return { installationId, plan, period };
-}
-
+/**
+ * Razorpay webhooks. Every signed event is recorded once by its event id, so a replay is answered `duplicate` and changes nothing.
+ * payment_link.paid (and partially_paid) records the payment against the link's order, once per Razorpay payment id, and completes the
+ * order when it is paid in full: its licences, its tax invoice and its other open links. cancelled and expired only update the link.
+ * Anything that fails is a 500, so Razorpay delivers the event again.
+ */
 export async function handleWebhook(deps: WebhookDeps, request: Request): Promise<Response> {
   const { db, log } = deps;
   const eventId = request.headers.get("x-razorpay-event-id");
-
   try {
     const rawBody = await request.text();
     if (!(await verifyWebhookSignature(rawBody, request.headers.get("x-razorpay-signature"), deps.webhookSecret))) return json({ error: "bad_signature" }, 400);
     if (!eventId) return json({ error: "missing_event_id" }, 400);
     if (await eventSeen(db, eventId)) return json({ outcome: "duplicate" });
-    const now = deps.now();
     let body: unknown = null;
     try { body = JSON.parse(rawBody); } catch { /* signed but not JSON: nothing to act on */ }
-    const type = typeof child(body, "event") === "string" ? (child(body, "event") as string) : "unknown";
+    const type = typeof child(body, "event") === "string" ? child(body, "event") as string : "unknown";
+    const now = deps.now();
     const record = async (outcome: string, detail?: string) => {
       if (detail) log(`webhook ${eventId} (${type}) ${outcome}: ${detail}`);
       await recordEventStatement(db, eventId, type, outcome, now).run();
@@ -46,59 +35,46 @@ export async function handleWebhook(deps: WebhookDeps, request: Request): Promis
     };
 
     const payload = child(body, "payload");
-    const entity = child(child(payload, "subscription"), "entity");
-    if (!type.startsWith("subscription.") || !isRecord(entity) || typeof entity.id !== "string") return await record("ignored");
-    const subscriptionId = entity.id;
-    const notes = readNotes(entity.notes);
-    if (!notes) return await record("unmatched", `subscription ${subscriptionId} has no usable notes`);
-    const installation = await getInstallation(db, notes.installationId);
-    if (!installation) return await record("unmatched", `unknown installation ${notes.installationId}`);
-    const status = typeof entity.status === "string" ? entity.status : type.slice("subscription.".length);
-    const periodEnd = typeof entity.current_end === "number" && Number.isFinite(entity.current_end) ? entity.current_end * 1000 : null;
-    const existing = await getSubscription(db, subscriptionId);
-    // A row created here (the webhook beat /v1/subscriptions' write, or it was lost) takes Razorpay's creation time, so subscription order stays right.
-    const createdAt = typeof entity.created_at === "number" && Number.isFinite(entity.created_at) ? entity.created_at * 1000 : now;
-    const subscription = {
-      razorpaySubscriptionId: subscriptionId, installationId: installation.installationId, plan: notes.plan, period: notes.period,
-      status, currentPeriodEnd: periodEnd ?? existing?.currentPeriodEnd ?? null, createdAt: existing?.createdAt ?? createdAt,
-    };
+    const linkEntity = child(child(payload, "payment_link"), "entity");
+    if (!type.startsWith("payment_link.") || typeof child(linkEntity, "id") !== "string") return await record("ignored");
+    const linkId = child(linkEntity, "id") as string;
+    const link = await db.prepare(`SELECT l.id, l.order_id AS orderId, o.code, o.customer_id AS customerId FROM payment_links l JOIN orders o ON o.id = l.order_id WHERE l.id = ?`)
+      .bind(linkId).first<{ id: string; orderId: string; code: string; customerId: string }>();
+    if (!link) return await record("unmatched", `unknown payment link ${linkId}`);
+    const linkStatus = typeof child(linkEntity, "status") === "string" ? child(linkEntity, "status") as string : type.slice("payment_link.".length);
+    const updateLink = db.prepare(`UPDATE payment_links SET status = ?, updated_at = ? WHERE id = ?`).bind(linkStatus, now, link.id);
 
-    if (type !== "subscription.charged") {
-      await db.batch([upsertSubscriptionStatement(db, subscription), recordEventStatement(db, eventId, type, "status", now)]);
+    if (type !== "payment_link.paid" && type !== "payment_link.partially_paid") {
+      await db.batch([updateLink, recordEventStatement(db, eventId, type, "status", now)]);
       return json({ outcome: "status" });
     }
-
-    const paymentId = child(child(child(payload, "payment"), "entity"), "id");
-    if (periodEnd === null || typeof paymentId !== "string") return await record("unmatched", `charge for ${subscriptionId} lacks current_end or a payment id`);
-    if (await paymentUsed(db, paymentId)) return await record("ignored", `payment ${paymentId} already issued`);
-    const latest = await latestLicenseForSubscription(db, subscriptionId);
-    if (latest && periodEnd <= latest.expiresAt) return await record("ignored", `period end ${periodEnd} is not newer than ${latest.expiresAt}`);
-    // A charge on a subscription that a newer, already charged one replaced must not hand the old plan the top revision.
-    if (await newerChargedSubscriptionExists(db, installation.installationId, subscription.createdAt, subscriptionId)) {
-      const response = await record("superseded", `subscription ${subscriptionId} was replaced by a newer charged subscription`);
-      // Its cancel failed or was lost earlier, so try again; a failure is for manual follow-up, never a reason to fail the webhook.
-      try { await deps.razorpay.cancelSubscription(subscriptionId); }
-      catch (error) { log(`could not cancel superseded subscription ${subscriptionId}: ${error instanceof Error ? error.message : String(error)}`); }
-      return response;
+    const payment = child(child(payload, "payment"), "entity");
+    const paymentId = child(payment, "id"), amount = child(payment, "amount");
+    if (typeof paymentId !== "string" || typeof amount !== "number" || !Number.isSafeInteger(amount) || amount <= 0) {
+      return await record("unmatched", `${linkId} paid without a payment id or amount`);
     }
-    if (periodEnd <= now) return await record("ignored", `period end ${periodEnd} is not after now (${now})`);
-
-    const { statement } = await issueLicense(deps, {
-      installation, plan: notes.plan, expiresAt: periodEnd, graceUntil: periodEnd + GRACE_MS, trial: false, reason: "charge", subscriptionId, paymentId,
-    });
-    await db.batch([statement, upsertSubscriptionStatement(db, subscription), recordEventStatement(db, eventId, type, "issued", now)]);
-
-    // Only a subscription's first paid charge retires the older ones (§3.5.3); renewals of an old subscription never touch a newer one still awaiting its first payment.
-    // A failure here is for manual follow-up, never a reason to fail the webhook (the licence is already issued).
-    if (!latest) {
-      try {
-        for (const older of await olderOpenSubscriptions(db, installation.installationId, subscription.createdAt, subscriptionId)) {
-          try { await deps.razorpay.cancelSubscription(older.razorpaySubscriptionId); }
-          catch (error) { log(`could not cancel superseded subscription ${older.razorpaySubscriptionId}: ${error instanceof Error ? error.message : String(error)}`); }
-        }
-      } catch (error) { log(`could not list superseded subscriptions for ${installation.installationId}: ${error instanceof Error ? error.message : String(error)}`); }
+    // Completes the order from the payments on file. Safe to repeat, so a delivery that follows an attempt which recorded the payment but
+    // stopped before completing the order finishes the job.
+    const settle = async (): Promise<boolean> => {
+      const settled = await settleOrder(deps, link.orderId, null, log);
+      // A link paid while another was still open: the other is cancelled so the customer can't pay twice. A failure only leaves it to expire.
+      if (settled && deps.razorpay) await cancelOpenLinks(deps, deps.razorpay, link.orderId, log);
+      return settled;
+    };
+    if (await db.prepare(`SELECT 1 AS hit FROM payments WHERE razorpay_payment_id = ?`).bind(paymentId).first()) {
+      await updateLink.run();
+      await settle();
+      return await record("duplicate_payment");
     }
-    return json({ outcome: "issued" });
+    const method = typeof child(payment, "method") === "string" ? child(payment, "method") as string : "online";
+    await db.batch([
+      db.prepare(`INSERT INTO payments (id, order_id, amount_paise, method, reference, status, received_at, note, razorpay_payment_id, created_at, updated_at)
+        VALUES (?, ?, ?, 'razorpay', ?, 'cleared', ?, ?, ?, ?, ?)`).bind(deps.uuid(), link.orderId, amount, paymentId, now, `Payment link, by ${method}`, paymentId, now, now),
+      updateLink,
+      activityStatement(db, now, { actorId: null, action: "payment.received", entityType: "order", entityId: link.orderId, customerId: link.customerId,
+        summary: `Received ${formatPaise(amount)} through the payment link for order ${link.code}` }),
+    ]);
+    return await record((await settle()) ? "paid" : "recorded");
   } catch (error) {
     log(`webhook ${eventId} failed: ${error instanceof Error ? error.message : String(error)}`);
     return json({ error: "unavailable" }, 500);

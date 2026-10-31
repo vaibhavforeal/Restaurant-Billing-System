@@ -35,31 +35,18 @@ A module works when all three hold:
 3. Every module it needs is working, for example Dish costing needs Recipes, which needs
    Inventory.
 
-## For MasalaPOS: the owner control panel
+## For MasalaPOS: the portal
 
-The panel is part of the licensing service at `https://<licensing-service>/owner`. Sign in
-with the owner password (the `OWNER_PASSWORD` secret). A session lasts 8 hours.
+In the [MasalaPOS Portal](vendor-portal.md), open the customer, then **Counters**, then the counter. Its **Modules** table shows each module, whether the plan includes it, and MasalaPOS's choice for this counter: **Follow the plan**, **Allow** or **Block**. Only admins change it; everyone else sees it.
 
-- Every restaurant appears the first time its MasalaPOS contacts the service. Give it a
-  name so it is easy to find; search by name, email or installation id.
-- Each restaurant shows its plan, whether its licence is active, in grace or expired, and
-  whether it has collected the latest settings.
-- For each module choose **Follow the plan**, **Allow** or **Block**, then **Save**.
+- Saving signs the counter's current licence terms with the new modules as the next licence revision.
+  - The restaurant's MasalaPOS collects it within an hour, or at once when an admin presses **Check for renewal** in **Settings → Plan and devices**.
+  - Until then the counter shows "Waiting for its next check-in".
+- An order can set modules too (**Modules** on the order). They become the counter's choices when it activates with that order, or when a renewal order is paid.
+- A counter whose licence has run out gets no new revision. Its next order carries the change, because every licence the service issues includes MasalaPOS's choices.
+- **Module changes** on the counter lists every change, who made it, and the licence revision it went into. The customer's activity log records it too.
 
-Saving signs the restaurant's current licence terms (plan, dates, trial, subscription) with
-the new modules as the next licence revision. The restaurant's MasalaPOS collects it within
-an hour, or at once when an admin presses **Check for renewal** in **Settings → Plan and
-devices**. Until then the card says "Waiting for the restaurant to check in". Renaming a
-restaurant issues nothing.
-
-A restaurant whose licence has run out gets no new revision. Its next trial or payment
-includes the change, because every licence the service issues carries MasalaPOS's choices.
-**Change history** lists every change and the licence revision it went into.
-
-Setting the panel up (the secret, deploying) is in the
-[licensing worker README](../../apps/licensing-worker/README.md). Licences issued by hand with
-`tools/prepare-license.ts` take the same choices with `--allow kds,qrOrdering` and
-`--deny reservations`.
+Licences issued by hand with `tools/prepare-license.ts` take the same choices with `--allow kds,qrOrdering` and `--deny reservations`.
 
 ## For the restaurant: the Marketplace
 
