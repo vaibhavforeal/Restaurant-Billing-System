@@ -27,6 +27,7 @@ It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the
 | Payments and invoices | All, plus cancelling an invoice | See their customers' | Record payments, clear cheques, issue invoices | — |
 | Counters and licences | Change licences and modules, move a counter, offline licences | See their customers' | — | Release a seat, reset pairing, download a licence |
 | Support tickets | All | Read their customers' | — | All |
+| Live chat, remote access | All | — | — | All |
 | Renewals, reports | All | Their own figures | All figures | All figures |
 | Staff, settings, activity log | Yes | — | — | — |
 
@@ -127,6 +128,10 @@ Each customer's **Counters** tab and every order show the licences on one timeli
   - Urgent means the restaurant can't bill.
 
   Support sees "Mine and unassigned" first.
+- **Live chat** is where restaurants' **Get support** messages arrive.
+  - Waiting chats come first, oldest first. The nav badge counts them, and a chime and a desktop notification announce new messages.
+  - Replying takes the chat. **Open a ticket** copies the conversation into a new ticket for follow-up.
+  - **Ask for remote access** sends a request to the counter's PC; someone there must allow it. How it works, its limits and the TURN relay setup are in `remote-support.md`.
 
 ## Today, renewals and reports
 
