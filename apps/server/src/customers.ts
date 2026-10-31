@@ -18,7 +18,7 @@ function customerStats(db: Database, id: string) {
     FROM bills WHERE customer_id = ? AND status <> 'void'`).get(id) as { visits: number; firstVisitAt: number | null; lastVisitAt: number | null };
   const spendPaise = customerSpend(db, id);
   const favourites = db.prepare(`SELECT l.name, SUM(l.qty) AS qty FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-    WHERE b.customer_id = ? AND b.status <> 'void' GROUP BY l.name ORDER BY qty DESC, l.name LIMIT 5`).all(id) as Array<{ name: string; qty: number }>;
+    WHERE b.customer_id = ? AND b.status <> 'void' AND l.parent_order_item_id IS NULL GROUP BY l.name ORDER BY qty DESC, l.name LIMIT 5`).all(id) as Array<{ name: string; qty: number }>;
   return { ...visits, spendPaise, averageBillPaise: visits.visits ? Math.round(spendPaise / visits.visits) : 0, favourites };
 }
 

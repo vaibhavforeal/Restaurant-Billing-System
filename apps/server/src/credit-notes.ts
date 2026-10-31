@@ -26,7 +26,7 @@ export function loadBillCredit(db: Database, billId: string): BillCredit {
   const lines = (db.prepare(`SELECT l.order_item_id, l.qty, l.name, l.category_id, l.category_name, oi.gst_rate_snapshot AS gst_rate,
       l.taxable_paise, l.cgst_paise, l.sgst_paise, l.rounding_paise, l.total_paise
     FROM bill_report_lines l JOIN order_items oi ON oi.id = l.order_item_id
-    WHERE l.bill_id = ? ORDER BY l.order_item_id`).all(billId) as Array<MoneyRow & {
+    WHERE l.bill_id = ? AND l.parent_order_item_id IS NULL ORDER BY l.order_item_id`).all(billId) as Array<MoneyRow & {
       order_item_id: string; qty: number; name: string; category_id: string | null; category_name: string; gst_rate: number;
     }>).map((r): BillLine => ({ orderItemId: r.order_item_id, qty: r.qty, name: r.name, categoryId: r.category_id,
       categoryName: r.category_name, gstRate: r.gst_rate, ...money(r) }));

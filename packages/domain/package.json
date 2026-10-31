@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./pricing": "./src/pricing.ts",
+    "./combos": "./src/combos.ts",
     "./gst": "./src/gst.ts",
     "./receipt-styles": "./src/receipt-styles.ts",
     "./operational-reports": "./src/operational-reports.ts",

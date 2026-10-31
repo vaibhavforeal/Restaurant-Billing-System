@@ -1,6 +1,7 @@
 import type { ItemPrices, PriceTier } from "@masalapos/domain/pricing";
 import type { DefaultGstRate, GstMode } from "@masalapos/domain/gst";
 import type { ReceiptStyle } from "@masalapos/domain/receipt-styles";
+import type { ComboGroup } from "@masalapos/domain/combos";
 export interface Category {
   id: string;
   name: string;
@@ -30,6 +31,9 @@ export interface Product extends ItemPrices {
   kotStationId: string | null;
   isActive: boolean;
   variants: Variant[];
+  /** A combo is sold as one line holding items picked from its slots. */
+  kind: "item" | "combo";
+  combo?: ComboGroup[];
 }
 
 export interface Station {
@@ -156,6 +160,8 @@ export interface OrderItem {
   note: string | null;
   cancelReason: string | null;
   kotId: string | null;
+  /** Set on an item inside a combo: the combo's own line. */
+  parentItemId?: string | null;
 }
 
 export interface Order {

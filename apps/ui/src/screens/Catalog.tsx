@@ -32,7 +32,7 @@ export function Catalog() {
   const [defaultGstRate, setDefaultGstRate] = useState(5);
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [editing, setEditing] = useState<Product | "new" | "new-combo" | null>(null);
   const [newCatName, setNewCatName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -107,7 +107,9 @@ export function Catalog() {
   if (editing) {
     return (
       <ProductEditor
-        product={editing === "new" ? null : editing}
+        product={editing === "new" || editing === "new-combo" ? null : editing}
+        kind={editing === "new-combo" ? "combo" : "item"}
+        products={products}
         defaultCategoryId={selectedCat}
         categories={categories}
         defaultGstRate={defaultGstRate}
@@ -154,9 +156,14 @@ export function Catalog() {
       <div className="panel catalog-products">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Products</h2>
-          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
-            New product
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+              New combo
+            </button>
+            <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+              New product
+            </button>
+          </div>
         </div>
         <p className="product-editor-help">Availability applies to new orders. Existing orders stay unchanged.</p>
         <CatalogTransfer busy={busy !== null} run={run} onImported={setMessage} />
@@ -187,7 +194,7 @@ export function Catalog() {
                 {zomato && <td className="pos-money">₹{paiseToRupees(priceForTier(p, "zomato"))}</td>}
                 <td>{p.gstRate === null ? "Default" : `${p.gstRate}%`}</td>
                 <td>{p.isVeg ? "🟢" : "🔴"}</td>
-                <td>{p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
+                <td>{p.kind === "combo" ? <span className="catalog-combo">Combo · {p.combo?.map((g) => g.name).join(", ") || "no slots yet"}</span> : p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
                 <td className="catalog-availability"><span className={p.isSoldOut ? "sold-out" : ""}>{p.isSoldOut ? "Sold out" : "Available"}</span><button disabled={busy !== null} aria-label={`Mark ${p.name} ${p.isSoldOut ? "available" : "sold out"}`} onClick={() => toggleSoldOut(p)}>{busy === p.id ? "Saving…" : p.isSoldOut ? "Mark available" : "Mark sold out"}</button></td>
                 <td>
                   <button disabled={busy !== null} onClick={() => setEditing(p)}>Edit</button>
