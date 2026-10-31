@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { StaffUser } from "../../../licensing-worker/src/portal/api-types";
 import { post } from "../api";
-import { Mark } from "../icons";
+import { Icon, Mark } from "../icons";
 import { Field, useRun } from "../ui";
 
 export function SignIn({ onSignedIn }: { onSignedIn: (user: StaffUser) => void }) {
@@ -12,17 +12,24 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: StaffUser) => void }
     e.preventDefault();
     void run(async () => onSignedIn((await post<{ user: StaffUser }>("/login", { email, password })).user));
   };
-  return <main className="signin"><div className="signin-card">
-    <div className="brand"><Mark /><div>ForkFlow Portal<small>Staff sign-in</small></div></div>
-    <h1>Sign in</h1>
-    <p className="muted">Customers, orders, licences and support for ForkFlow.</p>
+  return <main className="signin signin-split">
+    <section className="signin-intro">
+      <div className="brand"><Mark /><div>ForkFlow<small>Owner portal</small></div></div>
+      <div className="signin-story"><h2>A clear view.<br />A better day.</h2><p>Keep your customers, sales and support moving. One place to look after the business behind every restaurant.</p>
+        <div className="signin-workflows"><div><Icon name="customers" /><span>Build customer relationships</span></div><div><Icon name="orders" /><span>Stay on top of orders and payments</span></div><div><Icon name="renewals" /><span>Keep every counter running</span></div></div>
+      </div><p className="signin-footer">The business side of ForkFlow.</p>
+    </section>
+    <div className="signin-form-side"><div className="signin-card">
+    <h1>Welcome back.</h1>
+    <p className="muted">Sign in to your ForkFlow workspace.</p>
     <form onSubmit={submit}>
-      <Field label="Email"><input type="email" autoComplete="username" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} /></Field>
+      <Field label="Email"><input type="email" autoComplete="username" placeholder="you@company.com" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} /></Field>
       <Field label="Password"><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} /></Field>
       {status}
-      <button className="primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+      <button className="primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}<Icon name="arrow" /></button>
     </form>
-  </div></main>;
+    <p className="signin-help">Need access? Contact your ForkFlow administrator.</p>
+  </div></div></main>;
 }
 
 /** Changing one's own password; required straight after signing in with a temporary one. */

@@ -108,9 +108,9 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
           {form.kind !== "renewal" && <Field label="Outlets" hint="One counter (computer) per outlet activates with this order."><input type="number" min={1} max={500} required value={form.outlets} onChange={(e) => update({ outlets: e.target.value })} disabled={busy} /></Field>}
           {!trial && <Field label="Devices per outlet" hint={`The plan includes ${PLAN_DEVICES[form.plan]}.${settings.extraDevicePaise ? ` Each extra costs ${money(settings.extraDevicePaise)} per outlet.` : ""}`}>
             <input type="number" min={1} max={100} required value={form.maxDevices} onChange={(e) => update({ maxDevices: e.target.value })} disabled={busy} /></Field>}
-          {!trial && <Field label="Price per outlet, before GST (₹)" hint={priceFor(form.plan, form.termMonths) !== undefined ? `List price ${money(priceFor(form.plan, form.termMonths)!)}` : "No list price for this plan and term"}>
+          {!trial && <Field label="Price per outlet, before GST (Rs.)" hint={priceFor(form.plan, form.termMonths) !== undefined ? `List price ${money(priceFor(form.plan, form.termMonths)!)}` : "No list price for this plan and term"}>
             <input inputMode="decimal" required value={form.price} onChange={(e) => update({ price: e.target.value })} disabled={busy} /></Field>}
-          {!trial && <Field label="Discount on the licence (₹)"><input inputMode="decimal" value={form.discount} onChange={(e) => update({ discount: e.target.value })} disabled={busy} /></Field>}
+          {!trial && <Field label="Discount on the licence (Rs.)"><input inputMode="decimal" value={form.discount} onChange={(e) => update({ discount: e.target.value })} disabled={busy} /></Field>}
         </div>
         {form.kind === "renewal" && <section><h2 className="section-title" style={{ marginBottom: 8 }}>Counters to renew</h2>
           {enrolled.length === 0 ? <p className="empty-block">This customer has no activated counters to renew. Draft a new-outlets order instead.</p>
@@ -135,7 +135,7 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
               <Field label="Description"><input maxLength={200} value={e.description} onChange={(ev) => set({ description: ev.target.value })} disabled={busy} /></Field>
               <Field label="SAC / HSN"><input maxLength={8} inputMode="numeric" value={e.sac} onChange={(ev) => set({ sac: ev.target.value })} disabled={busy} /></Field>
               <Field label="Qty"><input type="number" min={1} value={e.quantity} onChange={(ev) => set({ quantity: ev.target.value })} disabled={busy} /></Field>
-              <Field label="Price (₹)"><input inputMode="decimal" value={e.price} onChange={(ev) => set({ price: ev.target.value })} disabled={busy} /></Field>
+              <Field label="Price (Rs.)"><input inputMode="decimal" value={e.price} onChange={(ev) => set({ price: ev.target.value })} disabled={busy} /></Field>
               <button type="button" className="ghost" disabled={busy} onClick={() => update({ extras: form.extras.filter((_, j) => j !== i) })}>Remove</button>
             </div>;
           })}</section>}

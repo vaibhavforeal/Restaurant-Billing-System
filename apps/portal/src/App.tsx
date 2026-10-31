@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { StaffUser } from "../../licensing-worker/src/portal/api-types";
 import { ROLE_NAMES, roleCan, type Permission } from "../../licensing-worker/src/portal/shared";
 import { api, ApiError, post, session } from "./api";
@@ -66,29 +66,57 @@ const ADMIN: NavItem[] = [
 function Shell({ user, onSignedOut, onUser }: { user: StaffUser; onSignedOut: () => void; onUser: (user: StaffUser) => void }) {
   const { path, search } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const navigation = useRef<HTMLElement>(null);
   useEffect(() => { setMenuOpen(false); }, [path]);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 901px)");
+    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    navigation.current?.querySelector<HTMLElement>("a, button")?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setMenuOpen(false); menuButton.current?.focus(); }
+      if (event.key === "Tab") {
+        const items = navigation.current?.querySelectorAll<HTMLElement>("a, button");
+        const first = items?.[0], last = items?.[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", onKey); };
+  }, [menuOpen]);
   const allowed = (items: NavItem[]) => items.filter((item) => !item.permission || roleCan(user.role, item.permission));
   const work = allowed(WORK), admin = allowed(ADMIN);
   const first = work[0]?.to ?? admin[0]?.to ?? "/account";
   useEffect(() => { if (path === "/" || path === "") navigate(first, true); }, [path, first]);
   const current = (to: string) => path === to || path.startsWith(`${to}/`);
-  const nav = (item: NavItem) => <Link key={item.to} to={item.to} className="nav-item" aria-current={current(item.to) ? "page" : undefined}><Icon name={item.icon} />{item.label}</Link>;
+  const section = [...work, ...admin].find((item) => current(item.to))?.label ?? "Account";
+  const nav = (item: NavItem) => <Link key={item.to} to={item.to} onClick={() => setMenuOpen(false)} className="nav-item" aria-current={current(item.to) ? "page" : undefined}><Icon name={item.icon} />{item.label}</Link>;
   return <div className={`app${menuOpen ? " menu-open" : ""}`}>
-    <aside className="sidebar" aria-label="Portal navigation">
-      <div className="brand"><Mark /><div>ForkFlow Portal<small>Sales, licences and support</small></div></div>
-      {work.length > 0 && <nav className="nav-group">{work.map(nav)}</nav>}
+    <a className="skip-link" href="#main">Skip to content</a>
+    {menuOpen && <button className="nav-backdrop" aria-label="Close navigation" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }} />}
+    <aside ref={navigation} id="portal-navigation" className="sidebar" aria-label="Portal navigation">
+      <div className="brand"><Mark /><div>ForkFlow<small>Owner portal</small></div><button className="nav-close" aria-label="Close menu" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }}><Icon name="close" /></button></div>
+      {work.length > 0 && <nav className="nav-group" aria-label="Workspace"><div className="nav-heading">Workspace</div>{work.map(nav)}</nav>}
       {admin.length > 0 && <nav className="nav-group" aria-label="Administration"><div className="nav-heading">Administration</div>{admin.map(nav)}</nav>}
       <div className="account">
-        <div className="who"><span className="initial" aria-hidden="true" style={{ background: "#f3dfe2", color: "#7a1424" }}>{user.name[0]?.toUpperCase()}</span>
+        <div className="who"><span className="initial" aria-hidden="true">{user.name[0]?.toUpperCase()}</span>
           <div><strong>{user.name}</strong><span>{ROLE_NAMES[user.role]}</span></div></div>
         <Link to="/account" className="nav-item" aria-current={current("/account") ? "page" : undefined}><Icon name="key" />Password</Link>
-        <button type="button" className="nav-item" style={{ border: 0, background: "none", cursor: "pointer", width: "100%", textAlign: "left" }}
+        <button type="button" className="nav-item signout"
           onClick={() => { void post("/logout").finally(onSignedOut); }}><Icon name="logout" />Sign out</button>
       </div>
     </aside>
-    <div className="topbar"><button type="button" className="ghost menu-button" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
-      <span style={{ width: 16, height: 16, display: "inline-block" }}><Icon name="menu" /></span></button><Search /></div>
-    <main className="sheet" id="main">{route(path, search, user, onUser)}</main>
+    <div className="topbar"><button ref={menuButton} type="button" className="ghost menu-button" aria-label="Menu" aria-controls="portal-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+      <Icon name="menu" /></button><div className="location-label"><span>Workspace</span><Icon name="chevron" /><strong>{section}</strong></div><Search /><Link className="topbar-account" to="/account" aria-label={`Account: ${user.name}`}>{user.name[0]?.toUpperCase()}</Link></div>
+    <main className="sheet" id="main" tabIndex={-1}>{route(path, search, user, onUser)}</main>
   </div>;
 }
 

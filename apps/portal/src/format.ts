@@ -38,8 +38,8 @@ export function inDays(at: number, now = Date.now()): string {
   return days === 0 ? "Today" : days === 1 ? "Tomorrow" : days === -1 ? "Yesterday" : days > 0 ? `In ${days} days` : `${-days} days ago`;
 }
 
-/** Money in rupees with Indian grouping, "₹1,23,456.00". */
-export const money = (paise: number | null | undefined) => (paise === null || paise === undefined ? "—" : formatPaise(paise, "₹"));
+/** Money in rupees with Indian grouping, "Rs. 1,23,456.00". */
+export const money = (paise: number | null | undefined) => (paise === null || paise === undefined ? "—" : formatPaise(paise));
 
 export const plural = (count: number, one: string, many = `${one}s`) => `${count.toLocaleString("en-IN")} ${count === 1 ? one : many}`;
 

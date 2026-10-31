@@ -27,7 +27,7 @@ export function FollowUpRows({ items, showAbout = true, onChanged, loaded = true
           {showAbout && <td>{f.lead ? <Link to={`/leads/${f.lead.id}`}>{f.lead.name}</Link> : f.customer ? <Link to={`/customers/${f.customer.id}`}>{f.customer.name}</Link> : "—"}
             {f.phone && <span className="sub"><a href={`tel:${f.phone.replace(/\s/g, "")}`}>{f.phone}</a></span>}</td>}
           <td className="num">{f.status === "open" ? <Due at={f.dueAt} /> : <span className="muted">{relativeDay(f.doneAt ?? f.dueAt)}</span>}</td>
-          <td className="num phone-hide">{f.status === "open" && <button className="secondary small" onClick={() => setClosing(f)}>Done…</button>}</td>
+          <td className="num followup-action">{f.status === "open" && <button className="secondary small" onClick={() => setClosing(f)}>Done…</button>}</td>
         </tr>)}
         {loaded && items.length === 0 && <EmptyRow columns={columns}>Nothing to follow up.</EmptyRow>}
       </tbody>

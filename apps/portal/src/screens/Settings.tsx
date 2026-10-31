@@ -84,12 +84,12 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
     <section className="settings-section">
       <div><h2>Price list</h2><p>Price per outlet before GST. New orders start from these; staff can change the price on an order. Leave a term blank if it isn't sold.</p></div>
       <div className="settings-panel">
-        <table className="data"><thead><tr><th>Term</th><th className="num">Basic (₹)</th><th className="num">Pro (₹)</th></tr></thead>
+        <table className="data"><thead><tr><th>Term</th><th className="num">Basic (Rs.)</th><th className="num">Pro (Rs.)</th></tr></thead>
           <tbody>{TERMS.map((months) => <tr key={months}><td>{months === 1 ? "1 month" : `${months} months`}</td>
             {(["basic", "pro"] as const).map((plan) => <td key={plan} className="num"><input aria-label={`${plan === "pro" ? "Pro" : "Basic"}, ${months} months`} inputMode="decimal" style={{ maxWidth: 140, textAlign: "right" }}
               value={prices[`${plan}:${months}`] ?? ""} onChange={(e) => setPrices({ ...prices, [`${plan}:${months}`]: e.target.value })} /></td>)}</tr>)}</tbody></table>
         <div className="form-grid" style={{ marginTop: 16 }}>
-          <Field label="Each extra device (₹)" hint="Per outlet, for the order's whole term, beyond the plan's devices."><input inputMode="decimal" value={extraDevice} onChange={(e) => setExtraDevice(e.target.value)} /></Field>
+          <Field label="Each extra device (Rs.)" hint="Per outlet, for the order's whole term, beyond the plan's devices."><input inputMode="decimal" value={extraDevice} onChange={(e) => setExtraDevice(e.target.value)} /></Field>
           <Field label="Trial length"><select value={s.trialDays} onChange={(e) => setS({ ...s, trialDays: Number(e.target.value) })}>
             {[7, 10, 14, 30].map((d) => <option key={d} value={d}>{d} days</option>)}</select></Field>
         </div>

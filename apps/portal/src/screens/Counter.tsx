@@ -98,13 +98,13 @@ function Modules({ counter, editable, onSaved }: { counter: InstallationDetail; 
       onSaved(res.installation);
     }, "Saved. The counter gets the change at its next check-in, within the hour.")}>Save modules</button>}</div>
     {status}
-    <table className="data"><thead><tr><th>Module</th><th>In the plan</th><th>For this counter</th></tr></thead><tbody>
-      {counter.modules.map((m) => <tr key={m.id}><td>{m.name}<span className="sub">{m.description}</span></td><td>{m.inPlan ? "Included" : <span className="muted">Not included</span>}</td>
-        <td>{editable ? <select aria-label={`${m.name} for this counter`} value={choices[m.id] === null || choices[m.id] === undefined ? "" : String(choices[m.id])} disabled={busy}
+    <div className="table-wrap counter-modules"><table className="data"><thead><tr><th>Module</th><th>In the plan</th><th>For this counter</th></tr></thead><tbody>
+      {counter.modules.map((m) => <tr key={m.id}><td>{m.name}<span className="sub">{m.description}</span></td><td data-label="In the plan">{m.inPlan ? "Included" : <span className="muted">Not included</span>}</td>
+        <td data-label="For this counter">{editable ? <select aria-label={`${m.name} for this counter`} value={choices[m.id] === null || choices[m.id] === undefined ? "" : String(choices[m.id])} disabled={busy}
           onChange={(e) => setChoices({ ...choices, [m.id]: e.target.value === "" ? null : e.target.value === "true" })} style={{ width: 170 }}>
           <option value="">Follow the plan</option><option value="true">Allow</option><option value="false">Block</option></select>
           : m.allowed ? "Allowed" : <span className="muted">Blocked</span>}</td></tr>)}
-    </tbody></table>
+    </tbody></table></div>
     {counter.moduleEvents.length > 0 && <details style={{ marginTop: 12 }}><summary>Module changes</summary><ul className="stack" style={{ marginTop: 8 }}>
       {counter.moduleEvents.map((e) => <li key={e.id}>{counter.modules.find((m) => m.id === e.moduleId)?.name ?? e.moduleId}: {e.allowed === null ? "follows the plan" : e.allowed ? "allowed" : "blocked"}
         <span className="muted"> · {dateTime(e.at)}{e.actorName ? ` · ${e.actorName}` : ""}{e.revision ? ` · revision ${e.revision}` : ""}</span></li>)}</ul></details>}

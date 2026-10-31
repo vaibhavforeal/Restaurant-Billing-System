@@ -1,5 +1,11 @@
 // One outline icon set at 1.5px, drawn on a 16px grid, for the navigation and a few affordances.
 const paths = {
+  arrow: "M3 8h10M9 4l4 4-4 4",
+  chevron: "m6 4 4 4-4 4",
+  plus: "M8 3v10M3 8h10",
+  close: "m4 4 8 8M12 4l-8 8",
+  calendar: "M3 3.5h10v10H3zM5 1.5v4M11 1.5v4M3 6.5h10M5.5 9h1M9.5 9h1",
+  check: "m3 8 3 3 7-7",
   home: "M2.5 7 8 2.5 13.5 7v6.5h-4v-4h-3v4h-4z",
   leads: "M2 3h12l-4.5 5.5V13l-3-1.5v-3z",
   customers: "M6 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM1.5 13.5c.4-2.4 2.2-4 4.5-4s4.1 1.6 4.5 4M11 3a2.3 2.3 0 0 1 0 4.4M12.5 9.6c1.2.6 1.9 2 2 3.9",
@@ -24,5 +30,5 @@ export const Icon = ({ name }: { name: IconName }) =>
 
 /** The ForkFlow mark: a fork in the ForkFlow red, as on the POS app. */
 export const Mark = () =>
-  <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#b92335" />
+  <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#b92335" />
     <path d="M11 8v7a3 3 0 0 0 3 3v6M11 8v5M14 8v5M17 8v5M21 8c-1.7 0-3 2-3 5s1.3 4 3 4v7" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>;

@@ -18,7 +18,7 @@ function ticks(max: number): number[] {
 }
 const short = (paise: number) => {
   const rupees = paise / 100;
-  return rupees >= 1_00_00_000 ? `₹${+(rupees / 1_00_00_000).toFixed(1)} Cr` : rupees >= 1_00_000 ? `₹${+(rupees / 1_00_000).toFixed(1)} L` : rupees >= 1000 ? `₹${+(rupees / 1000).toFixed(1)}k` : `₹${rupees}`;
+  return rupees >= 1_00_00_000 ? `Rs. ${+(rupees / 1_00_00_000).toFixed(1)} Cr` : rupees >= 1_00_000 ? `Rs. ${+(rupees / 1_00_000).toFixed(1)} L` : rupees >= 1000 ? `Rs. ${+(rupees / 1000).toFixed(1)}k` : `Rs. ${rupees}`;
 };
 const monthLabel = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleDateString("en-IN", { month: "short" });
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "—");
@@ -92,8 +92,8 @@ function MonthChart({ months }: { months: ReportData["revenueByMonth"] }) {
   const top = scale.at(-1)!;
   return <figure className="month-chart">
     <div className="month-plot" role="img" aria-label="Payments received in each of the last twelve months">
-      <div className="month-grid">{[...scale].reverse().map((t) => <div key={t} className="month-gridline"><span>{t === 0 ? "₹0" : short(t)}</span></div>)}</div>
-      <div className="month-bars">{months.map((m) => <div key={m.month} className="month-col" title={`${monthLabel(m.month)} ${m.month.slice(0, 4)}: ${formatPaise(m.paise, "₹")}`}>
+      <div className="month-grid">{[...scale].reverse().map((t) => <div key={t} className="month-gridline"><span>{t === 0 ? "Rs. 0" : short(t)}</span></div>)}</div>
+      <div className="month-bars">{months.map((m) => <div key={m.month} className="month-col" title={`${monthLabel(m.month)} ${m.month.slice(0, 4)}: ${formatPaise(m.paise)}`}>
         <div className="month-bar" style={{ height: top ? `${(m.paise / top) * 100}%` : "0%" }} /></div>)}</div>
     </div>
     <div className="month-labels">{months.map((m) => <span key={m.month}>{monthLabel(m.month)}</span>)}</div>
