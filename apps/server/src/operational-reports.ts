@@ -28,7 +28,7 @@ export function registerOperationalReports(app: FastifyInstance) {
         const entries = `WITH entries AS (
             SELECT l.product_id, l.variant_id, l.name, l.category_id, l.category_name, l.bill_id, l.qty, l.subtotal_paise AS subtotal, l.discount_paise AS discount,
               l.taxable_paise AS taxable, l.cgst_paise + l.sgst_paise AS gst, l.rounding_paise AS rounding, l.total_paise AS total, 0 AS creditQty, 0 AS credit
-            FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id WHERE b.created_at >= ? AND b.created_at < ?
+            FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id WHERE b.created_at >= ? AND b.created_at < ? AND l.parent_order_item_id IS NULL
             UNION ALL
             SELECT l.product_id, l.variant_id, l.name, l.category_id, l.category_name, NULL, 0, 0, 0, 0, 0, 0, 0, cl.qty, cl.total_paise
             FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
@@ -47,6 +47,15 @@ export function registerOperationalReports(app: FastifyInstance) {
           column("netQty", "Net quantity", "quantity"), column("netTotal", "Net sales", "money")];
         tables.push({ title: "Item sales", columns: [column("name", "Item / variant"), column("category", "Category"), ...columns], rows: items, totals: { name: "Total", ...totals } },
           { title: "Category sales", columns: [column("category", "Category"), ...columns], rows: categories, totals: { category: "Total", ...totals } });
+        // What went out inside combos: the combo's line above carries the money, so these are quantities only.
+        const inCombos = query(`SELECT l.name, l.category_name AS category, SUM(l.qty) AS qty, COUNT(DISTINCT l.bill_id) AS bills
+          FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id WHERE b.created_at >= ? AND b.created_at < ? AND l.parent_order_item_id IS NOT NULL
+          GROUP BY l.product_id, l.variant_id, l.name, l.category_id, l.category_name ORDER BY qty DESC, l.name`, ...bounds);
+        if (inCombos.length) {
+          notes.push("Items sold in combos are counted separately: the combo's own line carries their sales value, so they are quantities only. Credited combos are not taken off these quantities.");
+          tables.push({ title: "Items sold in combos", columns: [column("name", "Item / variant"), column("category", "Category"), column("qty", "Quantity", "quantity"), column("bills", "Bills")],
+            rows: inCombos, totals: { name: "Total", ...sum(inCombos, ["qty"]) } });
+        }
         // Zomato collects and pays the GST on these supplies, so the bills carry none; they are listed for the accountant.
         const supplies = query(`SELECT b.bill_no AS billNo, o.zomato_order_id AS zomatoOrderId, b.created_at AS date, b.total_paise AS value
           FROM bills b JOIN orders o ON o.id = b.order_id WHERE o.type = 'zomato' AND b.created_at >= ? AND b.created_at < ? ORDER BY b.created_at, b.bill_no`, start, end);
@@ -155,7 +164,7 @@ export function registerOperationalReports(app: FastifyInstance) {
           COALESCE(dt.name, 'Takeaway') AS location
           FROM order_items oi JOIN orders o ON o.id = oi.order_id LEFT JOIN kots k ON k.id = oi.kot_id
           LEFT JOIN users u ON u.id = oi.cancelled_by LEFT JOIN dining_tables dt ON dt.id = o.table_id
-          WHERE oi.status = 'cancelled' AND oi.cancelled_at >= ? AND oi.cancelled_at < ? ORDER BY oi.cancelled_at DESC, oi.id`, ...bounds);
+          WHERE oi.status = 'cancelled' AND oi.parent_item_id IS NULL AND oi.cancelled_at >= ? AND oi.cancelled_at < ? ORDER BY oi.cancelled_at DESC, oi.id`, ...bounds);
         tables.push({ title: "Cancelled items", columns: [column("time", "Cancelled at", "time"), column("orderId", "Order reference"), column("ticket", "KOT"), column("location", "Table / takeaway"), column("item", "Item"), column("qty", "Quantity"), column("value", "Menu value", "money"), column("staff", "Cancelled by"), column("reason", "Reason")], rows, totals: { item: "Total", ...sum(rows, ["qty", "value"]) } });
         const orders = query(`SELECT o.id AS orderId, o.closed_at AS time, COALESCE(dt.name, 'Takeaway') AS location,
           COALESCE(u.name, 'Unknown') AS staff, COALESCE(o.cancel_reason, 'Not recorded') AS reason

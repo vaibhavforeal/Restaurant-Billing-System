@@ -49,17 +49,20 @@ export function registerKots(app: FastifyInstance): void {
       id: string;
       product_id: string;
       station_id: string | null;
+      parent_item_id: string | null;
     }
-    const pendingItems = (app.db
+    const allPending = app.db
       .prepare(
-        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id
+        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id, oi.parent_item_id
          FROM order_items oi
          JOIN products p ON p.id = oi.product_id
          WHERE oi.order_id = ? AND oi.status = 'pending'
          ORDER BY oi.id`,
       )
-      .all(id) as PendingItem[]).filter((item) => !body || body.itemIds.includes(item.id));
-    if (body && new Set(body.itemIds).size !== pendingItems.length) throw httpError(409, "Kitchen items changed; review the order before sending again");
+      .all(id) as PendingItem[];
+    // Naming a combo sends the items in it.
+    const pendingItems = allPending.filter((item) => !body || body.itemIds.includes(item.id) || (item.parent_item_id !== null && body.itemIds.includes(item.parent_item_id)));
+    if (body && new Set(body.itemIds).size !== allPending.filter((item) => body.itemIds.includes(item.id)).length) throw httpError(409, "Kitchen items changed; review the order before sending again");
 
     const byStation = new Map<string, string[]>();
     for (const item of pendingItems) {
@@ -93,6 +96,10 @@ export function registerKots(app: FastifyInstance): void {
 
         createdKots.push({ id: kotId, stationId });
       }
+      // A combo is sent once any of its items is: it takes its own stock (packaging, say) and can no longer be edited.
+      const combos = [...new Set(pendingItems.filter((item) => item.station_id && item.parent_item_id).map((item) => item.parent_item_id!))];
+      changedStockIds.push(...consumeStock(app.db, combos, req.user.id));
+      for (const comboId of combos) app.db.prepare("UPDATE order_items SET status = 'sent' WHERE id = ? AND status = 'pending'").run(comboId);
       // A new Zomato order enters the kitchen; a Ready one goes back (new items to cook). Only when a KOT was created.
       if (createdKots.length > 0) {
         app.db.prepare("UPDATE orders SET zomato_status = 'preparing' WHERE id = ? AND type = 'zomato' AND (zomato_status IS NULL OR zomato_status = 'ready')").run(id);

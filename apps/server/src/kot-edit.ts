@@ -45,6 +45,10 @@ export function registerKotEdits(app: FastifyInstance): void {
       const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(item.order_id) as OrderRow;
       if (order.status !== "open") throw httpError(409, "order is not open");
       if (item.status !== "sent") throw httpError(409, item.status === "pending" ? "This item has not been sent; edit it in the cart" : "item is cancelled");
+      // A combo's items sit on several tickets; changing one means cancelling the combo and adding it again.
+      if (item.parent_item_id || db.prepare("SELECT 1 FROM order_items WHERE parent_item_id = ? LIMIT 1").get(item.id)) {
+        throw httpError(409, "A sent combo cannot be edited. Cancel it and add it again.", "combo_item");
+      }
       const newQty = body.qty ?? item.qty;
       const newNote = body.note === undefined ? item.note : body.note || null;
       if (newQty > item.qty) throw httpError(400, "To add more, add the dish again and send it to the kitchen");

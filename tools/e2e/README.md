@@ -219,21 +219,26 @@ add the fixtures file and the script with `page.addScriptTag({ path })`, then
 `waitForFunction` on `window.__licenseChecks`.
 
 The fake service requires the `X-ForkFlow-Installation-Secret` header on
-`/v1/activate` and `/v1/subscribe-sessions` and serves the Worker's real checkout
-page at `/subscribe?session=<token>` (the token is `fixtures.sessionToken`). Before
-running `licensing.js`, navigate a tab to that page and run
-`tools/e2e/licensing-expired-link.js` there (wait for
-`window.__licenseExpiredLinkChecks`, 3 checks): it submits the form and requires the
-form to disappear and the expired copy to show when the payment request answers 401.
+`/v1/activate` and `/v1/enroll`. Enroll accepts only the fixture Customer ID and
+Order ID (`fixtures.customerCode`, `fixtures.orderCode`). At setup, choose
+**No internet? Set up now and activate later**, so the script starts on an
+unactivated counter.
 
-Require 40 passing checks: the Subscribe and Manage plan buttons (busy state,
-session link sent to a new tab, failed request, blocked-tab fallback link, desktop-app one-click open),
-a cashier being refused a checkout session, the installation secret staying out of
-responses, activation request download, file limits, signatures, verified previews, interrupted activation and safe retry,
-device registration, remote rename/removal, downgrade impact, stale previews,
-already-installed grants, upgrades, history, failed-refresh recovery,
-Check for renewal installing a trial and then a paid renewal, the up-to-date and
-unreachable-service messages, and billing pages loading with the service down.
+Require 33 passing checks:
+- activation with a Customer ID and Order ID, and an unknown order activating nothing;
+- a cashier or an unauthenticated caller being refused activation;
+- the installation secret staying out of responses;
+- the activation request download;
+- file limits, signatures and verified previews;
+- an interrupted activation and its safe retry;
+- device registration, remote rename and removal;
+- downgrade impact, stale previews and already-installed grants;
+- upgrades and history, and recovery after a failed refresh;
+- Check for renewal installing a trial;
+- **Use a different Order ID** moving that trial to the paid order;
+- a renewal from the service;
+- the up-to-date and unreachable-service messages;
+- billing pages loading with the service down.
 
 Set the printed `clock-offset.txt` to `10800000` (ASCII text). This advances only
 the test license clock by three hours; never change the PC's system time. Set the

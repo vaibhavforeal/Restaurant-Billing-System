@@ -22,7 +22,7 @@ export function registerOrderAnalytics(app: FastifyInstance) {
         SELECT c.created_at, NULL, o.type, -c.total_paise
           FROM credit_notes c JOIN bills b ON b.id = c.bill_id JOIN orders o ON o.id = b.order_id WHERE c.created_at >= ? AND c.created_at < ?`;
       const lineEntries = `SELECT l.product_id, l.variant_id, l.category_id, l.name, l.category_name, o.id AS orderId, o.type, l.qty, l.total_paise AS total
-          FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id JOIN orders o ON o.id = b.order_id WHERE b.created_at >= ? AND b.created_at < ?
+          FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id JOIN orders o ON o.id = b.order_id WHERE b.created_at >= ? AND b.created_at < ? AND l.parent_order_item_id IS NULL
         UNION ALL
         SELECT l.product_id, l.variant_id, l.category_id, l.name, l.category_name, NULL, o.type, -cl.qty, -cl.total_paise
           FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id

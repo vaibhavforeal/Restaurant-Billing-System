@@ -58,8 +58,12 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const order = loadOrderJson(db, orderId);
   if (!order) throw httpError(404, "order not found");
   if (order.status !== "open") throw httpError(409, "order is not open");
-  const items = order.items.filter((item) => item.status !== "cancelled");
+  const active = order.items.filter((item) => item.status !== "cancelled");
+  // A combo's items are ₹0 lines under it: the bill shows the combo, with what it held.
+  const items = active.filter((item) => !item.parentItemId);
   if (!items.length) throw httpError(409, "Add items before billing");
+  const contents = (combo: (typeof items)[number]) => active.filter((item) => item.parentItemId === combo.id)
+    .map((item) => item.qty > combo.qty ? `${item.qty / combo.qty} x ${item.name}` : item.name);
   const unsent = db.prepare("SELECT oi.id FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? AND oi.status = 'pending' AND p.kot_station_id IS NOT NULL LIMIT 1").get(orderId);
   if (unsent) throw httpError(409, "Send kitchen items before billing");
   let totals;
@@ -78,7 +82,10 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const receipt: ReceiptSnapshot = { ...profile, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     ...(order.orderTypeName ? { orderTypeName: order.orderTypeName } : {}),
     ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),
-    items: items.map(({ name, qty, pricePaise, gstRate }) => ({ name, qty, pricePaise, gstRate })), ...receiptExtra };
+    items: items.map((item) => {
+      const held = contents(item);
+      return { name: item.name, qty: item.qty, pricePaise: item.pricePaise, gstRate: item.gstRate, ...(held.length ? { contents: held } : {}) };
+    }), ...receiptExtra };
   return { items, totals, receipt, loyalty: { ...loyalty, customerId: customer?.id ?? null, pointsEarned: earned } };
 }
 

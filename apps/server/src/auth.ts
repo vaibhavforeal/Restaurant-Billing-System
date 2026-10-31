@@ -2,7 +2,7 @@ import { hashPassword, verifyPassword } from "@forkflow/core";
 import { KNOWN_PERMISSIONS, LoginBody, SetupBody, effectivePermissions, staffCan, uuidv7, type PermissionOverrides, type RoleName, type Database } from "@forkflow/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
-import { deviceHash } from "./licensing.js";
+import { deviceHash, enrollBody } from "./licensing.js";
 import { createPinThrottle } from "./pin-throttle.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -63,6 +63,8 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
   const throttle = createPinThrottle();
   app.decorate("loginThrottle", throttle);
   app.decorate("approvalThrottle", createPinThrottle());
+  // Activation at setup needs no sign-in, so wrong Customer ID / Order ID guesses from the LAN are slowed down like wrong PINs.
+  const activationThrottle = createPinThrottle();
 
   const createSession = (userId: string, credential: unknown): string => {
     const token = randomBytes(32).toString("hex");
@@ -104,10 +106,33 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     };
   });
 
+  const noUsers = () => (app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n === 0;
   app.get("/api/needs-setup", async () => {
     // users-count is the canonical signal; settings.setup_complete is informational only
-    const row = app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
-    return { needsSetup: row.n === 0, ...(demo ? { demo: true } : {}) };
+    const needsSetup = noUsers();
+    if (!needsSetup) return { needsSetup, ...(demo ? { demo: true } : {}) };
+    // How setup starts: "online" asks for the Customer ID and Order ID, "offline" (no licensing service in this build) uses a licence
+    // file after setup, and "none" (development and demo builds) needs no activation.
+    const status = app.licensing.status();
+    return {
+      needsSetup, ...(demo ? { demo: true } : {}),
+      activation: status.mode === "development" ? "none" : status.onlineActivation ? "online" : "offline",
+      licensed: status.state === "active" || status.state === "grace" || status.state === "development",
+    };
+  });
+
+  // The first step of setup on a commercial counter. Open only until the first user exists, so it can never become a way round sign-in.
+  app.post("/api/setup/activate", async (req, reply) => {
+    if (!app.licensing.enabled) return reply.status(409).send({ error: "This build does not need activation" });
+    if (!deviceHash(req.headers["x-forkflow-device"])) return reply.status(400).send({ error: "A device credential is required" });
+    if (!noUsers()) return reply.status(409).send({ error: "already set up" });
+    const body = enrollBody.parse(req.body);
+    if (!activationThrottle.beginPinAttempt(req.ip)) return reply.status(429).send({ error: "Too many attempts. Wait a minute and try again." });
+    reply.header("Cache-Control", "no-store");
+    const result = await app.licensing.enroll(body, "Setup");
+    if ("error" in result) return reply.status(result.status).send({ error: result.error });
+    activationThrottle.clearPinFailures(req.ip);
+    return result;
   });
 
   app.post("/api/setup", async (req, reply) => {
@@ -135,7 +160,17 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     });
     write();
 
-    const token = createSession(id, req.headers["x-forkflow-device"]);
+    // A counter activated in the first step of setup registers the browser that set it up, so the admin lands straight in.
+    const credential = req.headers["x-forkflow-device"];
+    if (app.licensing.enabled) {
+      const status = app.licensing.status(credential);
+      if ((status.state === "active" || status.state === "grace") && status.registeredDevices === 0) {
+        try { app.licensing.register(credential, "Main counter", body.adminName); app.licensing.announceChange(); }
+        catch { /* The admin can still register it from Plan and devices. */ }
+      }
+    }
+
+    const token = createSession(id, credential);
     return reply.status(201).send({ token, user: authedUser(app.db, { id, name: body.adminName, role: "admin" }) });
   });
 

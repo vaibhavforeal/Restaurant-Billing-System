@@ -54,12 +54,13 @@ export function registerCosting(app: FastifyInstance): void {
   });
 
   app.get("/api/costing/dishes", { preHandler: costs }, async (_req, reply) => {
+    // Combos are costed through their items' recipes in the profit report, so they are not listed here.
     // A restaurant that charges no GST sells at its menu prices: nothing is backed out. Otherwise GST is included in
     // the menu price, at the item's own rate or else the restaurant's default.
     const { gstMode, gstRate: defaultRate } = readGstSettings(db);
     const taxInclusive = gstMode === "included";
     const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, p.zomato_price_paise, c.name AS category_name
-      FROM products p JOIN categories c ON c.id = p.category_id WHERE p.is_active = 1
+      FROM products p JOIN categories c ON c.id = p.category_id WHERE p.is_active = 1 AND p.kind = 'item'
       ORDER BY c.sort_order, c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id`).all() as Array<{
       id: string; name: string; price_paise: number; gst_rate: number | null; ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; category_name: string;
     }>;
@@ -114,7 +115,7 @@ export function registerCosting(app: FastifyInstance): void {
       // Sale movements that were later reversed (cancelled items) no longer count as consumption; a KOT edit's partial
       // return (partial_of) takes its share off the sale it reduced.
       const sales = `(SELECT m.cost_paise + COALESCE((SELECT SUM(p.cost_paise) FROM stock_moves p WHERE p.partial_of = m.id), 0) AS cost_paise
-        FROM stock_moves m WHERE m.order_item_id = l.order_item_id AND m.reason = 'sale'
+        FROM stock_moves m WHERE (m.order_item_id = l.order_item_id OR m.order_item_id IN (SELECT id FROM order_items WHERE parent_item_id = l.order_item_id)) AND m.reason = 'sale'
         AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id))`;
       const recipe = `(SELECT COUNT(*) FROM ${sales}) AS saleMoves, (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves`;
       // Issued lines by bill date (void bills too). Credit-note lines subtract their taxable value and quantity on the
@@ -124,7 +125,7 @@ export function registerCosting(app: FastifyInstance): void {
           SELECT l.category_name AS categoryName, l.name, l.qty, l.taxable_paise AS revenuePaise, ${recipe},
             (SELECT 0 - SUM(cost_paise) FROM ${sales}) AS costPaise, b.created_at AS at, l.bill_id, l.order_item_id
           FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-          WHERE b.created_at >= ? AND b.created_at < ?
+          WHERE b.created_at >= ? AND b.created_at < ? AND l.parent_order_item_id IS NULL
           UNION ALL
           SELECT l.category_name, l.name, -cl.qty, -cl.taxable_paise, ${recipe}, 0, c.created_at, l.bill_id, l.order_item_id
           FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id

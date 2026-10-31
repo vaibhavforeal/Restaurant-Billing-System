@@ -87,7 +87,8 @@ export function CreditNoteList({ notes, printers, printerId }: { notes: BillCred
 
 /** The items of an issued bill with how many were billed and refunded. */
 export function BillItemLines({ items, refundedQty, showRefunded }: { items: OrderItem[]; refundedQty: Record<string, number>; showRefunded: boolean }) {
-  const billed = items.filter((item) => item.status !== "cancelled");
+  // A combo is billed and refunded as one line; the items in it are not lines of their own.
+  const billed = items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
   if (!billed.length) return null;
   return <section className="bill-item-lines" aria-label="Billed items">
     <h3>Items</h3>
@@ -118,7 +119,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   kind: "void" | "refund"; bill: Bill; items: OrderItem[]; role: "admin" | "cashier" | "waiter" | "kitchen"; printers: Printer[]; printerId: string;
   onBusyChange: (busy: boolean) => void; onClose: () => void; onIssued: (result: IssuedCredit) => void; onStale: () => void;
 }) {
-  const billable = items.filter((item) => item.status !== "cancelled");
+  const billable = items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
   const unpaid = bill.status === "unpaid";
   const [qty, setQty] = useState<Record<string, number>>({});
   const [pick, setPick] = useState("");

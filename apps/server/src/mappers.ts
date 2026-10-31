@@ -40,6 +40,8 @@ export interface OrderItemRow {
   cancel_reason: string | null;
   kot_id: string | null;
   cancelled_by: string | null;
+  /** Set on an item inside a combo: the combo's own line. */
+  parent_item_id: string | null;
 }
 
 export interface KotRow {
@@ -66,6 +68,7 @@ export function orderItemJson(r: OrderItemRow) {
     note: r.note,
     cancelReason: r.cancel_reason,
     kotId: r.kot_id,
+    parentItemId: r.parent_item_id,
   };
 }
 

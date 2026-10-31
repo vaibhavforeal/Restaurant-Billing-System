@@ -47,7 +47,7 @@ function sourceSql(id: string, start: number, end: number): SourceSql {
   }
   if (id === "bill_items") {
     return {
-      from: `bill_report_lines l JOIN bills b ON b.id = l.bill_id ${billJoins}`, dateColumn: "b.created_at", order: "b.created_at DESC, b.bill_no DESC, l.name, l.order_item_id",
+      from: `bill_report_lines l JOIN bills b ON b.id = l.bill_id AND l.parent_order_item_id IS NULL ${billJoins}`, dateColumn: "b.created_at", order: "b.created_at DESC, b.bill_no DESC, l.name, l.order_item_id",
       fields: {
         ...billWhen("b.created_at"), billNo: "b.bill_no", item: "l.name", category: "l.category_name", ...billWho, status: "b.status",
         lines: "1", qty: "l.qty", subtotal: "l.subtotal_paise", discount: "l.discount_paise", taxable: "l.taxable_paise", gst: "l.cgst_paise + l.sgst_paise",

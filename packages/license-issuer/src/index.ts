@@ -14,6 +14,8 @@ export const ActivationRequest = z.object({
   currentRevision: z.number().int().nonnegative(),
   generatedAt: z.number().int().nonnegative(),
   verificationKeyFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  appVersion: z.string().max(40).optional(),
+  outletName: z.string().max(120).optional(),
 });
 export type ActivationRequest = z.infer<typeof ActivationRequest>;
 
@@ -22,8 +24,14 @@ export function parseActivationRequest(text: string): ActivationRequest {
   catch { throw new Error("This is not a ForkFlow activation request. Download it from Settings > Plan and devices > Activation details."); }
 }
 
-/** `modules` holds the ForkFlow owner's choices for this restaurant; anything left out follows the plan. */
-export interface ClaimTerms { plan: Plan; expiresAt: number; graceUntil: number; trial?: boolean; modules?: ModuleOverrides }
+/**
+ * `modules` holds the ForkFlow owner's choices for this restaurant; anything left out follows the plan. `maxDevices` defaults to the
+ * plan's; the codes name the portal customer and order the terms come from.
+ */
+export interface ClaimTerms {
+  plan: Plan; expiresAt: number; graceUntil: number; trial?: boolean; modules?: ModuleOverrides;
+  maxDevices?: number; customerCode?: string; orderCode?: string;
+}
 
 /**
  * A first activation gets fresh identifiers at revision 1. A request that already
@@ -42,13 +50,15 @@ export function buildClaims(request: ActivationRequest, terms: ClaimTerms, now: 
     installationId: request.installationId,
     revision: renewal ? request.currentRevision + 1 : 1,
     plan: terms.plan,
-    maxDevices: plan.maxDevices,
+    maxDevices: terms.maxDevices ?? plan.maxDevices,
     features: featuresFromModules(modules),
     modules,
     issuedAt: now,
     expiresAt: terms.expiresAt,
     graceUntil: terms.graceUntil,
     ...(terms.trial ? { trial: true } : {}),
+    ...(terms.customerCode ? { customerCode: terms.customerCode } : {}),
+    ...(terms.orderCode ? { orderCode: terms.orderCode } : {}),
   });
 }
 

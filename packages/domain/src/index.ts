@@ -3,6 +3,7 @@ export { RECEIPT_STYLES, resolveReceiptStyle, type ReceiptStyle } from "./receip
 export * from "./zomato.js";
 export { INTEGRATIONS, IntegrationToggle, isIntegrationId, type IntegrationId, type IntegrationStatus, type IntegrationDef, type IntegrationInfo, type IntegrationToggleInput } from "./integrations.js";
 export { saveReportLines, allocatePaise } from "./report-lines.js";
+export * from "./combos.js";
 export { OPERATIONAL_REPORTS, type OperationalReportKind, type OperationalReport, type ReportTable, type ReportColumn, type ReportCell } from "./operational-reports.js";
 export * from "./custom-reports.js";
 export { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, type Reservation, type ReservationInput, type ReservationList } from "./reservations.js";
