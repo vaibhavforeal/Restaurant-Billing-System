@@ -59,6 +59,8 @@ export const ticketRoutes: Route[] = [
     const q = ctx.url.searchParams, where: string[] = [], binds: unknown[] = [];
     const status = q.get("status") ?? "active";
     if (status === "active") where.push("t.status IN ('open', 'in_progress', 'waiting')");
+    // The Resolved list is every finished ticket: resolved, and closed (the screen tags those "Closed").
+    else if (status === "resolved") where.push("t.status IN ('resolved', 'closed')");
     else if (status !== "all") { where.push("t.status = ?"); binds.push(status); }
     if (q.get("priority")) { where.push("t.priority = ?"); binds.push(q.get("priority")); }
     if (q.get("assigneeId") === "me") { where.push("t.assignee_id = ?"); binds.push(ctx.user.id); }

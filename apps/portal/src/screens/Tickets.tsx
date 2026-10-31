@@ -37,7 +37,7 @@ export function Tickets({ me, customerId }: { me: StaffUser; customerId?: string
       actions={canWrite && <button className="primary" onClick={() => setOpening(true)}>New ticket</button>} />
     <Tabs label="Tickets" value={filter} onChange={setFilter} tabs={[
       ...(me.role === "support" || me.role === "admin" ? [{ id: "mine" as const, label: "Mine and unassigned" }] : []),
-      { id: "active", label: <>Open<span className="count">{active}</span></> }, { id: "resolved", label: "Resolved" }, { id: "all", label: "All" },
+      { id: "active", label: <>Open<span className="count">{active}</span></> }, { id: "resolved", label: "Resolved and closed" }, { id: "all", label: "All" },
     ]} />
     {list}
   </>;
@@ -48,7 +48,7 @@ export function TicketRows({ tickets, loaded, hideCustomer }: { tickets: TicketS
     <thead><tr><th>Ticket</th>{!hideCustomer && <th>Customer</th>}<th className="phone-hide">Priority</th><th className="phone-hide">Status</th><th className="phone-hide">With</th><th className="num">Opened</th></tr></thead>
     <tbody>
       {tickets.map((t) => <tr key={t.id} className="clickable" onClick={() => navigate(`/tickets/${t.id}`)}>
-        <td><Link className="name" to={`/tickets/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.subject}</Link><span className="sub">T-{t.number} · {CATEGORY_NAMES[t.category]}</span></td>
+        <td><Link className="name" to={`/tickets/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.subject}</Link><span className="sub">T-{t.number} · {CATEGORY_NAMES[t.category]}{t.status === "closed" && <> · <Pill>Closed</Pill></>}</span></td>
         {!hideCustomer && <td>{t.customer.name}</td>}
         <td className="phone-hide"><PriorityMark priority={t.priority} /></td>
         <td className="phone-hide">{STATUS_NAMES[t.status]}</td>

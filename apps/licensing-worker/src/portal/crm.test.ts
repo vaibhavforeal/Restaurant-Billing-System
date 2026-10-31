@@ -121,6 +121,12 @@ describe("tickets", () => {
     const active = await ritu.ok<{ tickets: TicketSummary[]; counts: Record<string, number> }>("GET", "/tickets");
     expect(active.tickets.map((t) => t.number)).toEqual([1002]);
     expect(active.counts).toEqual({ open: 1, resolved: 1 });
+    // The Resolved list also holds closed tickets (the portal tags them "Closed").
+    const third = await neha.ok<{ ticket: TicketDetail }>("POST", "/tickets", { customerId: c.id, installationId: null, subject: "Duplicate of 1001", description: "", category: "other", priority: "low", assigneeId: null });
+    await neha.ok("PATCH", `/tickets/${third.ticket.id}`, { status: "closed" });
+    const finished = await ritu.ok<{ tickets: TicketSummary[] }>("GET", "/tickets?status=resolved");
+    expect(finished.tickets.map((t) => [t.number, t.status]).sort()).toEqual([[1001, "resolved"], [1003, "closed"]]);
+    expect((await ritu.ok<{ tickets: TicketSummary[] }>("GET", "/tickets?status=closed")).tickets.map((t) => t.number)).toEqual([1003]);
     expect((await ritu.call("POST", `/tickets/${ticket.id}/comments`, { body: "x" })).status).toBe(403);
     expect((await (await as(env, "sales")).call("GET", `/tickets/${ticket.id}`)).status).toBe(404);
     expect((await neha.ok<{ hits: Array<{ kind: string }> }>("GET", "/search?q=T-1001")).hits).toEqual([expect.objectContaining({ kind: "ticket" })]);
