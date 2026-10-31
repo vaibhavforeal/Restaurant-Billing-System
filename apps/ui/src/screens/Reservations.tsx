@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Reservation, ReservationInput, ReservationList } from "@forkflow/domain";
+import type { Reservation, ReservationInput, ReservationList } from "@masalapos/domain";
 import { apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";

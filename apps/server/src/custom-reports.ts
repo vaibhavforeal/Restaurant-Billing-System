@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   CUSTOM_REPORT_LIMITS, CustomReportConfig, CustomReportSave, customReportProblem, customReportSource, localDateKey, uuidv7,
   type CustomReport, type CustomReportConfigValue, type CustomReportField, type ReportCell, type ReportColumn, type SavedCustomReport,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";

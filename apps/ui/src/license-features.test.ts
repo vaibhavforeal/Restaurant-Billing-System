@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allModules, planModules } from "@forkflow/domain/modules";
+import { allModules, planModules } from "@masalapos/domain/modules";
 import { moduleSummary } from "./license-features";
 
 describe("moduleSummary", () => {

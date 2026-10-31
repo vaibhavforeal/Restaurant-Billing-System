@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useModules } from "../modules";
-import { OPERATIONAL_REPORTS, type OperationalReportKind } from "@forkflow/domain/operational-reports";
+import { OPERATIONAL_REPORTS, type OperationalReportKind } from "@masalapos/domain/operational-reports";
 import { OperationalReports, PROFIT_REPORT_TITLE } from "./OperationalReports";
 import { COSTING_PRO_NOTE } from "../dish-costing";
 import { useLicense } from "./LicenseSettings";
@@ -63,7 +63,7 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZ
   function exportReport() {
     if (!report || loading || (tab !== "sales" && tab !== "collections")) return;
     try {
-      downloadText(salesReportCsv(report, tab), `forkflow-${tab}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
+      downloadText(salesReportCsv(report, tab), `masalapos-${tab}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
       setExportError(""); setMessage(`${tab === "sales" ? "Sales" : "Collections"} CSV downloaded for ${report.from} to ${report.to}.`);
     } catch (e) { setMessage(""); setExportError(e instanceof Error ? e.message : "Could not download report"); }
   }

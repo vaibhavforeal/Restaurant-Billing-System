@@ -1,5 +1,5 @@
-export const EXPIRED_COPY = "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again.";
-export const SUCCESS_COPY = "Payment received. Return to ForkFlow and press Check for renewal.";
+export const EXPIRED_COPY = "This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again.";
+export const SUCCESS_COPY = "Payment received. Return to MasalaPOS and press Check for renewal.";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (c) => ESCAPES[c]!);
@@ -27,8 +27,8 @@ modal:{ondismiss:function(){button.disabled=false;}}}).open();
 })();`;
 
 const page = (body: string) => `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subscribe to ForkFlow</title><style>${STYLE}</style></head>
-<body><main><h1>Subscribe to ForkFlow</h1>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subscribe to MasalaPOS</title><style>${STYLE}</style></head>
+<body><main><h1>Subscribe to MasalaPOS</h1>
 ${body}
 </main></body></html>`;
 

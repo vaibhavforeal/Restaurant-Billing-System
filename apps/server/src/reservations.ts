@@ -1,5 +1,5 @@
 import { tablePriceTier } from "./pricing.js";
-import { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, uuidv7, localDateKey, nextSplitLabel, type Reservation, type ReservationInput } from "@forkflow/domain";
+import { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, uuidv7, localDateKey, nextSplitLabel, type Reservation, type ReservationInput } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";

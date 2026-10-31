@@ -1,5 +1,5 @@
 
-const CACHE = "forkflow-kitchen-07a9e7b54a2671de";
+const CACHE = "masalapos-kitchen-07a9e7b54a2671de";
 const SHELL = "/kitchen/";
 const ASSETS = ["/assets/index--TBobyOL.css","/assets/index-Cb8zr6JT.js","/kitchen/manifest.webmanifest","/kitchen/icon-192.png","/kitchen/icon-512.png"];
 const STATIC = new Set(ASSETS);
@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     for (const name of await caches.keys()) {
-      if (name.startsWith("forkflow-kitchen-") && name !== CACHE) await caches.delete(name);
+      if (name.startsWith("masalapos-kitchen-") && name !== CACHE) await caches.delete(name);
     }
     await self.clients.claim();
   })());

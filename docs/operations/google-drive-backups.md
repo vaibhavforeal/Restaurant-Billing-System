@@ -2,13 +2,13 @@
 
 Admins connect a Google account in **Settings → Backups & connections** on the main POS
 PC. Every verified local backup (daily, manual, pre-update) is then uploaded to a
-**ForkFlow Backups** folder in that account, and any of them can be restored from the same
+**MasalaPOS Backups** folder in that account, and any of them can be restored from the same
 screen, including backups uploaded by an older PC. Local backups and backup files keep
 working whether or not Drive is connected.
 
-## One-time setup (ForkFlow team, before building)
+## One-time setup (MasalaPOS team, before building)
 
-1. In Google Cloud console create one ForkFlow project and enable the **Google Drive API**.
+1. In Google Cloud console create one MasalaPOS project and enable the **Google Drive API**.
 2. Configure the OAuth consent screen (External, app name/logo/support email, privacy
    policy URL). Add the scopes `openid`, `email` and `https://www.googleapis.com/auth/drive.file`.
    `drive.file` is a non-sensitive scope, so no security assessment is needed, but the
@@ -18,8 +18,8 @@ working whether or not Drive is connected.
    as public; sign-in is protected by PKCE and a single-use loopback redirect.
 4. Build with the client in the environment:
    ```powershell
-   $env:FORKFLOW_GOOGLE_CLIENT_ID = "...apps.googleusercontent.com"
-   $env:FORKFLOW_GOOGLE_CLIENT_SECRET = "GOCSPX-..."
+   $env:MASALAPOS_GOOGLE_CLIENT_ID = "...apps.googleusercontent.com"
+   $env:MASALAPOS_GOOGLE_CLIENT_SECRET = "GOCSPX-..."
    npm run package:win
    ```
    `tools/build-desktop.mjs` embeds both. A build without them shows Drive as
@@ -37,7 +37,7 @@ working whether or not Drive is connected.
   account is used than the one already linked (disconnect first to switch).
 - **Credentials**: the refresh token is sealed with AES-256-GCM in
   `<data>/google-drive.json`. The key is created by the desktop shell, protected with
-  Windows DPAPI (Electron `safeStorage`) in `%APPDATA%\forkflow-desktop\cloud-secret.bin`
+  Windows DPAPI (Electron `safeStorage`) in `%APPDATA%\masalapos-desktop\cloud-secret.bin`
   and handed to the server in its environment, which removes it at start-up. Tokens
   never enter the database, backups, logs or API responses. A data folder moved to
   another PC or Windows user shows **Reconnect required**, and so does a revoked grant.
@@ -51,11 +51,11 @@ working whether or not Drive is connected.
 - **Retention**: after each upload, this installation's Drive backups follow the same
   rules as local ones (`expiredBackups` in `backups.ts`): the newest backup is always
   kept, then dailies for the configured days, plus 10 manual and 10 pre-update. Expired
-  files go to the Drive trash. Other PCs' backups and any non-ForkFlow file are never touched.
+  files go to the Drive trash. Other PCs' backups and any non-MasalaPOS file are never touched.
 - **Folder**: one app-created folder per account, found again by its `appProperties`
   after a reinstall. Changing the folder name in Settings renames it, and a rename done
   in Drive itself is kept.
-- **Restore**: *Backups in Google Drive* lists every ForkFlow backup in the account. A
+- **Restore**: *Backups in Google Drive* lists every MasalaPOS backup in the account. A
   restore downloads into `<data>/restore-incoming/`, checks MD5 and SHA-256, and then
   follows the same preview and confirm flow as a backup file (see
   [backup-and-recovery.md](backup-and-recovery.md)).
@@ -74,7 +74,7 @@ All routes need `settings.manage`. The routes marked "main PC" also require a lo
 | POST | `/api/system/cloud-backups/upload` | Verified manual snapshot queued; 202 |
 | POST | `/api/system/cloud-backups/retry` | Pending uploads made due; 202 |
 | POST | `/api/system/cloud-backups/disconnect` | Revoke and forget the credential; clear pending queue |
-| GET | `/api/system/cloud-backups/files` | ForkFlow backups in the account |
+| GET | `/api/system/cloud-backups/files` | MasalaPOS backups in the account |
 | POST | `/api/system/cloud-backups/restore` | main PC: `{ id }` → download, verify, restore preview |
 
 ## Verification

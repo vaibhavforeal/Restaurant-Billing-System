@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
-import { priceForTier } from "@forkflow/domain/pricing";
+import { priceForTier } from "@masalapos/domain/pricing";
 import { paiseToRupees } from "../money";
 import { useIntegrations } from "../integrations";
 import type { Category, Product, Station, StationInfo } from "../types";

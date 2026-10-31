@@ -5,7 +5,7 @@
   const wait = async (check) => { for (let i = 0; i < 200; i++) { if (check()) return; await new Promise((r) => setTimeout(r, 50)); } throw new Error("UI wait timed out"); };
   const buttons = (text) => [...document.querySelectorAll("button")].filter((b) => b.textContent.trim() === text);
   const api = async (path, body) => {
-    const response = await fetch(path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", authorization: `Bearer ${localStorage.getItem("forkflow.token")}` }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const response = await fetch(path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", authorization: `Bearer ${localStorage.getItem("masalapos.token")}` }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) throw new Error(await response.text()); return response.json();
   };
   const category = (await api("/api/categories", { name: "Settlement navigation test" })).category;

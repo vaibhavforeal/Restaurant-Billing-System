@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { CloudBackupPreferences, type CloudBackupAccount, type CloudBackupFile, type CloudBackupSettings, type CloudBackupStatus } from "@forkflow/domain";
+import { CloudBackupPreferences, type CloudBackupAccount, type CloudBackupFile, type CloudBackupSettings, type CloudBackupStatus } from "@masalapos/domain";
 import { atomicJson, verifyBackup, type Backups } from "./backups.js";
 import { httpError } from "./http-error.js";
 
@@ -163,12 +163,12 @@ export class CloudBackups {
   }
   async connect(): Promise<{ authUrl: string }> {
     if (this.damaged) throw httpError(409, this.damaged);
-    if (!this.provider?.beginConnect) throw httpError(409, "Google Drive backup is not available in this ForkFlow build. Local backups remain available.");
+    if (!this.provider?.beginConnect) throw httpError(409, "Google Drive backup is not available in this MasalaPOS build. Local backups remain available.");
     if (this.disconnecting || this.closing) throw httpError(409, "Cloud backup is stopping.");
     return this.provider.beginConnect();
   }
   private remote() {
-    if (!this.provider?.list || !this.provider.download) throw httpError(409, "Google Drive backup is not available in this ForkFlow build.");
+    if (!this.provider?.list || !this.provider.download) throw httpError(409, "Google Drive backup is not available in this MasalaPOS build.");
     const connection = this.provider.connection();
     if (connection.state !== "connected") throw httpError(409, "Connect Google Drive on the main POS PC first.");
     return this.provider as Required<CloudBackupProvider>;
@@ -193,7 +193,7 @@ export class CloudBackups {
     if (!this.ready()) return Promise.resolve();
     // Defer work so a local backup response never waits for network I/O.
     this.active = Promise.resolve().then(() => this.drain()).then(() => { this.storageError = null; }).catch(() => {
-      this.storageError = "Cloud backup could not save its upload progress. Local backups are still available; ForkFlow will try again.";
+      this.storageError = "Cloud backup could not save its upload progress. Local backups are still available; MasalaPOS will try again.";
     }).finally(() => { this.active = null; });
     return this.active;
   }
@@ -241,7 +241,7 @@ export class CloudBackups {
       } catch {
         entry.attempts++;
         entry.nextAttemptAt = this.now() + Math.min(3_600_000, 60_000 * 2 ** Math.min(entry.attempts - 1, 6));
-        this.state.lastError = "Cloud upload was not confirmed. Your local backup is safe; ForkFlow will retry.";
+        this.state.lastError = "Cloud upload was not confirmed. Your local backup is safe; MasalaPOS will retry.";
         this.save();
         break;
       } finally { clearTimeout(timeout); this.controller = null; }

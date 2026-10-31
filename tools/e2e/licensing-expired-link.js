@@ -7,7 +7,7 @@
   const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
   const wait = async (fn) => { const end = Date.now() + 5000; while (Date.now() < end) { if (fn()) return; await new Promise((r) => setTimeout(r, 30)); } throw new Error('Timed out: ' + document.body.innerText.slice(-1000)); };
   const visible = (el) => !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
-  const expiredCopy = 'This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again.';
+  const expiredCopy = 'This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again.';
   const form = document.getElementById('checkout'), expired = document.getElementById('expired');
   check(visible(form) && !visible(expired) && form.dataset.session.length === 43, 'A valid checkout page shows its form and no expired message');
   form.elements.email.value = 'owner@example.com'; form.querySelector('button').click();

@@ -1,11 +1,11 @@
 import DatabaseCtor from "better-sqlite3";
-import { MIGRATIONS, localDateKey, type Database } from "@forkflow/domain";
+import { MIGRATIONS, localDateKey, type Database } from "@masalapos/domain";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, openSync, fsyncSync, closeSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-export const managedName = /^forkflow-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
+export const managedName = /^masalapos-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
 export type BackupKind = "daily" | "manual" | "pre-update";
 /** Kind and creation time from a managed snapshot name, or null for any other file. */
 export function parseBackupName(name: string): { kind: BackupKind; createdAt: number } | null {
@@ -41,7 +41,7 @@ export function syncFile(path: string): void {
   try { fsyncSync(fd); } finally { closeSync(fd); }
 }
 
-/** Read-only validation: a snapshot must be a complete, supported ForkFlow database. */
+/** Read-only validation: a snapshot must be a complete, supported MasalaPOS database. */
 export function verifyBackup(path: string): number {
   const check = new DatabaseCtor(path, { readonly: true, fileMustExist: true });
   try {
@@ -85,7 +85,7 @@ export class Backups {
     return this.status();
   }
   create(kind: Kind) {
-    const name = `forkflow-${kind}-${this.now()}-${randomUUID()}.db`;
+    const name = `masalapos-${kind}-${this.now()}-${randomUUID()}.db`;
     const target = join(this.folder, name);
     const temp = `${target}.partial`;
     try {

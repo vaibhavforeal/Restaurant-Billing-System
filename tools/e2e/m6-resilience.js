@@ -12,21 +12,21 @@
   const click = async (text) => { const b = await waitFor(() => { const candidate = button(text); return candidate && !candidate.disabled ? candidate : null; }, `enabled ${text}`); b.click(); await new Promise((r) => setTimeout(r, 100)); };
   const nativeFetch = window.fetch.bind(window);
   const api = async (path, method = "GET", body) => {
-    const res = await nativeFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const res = await nativeFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const data = await res.json(); if (!res.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
   };
-  await waitFor(() => localStorage.getItem("forkflow.generation"), "server generation checked");
+  await waitFor(() => localStorage.getItem("masalapos.generation"), "server generation checked");
   await click("settings"); (await waitFor(() => document.querySelector('[data-section="backups"]'), "backups card")).click(); await waitFor(() => button("Back up now"), "backup controls");
   const count = (await api("/system/backups")).backups.length;
   await click("Back up now"); await waitFor(() => document.body.innerText.includes("Verified local backup saved"), "manual backup");
   const backups = await api("/system/backups");
   check(backups.backups.length === count + 1, "Manual backup created from Settings");
-  const copy = await nativeFetch(`/api/system/backups/${backups.backups[0].name}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+  const copy = await nativeFetch(`/api/system/backups/${backups.backups[0].name}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
   check(new TextDecoder().decode((await copy.arrayBuffer()).slice(0, 15)) === "SQLite format 3", "Backup download contains a SQLite snapshot");
   const connections = await api("/system/connections");
   if (connections.connections.length) {
-    check([...document.querySelectorAll("img")].some((img) => img.alt.includes("Connect to ForkFlow") && img.complete && img.naturalWidth > 0), "LAN QR code renders locally");
-    const shortcut = await nativeFetch(`/api/system/shortcut?url=${encodeURIComponent(connections.connections[0].url)}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+    check([...document.querySelectorAll("img")].some((img) => img.alt.includes("Connect to MasalaPOS") && img.complete && img.naturalWidth > 0), "LAN QR code renders locally");
+    const shortcut = await nativeFetch(`/api/system/shortcut?url=${encodeURIComponent(connections.connections[0].url)}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
     check((await shortcut.text()).includes(`--app=${connections.connections[0].url}`), "Edge shortcut targets the displayed LAN address");
   }
   const stamp = Date.now();
@@ -38,7 +38,7 @@
   const productButton = () => [...document.querySelectorAll("button")].find((b) => b.textContent.includes(product.name));
   (await waitFor(productButton, "menu product")).click();
   await waitFor(() => button("Punch"), "saved draft");
-  const draftKey = Object.keys(localStorage).find((key) => key.startsWith("forkflow.draft.") && localStorage.getItem(key).includes(product.id));
+  const draftKey = Object.keys(localStorage).find((key) => key.startsWith("masalapos.draft.") && localStorage.getItem(key).includes(product.id));
   check(!!draftKey, "Cart persisted before any request");
   const orderId = draftKey.split(".").at(-1);
   const { order } = await api(`/orders/${orderId}`);
@@ -67,7 +67,7 @@
     await click("Punch"); await waitFor(() => !button("Punch"), "second punch");
     losePath = `/api/orders/${orderId}/send`; lost = false;
     await click("Send to kitchen");
-    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v2.")), "kitchen acknowledgement replay");
+    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v2.")), "kitchen acknowledgement replay");
     const sent = (await api(`/orders/${orderId}`)).order;
     check(sent.items.length === 2 && sent.items.every((i) => i.status === "sent"), "Kitchen retry keeps one saved send request");
     check((await api("/kots")).kots.filter((k) => k.orderId === orderId).length === 1, "Lost kitchen acknowledgement does not duplicate KOTs");
@@ -75,12 +75,12 @@
     losePath = `/api/orders/${orderId}/bill`; lost = false;
     await click("Issue bill");
     await waitFor(() => button("Settle bill"), "bill issued after response loss");
-    await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v2.")), "bill queue cleared");
+    await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v2.")), "bill queue cleared");
     const { bill } = await api(`/orders/${orderId}/bill`);
     check(bill.status === "unpaid", "Bill issue resolves a lost acknowledgement from the same saved request");
     losePath = `/api/bills/${bill.id}/settle`; lost = false;
     await click("Settle bill");
-    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v2.")), "settlement replay");
+    await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v2.")), "settlement replay");
     const paid = (await api(`/orders/${orderId}/bill`)).bill;
     check(paid.status === "paid" && paid.payments.length === 1, "Lost settlement acknowledgement records payment only once");
   } finally { window.fetch = nativeFetch; }

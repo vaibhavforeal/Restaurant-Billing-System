@@ -3,17 +3,17 @@ import { join } from "node:path";
 
 /**
  * The Google OAuth "Desktop app" client for Drive backups.
- * Order: FORKFLOW_GOOGLE_CLIENT_ID/_SECRET, then the JSON named by FORKFLOW_GOOGLE_CLIENT_FILE,
+ * Order: MASALAPOS_GOOGLE_CLIENT_ID/_SECRET, then the JSON named by MASALAPOS_GOOGLE_CLIENT_FILE,
  * then a single client_secret_*.json downloaded from Cloud console into `root` (git-ignored).
  * Returns empty strings when none is configured; the build then ships without Drive backup.
  */
 export function googleOAuthClient(root) {
-  const id = process.env.FORKFLOW_GOOGLE_CLIENT_ID, secret = process.env.FORKFLOW_GOOGLE_CLIENT_SECRET;
+  const id = process.env.MASALAPOS_GOOGLE_CLIENT_ID, secret = process.env.MASALAPOS_GOOGLE_CLIENT_SECRET;
   if (id) return { clientId: id, clientSecret: secret ?? "", source: "environment" };
-  let file = process.env.FORKFLOW_GOOGLE_CLIENT_FILE;
+  let file = process.env.MASALAPOS_GOOGLE_CLIENT_FILE;
   if (!file) {
     const found = existsSync(root) ? readdirSync(root).filter((name) => /^client_secret_.+\.json$/.test(name)) : [];
-    if (found.length > 1) throw new Error(`Several Google OAuth client files in ${root}; keep one or set FORKFLOW_GOOGLE_CLIENT_FILE`);
+    if (found.length > 1) throw new Error(`Several Google OAuth client files in ${root}; keep one or set MASALAPOS_GOOGLE_CLIENT_FILE`);
     if (found.length) file = join(root, found[0]);
   }
   if (!file) return { clientId: "", clientSecret: "", source: "none" };

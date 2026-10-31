@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -68,7 +68,7 @@ class SetupActivity : Activity() {
 
     /** A pairing code scanned with the system camera opens here; never re-pair without asking. */
     private fun openPairingLink(intent: Intent?) {
-        val link = intent?.data?.takeIf { it.scheme == "forkflow-captain" }?.toString() ?: return
+        val link = intent?.data?.takeIf { it.scheme == "masalapos-captain" }?.toString() ?: return
         val server = try { Pairing.parse(link).first().origin } catch (e: PairingException) { return showStatus(e.message) }
         AlertDialog.Builder(this)
             .setTitle(R.string.pair_link_title)

@@ -6,7 +6,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { z } from "zod";
-import type { CloudBackupAccount, CloudBackupFile } from "@forkflow/domain";
+import type { CloudBackupAccount, CloudBackupFile } from "@masalapos/domain";
 import { atomicJson, expiredBackups, parseBackupName } from "./backups.js";
 import type { CloudBackupConnection, CloudBackupProvider } from "./cloud-backups.js";
 
@@ -16,7 +16,7 @@ const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
 const DRIVE = "https://www.googleapis.com/drive/v3/files";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
-/** Only files ForkFlow itself creates: no access to the restaurant's other Drive files. */
+/** Only files MasalaPOS itself creates: no access to the restaurant's other Drive files. */
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const BACKUP_MIME = "application/x-sqlite3";
@@ -121,9 +121,9 @@ export class GoogleDriveProvider implements CloudBackupProvider {
     timer.unref();
     server.on("request", (req: IncomingMessage, res: ServerResponse) => {
       const url = new URL(req.url ?? "/", redirectUri);
-      if (url.pathname !== "/oauth2callback" || done) { page(res, 404, "This page is not part of a ForkFlow sign-in."); return; }
+      if (url.pathname !== "/oauth2callback" || done) { page(res, 404, "This page is not part of a MasalaPOS sign-in."); return; }
       // A mismatched state is a stale or forged link: refuse it but keep waiting for the real redirect.
-      if (url.searchParams.get("state") !== state) { page(res, 400, "This sign-in link is out of date. Start again from ForkFlow Settings."); return; }
+      if (url.searchParams.get("state") !== state) { page(res, 400, "This sign-in link is out of date. Start again from MasalaPOS Settings."); return; }
       done = true;
       const error = url.searchParams.get("error");
       const code = url.searchParams.get("code");
@@ -134,7 +134,7 @@ export class GoogleDriveProvider implements CloudBackupProvider {
         return;
       }
       this.completeSignIn(code, verifier, redirectUri).then(
-        (account) => finish(200, `Google Drive (${account.email}) is now connected to ForkFlow. You can close this tab.`),
+        (account) => finish(200, `Google Drive (${account.email}) is now connected to MasalaPOS. You can close this tab.`),
         (failure: unknown) => {
           this.signInMessage = failure instanceof DriveError || failure instanceof Error ? failure.message : "Google sign-in failed. Try again.";
           finish(400, this.signInMessage);
@@ -160,15 +160,15 @@ export class GoogleDriveProvider implements CloudBackupProvider {
     const revoke = () => { void this.fetch(REVOKE_URL, { method: "POST", body: new URLSearchParams({ token: token.refresh_token ?? token.access_token! }), signal: AbortSignal.timeout(10_000) }).catch(() => {}); };
     if (!(token.scope ?? "").split(" ").includes(DRIVE_SCOPE)) {
       revoke();
-      throw new Error("ForkFlow needs permission to save its backups in your Google Drive. Connect again and allow access when Google asks.");
+      throw new Error("MasalaPOS needs permission to save its backups in your Google Drive. Connect again and allow access when Google asks.");
     }
-    if (!token.refresh_token) { revoke(); throw new Error("Google did not allow ForkFlow to stay connected. Try connecting again."); }
+    if (!token.refresh_token) { revoke(); throw new Error("Google did not allow MasalaPOS to stay connected. Try connecting again."); }
     const info = await this.fetch(USERINFO_URL, { headers: { authorization: `Bearer ${token.access_token}` }, signal: AbortSignal.timeout(30_000) });
     const user = await info.json().catch(() => ({})) as { sub?: string; email?: string };
     if (!info.ok || !user.sub) { revoke(); throw new Error("Could not read the Google account. Try again."); }
     if (this.state.account && this.state.account.id !== user.sub) {
       revoke();
-      throw new Error(`Backups on this PC are linked to ${this.state.account.email}. Disconnect Google Drive in ForkFlow before using a different account.`);
+      throw new Error(`Backups on this PC are linked to ${this.state.account.email}. Disconnect Google Drive in MasalaPOS before using a different account.`);
     }
     const account = { id: user.sub, email: user.email ?? user.sub };
     this.state = { ...this.state, account, refreshToken: this.seal(token.refresh_token), reconnect: false };
@@ -194,7 +194,7 @@ export class GoogleDriveProvider implements CloudBackupProvider {
     const size = statSync(path).size;
     const md5 = await hashFile(path, "md5", signal);
     // A lost success response leaves a complete file behind: reuse it instead of uploading twice.
-    const existing = await this.listFiles(`trashed = false and appProperties has { key='forkflowKey' and value=${literal(idempotencyKey)} }`, signal);
+    const existing = await this.listFiles(`trashed = false and appProperties has { key='masalaposKey' and value=${literal(idempotencyKey)} }`, signal);
     for (const file of existing) {
       if (Number(file.size) === size && file.md5Checksum === md5 && file.appProperties?.["sha256"] === sha256) return { remoteId: file.id };
       await this.trash(file.id, signal);
@@ -204,8 +204,8 @@ export class GoogleDriveProvider implements CloudBackupProvider {
       method: "POST", signal,
       headers: { "content-type": "application/json; charset=UTF-8", "x-upload-content-type": BACKUP_MIME, "x-upload-content-length": String(size) },
       body: JSON.stringify({ name, parents: [parent], mimeType: BACKUP_MIME, appProperties: {
-        forkflowRole: "backup", forkflowInstallation: this.state.installationId, forkflowKey: idempotencyKey, sha256,
-        forkflowRestaurant: truncateBytes(this.options.restaurantName(), 100),
+        masalaposRole: "backup", masalaposInstallation: this.state.installationId, masalaposKey: idempotencyKey, sha256,
+        masalaposRestaurant: truncateBytes(this.options.restaurantName(), 100),
       } }),
     });
     const session = start.headers.get("location");
@@ -243,25 +243,25 @@ export class GoogleDriveProvider implements CloudBackupProvider {
   async prune(input: { account: CloudBackupAccount; retentionDays: number; signal: AbortSignal }): Promise<void> {
     this.requireAccount(input.account);
     // Only this installation's snapshots: never another PC's backups or any other file in the account.
-    const files = await this.listFiles(`trashed = false and appProperties has { key='forkflowInstallation' and value=${literal(this.state.installationId)} }`, input.signal);
+    const files = await this.listFiles(`trashed = false and appProperties has { key='masalaposInstallation' and value=${literal(this.state.installationId)} }`, input.signal);
     // Trash rather than delete: Drive keeps trashed files for 30 days.
     for (const file of expiredBackups(files, input.retentionDays, this.now())) await this.trash(file.id, input.signal);
   }
 
-  /** Every ForkFlow backup in the account, including those uploaded by a previous PC. */
+  /** Every MasalaPOS backup in the account, including those uploaded by a previous PC. */
   async list(signal: AbortSignal): Promise<CloudBackupFile[]> {
-    const files = await this.listFiles("trashed = false and appProperties has { key='forkflowRole' and value='backup' }", signal, 500);
+    const files = await this.listFiles("trashed = false and appProperties has { key='masalaposRole' and value='backup' }", signal, 500);
     return files.flatMap((file) => {
       const info = parseBackupName(file.name);
       return info ? [{ id: file.id, name: file.name, ...info, bytes: Number(file.size ?? 0),
-        restaurantName: file.appProperties?.["forkflowRestaurant"] || null, thisPc: file.appProperties?.["forkflowInstallation"] === this.state.installationId }] : [];
+        restaurantName: file.appProperties?.["masalaposRestaurant"] || null, thisPc: file.appProperties?.["masalaposInstallation"] === this.state.installationId }] : [];
     }).sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  /** Download a ForkFlow backup into `target`, checking Drive's MD5 and the SHA-256 recorded at upload. */
+  /** Download a MasalaPOS backup into `target`, checking Drive's MD5 and the SHA-256 recorded at upload. */
   async download(id: string, target: string, signal: AbortSignal): Promise<{ name: string }> {
     const meta = await this.json<DriveFile>(`${DRIVE}/${encodeURIComponent(id)}?fields=id,name,size,md5Checksum,trashed,appProperties`, { signal });
-    if (meta.trashed || meta.appProperties?.["forkflowRole"] !== "backup" || !parseBackupName(meta.name)) throw new DriveError(404, "That Google Drive backup was not found");
+    if (meta.trashed || meta.appProperties?.["masalaposRole"] !== "backup" || !parseBackupName(meta.name)) throw new DriveError(404, "That Google Drive backup was not found");
     const res = await this.authorized(`${DRIVE}/${encodeURIComponent(id)}?alt=media`, { signal });
     if (!res.ok || !res.body) throw new DriveError(res.status, "Google Drive download failed");
     const md5 = createHash("md5"), sha256 = createHash("sha256");
@@ -274,7 +274,7 @@ export class GoogleDriveProvider implements CloudBackupProvider {
     return { name: meta.name };
   }
 
-  /** The shared "ForkFlow Backups" folder, created once per account and renamed when the preference changes. */
+  /** The shared "MasalaPOS Backups" folder, created once per account and renamed when the preference changes. */
   private async folder(name: string, signal: AbortSignal): Promise<string> {
     if (this.state.folderId) {
       const res = await this.authorized(`${DRIVE}/${encodeURIComponent(this.state.folderId)}?fields=id,name,trashed`, { signal });
@@ -283,9 +283,9 @@ export class GoogleDriveProvider implements CloudBackupProvider {
         if (!folder.trashed) { await this.rename(folder, name, signal); return folder.id; }
       } else if (res.status !== 404) throw new DriveError(res.status, "Google Drive folder check failed");
     }
-    const found = (await this.listFiles(`mimeType = '${FOLDER_MIME}' and trashed = false and appProperties has { key='forkflowRole' and value='backup-folder' }`, signal, 1))[0];
+    const found = (await this.listFiles(`mimeType = '${FOLDER_MIME}' and trashed = false and appProperties has { key='masalaposRole' and value='backup-folder' }`, signal, 1))[0];
     const folder = found ?? await this.json<DriveFile>(`${DRIVE}?fields=id,name`, { method: "POST", signal, headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, mimeType: FOLDER_MIME, appProperties: { forkflowRole: "backup-folder" } }) });
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME, appProperties: { masalaposRole: "backup-folder" } }) });
     this.state = { ...this.state, folderId: folder.id, folderName: found ? this.state.folderName : name };
     this.save();
     await this.rename(folder, name, signal);
@@ -376,5 +376,5 @@ async function hashFile(path: string, algorithm: "md5" | "sha256", signal: Abort
 function page(res: ServerResponse, status: number, text: string) {
   const escaped = text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'" });
-  res.end(`<!doctype html><meta charset="utf-8"><title>ForkFlow</title><body style="font:16px system-ui;margin:15vh auto;max-width:32em;padding:0 1em;color:#1f2328"><h1 style="font-size:20px">ForkFlow</h1><p>${escaped}</p></body>`);
+  res.end(`<!doctype html><meta charset="utf-8"><title>MasalaPOS</title><body style="font:16px system-ui;margin:15vh auto;max-width:32em;padding:0 1em;color:#1f2328"><h1 style="font-size:20px">MasalaPOS</h1><p>${escaped}</p></body>`);
 }

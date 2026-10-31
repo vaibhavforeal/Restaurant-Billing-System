@@ -5,7 +5,7 @@ A manual end-to-end run of the licensing service in Razorpay **test mode**. It n
 > [!WARNING]
 > The test Worker signs with its own **test** key pair (`C:\secure\license-test-private.pem`), never the production key. Anyone can pay the test Worker with Razorpay's public test card, so a test Worker holding the production key would hand out licences that production counters accept. The README's "What you need" and step 4 show how to set this up.
 
-Use a disposable counter: a test build that embeds the **test** public key (`FORKFLOW_LICENSE_PUBLIC_KEY` from `C:\secure\license-test-public.pem`) and the test Worker's URL (`FORKFLOW_LICENSE_SERVICE_URL`), run with a fresh data folder so it is a new installation. Never give a test build to a restaurant. Keep `npx wrangler tail --env test` open in a terminal for the whole run.
+Use a disposable counter: a test build that embeds the **test** public key (`MASALAPOS_LICENSE_PUBLIC_KEY` from `C:\secure\license-test-public.pem`) and the test Worker's URL (`MASALAPOS_LICENSE_SERVICE_URL`), run with a fresh data folder so it is a new installation. Never give a test build to a restaurant. Keep `npx wrangler tail --env test` open in a terminal for the whole run.
 
 Test-mode helpers (check Razorpay's current test-mode documentation if any of these has changed): test card `4111 1111 1111 1111` with any future expiry and any CVV, and the test UPI id `success@razorpay` (for a failing UPI payment use `failure@razorpay`).
 
@@ -14,7 +14,7 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 - [ ] The test Worker is deployed, its database migrated, the four secrets (with `LICENSE_SIGNING_KEY` from the test key pair) and the four plan-id variables set, and the Razorpay test-mode webhook points at `https://<test-worker>/webhooks/razorpay` for the five `subscription.*` events.
 - [ ] `POST https://<test-worker>/v1/activate` with an invalid body answers `400`, not `500`, and `wrangler tail` shows no `rate limiter unavailable` line. (The Worker fails open if the rate-limit binding errors, which is what local `wrangler dev` currently does, so a deployed Worker that logs this line is running without rate limiting. Fix the binding before going live.)
 - [ ] Migration `0002` (installation secret and checkout sessions) is applied to the test database before the Worker that needs it is deployed.
-- [ ] A request without the secret gets `401`: `POST https://<test-worker>/v1/activate` with a valid body but no `X-ForkFlow-Installation-Secret` header answers `401 {"error":"unauthorized"}`, and so does `POST https://<test-worker>/v1/subscribe-sessions`.
+- [ ] A request without the secret gets `401`: `POST https://<test-worker>/v1/activate` with a valid body but no `X-MasalaPOS-Installation-Secret` header answers `401 {"error":"unauthorized"}`, and so does `POST https://<test-worker>/v1/subscribe-sessions`.
 - [ ] The counter starts, you complete setup, and you open **Settings > Plan and devices** as the admin.
 
 ## 1. A fresh install gets a trial
@@ -28,13 +28,13 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 
 - [ ] Press **Subscribe**: it reads "Opening payment page…" while it works, then a new tab opens at `https://<test-worker>/subscribe?session=<43-character token>` (there is no installation id in the address), showing plan, period and email. If the browser blocks the new tab, Settings shows an **Open payment page** link instead.
 - [ ] Choose Basic, monthly, enter an email and continue to Razorpay Checkout. Pay with the test card or `success@razorpay`.
-- [ ] The success screen says "Payment received. Return to ForkFlow and press Check for renewal."
+- [ ] The success screen says "Payment received. Return to MasalaPOS and press Check for renewal."
 - [ ] In the Razorpay dashboard the subscription is `active` and the webhook shows a delivered `subscription.charged` with a `200` response.
 - [ ] In `wrangler tail` there is no error (the Worker only logs problems). In Razorpay's webhook delivery view for the `subscription.charged` event, the response body is `{"outcome":"issued"}`.
 
 ## 3. Check for renewal installs revision 2
 
-- [ ] Back in ForkFlow press **Check for renewal**: "A new licence was installed."
+- [ ] Back in MasalaPOS press **Check for renewal**: "A new licence was installed."
 - [ ] The plan now reads **Basic**, the trial line is gone, **Manage plan** replaces **Subscribe**, the renewal date matches the subscription's next charge date in Razorpay, and the licence revision is 2.
 - [ ] History shows the install by "Automatic renewal". Other open browsers update without a reload.
 - [ ] Billing, the kitchen screen and a second registered device all keep working throughout.
@@ -42,10 +42,10 @@ Test-mode helpers (check Razorpay's current test-mode documentation if any of th
 ## 4. Checkout needs a live session from an admin
 
 - [ ] Open `https://<test-worker>/subscribe` with no session, and again with `?session=<a random 43-character string>`. Each answers `404` with the expired copy (below) and no form. An installation id in the address is ignored.
-- [ ] An expired payment link shows the expired copy. Press **Subscribe** (or **Manage plan**) and leave the new tab untouched for 30 minutes (or delete the row from `subscribe_sessions` in D1 to skip the wait), then fill in the form and continue. The form disappears and the page says "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again." Pressing the button again opens a fresh link that works.
+- [ ] An expired payment link shows the expired copy. Press **Subscribe** (or **Manage plan**) and leave the new tab untouched for 30 minutes (or delete the row from `subscribe_sessions` in D1 to skip the wait), then fill in the form and continue. The form disappears and the page says "This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again." Pressing the button again opens a fresh link that works.
 - [ ] Sign in as a cashier or waiter: **Subscribe** and **Manage plan** are not available, and `POST /api/license/subscribe-session` answers `403`.
-- [ ] From the ForkFlow desktop app, press **Subscribe**: the payment page opens in the system browser in one click.
-- [ ] Optional: with a second disposable counter, copy the first counter's installation id into its `installation.json` (keep the second counter's own secret) and press **Check for renewal**. It reports "The licensing service doesn't recognise this installation. Contact ForkFlow support." and the first counter's licence is unchanged.
+- [ ] From the MasalaPOS desktop app, press **Subscribe**: the payment page opens in the system browser in one click.
+- [ ] Optional: with a second disposable counter, copy the first counter's installation id into its `installation.json` (keep the second counter's own secret) and press **Check for renewal**. It reports "The licensing service doesn't recognise this installation. Contact MasalaPOS support." and the first counter's licence is unchanged.
 
 ## 5. A plan change cancels the old subscription
 

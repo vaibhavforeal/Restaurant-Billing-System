@@ -1,5 +1,5 @@
-appId: in.forkflow.pos
-productName: ForkFlow
+appId: in.masalapos.pos
+productName: MasalaPOS
 directories:
   app: build/desktop/commercial
   output: dist/commercial
@@ -17,7 +17,7 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/desktop/icon.ico
-  artifactName: "ForkFlow-Setup-${version}.${ext}"
+  artifactName: "MasalaPOS-Setup-${version}.${ext}"
 nsis:
   oneClick: false
   perMachine: true

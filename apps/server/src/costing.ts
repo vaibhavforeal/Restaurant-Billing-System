@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { UnitCostSet, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@forkflow/domain";
+import { UnitCostSet, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@masalapos/domain";
 import { readGstSettings } from "./gst-settings.js";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";

@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import java.io.ByteArrayInputStream
 import java.security.GeneralSecurityException

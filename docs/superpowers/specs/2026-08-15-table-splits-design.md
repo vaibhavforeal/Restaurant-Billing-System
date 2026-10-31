@@ -88,7 +88,7 @@ cancelled), the next seating starts at `A` again.
   ≠ `'A'`; plain `T1` for split A; `Parcel` unchanged. (Split A keeps today's
   look; only extra groups grow a suffix — deterministic, no re-rendering of
   already-displayed tickets when siblings appear.)
-- **Draft carts:** already keyed `forkflow.draft.{orderId}` — splits get
+- **Draft carts:** already keyed `masalapos.draft.{orderId}` — splits get
   independent drafts with zero changes.
 
 ## Testing

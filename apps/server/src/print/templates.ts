@@ -1,6 +1,6 @@
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
-import type { PrintProfileInput } from "@forkflow/domain";
+import type { PrintProfileInput } from "@masalapos/domain";
 
 export interface KotSlipCtx {
   kotNo: number;

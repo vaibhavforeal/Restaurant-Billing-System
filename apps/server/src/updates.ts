@@ -1,4 +1,4 @@
-import { UPDATE_CHANNELS, isToServer, type ToDesktop, type UpdateChannel, type UpdateStatus } from "@forkflow/domain";
+import { UPDATE_CHANNELS, isToServer, type ToDesktop, type UpdateChannel, type UpdateStatus } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
@@ -12,7 +12,7 @@ export interface UpdateBridge {
 const UpdateSettings = z.object({ channel: z.enum(UPDATE_CHANNELS) });
 
 /**
- * Settings → Updates. The shell downloads in the background; installing restarts ForkFlow on every counter, so the admin
+ * Settings → Updates. The shell downloads in the background; installing restarts MasalaPOS on every counter, so the admin
  * starts it, and only while no order is open or waiting for payment.
  */
 export function registerUpdates(app: FastifyInstance, bridge: UpdateBridge | undefined, currentVersion: string): void {
@@ -21,7 +21,7 @@ export function registerUpdates(app: FastifyInstance, bridge: UpdateBridge | und
   let status: UpdateStatus = bridge
     ? { state: "idle", currentVersion, availableVersion: null, percent: null, checkedAt: null, message: null }
     : { state: "unsupported", currentVersion, availableVersion: null, percent: null, checkedAt: null,
-      message: "This server is running without the ForkFlow desktop app, which installs updates." };
+      message: "This server is running without the MasalaPOS desktop app, which installs updates." };
   const channel = () => (db.prepare("SELECT update_channel AS c FROM settings WHERE id = 1").get() as { c: UpdateChannel }).c;
   const busyOrders = () => (db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('open', 'billed')").get() as { n: number }).n;
   const state = () => ({ channel: channel(), status, openOrders: busyOrders() });
@@ -45,7 +45,7 @@ export function registerUpdates(app: FastifyInstance, bridge: UpdateBridge | und
   app.post("/api/system/updates/install", { preHandler: manage }, async (_req, reply) => {
     if (!bridge || status.state !== "ready") throw httpError(409, "No update is ready to install");
     const open = busyOrders();
-    if (open) throw httpError(409, `Finish service first: ${open} order${open > 1 ? "s are" : " is"} open or waiting for payment. The update installs when ForkFlow is next quit.`, "orders_open");
+    if (open) throw httpError(409, `Finish service first: ${open} order${open > 1 ? "s are" : " is"} open or waiting for payment. The update installs when MasalaPOS is next quit.`, "orders_open");
     bridge.send({ type: "update-install" });
     return reply.status(202).send(state());
   });

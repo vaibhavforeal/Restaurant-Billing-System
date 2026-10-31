@@ -1,4 +1,4 @@
-import type { Plan } from "@forkflow/domain/licensing";
+import type { Plan } from "@masalapos/domain/licensing";
 import type { Period } from "./env.js";
 import { issueLicense, type Deps } from "./issue.js";
 import { verifyWebhookSignature, type RazorpayApi } from "./razorpay.js";

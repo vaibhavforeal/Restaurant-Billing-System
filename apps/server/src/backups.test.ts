@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIGRATIONS, migrate, openDb, type Database } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { Backups, atomicJson, verifyBackup } from "./backups.js";
 import { restoreDatabase } from "./recovery.js";
 import { prepareDatabase } from "./startup.js";
@@ -10,8 +10,8 @@ import { lockDataDirectory } from "./data-lock.js";
 
 const folders: string[] = [], databases: Database[] = [];
 function fixture(version = MIGRATIONS.length) {
-  const folder = mkdtempSync(join(tmpdir(), "forkflow-backup-test-")); folders.push(folder);
-  const db = openDb(join(folder, "forkflow.db")); databases.push(db);
+  const folder = mkdtempSync(join(tmpdir(), "masalapos-backup-test-")); folders.push(folder);
+  const db = openDb(join(folder, "masalapos.db")); databases.push(db);
   migrate(db, MIGRATIONS.slice(0, version));
   return { folder, db };
 }
@@ -26,7 +26,7 @@ it("captures committed WAL data in a standalone verified snapshot", () => {
   expect(verifyBackup(path)).toBe(MIGRATIONS.length);
   const copy = openDb(path); databases.push(copy);
   expect(copy.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Snapshot Cafe" });
-  expect(backups.download("../forkflow.db")).toBeNull();
+  expect(backups.download("../masalapos.db")).toBeNull();
 });
 it("takes one daily snapshot per local day and prunes only managed expired snapshots", () => {
   const { folder, db } = fixture(); let now = Date.now();
@@ -76,26 +76,26 @@ it("restores a snapshot, archives current data and invalidates sessions and brow
   db.prepare("UPDATE settings SET restaurant_name = 'Before'").run();
   const backup = backups.create("manual"); db.prepare("UPDATE settings SET restaurant_name = 'After'").run(); db.close();
   const archive = restoreDatabase(folder, join(backups.folder, backup.name));
-  expect(existsSync(join(archive!, "forkflow.db"))).toBe(true);
-  const restored = openDb(join(folder, "forkflow.db")); databases.push(restored);
+  expect(existsSync(join(archive!, "masalapos.db"))).toBe(true);
+  const restored = openDb(join(folder, "masalapos.db")); databases.push(restored);
   expect(restored.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Before" });
   expect(JSON.parse(readFileSync(join(folder, "recovery-generation.json"), "utf8")).generation).toBeTruthy();
   expect(existsSync(join(folder, "restore-pending.json"))).toBe(false);
 });
 it("rejects corrupt or unrelated input before touching live data", () => {
-  const { folder, db } = fixture(); db.close(); const before = readFileSync(join(folder, "forkflow.db"));
+  const { folder, db } = fixture(); db.close(); const before = readFileSync(join(folder, "masalapos.db"));
   const invalid = join(folder, "invalid.db"); writeFileSync(invalid, "bad");
   expect(() => restoreDatabase(folder, invalid)).toThrow();
-  expect(readFileSync(join(folder, "forkflow.db"))).toEqual(before);
+  expect(readFileSync(join(folder, "masalapos.db"))).toEqual(before);
 });
 it("resumes interrupted archive and install phases without losing the old database", () => {
   const { folder, db } = fixture(); const backup = new Backups(db, folder).create("manual"); db.close();
   copyFileSync(join(folder, "backups", backup.name), join(folder, "restore-staged.db"));
   const archive = join(folder, "recovery", "test"); mkdirSync(archive, { recursive: true });
-  renameSync(join(folder, "forkflow.db"), join(archive, "forkflow.db"));
+  renameSync(join(folder, "masalapos.db"), join(archive, "masalapos.db"));
   atomicJson(join(folder, "restore-pending.json"), { archive, phase: "archive" });
   expect(restoreDatabase(folder)).toBe(archive);
-  expect(verifyBackup(join(folder, "forkflow.db"))).toBe(MIGRATIONS.length);
+  expect(verifyBackup(join(folder, "masalapos.db"))).toBe(MIGRATIONS.length);
   expect(restoreDatabase(folder)).toBeNull();
 });
 it("rejects a second writer lock and allows restart after release", async () => {

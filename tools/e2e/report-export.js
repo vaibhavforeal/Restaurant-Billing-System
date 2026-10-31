@@ -12,8 +12,8 @@
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click;
   const api = async (path, method = 'GET', body) => {
     const res = await originalFetch('/api' + path, { method, headers: {
-      authorization: 'Bearer ' + localStorage.getItem('forkflow.token'),
-      'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json',
+      authorization: 'Bearer ' + localStorage.getItem('masalapos.token'),
+      'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json',
     }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };
@@ -48,7 +48,7 @@
     const report = (await api('/reports/day-end?date=' + date)).report;
     button('Export CSV').click(); await wait(() => downloads.length === 1);
     const text = await downloads[0].text;
-    check(downloads[0].filename === `forkflow-day-end-${date}.csv`, 'Filename uses the selected business date');
+    check(downloads[0].filename === `masalapos-day-end-${date}.csv`, 'Filename uses the selected business date');
     const bytes = new Uint8Array(await downloads[0].bytes);
     check(bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191 && text.includes(report.timezone), 'CSV download includes UTF-8 BOM and server timezone');
     check(text.includes(`"Sales including GST and rounding","","${(report.sales.totalPaise / 100).toFixed(2)}","INR"`), 'Export sales agree with the saved report');
@@ -68,7 +68,7 @@
     release(); await new Promise((resolve) => setTimeout(resolve, 150));
     button('Export CSV').click(); await wait(() => downloads.length === 2);
     const empty = await downloads[1].text;
-    check(downloads[1].filename === 'forkflow-day-end-2000-01-01.csv' && empty.includes('"Number of bills","","0","count"'), 'Empty-date export works and ignores late responses from an older request');
+    check(downloads[1].filename === 'masalapos-day-end-2000-01-01.csv' && empty.includes('"Number of bills","","0","count"'), 'Empty-date export works and ignores late responses from an older request');
 
     window.fetch = async (...args) => String(args[0]).includes('/api/reports/day-end')
       ? new Response(JSON.stringify({ error: 'Report temporarily unavailable' }), { status: 503, headers: { 'content-type': 'application/json' } })

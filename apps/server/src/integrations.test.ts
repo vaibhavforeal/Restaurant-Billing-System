@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
 import { auth, commercialApp, createUser, enableIntegration, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
@@ -53,7 +53,7 @@ describe("kds licensing", () => {
     const c = await commercialApp("basic"); app = c.app;
     const on = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: true } });
     expect(on.statusCode).toBe(403);
-    expect(on.json().error).toBe("Kitchen Display (KDS) is not included for this restaurant. Contact ForkFlow to add it.");
+    expect(on.json().error).toBe("Kitchen Display (KDS) is not included for this restaurant. Contact MasalaPOS to add it.");
     enableIntegration(app, "kds"); // a plan downgrade can leave the stored switch on
     const off = await app.inject({ method: "PATCH", url: "/api/integrations/kds", headers: c.headers, payload: { enabled: false } });
     expect(off.statusCode, off.body).toBe(200);

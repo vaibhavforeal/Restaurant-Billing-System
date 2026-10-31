@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { OperationalReport } from "@forkflow/domain";
+import type { OperationalReport } from "@masalapos/domain";
 import { operationalCsv, operationalCell } from "./operational-report";
 
 it("exports the loaded report with rupee precision, safe text, negative numeric quantities and metadata", () => {

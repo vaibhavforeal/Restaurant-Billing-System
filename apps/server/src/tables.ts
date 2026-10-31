@@ -1,4 +1,4 @@
-import { TableCreate, TableUpdate, uuidv7 } from "@forkflow/domain";
+import { TableCreate, TableUpdate, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { localMinute } from "./reservation-rules.js";

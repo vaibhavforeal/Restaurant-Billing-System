@@ -20,8 +20,8 @@ function evaluate(expression) {
 const electron = "process.getBuiltinModule('module').createRequire(process.execPath)('electron')";
 const checks = [];
 try {
-  const context = await evaluate("({path: process.execPath, data: process.env.FORKFLOW_DATA_DIR, autostart: process.env.FORKFLOW_DISABLE_AUTOSTART})");
-  assert.match(context.path.replaceAll("\\", "/"), /win-unpacked\/ForkFlow\.exe$/i);
+  const context = await evaluate("({path: process.execPath, data: process.env.MASALAPOS_DATA_DIR, autostart: process.env.MASALAPOS_DISABLE_AUTOSTART})");
+  assert.match(context.path.replaceAll("\\", "/"), /win-unpacked\/MasalaPOS\.exe$/i);
   assert.match(context.data.replaceAll("\\", "/"), /\.e2e-scratch\//);
   assert.equal(context.autostart, "1");
   const health = await (await fetch(base + "/api/health")).json(); assert.equal(health.ok, true);
@@ -34,7 +34,7 @@ try {
   const backup = await fetch(base + "/api/system/backups", { method: "POST", headers }); assert.ok(backup.ok);
   const snapshot = await backup.json(); assert.ok(snapshot.name); checks.push("Packaged server creates a verified backup");
   const metrics = await evaluate(`${electron}.app.getAppMetrics().map(m => ({pid:m.pid,type:m.type,name:m.name,serviceName:m.serviceName}))`);
-  const child = metrics.find((m) => m.name === "ForkFlow POS server" || m.serviceName === "ForkFlow POS server");
+  const child = metrics.find((m) => m.name === "MasalaPOS POS server" || m.serviceName === "MasalaPOS POS server");
   assert.ok(child, JSON.stringify(metrics));
   process.kill(child.pid);
   let restarted;

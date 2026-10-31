@@ -7,11 +7,11 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: [
-      // Subpath exports (e.g. "@forkflow/domain/gst") resolve to their own source file, not under the index.
-      { find: /^@forkflow\/domain\/(.+)$/, replacement: fileURLToPath(new URL("./packages/domain/src/$1.ts", import.meta.url)) },
-      { find: "@forkflow/domain", replacement: pkg("domain") },
-      { find: "@forkflow/core", replacement: pkg("core") },
-      { find: "@forkflow/license-issuer", replacement: pkg("license-issuer") },
+      // Subpath exports (e.g. "@masalapos/domain/gst") resolve to their own source file, not under the index.
+      { find: /^@masalapos\/domain\/(.+)$/, replacement: fileURLToPath(new URL("./packages/domain/src/$1.ts", import.meta.url)) },
+      { find: "@masalapos/domain", replacement: pkg("domain") },
+      { find: "@masalapos/core", replacement: pkg("core") },
+      { find: "@masalapos/license-issuer", replacement: pkg("license-issuer") },
     ],
   },
   test: {

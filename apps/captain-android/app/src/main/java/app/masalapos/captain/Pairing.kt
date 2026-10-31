@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import java.net.URI
 import java.net.URISyntaxException
@@ -22,7 +22,7 @@ object Pairing {
     fun parse(input: String): List<PairingRequest> {
         val text = input.trim()
         if (text.isEmpty()) throw PairingException("Enter the POS address, for example 192.168.1.20")
-        if (text.startsWith("forkflow-captain:", ignoreCase = true)) {
+        if (text.startsWith("masalapos-captain:", ignoreCase = true)) {
             val query = query(uri(text).rawQuery.orEmpty())
             val origin = origin(query["server"] ?: throw PairingException("This pairing code has no POS address"))
             val fingerprint = query["ca"]?.let(::fingerprint)

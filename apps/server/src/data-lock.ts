@@ -11,7 +11,7 @@ export async function lockDataDirectory(folder: string): Promise<() => Promise<v
   const server = createServer((socket) => socket.end());
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(`\\\\.\\pipe\\forkflow-${hash}`, () => { server.off("error", reject); resolve(); });
+    server.listen(`\\\\.\\pipe\\masalapos-${hash}`, () => { server.off("error", reject); resolve(); });
   });
   return () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }

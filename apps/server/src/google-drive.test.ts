@@ -87,7 +87,7 @@ afterEach(async () => {
 });
 
 function setup(google = fakeGoogle(), key: Buffer = randomBytes(32), dataDir?: string) {
-  const folder = dataDir ?? mkdtempSync(join(tmpdir(), "forkflow-drive-test-"));
+  const folder = dataDir ?? mkdtempSync(join(tmpdir(), "masalapos-drive-test-"));
   if (!dataDir) folders.push(folder);
   let now = Date.UTC(2026, 9, 31);
   const provider = new GoogleDriveProvider({ clientId: "client.apps.googleusercontent.com", clientSecret: "desktop-secret", dataDir: folder, secretKey: key,
@@ -109,7 +109,7 @@ async function signIn(provider: GoogleDriveProvider, params: Record<string, stri
   return { res, html: await res.text(), redirect };
 }
 const account = { id: "google-user-1", email: "owner@example.com" };
-const snapshotName = (kind: string, at: number) => `forkflow-${kind}-${at}-${randomUUID()}.db`;
+const snapshotName = (kind: string, at: number) => `masalapos-${kind}-${at}-${randomUUID()}.db`;
 function snapshot(folder: string, name: string, bytes = 4096) {
   const path = join(folder, name);
   writeFileSync(path, randomBytes(bytes));
@@ -193,17 +193,17 @@ describe("Drive backups", () => {
     const { provider, folder, google } = setup();
     await signIn(provider);
     const file = snapshot(folder, snapshotName("daily", Date.UTC(2026, 9, 30)), 9 * 1024 * 1024 + 123);
-    const { remoteId } = await provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "ForkFlow Backups", signal: signal() });
+    const { remoteId } = await provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "MasalaPOS Backups", signal: signal() });
     const stored = google.files.get(remoteId)!;
     expect(stored.data.equals(readFileSync(file.path))).toBe(true);
-    expect(stored.appProperties).toMatchObject({ forkflowRole: "backup", forkflowKey: file.name, sha256: file.sha256, forkflowRestaurant: "Spice Garden" });
+    expect(stored.appProperties).toMatchObject({ masalaposRole: "backup", masalaposKey: file.name, sha256: file.sha256, masalaposRestaurant: "Spice Garden" });
     const folders = [...google.files.values()].filter((f) => f.mimeType === "application/vnd.google-apps.folder");
     expect(folders).toHaveLength(1);
     expect(stored.parents).toEqual([folders[0]!.id]);
     expect(google.calls.filter((call) => call.startsWith("PUT https://upload.fake"))).toHaveLength(2);
 
     // A retried upload after a lost response reuses the confirmed file instead of creating a duplicate.
-    expect((await provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "ForkFlow Backups", signal: signal() })).remoteId).toBe(remoteId);
+    expect((await provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "MasalaPOS Backups", signal: signal() })).remoteId).toBe(remoteId);
     // A renamed preference renames the same folder.
     const second = snapshot(folder, snapshotName("manual", Date.UTC(2026, 9, 31)));
     await provider.upload({ ...second, idempotencyKey: second.name, account, folderName: "Spice Garden Backups", signal: signal() });
@@ -215,8 +215,8 @@ describe("Drive backups", () => {
     await signIn(provider);
     const file = snapshot(folder, snapshotName("manual", Date.UTC(2026, 9, 30)));
     google.corruptNextUpload();
-    await expect(provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "ForkFlow Backups", signal: signal() })).rejects.toThrow(/did not match/);
-    expect([...google.files.values()].filter((f) => f.appProperties["forkflowRole"] === "backup" && !f.trashed)).toEqual([]);
+    await expect(provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "MasalaPOS Backups", signal: signal() })).rejects.toThrow(/did not match/);
+    expect([...google.files.values()].filter((f) => f.appProperties["masalaposRole"] === "backup" && !f.trashed)).toEqual([]);
   });
 
   it("prunes only this installation's expired backups, to the trash", async () => {
@@ -224,10 +224,10 @@ describe("Drive backups", () => {
     await signIn(provider);
     const installation = JSON.parse(readFileSync(join(folder, "google-drive.json"), "utf8")).installationId as string;
     const day = 86400000, now = Date.UTC(2026, 9, 31);
-    const recent = google.put(snapshotName("daily", now - day), { forkflowRole: "backup", forkflowInstallation: installation });
-    const old = google.put(snapshotName("daily", now - 60 * day), { forkflowRole: "backup", forkflowInstallation: installation });
-    const otherPc = google.put(snapshotName("daily", now - 90 * day), { forkflowRole: "backup", forkflowInstallation: randomUUID() });
-    const unrelated = google.put("tax-return.pdf", { forkflowInstallation: installation });
+    const recent = google.put(snapshotName("daily", now - day), { masalaposRole: "backup", masalaposInstallation: installation });
+    const old = google.put(snapshotName("daily", now - 60 * day), { masalaposRole: "backup", masalaposInstallation: installation });
+    const otherPc = google.put(snapshotName("daily", now - 90 * day), { masalaposRole: "backup", masalaposInstallation: randomUUID() });
+    const unrelated = google.put("tax-return.pdf", { masalaposInstallation: installation });
     await provider.prune({ account, retentionDays: 30, signal: signal() });
     expect([recent, old, otherPc, unrelated].map((f) => f.trashed)).toEqual([false, true, false, false]);
   });
@@ -236,9 +236,9 @@ describe("Drive backups", () => {
     const { provider, folder, google } = setup();
     await signIn(provider);
     const file = snapshot(folder, snapshotName("manual", Date.UTC(2026, 9, 31)));
-    const { remoteId } = await provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "ForkFlow Backups", signal: signal() });
-    google.put(snapshotName("daily", Date.UTC(2026, 9, 1)), { forkflowRole: "backup", forkflowInstallation: randomUUID(), forkflowRestaurant: "Old PC" });
-    google.put("notes.txt", { forkflowRole: "backup" });
+    const { remoteId } = await provider.upload({ ...file, idempotencyKey: file.name, account, folderName: "MasalaPOS Backups", signal: signal() });
+    google.put(snapshotName("daily", Date.UTC(2026, 9, 1)), { masalaposRole: "backup", masalaposInstallation: randomUUID(), masalaposRestaurant: "Old PC" });
+    google.put("notes.txt", { masalaposRole: "backup" });
     const list = await provider.list(signal());
     expect(list.map(({ restaurantName, thisPc, kind }) => ({ restaurantName, thisPc, kind }))).toEqual([
       { restaurantName: "Spice Garden", thisPc: true, kind: "manual" }, { restaurantName: "Old PC", thisPc: false, kind: "daily" }]);

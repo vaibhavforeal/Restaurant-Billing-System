@@ -1,11 +1,11 @@
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, nextSplitLabel } from "@forkflow/domain";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, nextSplitLabel } from "@masalapos/domain";
 import { z } from "zod";
 import { rowPrice, tablePriceTier, type PriceRow } from "./pricing.js";
 import { readGstSettings } from "./gst-settings.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
-import { effectiveGstRate, reverseStock } from "@forkflow/domain";
+import { effectiveGstRate, reverseStock } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { cancelSlip } from "./print/templates.js";
 import { readProfile } from "./print/profile.js";

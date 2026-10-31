@@ -5,13 +5,13 @@
 
 ## Goal
 
-Pivot ForkFlow away from the cloud-synced, AI-first PetPooja alternative to a **local-only desktop POS** with basic modules first (Products, Inventory, Billing, KOT/Tables), then design it, plan Milestone 1, and build it.
+Pivot MasalaPOS away from the cloud-synced, AI-first PetPooja alternative to a **local-only desktop POS** with basic modules first (Products, Inventory, Billing, KOT/Tables), then design it, plan Milestone 1, and build it.
 
 ## Current state
 
 - `main` is at `ae76602` (+ handoff commit); **39/39 vitest tests green, typecheck clean across all workspaces**, working tree clean. No feature branches left.
 - Remote: `origin` = https://github.com/vaibhavforeal/Restaurant-Billing-System.git, `main` pushed and tracking (added at end of session).
-- Working software: `npm run dev` (Fastify :4100 + Vite :5173 hot reload) and `npm run dev:desktop` (Electron window supervising the real server). First run creates `data/forkflow.db` and shows the setup screen.
+- Working software: `npm run dev` (Fastify :4100 + Vite :5173 hot reload) and `npm run dev:desktop` (Electron window supervising the real server). First run creates `data/masalapos.db` and shows the setup screen.
 - **Blocked on the human:** nobody has ever clicked through the UI in a real browser/Electron window (subagents verified via inject/curl/process checks only). Acceptance = `npm run dev:desktop`, then setup → logout → login.
 - Milestones 2–7 are unplanned by design (one plan per milestone, written when reached).
 
@@ -36,8 +36,8 @@ Pivot ForkFlow away from the cloud-synced, AI-first PetPooja alternative to a **
 | `packages/domain/src/id.ts` | uuidv7 (salvaged from retired sync package). |
 | `apps/server/src/server.ts` | `buildServer({db, logger?})`: error handler (ZodError→400, ≥500 logged + masked), empty-JSON-body-tolerant parser, health route. |
 | `apps/server/src/auth.ts` | needs-setup / setup (409 + in-transaction recheck) / login (PIN-only, per-IP throttle: 5 fails → 2s→60s backoff) / me / logout; `requireAuth` + `requirePermission()` decorators; 24h DB sessions. |
-| `apps/server/src/main.ts` | Entrypoint: FORKFLOW_DATA_DIR (default ./data), migrate, serve apps/ui/dist with SPA fallback, listen 0.0.0.0:4100. |
-| `apps/ui/src/api.ts` | fetch wrapper: token in localStorage `forkflow.token`, content-type only when body present, 401 clears session. |
+| `apps/server/src/main.ts` | Entrypoint: MASALAPOS_DATA_DIR (default ./data), migrate, serve apps/ui/dist with SPA fallback, listen 0.0.0.0:4100. |
+| `apps/ui/src/api.ts` | fetch wrapper: token in localStorage `masalapos.token`, content-type only when body present, 401 clears session. |
 | `apps/ui/src/screens/` | Setup (masked PIN), Login (touch PIN pad, auto-submit at 6 digits), Home (logout). `App.tsx` = needs-setup→setup/login/home state machine. |
 | `apps/desktop/src/main.ts` | Electron shell: spawns server via **system node + tsx** (deliberate — see decisions), health-polls, opens window, restarts child max 5 w/ backoff (reset on healthy), kills child on quit. |
 | Root `package.json` | Scripts: test / typecheck (root + ui chained) / dev / dev:server / dev:ui / dev:desktop. |

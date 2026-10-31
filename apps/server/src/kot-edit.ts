@@ -1,4 +1,4 @@
-import { SentItemEdit, returnPartialStock, uuidv7 } from "@forkflow/domain";
+import { SentItemEdit, returnPartialStock, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";

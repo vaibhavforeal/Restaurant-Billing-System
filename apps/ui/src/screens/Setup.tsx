@@ -18,7 +18,7 @@ export function Setup({ onDone }: { onDone: (user: User) => void }) {
     } catch { setError("Setup failed. Check the fields and use a 4–6 digit PIN."); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Set up ForkFlow</h2>
+  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Set up MasalaPOS</h2>
     <label>Restaurant name<input required placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} disabled={busy} /></label>
     <label>Your name<input required placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} disabled={busy} /></label>
     <label>Admin PIN<input required type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" pattern="[0-9]{4,6}" maxLength={6} onChange={(e) => setPin(e.target.value)} disabled={busy} /></label>

@@ -1,4 +1,4 @@
-import { MIGRATIONS, migrate, type Database } from "@forkflow/domain";
+import { MIGRATIONS, migrate, type Database } from "@masalapos/domain";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicJson, type Backups } from "./backups.js";

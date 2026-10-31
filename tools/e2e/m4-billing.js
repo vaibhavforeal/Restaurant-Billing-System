@@ -26,7 +26,7 @@
     await new Promise((resolve) => setTimeout(resolve, 60));
   };
   const api = async (path, method = 'GET', body) => {
-    const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const data = await r.json(); if (!r.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
   };
   const suffix = Date.now();

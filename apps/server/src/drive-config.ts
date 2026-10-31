@@ -3,21 +3,21 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GoogleDriveProvider } from "./google-drive.js";
 
-declare const __FORKFLOW_GOOGLE_CLIENT_ID__: string;
-declare const __FORKFLOW_GOOGLE_CLIENT_SECRET__: string;
-declare const __FORKFLOW_COMMERCIAL__: boolean;
+declare const __MASALAPOS_GOOGLE_CLIENT_ID__: string;
+declare const __MASALAPOS_GOOGLE_CLIENT_SECRET__: string;
+declare const __MASALAPOS_COMMERCIAL__: boolean;
 
 /**
  * Google Drive backup is available when the build carries a Google OAuth "Desktop app" client and the desktop shell
  * supplied its Windows-protected key. Without either, Settings shows Drive as not configured and local backups continue.
  */
 export function driveProvider(input: { dataDir: string; secretKey: string | undefined; restaurantName: () => string; warn: (message: string) => void }): GoogleDriveProvider | undefined {
-  const commercial = typeof __FORKFLOW_COMMERCIAL__ !== "undefined" && __FORKFLOW_COMMERCIAL__;
-  const built = typeof __FORKFLOW_GOOGLE_CLIENT_ID__ !== "undefined" && __FORKFLOW_GOOGLE_CLIENT_ID__
-    ? { clientId: __FORKFLOW_GOOGLE_CLIENT_ID__, clientSecret: typeof __FORKFLOW_GOOGLE_CLIENT_SECRET__ !== "undefined" ? __FORKFLOW_GOOGLE_CLIENT_SECRET__ : "" } : null;
+  const commercial = typeof __MASALAPOS_COMMERCIAL__ !== "undefined" && __MASALAPOS_COMMERCIAL__;
+  const built = typeof __MASALAPOS_GOOGLE_CLIENT_ID__ !== "undefined" && __MASALAPOS_GOOGLE_CLIENT_ID__
+    ? { clientId: __MASALAPOS_GOOGLE_CLIENT_ID__, clientSecret: typeof __MASALAPOS_GOOGLE_CLIENT_SECRET__ !== "undefined" ? __MASALAPOS_GOOGLE_CLIENT_SECRET__ : "" } : null;
   // Development only: the client file downloaded into the working folder (git-ignored), when no env vars are set.
-  const { clientId, clientSecret } = built ?? (process.env["FORKFLOW_GOOGLE_CLIENT_ID"]
-    ? { clientId: process.env["FORKFLOW_GOOGLE_CLIENT_ID"], clientSecret: process.env["FORKFLOW_GOOGLE_CLIENT_SECRET"] ?? "" }
+  const { clientId, clientSecret } = built ?? (process.env["MASALAPOS_GOOGLE_CLIENT_ID"]
+    ? { clientId: process.env["MASALAPOS_GOOGLE_CLIENT_ID"], clientSecret: process.env["MASALAPOS_GOOGLE_CLIENT_SECRET"] ?? "" }
     : commercial ? { clientId: "", clientSecret: "" } : developmentClientFile(input.warn));
   if (!clientId) return undefined;
   let key = input.secretKey ? Buffer.from(input.secretKey, "base64") : undefined;

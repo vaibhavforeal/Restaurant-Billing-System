@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot, planModules } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP } from "./test-helpers.js";
@@ -9,7 +9,7 @@ import { SETUP } from "./test-helpers.js";
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const apps: FastifyInstance[] = [];
-type Headers = { authorization: string; "x-forkflow-device": string };
+type Headers = { authorization: string; "x-masalapos-device": string };
 type Item = { id: string; productId: string; qty: number; pricePaise: number; status: string };
 type Order = { id: string; type: string; tableId: string | null; tableName: string | null; splitLabel: string | null; status: string; items: Item[] };
 type Preview = BillTotals & { receipt: ReceiptSnapshot; previewKey: string };
@@ -26,9 +26,9 @@ async function fixture(gstMode: GstMode = "included") {
   const fake = makeFakeSink();
   const app = buildServer({ db, sinkSend: fake.send, licensing: { publicKey, installationId } }); apps.push(app);
   const device = "a".repeat(64);
-  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
-  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const api = (method: "GET" | "POST" | "PATCH" | "PUT", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
@@ -89,7 +89,7 @@ async function fixture(gstMode: GstMode = "included") {
     expect((await api("POST", "/api/users", { name: role, role, pin })).statusCode).toBe(201);
     const loggedIn = await api("POST", "/api/login", { pin });
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
-    return { authorization: `Bearer ${loggedIn.json().token}`, "x-forkflow-device": device };
+    return { authorization: `Bearer ${loggedIn.json().token}`, "x-masalapos-device": device };
   }
   return { app, fake, api, headers, meal, drink, riceId, drinkStockId, stationId, balances, draft, punch, send, preview, issue, staff };
 }

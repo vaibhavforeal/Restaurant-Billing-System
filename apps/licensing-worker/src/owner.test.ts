@@ -1,8 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { verifyLicenseSignature } from "@forkflow/core";
-import { LicenseClaims } from "@forkflow/domain/licensing";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { verifyLicenseSignature } from "@masalapos/core";
+import { LicenseClaims } from "@masalapos/domain/licensing";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import type { Env } from "./env.js";
 import worker from "./index.js";
 import { issueLicense } from "./issue.js";
@@ -50,7 +50,7 @@ async function login(password = PASSWORD) {
 }
 async function activate(currentRevision = 0, held?: { licenseId: string; organizationId: string; outletId: string }) {
   const res = await send("POST", "/v1/activate", {
-    format: "forkflow-activation-request", version: 1, installationId, licenseId: held?.licenseId ?? null, organizationId: held?.organizationId ?? null,
+    format: "masalapos-activation-request", version: 1, installationId, licenseId: held?.licenseId ?? null, organizationId: held?.organizationId ?? null,
     outletId: held?.outletId ?? null, currentRevision, generatedAt: Date.now(), verificationKeyFingerprint: fingerprint,
   }, { [SECRET_HEADER]: TEST_SECRET });
   const license = (await res.json() as { license: string | null }).license;
@@ -157,8 +157,8 @@ describe("owner control panel", () => {
     } });
     try {
       const device = "f".repeat(64);
-      const setup = await counter.inject({ method: "POST", url: "/api/setup", payload: { restaurantName: "Spice Route", adminName: "Asha", pin: "1234" }, headers: { "x-forkflow-device": device } });
-      const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+      const setup = await counter.inject({ method: "POST", url: "/api/setup", payload: { restaurantName: "Spice Route", adminName: "Asha", pin: "1234" }, headers: { "x-masalapos-device": device } });
+      const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
       expect((await counter.licensing.fetchLatest()).outcome).toBe("installed");
       expect((await counter.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Counter" }, headers })).statusCode).toBe(200);
       const reservations = async () => (await counter.inject({ url: "/api/modules", headers })).json().modules.find((m: { id: string }) => m.id === "reservations");

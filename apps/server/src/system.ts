@@ -16,11 +16,11 @@ const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 export function fromMainPc(req: FastifyRequest): boolean {
   return LOOPBACK.has(req.socket.remoteAddress ?? "");
 }
-/** e.g. "ForkFlow backup - Spice Garden - 2026-10-31 1430.db": ASCII so every browser keeps the name. */
+/** e.g. "MasalaPOS backup - Spice Garden - 2026-10-31 1430.db": ASCII so every browser keeps the name. */
 export function exportFileName(restaurantName: string, at: number): string {
   const name = restaurantName.normalize("NFKD").replace(/[^A-Za-z0-9 &'.-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "Restaurant";
   const d = new Date(at), pad = (n: number) => String(n).padStart(2, "0");
-  return `ForkFlow backup - ${name} - ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}${pad(d.getMinutes())}.db`;
+  return `MasalaPOS backup - ${name} - ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}${pad(d.getMinutes())}.db`;
 }
 
 export function lanUrls(port: number): string[] {
@@ -30,15 +30,15 @@ export function lanUrls(port: number): string[] {
 }
 export function edgeShortcut(url: string): string {
   // The only caller passes a URL generated from the server's own IPv4 interfaces.
-  return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\ForkFlow.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
+  return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\MasalaPOS.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
 }
 /** Copied into the UI build by tools/build-desktop.mjs when the Android app has been built. */
-export const CAPTAIN_APK_PATH = "/captain/android/ForkFlow-Captain.apk";
+export const CAPTAIN_APK_PATH = "/captain/android/MasalaPOS-Captain.apk";
 /** QR payload for the Android Captain app: the POS origin and, for HTTPS, the restaurant CA it must pin. */
 export function captainPairingUri(origin: string, fingerprint?: string): string {
   const params = new URLSearchParams({ server: origin });
   if (fingerprint) params.set("ca", fingerprint.replaceAll(":", "").toUpperCase());
-  return `forkflow-captain://pair?${params}`;
+  return `masalapos-captain://pair?${params}`;
 }
 export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4100, generation = "initial", captainHttps?: CaptainHttpsInfo, cloudBackups?: CloudBackups,
   restore: { staging?: RestoreStaging; desktop?: UpdateBridge } = {}) {
@@ -76,18 +76,18 @@ export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4
   app.get("/captain/restaurant-ca.cer", async (_req, reply) => {
     if (!captainHttps?.enabled || !captainHttps.certificate) return reply.status(404).send({ error: "Captain HTTPS is not configured" });
     return reply.type("application/x-x509-ca-cert").header("Cache-Control", "no-store")
-      .header("Content-Disposition", 'attachment; filename="ForkFlow-Restaurant-CA.cer"').send(captainHttps.certificate);
+      .header("Content-Disposition", 'attachment; filename="MasalaPOS-Restaurant-CA.cer"').send(captainHttps.certificate);
   });
   app.get("/api/system/shortcut", { preHandler: manage }, async (req, reply) => {
     const { url } = z.object({ url: z.string() }).parse(req.query);
     if (!lanUrls(port).includes(url)) return reply.status(400).send({ error: "Choose a current server LAN address" });
-    return reply.type("text/plain").header("Content-Disposition", 'attachment; filename="Create-ForkFlow-Shortcut.ps1"').send(edgeShortcut(url));
+    return reply.type("text/plain").header("Content-Disposition", 'attachment; filename="Create-MasalaPOS-Shortcut.ps1"').send(edgeShortcut(url));
   });
   if (!backups) return;
   const { staging, desktop } = restore;
   /** Restore stops every counter, so it is started only from the main PC's desktop app. */
   const restoreBlocked = (req: FastifyRequest): string | null =>
-    !desktop || !staging ? "Restore runs in the ForkFlow desktop app on the main POS PC. Use the tray menu â†’ Restore backup."
+    !desktop || !staging ? "Restore runs in the MasalaPOS desktop app on the main POS PC. Use the tray menu â†’ Restore backup."
       : !fromMainPc(req) ? "To restore, open Settings â†’ Backups on the main POS PC." : null;
   const requireRestore = (req: FastifyRequest) => { const reason = restoreBlocked(req); if (reason) throw httpError(409, reason); return staging!; };
   const backupStatus = (req: FastifyRequest, status: ReturnType<Backups["status"]>) => ({ ...status, restoreBlockedReason: restoreBlocked(req) });

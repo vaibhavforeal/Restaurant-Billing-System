@@ -1,4 +1,4 @@
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
 import type { Deps } from "./issue.js";

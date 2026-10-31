@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { RestorePreview } from "@forkflow/domain";
+import type { RestorePreview } from "@masalapos/domain";
 import { apiFetch, authHeaders, session } from "../api";
 import { CloudBackupSettings } from "./CloudBackupSettings";
 import { Icon } from "../Icon";
@@ -92,7 +92,7 @@ export function BackupSettings() {
           })}><Icon name="refresh" size={16} />Back up now</button>
           <button className="primary" disabled={busy} onClick={() => void run(async () => {
             setMessage("Preparing backup file…");
-            await saveResponse(await fetch("/api/system/backups/export", { method: "POST", headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), "ForkFlow backup.db");
+            await saveResponse(await fetch("/api/system/backups/export", { method: "POST", headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), "MasalaPOS backup.db");
             setStatus(await apiFetch<BackupStatus>("/api/system/backups"));
             setMessage("Backup file downloaded. Keep it somewhere safe, away from this PC, such as a USB drive.");
           })}><Icon name="download" size={16} />Download backup file</button>
@@ -131,7 +131,7 @@ export function BackupSettings() {
       {preview && <div ref={reviewRef}><RestoreReview key={preview.token} preview={preview} busy={busy || restoring} onCancel={cancelPreview} onConfirm={() => void run(async () => {
         await apiFetch("/api/system/restore/confirm", { method: "POST", body: JSON.stringify({ token: preview.token }) });
         setRestoring(true); setPreview(null);
-        setMessage("Restoring… ForkFlow will restart. Sign in again once it is back.");
+        setMessage("Restoring… MasalaPOS will restart. Sign in again once it is back.");
       })} /></div>}
       </section>
       <p className="backup-hint backup-privacy">Each file includes your menu and photos, orders, bills, customers, stock, staff and settings. Store downloaded copies securely, away from this PC.</p>
@@ -142,7 +142,7 @@ export function BackupSettings() {
       <fieldset disabled={busy} className="backup-storage"><legend>Local storage settings</legend>
         <p>Backup folder<code>{status.folder}</code></p>
         <label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label>
-        <label>Also copy each backup to another folder (optional) <input placeholder="E:\ForkFlow Backups" value={second} onChange={(e) => setSecond(e.target.value)} /></label>
+        <label>Also copy each backup to another folder (optional) <input placeholder="E:\MasalaPOS Backups" value={second} onChange={(e) => setSecond(e.target.value)} /></label>
         <small>Use a USB drive or a synced folder on the main PC. A missing drive never stops the backup on this PC.</small>
         <div><button disabled={!validStorage} onClick={() => void run(async () => {
           setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "PUT", body: JSON.stringify({ retentionDays: days, secondLocation: second }) }));
@@ -166,7 +166,7 @@ function RestoreReview({ preview, busy, onCancel, onConfirm }: { preview: Restor
       <div><dt>Orders</dt><dd>{preview.orders.toLocaleString()}</dd></div>
       <div><dt>Size</dt><dd>{formatBytes(preview.bytes)}</dd></div>
     </dl>
-    <p className="restore-warning">This replaces all current data with this backup. {lastActivity ? `Anything recorded after ${formatWhen(lastActivity)} will no longer appear. ` : ""}ForkFlow keeps the current data in its recovery folder. Every counter must stop work, and everyone signs in again afterwards.</p>
+    <p className="restore-warning">This replaces all current data with this backup. {lastActivity ? `Anything recorded after ${formatWhen(lastActivity)} will no longer appear. ` : ""}MasalaPOS keeps the current data in its recovery folder. Every counter must stop work, and everyone signs in again afterwards.</p>
     <label className="restore-confirm"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />All counters have stopped work. Replace the current data with this backup.</label>
     <div className="backup-actions">
       <button disabled={busy} onClick={onCancel}>Cancel</button>

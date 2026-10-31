@@ -21,7 +21,7 @@
 - Billing has no kitchen condition. "Send kitchen items before billing" stays.
 - The `settings.require_kitchen_acceptance` and `kots.accepted_at` columns stay, unused. No migration.
 - Notice copy: title "Kitchen Display is turned off"; text "Ask an admin to turn it on in the Marketplace."
-- Marketplace header: "Connect ForkFlow to delivery platforms and add-ons". Unlicensed card: pill "Pro plan", note "Upgrade to Pro to use the Kitchen Display", admin button "View licence".
+- Marketplace header: "Connect MasalaPOS to delivery platforms and add-ons". Unlicensed card: pill "Pro plan", note "Upgrade to Pro to use the Kitchen Display", admin button "View licence".
 - Run vitest from the repo root. Gates: `npm run typecheck` clean; `npx vitest run` passing except the 2 known `captain-https` environment failures.
 - Do not commit unless the user asks; stage files explicitly when they do.
 
@@ -155,7 +155,7 @@
 
 - [ ] **Step 1: Implement** `KitchenRoute` beside `ZomatoRoute` in `App.tsx`: for admin/cashier, `!ready` → loading text; `!isEnabled("kds")` → `<IntegrationOff name="Kitchen Display" …/>`; otherwise `<Kitchen />`. The kitchen role renders `<Kitchen />` directly (the board handles `kds_off`, Task 7).
 - [ ] **Step 2: Implement** `Home.tsx`: the Kitchen quick link only when `isEnabled("kds")`. `SystemSettings.tsx`: the "Kitchen displays" heading, text and links only when `isEnabled("kds")`.
-- [ ] **Step 3: Run** `npm run typecheck` and `npm run build -w @forkflow/ui` — PASS. Behaviour is verified by the Task 8 e2e checks.
+- [ ] **Step 3: Run** `npm run typecheck` and `npm run build -w @masalapos/ui` — PASS. Behaviour is verified by the Task 8 e2e checks.
 - [ ] **Step 4: Commit** (when asked): `feat(ui): hide kitchen surfaces while KDS is off`.
 
 ### Task 7: Kitchen board handles `kds_off`

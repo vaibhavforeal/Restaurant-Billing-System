@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { CloudBackupFile, CloudBackupStatus } from "@forkflow/domain";
+import type { CloudBackupFile, CloudBackupStatus } from "@masalapos/domain";
 import { apiFetch } from "../api";
 import { Icon } from "../Icon";
 import { backupKindLabels as kindLabels, formatBytes, formatWhen } from "../backup-format";
@@ -12,7 +12,7 @@ export function CloudBackupSettings({ restoreBlockedReason, restoreBusy, onResto
 }) {
   const [status, setStatus] = useState<CloudBackupStatus | null>(null);
   const [automatic, setAutomatic] = useState(true);
-  const [folderName, setFolderName] = useState("ForkFlow Backups");
+  const [folderName, setFolderName] = useState("MasalaPOS Backups");
   const [retentionDays, setRetentionDays] = useState(30);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -74,9 +74,9 @@ export function CloudBackupSettings({ restoreBlockedReason, restoreBusy, onResto
     {error && <p role="alert" className="cloud-backup-error">{error}</p>}
     {message && <p role="status">{message}</p>}
     {status && <>
-      <p id={stateId}>{status.state === "not_configured" ? "Google Drive backup is not set up in this ForkFlow build. Backups on this PC and backup files work as usual."
+      <p id={stateId}>{status.state === "not_configured" ? "Google Drive backup is not set up in this MasalaPOS build. Backups on this PC and backup files work as usual."
         : status.state === "reconnect_required" ? "Google needs you to sign in again before backups can upload. Your backups on this PC are safe."
-        : status.state === "not_connected" ? "Keep a copy of every backup in your Google Drive, so you can recover even if this PC is lost or damaged. ForkFlow can only see the backup files it creates."
+        : status.state === "not_connected" ? "Keep a copy of every backup in your Google Drive, so you can recover even if this PC is lost or damaged. MasalaPOS can only see the backup files it creates."
         : <>Backups upload to <strong>{status.account?.email ?? "your Google account"}</strong> in the folder “{status.folderName}”.</>}</p>
       {status.lastError && <p role="alert" className="cloud-backup-error">{status.lastError}</p>}
       {connecting && <p role="status" className="cloud-backup-waiting">Finish signing in to Google in your browser. This page updates when you are done.</p>}

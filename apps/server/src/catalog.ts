@@ -4,7 +4,7 @@ import {
   VariantCreate, VariantUpdate,
   StationCreate, StationUpdate,
   uuidv7,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { menuPhotoUrl, validateMenuPhoto } from "./menu-photo.js";

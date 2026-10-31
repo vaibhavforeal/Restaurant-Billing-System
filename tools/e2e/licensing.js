@@ -24,15 +24,15 @@
     const tab = { url, target, closed: false, opener: 'page', location: { href: '' }, document: { title: '', body: { textContent: '' } }, close() { this.closed = true; } }; tabs.push(tab); return tab;
   };
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
-  const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' });
+  const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' });
   const api = async (path, method = 'GET', body, as = headers()) => {
     const res = await originalFetch('/api' + path, { method, headers: as, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (res.status === 204) return {};
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };
   const registerOther = async (credential, name) => {
-    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-forkflow-device': credential, 'content-type': 'application/json' });
-    const as = { authorization: 'Bearer ' + login.token, 'x-forkflow-device': credential, 'content-type': 'application/json' };
+    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
+    const as = { authorization: 'Bearer ' + login.token, 'x-masalapos-device': credential, 'content-type': 'application/json' };
     await api('/license/devices', 'POST', { name }, as); return as;
   };
   URL.createObjectURL = function (blob) { const url = originalUrl.call(this, blob); blobs.set(url, blob); return url; };
@@ -64,7 +64,7 @@
     const fallback = link('Open payment page');
     check(tabs.length === 2 && fallback.href === sessionUrl && fallback.target === '_blank' && fallback.rel === 'noopener noreferrer' && panel().innerText.includes("The payment page didn't open automatically.") && !panel().innerText.includes('blocked'),
       'A blocked tab falls back to an Open payment page link with neutral copy and the session URL');
-    // The ForkFlow desktop app has an Electron user agent: no blank tab, window.open is called once with the session URL (the shell sends it to the system browser).
+    // The MasalaPOS desktop app has an Electron user agent: no blank tab, window.open is called once with the session URL (the shell sends it to the system browser).
     const realAgent = navigator.userAgent; blocked = false;
     Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => realAgent + ' Electron/33.0.0' });
     const before = tabs.length; await click('Subscribe');
@@ -108,8 +108,8 @@
     await wait(() => document.body.innerText.includes('Dashboard'));
     check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
     await api('/users', 'POST', { name: 'QA Cashier', pin: '2468', role: 'cashier' });
-    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' });
-    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' };
+    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' });
+    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' };
     check((await originalFetch('/api/license/subscribe-session', { method: 'POST', headers: asCashier })).status === 403 && (await originalFetch('/api/license/subscribe-session', { method: 'POST' })).status === 401,
       'A cashier or an unauthenticated caller cannot create a checkout session');
     document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);

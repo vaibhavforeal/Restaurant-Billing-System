@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const CloudBackupPreferences = z.object({
   automatic: z.boolean().default(true),
-  folderName: z.string().trim().min(1).max(100).regex(/^[^\\/\x00-\x1f]+$/, "Use a folder name without slashes").default("ForkFlow Backups"),
+  folderName: z.string().trim().min(1).max(100).regex(/^[^\\/\x00-\x1f]+$/, "Use a folder name without slashes").default("MasalaPOS Backups"),
   retentionDays: z.number().int().min(7).max(365).default(30),
 }).strict();
 
@@ -25,7 +25,7 @@ export interface CloudBackupStatus extends CloudBackupSettings {
   onMainPc: boolean;
 }
 
-/** A ForkFlow backup stored in the connected Google Drive. */
+/** A MasalaPOS backup stored in the connected Google Drive. */
 export interface CloudBackupFile {
   id: string;
   name: string;

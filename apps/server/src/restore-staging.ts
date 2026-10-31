@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Transform, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { RestorePreview } from "@forkflow/domain";
+import type { RestorePreview } from "@masalapos/domain";
 import { parseBackupName, syncFile, verifyBackup } from "./backups.js";
 import { httpError } from "./http-error.js";
 
@@ -38,7 +38,7 @@ export class RestoreStaging {
     let bytes = 0;
     const limit = new Transform({ transform(chunk: Buffer, _encoding, callback) {
       bytes += chunk.length;
-      callback(bytes > MAX_RESTORE_BYTES ? httpError(413, "This file is too large to be a ForkFlow backup") : null, chunk);
+      callback(bytes > MAX_RESTORE_BYTES ? httpError(413, "This file is too large to be a MasalaPOS backup") : null, chunk);
     } });
     return this.stage("file", label, (target) => pipeline(stream, limit, createWriteStream(target)));
   }
@@ -82,7 +82,7 @@ export class RestoreStaging {
       rmSync(path, { force: true });
       const reason = error instanceof Error ? error.message : "";
       throw httpError(400, /not a database|file is (encrypted|not)/i.test(reason) || !reason
-        ? "This file is not a ForkFlow backup." : `This file cannot be restored: ${reason}.`);
+        ? "This file is not a MasalaPOS backup." : `This file cannot be restored: ${reason}.`);
     }
     this.current = { token, path, preview };
     return preview;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ServiceReceipt, ServiceSubmission } from "@forkflow/domain";
+import type { ServiceReceipt, ServiceSubmission } from "@masalapos/domain";
 import { uuid } from "../uuid";
 import "../guest-services.css";
 
@@ -8,7 +8,7 @@ type SavedCall = { submission: ServiceSubmission; receipt: ServiceReceipt | null
 type Calls = { version: 1; waiter: SavedCall | null; bill: SavedCall | null };
 const kinds: Kind[] = ["waiter", "bill"];
 const blank = (): Calls => ({ version: 1, waiter: null, bill: null });
-const keyFor = (token: string) => `forkflow.guest-services.v1.${token}`;
+const keyFor = (token: string) => `masalapos.guest-services.v1.${token}`;
 
 function readCalls(token: string): Calls {
   try {

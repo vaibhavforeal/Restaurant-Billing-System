@@ -1,4 +1,4 @@
-import type { AnalyticsHour, OrderAnalyticsReport, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
+import type { AnalyticsHour, OrderAnalyticsReport, OrderTypeAnalytics } from "@masalapos/domain/operational-reports";
 import { statusText } from "./dashboard-view";
 import type { Order } from "./types";
 

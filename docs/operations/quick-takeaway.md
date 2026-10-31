@@ -8,12 +8,12 @@ license and device access. A takeaway has no dining table.
 
 1. Choose **Takeaway** from **Home** or **Tables & orders**. An unfinished
    takeaway saved for this staff member in this browser opens again; otherwise
-   ForkFlow starts a new parcel.
+   MasalaPOS starts a new parcel.
 2. Select menu items, portions, quantities, and any notes. Review the cart.
    Search and **Menu category** filter the compact menu. On phones, switch
    between **Menu** and **Order**, or use **View cart**. Long item lists scroll
    inside their panels while totals and checkout remain visible.
-3. Choose **Pay · F10**. ForkFlow punches the cart and sends pending items assigned
+3. Choose **Pay · F10**. MasalaPOS punches the cart and sends pending items assigned
    to kitchen stations before showing the GST bill preview. This action can
    create KOTs and deduct their ingredients, even before a bill is issued.
 4. Review the total in the checkout dialog. **Bill options** contains the
@@ -113,4 +113,4 @@ cannot independently issue a completed bill or confirm payment recording.
 
 Hosted accounts, cloud synchronization, and subscription renewal remain
 unfinished. Takeaway uses the same local database and licensing boundary
-as the rest of ForkFlow; see [commercial licensing](commercial-licensing.md).
+as the rest of MasalaPOS; see [commercial licensing](commercial-licensing.md).

@@ -5,12 +5,12 @@ Implementation follow-up: the first phase is now implemented. See
 operating instructions. The review below records the comparison before changes.
 
 Reviewed 30 September 2026 against the local BillTouch Cloud installation at
-`C:/Users/AR/Downloads/BillTouch_Cloud` and the current ForkFlow source.
+`C:/Users/AR/Downloads/BillTouch_Cloud` and the current MasalaPOS source.
 
 ## Recommendation
 
 Implement BillTouch-style printer discovery and configurable bill/KOT profiles
-on top of ForkFlow's existing printing service. The existing network, Windows
+on top of MasalaPOS's existing printing service. The existing network, Windows
 spooler and Bluetooth COM transports, kitchen routing, receipt rendering and
 queue can be extended. BillTouch is a packaged Python application with a web UI;
 its bundled module is not a drop-in component for our TypeScript/Electron app.
@@ -40,14 +40,14 @@ verified through their advanced settings screens:
   test-print actions, cash drawer, language-print options, group/department/mode
   printing controls. Brand labels do not establish hardware compatibility.
 
-No physical print was sent, no BillTouch settings were saved, and no ForkFlow
+No physical print was sent, no BillTouch settings were saved, and no MasalaPOS
 application code was changed. This is a capability and implementation review,
 not a hardware certification or a claim that every bundled option is enabled
 in this demo.
 
 ## Comparison
 
-| Capability | BillTouch evidence | ForkFlow today | Suggested work |
+| Capability | BillTouch evidence | MasalaPOS today | Suggested work |
 |---|---|---|---|
 | Installed printer picker | Live dropdown lists installed Windows printers | Manually typed Windows printer name | Add host printer discovery and a refreshable picker |
 | Connection methods | Live DOS/Windows and USB/IP/BT fields | TCP network, Windows RAW spooler, Bluetooth COM | Keep transports; validate addresses and explain host-local connections |

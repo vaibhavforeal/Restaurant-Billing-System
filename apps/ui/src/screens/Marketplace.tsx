@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
-import type { IntegrationInfo } from "@forkflow/domain/integrations";
+import type { IntegrationInfo } from "@masalapos/domain/integrations";
 import type { User } from "../api";
 import { canToggle, statusLabel } from "../integrations-model";
 import { useIntegrations } from "../integrations";
 import { useModules } from "../modules";
-import type { ModuleGroup, ModuleInfo } from "@forkflow/domain/modules";
+import type { ModuleGroup, ModuleInfo } from "@masalapos/domain/modules";
 import type { Page } from "../NavBar";
 import { ZomatoSettingsDialog } from "./ZomatoConnection";
 import "../marketplace.css";
@@ -36,7 +36,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
 
   return <section className="screen marketplace-screen">
     <div className="page-header"><div><h2>Marketplace</h2><p>Add-ons and modules for this restaurant</p></div></div>
-    <p className="marketplace-note">ForkFlow decides which add-ons and modules this restaurant can use. {userCan(user, "integrations.configure") ? "You can turn an included one off here and back on later." : "Only an admin can turn them on or off."}</p>
+    <p className="marketplace-note">MasalaPOS decides which add-ons and modules this restaurant can use. {userCan(user, "integrations.configure") ? "You can turn an included one off here and back on later." : "Only an admin can turn them on or off."}</p>
     <h3 className="marketplace-section">Add-ons</h3>
     {!ready && <p role="status">Loading integrations…</p>}
     {ready && integrations.length === 0 && <div className="panel marketplace-empty" role="status"><p>Integrations could not be loaded.</p><button onClick={refresh}>Try again</button></div>}
@@ -52,7 +52,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
             <span className={`marketplace-pill is-${info.status === "coming_soon" ? "soon" : !info.licensed ? "locked" : info.enabled ? "on" : "off"}`}>{label}</span>
           </div>
           <p className="marketplace-description">{info.description}</p>
-          {!info.licensed && info.status === "available" && <p className="marketplace-plan-note">Not included for this restaurant. Contact ForkFlow to add it.</p>}
+          {!info.licensed && info.status === "available" && <p className="marketplace-plan-note">Not included for this restaurant. Contact MasalaPOS to add it.</p>}
           {error && <p role="alert" className="marketplace-error">{error}</p>}
           <div className="marketplace-card-foot">
             {!info.licensed && info.status === "available" && userCan(user, "settings.manage") ? <button onClick={() => onNavigate({ name: "settings", section: "plan" })}>View licence</button>
@@ -118,7 +118,7 @@ function ModuleSection({ group, title, user }: { group: ModuleGroup; title: stri
             <span className={`marketplace-pill is-${!m.allowed ? "locked" : m.active ? "on" : "off"}`}>{!m.allowed ? "Not included" : m.active ? "On" : m.enabled ? "Waiting" : "Off"}</span>
           </div>
           <p className="marketplace-description">{m.description}</p>
-          {!m.allowed && <p className="marketplace-plan-note">Not included for this restaurant. Contact ForkFlow to add it.</p>}
+          {!m.allowed && <p className="marketplace-plan-note">Not included for this restaurant. Contact MasalaPOS to add it.</p>}
           {m.allowed && m.enabled && !m.active && m.reason && <p className="marketplace-plan-note">{m.reason}.</p>}
           {errors[m.id] && <p role="alert" className="marketplace-error">{errors[m.id]}</p>}
           <div className="marketplace-card-foot">
@@ -139,7 +139,7 @@ export function ModuleOff({ module, canManage, onOpenMarketplace }: { module: Mo
   return <section className="screen marketplace-screen">
     <div className="panel marketplace-empty" role="status">
       <h3>{name} is not available</h3>
-      <p>{notIncluded ? `${name} is not included for this restaurant. Contact ForkFlow to add it.`
+      <p>{notIncluded ? `${name} is not included for this restaurant. Contact MasalaPOS to add it.`
         : module?.enabled ? `${module.reason ?? "It needs another module"}. Turn that on in the Marketplace.`
         : canManage ? `Turn ${name} on in the Marketplace to use it.` : `Ask an admin to turn ${name} on in the Marketplace.`}</p>
       {canManage && !notIncluded && <button onClick={onOpenMarketplace}>Open Marketplace</button>}

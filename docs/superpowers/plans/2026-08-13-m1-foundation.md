@@ -16,8 +16,8 @@
 - Server listens on `0.0.0.0:4100` (LAN clients are a spec requirement).
 - Only the server process touches SQLite. WAL mode, foreign keys ON.
 - Tests: vitest, files match `packages/*/src/**/*.test.ts` / `apps/*/src/**/*.test.ts`. Run with `npx vitest run <path>` for a single file, `npm test` for all.
-- Workspace names: `@forkflow/core` (exists), `@forkflow/domain`, `@forkflow/server`, `@forkflow/ui`, `@forkflow/desktop`.
-- Install deps into a workspace with `npm i <pkg> -w @forkflow/<name>` (run from repo root). Don't pin versions manually; accept what npm resolves.
+- Workspace names: `@masalapos/core` (exists), `@masalapos/domain`, `@masalapos/server`, `@masalapos/ui`, `@masalapos/desktop`.
+- Install deps into a workspace with `npm i <pkg> -w @masalapos/<name>` (run from repo root). Don't pin versions manually; accept what npm resolves.
 - Windows dev machine, bash shell. Use forward slashes in commands; they work in Git Bash.
 - Commit after every task (steps say when). Never use `git add -A` after Task 1 — stage named files.
 
@@ -58,7 +58,7 @@ git commit -m "chore: baseline pre-pivot codebase (Phase 0 sync architecture, re
 
 **Interfaces:**
 - Consumes: `packages/sync/src/id.ts` (`uuidv7(): string`, RFC 9562, monotonic).
-- Produces: `import { uuidv7 } from "@forkflow/domain"` for every later task.
+- Produces: `import { uuidv7 } from "@masalapos/domain"` for every later task.
 
 - [ ] **Step 1: Scaffold the domain package and salvage uuidv7**
 
@@ -72,7 +72,7 @@ Create `packages/domain/package.json`:
 
 ```json
 {
-  "name": "@forkflow/domain",
+  "name": "@masalapos/domain",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -89,7 +89,7 @@ Create `packages/domain/src/index.ts`:
 export { uuidv7 } from "./id.js";
 ```
 
-Check `packages/domain/src/id.test.ts`: if it imports from `"./id.js"` it needs no edit; if it imports `"@forkflow/sync"`, change to `"./id.js"`.
+Check `packages/domain/src/id.test.ts`: if it imports from `"./id.js"` it needs no edit; if it imports `"@masalapos/sync"`, change to `"./id.js"`.
 
 - [ ] **Step 2: Delete the retired workspaces**
 
@@ -103,8 +103,8 @@ rm -rf packages/sync packages/db apps/terminal-demo
 
 ```ts
     alias: {
-      "@forkflow/domain": pkg("domain"),
-      "@forkflow/core": pkg("core"),
+      "@masalapos/domain": pkg("domain"),
+      "@masalapos/core": pkg("core"),
     },
 ```
 
@@ -114,8 +114,8 @@ Also delete the stale comment about PGlite/Postgres above `testTimeout` (keep th
 
 ```json
     "paths": {
-      "@forkflow/domain": ["packages/domain/src/index.ts"],
-      "@forkflow/core": ["packages/core/src/index.ts"]
+      "@masalapos/domain": ["packages/domain/src/index.ts"],
+      "@masalapos/core": ["packages/core/src/index.ts"]
     }
 ```
 
@@ -135,7 +135,7 @@ Expected: all remaining tests pass (core's password/rbac tests + domain's id tes
 
 ```bash
 git add -A
-git commit -m "refactor: retire sync/db/terminal-demo, scaffold @forkflow/domain with salvaged uuidv7"
+git commit -m "refactor: retire sync/db/terminal-demo, scaffold @masalapos/domain with salvaged uuidv7"
 ```
 
 (`git add -A` is allowed once more here because the deletions must be staged; verify `git status` shows only expected paths first.)
@@ -159,8 +159,8 @@ git commit -m "refactor: retire sync/db/terminal-demo, scaffold @forkflow/domain
 - [ ] **Step 1: Install dependencies**
 
 ```bash
-npm i better-sqlite3 -w @forkflow/domain
-npm i -D @types/better-sqlite3 -w @forkflow/domain
+npm i better-sqlite3 -w @masalapos/domain
+npm i -D @types/better-sqlite3 -w @masalapos/domain
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -338,7 +338,7 @@ The spec (§3) fixes 16 domain tables. This migration creates all of them now �
 
 **Interfaces:**
 - Consumes: `Migration`, `openDb`, `migrate`, `uuidv7` (Tasks 2–3).
-- Produces: `MIGRATIONS: Migration[]` (exported from `@forkflow/domain`); the full schema below — later tasks and milestones must match these exact table/column names.
+- Produces: `MIGRATIONS: Migration[]` (exported from `@masalapos/domain`); the full schema below — later tasks and milestones must match these exact table/column names.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -662,7 +662,7 @@ git commit -m "feat(domain): migration 001 — full POS schema with seeds"
 - Modify: `packages/domain/src/index.ts`, `packages/domain/package.json` (zod dep)
 
 **Interfaces:**
-- Consumes: `Role`, `can` from `@forkflow/core` (exists: `can(role, "orders.create")`, supports `"orders.*"` and `"*"`).
+- Consumes: `Role`, `can` from `@masalapos/core` (exists: `can(role, "orders.create")`, supports `"orders.*"` and `"*"`).
 - Produces:
   - `type RoleName = "admin" | "cashier" | "waiter" | "kitchen"`
   - `roleFor(name: RoleName): Role`
@@ -671,7 +671,7 @@ git commit -m "feat(domain): migration 001 — full POS schema with seeds"
 - [ ] **Step 1: Install zod**
 
 ```bash
-npm i zod -w @forkflow/domain
+npm i zod -w @masalapos/domain
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -679,7 +679,7 @@ npm i zod -w @forkflow/domain
 `packages/domain/src/roles.test.ts`:
 
 ```ts
-import { can } from "@forkflow/core";
+import { can } from "@masalapos/core";
 import { describe, expect, it } from "vitest";
 import { roleFor } from "./roles.js";
 
@@ -727,7 +727,7 @@ Expected: FAIL — cannot resolve `./roles.js`.
 `packages/domain/src/roles.ts`:
 
 ```ts
-import type { Role } from "@forkflow/core";
+import type { Role } from "@masalapos/core";
 
 export type RoleName = "admin" | "cashier" | "waiter" | "kitchen";
 
@@ -805,11 +805,11 @@ git commit -m "feat(domain): role permission map + auth request schemas"
 - Test: `apps/server/src/server.test.ts`
 
 **Interfaces:**
-- Consumes: `openDb`, `migrate`, `MIGRATIONS` from `@forkflow/domain`.
+- Consumes: `openDb`, `migrate`, `MIGRATIONS` from `@masalapos/domain`.
 - Produces:
   - `buildServer(opts: { db: Database }): FastifyInstance` — routes registered, **not** listening; tests use `app.inject()`.
   - `GET /api/health` → `200 {"ok":true}`.
-  - `main.ts` — real entrypoint: opens `$FORKFLOW_DATA_DIR/forkflow.db` (default `./data`), migrates, listens on `0.0.0.0:4100`, serves `apps/ui/dist` if present.
+  - `main.ts` — real entrypoint: opens `$MASALAPOS_DATA_DIR/masalapos.db` (default `./data`), migrates, listens on `0.0.0.0:4100`, serves `apps/ui/dist` if present.
 
 - [ ] **Step 1: Create the workspace and install deps**
 
@@ -817,7 +817,7 @@ git commit -m "feat(domain): role permission map + auth request schemas"
 
 ```json
 {
-  "name": "@forkflow/server",
+  "name": "@masalapos/server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -826,25 +826,25 @@ git commit -m "feat(domain): role permission map + auth request schemas"
     ".": "./src/server.ts"
   },
   "dependencies": {
-    "@forkflow/core": "*",
-    "@forkflow/domain": "*"
+    "@masalapos/core": "*",
+    "@masalapos/domain": "*"
   }
 }
 ```
 
 ```bash
 npm install
-npm i fastify @fastify/static zod -w @forkflow/server
+npm i fastify @fastify/static zod -w @masalapos/server
 ```
 
-(No new tsconfig paths or vitest aliases are needed: server tests import `./server.js` relatively, and the `@forkflow/domain` / `@forkflow/core` aliases already exist from Task 2.)
+(No new tsconfig paths or vitest aliases are needed: server tests import `./server.js` relatively, and the `@masalapos/domain` / `@masalapos/core` aliases already exist from Task 2.)
 
 - [ ] **Step 2: Write the failing test**
 
 `apps/server/src/server.test.ts`:
 
 ```ts
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer } from "./server.js";
 
@@ -879,7 +879,7 @@ Expected: FAIL — cannot resolve `./server.js`.
 `apps/server/src/server.ts`:
 
 ```ts
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 
@@ -916,7 +916,7 @@ declare module "fastify" {
 `apps/server/src/main.ts`:
 
 ```ts
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -924,10 +924,10 @@ import { fileURLToPath } from "node:url";
 import { buildServer } from "./server.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
+const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
 mkdirSync(dataDir, { recursive: true });
 
-const db = openDb(join(dataDir, "forkflow.db"));
+const db = openDb(join(dataDir, "masalapos.db"));
 migrate(db, MIGRATIONS);
 
 const app = buildServer({ db });
@@ -944,9 +944,9 @@ if (existsSync(uiDist)) {
   });
 }
 
-const PORT = Number(process.env["FORKFLOW_PORT"] ?? 4100);
+const PORT = Number(process.env["MASALAPOS_PORT"] ?? 4100);
 await app.listen({ host: "0.0.0.0", port: PORT });
-console.log(`ForkFlow server on http://localhost:${PORT} (db: ${join(dataDir, "forkflow.db")})`);
+console.log(`MasalaPOS server on http://localhost:${PORT} (db: ${join(dataDir, "masalapos.db")})`);
 ```
 
 - [ ] **Step 5: Run test + typecheck to verify**
@@ -966,7 +966,7 @@ sleep 2 && curl -s http://localhost:4100/api/health
 kill %1
 ```
 
-Expected output: `{"ok":true}`. A `data/forkflow.db` file appears (gitignored via `*.db`).
+Expected output: `{"ok":true}`. A `data/masalapos.db` file appears (gitignored via `*.db`).
 
 - [ ] **Step 7: Commit**
 
@@ -985,7 +985,7 @@ git commit -m "feat(server): Fastify skeleton — buildServer, /api/health, entr
 - Modify: `apps/server/src/server.ts` (register plugin)
 
 **Interfaces:**
-- Consumes: `hashPassword`, `verifyPassword`, `can` (`@forkflow/core`); `uuidv7`, `roleFor`, `LoginBody`, `SetupBody`, `RoleName` (`@forkflow/domain`); `app.db`.
+- Consumes: `hashPassword`, `verifyPassword`, `can` (`@masalapos/core`); `uuidv7`, `roleFor`, `LoginBody`, `SetupBody`, `RoleName` (`@masalapos/domain`); `app.db`.
 - Produces (later milestones depend on these exactly):
   - `GET /api/needs-setup` → `{ needsSetup: boolean }` (public)
   - `POST /api/setup` `{ restaurantName, adminName, pin }` → `201 { token, user }`; `409` if any user exists
@@ -1001,7 +1001,7 @@ git commit -m "feat(server): Fastify skeleton — buildServer, /api/health, entr
 `apps/server/src/auth.test.ts`:
 
 ```ts
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer } from "./server.js";
 
@@ -1100,8 +1100,8 @@ describe("requirePermission", () => {
     const admin = await setup(app);
 
     // create a waiter directly in the DB (user CRUD endpoints arrive in Milestone 2)
-    const { hashPassword } = await import("@forkflow/core");
-    const { uuidv7 } = await import("@forkflow/domain");
+    const { hashPassword } = await import("@masalapos/core");
+    const { uuidv7 } = await import("@masalapos/domain");
     app.db
       .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, 'Wren', ?, 'waiter', ?)")
       .run(uuidv7(), await hashPassword("5678"), Date.now());
@@ -1132,8 +1132,8 @@ Expected: FAIL — `app.requirePermission is not a function` / 404s on auth rout
 `apps/server/src/auth.ts`:
 
 ```ts
-import { hashPassword, verifyPassword, can } from "@forkflow/core";
-import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName } from "@forkflow/domain";
+import { hashPassword, verifyPassword, can } from "@masalapos/core";
+import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
 
@@ -1292,7 +1292,7 @@ git commit -m "feat(server): PIN auth — setup/login/me/logout, session tokens,
 
 **Interfaces:**
 - Consumes: the Task 7 API exactly (`/api/needs-setup`, `/api/setup`, `/api/login`, `/api/me`, `/api/logout`).
-- Produces: `apps/ui/dist` (via `npm run build -w @forkflow/ui`) that `apps/server/src/main.ts` already serves; `api.ts` exports `apiFetch(path, init?)` and `session` helpers reused by every later screen.
+- Produces: `apps/ui/dist` (via `npm run build -w @masalapos/ui`) that `apps/server/src/main.ts` already serves; `api.ts` exports `apiFetch(path, init?)` and `session` helpers reused by every later screen.
 
 - [ ] **Step 1: Scaffold the workspace**
 
@@ -1300,7 +1300,7 @@ git commit -m "feat(server): PIN auth — setup/login/me/logout, session tokens,
 
 ```json
 {
-  "name": "@forkflow/ui",
+  "name": "@masalapos/ui",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -1315,8 +1315,8 @@ git commit -m "feat(server): PIN auth — setup/login/me/logout, session tokens,
 
 ```bash
 npm install
-npm i react react-dom -w @forkflow/ui
-npm i -D vite @vitejs/plugin-react @types/react @types/react-dom -w @forkflow/ui
+npm i react react-dom -w @masalapos/ui
+npm i -D vite @vitejs/plugin-react @types/react @types/react-dom -w @masalapos/ui
 ```
 
 `apps/ui/tsconfig.json` (standalone — DOM lib and JSX, which the Node-flavored root config must not see):
@@ -1361,7 +1361,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ForkFlow POS</title>
+    <title>MasalaPOS POS</title>
   </head>
   <body>
     <div id="root"></div>
@@ -1379,9 +1379,9 @@ Root `tsconfig.json` — add (UI has its own config; the root one lacks DOM type
 Root `package.json` scripts — replace `"typecheck"` and add dev helpers:
 
 ```json
-    "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
     "dev:server": "tsx watch apps/server/src/main.ts",
-    "dev:ui": "npm run dev -w @forkflow/ui"
+    "dev:ui": "npm run dev -w @masalapos/ui"
 ```
 
 - [ ] **Step 2: Implement the API helper and screens**
@@ -1391,7 +1391,7 @@ Root `package.json` scripts — replace `"typecheck"` and add dev helpers:
 `apps/ui/src/api.ts`:
 
 ```ts
-const TOKEN_KEY = "forkflow.token";
+const TOKEN_KEY = "masalapos.token";
 
 export const session = {
   get token(): string | null {
@@ -1467,7 +1467,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   return (
     <div style={{ maxWidth: 280, margin: "10vh auto", textAlign: "center", fontFamily: "system-ui" }}>
-      <h1>ForkFlow</h1>
+      <h1>MasalaPOS</h1>
       <div style={{ fontSize: 32, letterSpacing: 8, minHeight: 44 }}>{"•".repeat(pin.length)}</div>
       <div style={{ color: "crimson", minHeight: 24 }}>{error}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
@@ -1518,7 +1518,7 @@ export function Setup({ onDone }: { onDone: (user: User) => void }) {
 
   return (
     <form onSubmit={submit} style={{ maxWidth: 320, margin: "10vh auto", display: "grid", gap: 12, fontFamily: "system-ui" }}>
-      <h1>Set up ForkFlow</h1>
+      <h1>Set up MasalaPOS</h1>
       <input placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
       <input placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
       <input placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" onChange={(e) => setPin(e.target.value)} />
@@ -1546,7 +1546,7 @@ export function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   return (
     <div style={{ maxWidth: 480, margin: "10vh auto", textAlign: "center", fontFamily: "system-ui" }}>
-      <h1>ForkFlow</h1>
+      <h1>MasalaPOS</h1>
       <p>
         Signed in as <strong>{user.name}</strong> ({user.role})
       </p>
@@ -1621,7 +1621,7 @@ createRoot(document.getElementById("root")!).render(<App />);
 
 ```bash
 npm run typecheck
-npm run build -w @forkflow/ui
+npm run build -w @masalapos/ui
 ```
 
 Expected: both clean; `apps/ui/dist/index.html` exists.
@@ -1632,7 +1632,7 @@ Expected: both clean; `apps/ui/dist/index.html` exists.
 npx tsx apps/server/src/main.ts
 ```
 
-Open `http://localhost:4100` in a browser (delete `data/forkflow.db` first if a previous smoke test created users):
+Open `http://localhost:4100` in a browser (delete `data/masalapos.db` first if a previous smoke test created users):
 1. Setup screen appears → fill in name/admin/PIN → lands on Home.
 2. Log out → PIN pad → wrong PIN shows "Wrong PIN" → right PIN lands on Home.
 3. Refresh — still signed in (token survives reload).
@@ -1666,7 +1666,7 @@ Dev-mode shell: it spawns the server with the system Node (`node --import tsx`),
 
 ```json
 {
-  "name": "@forkflow/desktop",
+  "name": "@masalapos/desktop",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -1681,7 +1681,7 @@ Dev-mode shell: it spawns the server with the system Node (`node --import tsx`),
 
 ```bash
 npm install
-npm i -D electron -w @forkflow/desktop
+npm i -D electron -w @masalapos/desktop
 ```
 
 `apps/desktop/tsconfig.json`:
@@ -1703,7 +1703,7 @@ npm i -D electron -w @forkflow/desktop
 Root `package.json` — add script:
 
 ```json
-    "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+    "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
 ```
 
 - [ ] **Step 2: Implement the shell**
@@ -1785,7 +1785,7 @@ npm run typecheck
 npm run dev:desktop
 ```
 
-Expected: an Electron window opens showing the ForkFlow login (or setup) screen; closing the window exits Electron *and* the server process (verify: `curl -s http://localhost:4100/api/health` fails afterward).
+Expected: an Electron window opens showing the MasalaPOS login (or setup) screen; closing the window exits Electron *and* the server process (verify: `curl -s http://localhost:4100/api/health` fails afterward).
 
 - [ ] **Step 4: Commit**
 
@@ -1824,7 +1824,7 @@ Verify: `npm run dev` starts both; `http://localhost:5173` (Vite, proxying /api)
 Replace the entire file with:
 
 ```markdown
-# ForkFlow
+# MasalaPOS
 
 A local-only desktop POS for restaurants. One Windows PC runs everything —
 an Electron shell, a Fastify server, and a SQLite database. Extra billing
@@ -1848,7 +1848,7 @@ npm run dev           # server (:4100) + Vite UI (:5173) with hot reload
 npm run dev:desktop   # the real thing: Electron window + server + built UI
 ```
 
-The database lives in `./data/forkflow.db` (override with FORKFLOW_DATA_DIR).
+The database lives in `./data/masalapos.db` (override with MASALAPOS_DATA_DIR).
 Delete it to re-run first-time setup.
 
 ## Layout
@@ -1869,7 +1869,7 @@ apps/
 ```bash
 npm test
 npm run typecheck
-npm run build -w @forkflow/ui
+npm run build -w @masalapos/ui
 ```
 
 Expected: all green. Then `npm run dev:desktop` one last time — setup/login works in the window.

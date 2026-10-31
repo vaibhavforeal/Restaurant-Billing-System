@@ -76,9 +76,9 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
         <div className="system-section-heading"><Icon name="monitor" size={22} /><div><h3>Connect a counter PC</h3><p>Open a restaurant address on the other PC, then sign in with a staff PIN.</p></div></div>
         {!connections.length && <p className="system-empty">No LAN address found. Connect this PC to Wi-Fi or Ethernet, then reopen Settings.</p>}
         <div className="connection-code-list">{connections.map((connection) => <div className="connection-code" key={connection.url}>
-          <img src={connection.qr} width={180} height={180} alt={`Connect to ForkFlow at ${connection.url}`} />
+          <img src={connection.qr} width={180} height={180} alt={`Connect to MasalaPOS at ${connection.url}`} />
           <div><span className="connection-address-label">Restaurant address</span><a href={connection.url} target="_blank" rel="noreferrer">{connection.url}</a>
-          <div className="backup-actions"><button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-ForkFlow-Shortcut.ps1"))}><Icon name="download" size={16} />Download Edge shortcut setup</button></div>
+          <div className="backup-actions"><button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-MasalaPOS-Shortcut.ps1"))}><Icon name="download" size={16} />Download Edge shortcut setup</button></div>
           <p>On the counter PC, right-click the downloaded file and choose <strong>Run with PowerShell</strong> to create a desktop shortcut.</p></div>
         </div>)}</div>
         <p className="connection-footnote">Reserve the main PC's IP address in your router so the restaurant address stays the same.</p>
@@ -86,11 +86,11 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
       {device === "android" && <>
         <div className="system-section-heading"><Icon name="tablet" size={22} /><div><h3>Android Captain app</h3><p>Take orders and send KOTs from an Android phone or tablet.</p></div></div>
         {apk && android ? <>
-          <div className="connection-step"><span>1</span><div><h4>Install ForkFlow Captain {apk.versionName}</h4><p>Scan a download code. Android asks once to allow installs from the browser.</p></div></div>
+          <div className="connection-step"><span>1</span><div><h4>Install MasalaPOS Captain {apk.versionName}</h4><p>Scan a download code. Android asks once to allow installs from the browser.</p></div></div>
           <div className="connection-code-list">{android.downloads.map(link => <ConnectionCode key={link.url} url={link.url} qr={link.qr} label="Download Captain" />)}</div>
           <div className="connection-step"><span>2</span><div><h4>Pair with this restaurant</h4><p>Open the app, tap <strong>Scan pairing code</strong> and scan a code below. Sign in with a waiter PIN.</p></div></div>
           <div className="connection-code-list">{android.pairings.map(pairing => <ConnectionCode key={pairing.origin} url={pairing.origin} qr={pairing.qr} label={pairing.secure ? "Secure pairing" : "Unencrypted pairing"} pairing />)}</div>
-          <p className="connection-footnote">{android.pairings.length > 0 && android.pairings.every(pairing => pairing.secure) ? "The app checks the restaurant certificate itself. Nothing else needs to be installed." : "Unencrypted connections need the local Captain HTTPS setup on the POS PC. Pair tablets again after setup."} The app updates itself from this POS after each ForkFlow update.</p>
+          <p className="connection-footnote">{android.pairings.length > 0 && android.pairings.every(pairing => pairing.secure) ? "The app checks the restaurant certificate itself. Nothing else needs to be installed." : "Unencrypted connections need the local Captain HTTPS setup on the POS PC. Pair tablets again after setup."} The app updates itself from this POS after each MasalaPOS update.</p>
         </> : <div className="system-empty"><h4>Android app not included in this build</h4><p>Your tablets can still use Captain in the browser.</p><button onClick={() => setDevice("browser")}>Set up Captain in browser<Icon name="arrow" size={16} /></button></div>}
       </>}
       {device === "browser" && <>
@@ -105,7 +105,7 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
       </>}
       {device === "kitchen" && kitchenDisplay && <>
         <div className="system-section-heading"><Icon name="kitchen" size={22} /><div><h3>Kitchen displays</h3><p>Keep your kitchen in sync with live tickets and completion updates.</p></div></div>
-        <ol className="connection-instructions"><li>Create a staff member with the <strong>Kitchen</strong> role in Users.</li><li>Install ForkFlow Kitchen on a kitchen PC and enter a POS address, or open a Kitchen link on a tablet.</li><li>Sign in with the kitchen staff PIN.</li></ol>
+        <ol className="connection-instructions"><li>Create a staff member with the <strong>Kitchen</strong> role in Users.</li><li>Install MasalaPOS Kitchen on a kitchen PC and enter a POS address, or open a Kitchen link on a tablet.</li><li>Sign in with the kitchen staff PIN.</li></ol>
         {!connections.length && <p className="system-empty">No LAN address found. Connect this PC to the restaurant network, then reopen Settings.</p>}
         <ul className="connection-link-list">{connections.map(connection => <li key={connection.url}><span>Kitchen address</span><a href={`${connection.url}/kitchen/`} target="_blank" rel="noreferrer">{connection.url}/kitchen/</a></li>)}</ul>
         {captain?.enabled && <><h4>Secure links for tablet installation</h4><ul className="connection-link-list">{captain.connections.map(connection => {

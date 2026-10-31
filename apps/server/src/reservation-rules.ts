@@ -1,4 +1,4 @@
-import { localDateKey, type Database } from "@forkflow/domain";
+import { localDateKey, type Database } from "@masalapos/domain";
 import { httpError } from "./http-error.js";
 
 export const localMinute = (ms: number) => {

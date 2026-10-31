@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CATALOG_CSV_COLUMNS, CATALOG_CSV_LIMIT, GST_RATES, catalogCsv, parseCatalogCsv, uuidv7, type CatalogImportPreview } from "@forkflow/domain";
+import { CATALOG_CSV_COLUMNS, CATALOG_CSV_LIMIT, GST_RATES, catalogCsv, parseCatalogCsv, uuidv7, type CatalogImportPreview } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
@@ -42,7 +42,7 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
       for (const v of variants.get(p.id) ?? []) rows.push([...base, v.id, v.name, rupees(v.price_paise), String(!!v.is_active), ...service, optional(v.ac_price_paise), optional(v.takeaway_price_paise), optional(p.zomato_price_paise), optional(v.zomato_price_paise)]);
     }
     reply.header("Cache-Control", "no-store");
-    return { filename: `forkflow-items-${new Date().toISOString().slice(0, 10)}.csv`, csv: catalogCsv(rows) };
+    return { filename: `masalapos-items-${new Date().toISOString().slice(0, 10)}.csv`, csv: catalogCsv(rows) };
   });
 
   function plan(csv: string) {

@@ -1,10 +1,10 @@
-import { INTEGRATIONS, IntegrationToggle, isIntegrationId, isModuleId, type Database, type IntegrationId, type IntegrationInfo } from "@forkflow/domain";
+import { INTEGRATIONS, IntegrationToggle, isIntegrationId, isModuleId, type Database, type IntegrationId, type IntegrationInfo } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { moduleActive, moduleStates, requireModule, setModuleEnabled } from "./modules.js";
 
 /**
- * The Marketplace add-on cards: a view over the module controls (see modules.ts). An add-on works when the ForkFlow owner
+ * The Marketplace add-on cards: a view over the module controls (see modules.ts). An add-on works when the MasalaPOS owner
  * allows it and the restaurant has switched it on. Swiggy is listed but not yet a module, so it is never on.
  */
 export function integrationEnabled(db: Database, id: IntegrationId): boolean {

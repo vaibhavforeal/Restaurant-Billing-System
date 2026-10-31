@@ -20,7 +20,7 @@ Success means:
 | Topic | Decision |
 | --- | --- |
 | Secret | 32 random bytes, hex (64 chars), stored as `installationSecret` in `installation.json` beside `installationId`. Created with the id on first start; added to an existing file that lacks it. Backups never include `installation.json`, so the secret follows the data folder exactly as the id does |
-| Transport | HTTP header `X-ForkFlow-Installation-Secret` on counter → Worker calls only. Not part of `ActivationRequest`, so the downloadable activation-request file is unchanged |
+| Transport | HTTP header `X-MasalaPOS-Installation-Secret` on counter → Worker calls only. Not part of `ActivationRequest`, so the downloadable activation-request file is unchanged |
 | Storage on the Worker | `installations.secret_hash` = lowercase hex SHA-256 of the secret string. Compared in constant time |
 | Trust model | Trust on first use. The request that creates the installation row sets the hash. A known row with a `NULL` hash is claimed by the next request carrying a well-formed secret (this is also the operator's reset path) |
 | Failure | Missing, malformed or wrong secret for a known installation → `401 { error: "unauthorized" }` |
@@ -59,7 +59,7 @@ Order of checks: parse body (400) → key fingerprint (409) → secret (401) →
 
 ### 3.4 Checkout
 
-- `GET /subscribe?session=<token>`: a valid, unexpired session renders the page for its installation, embedding the session (escaped) instead of the installation id. Anything else → 404 page with the copy `This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again.`
+- `GET /subscribe?session=<token>`: a valid, unexpired session renders the page for its installation, embedding the session (escaped) instead of the installation id. Anything else → 404 page with the copy `This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again.`
 - `POST /v1/subscriptions` body becomes `{ session, plan, period, email }`. The installation comes from the session. Invalid or expired session → `401 { error: "session_expired" }`, and the page shows the same expired copy. Everything else (Razorpay notes, 502 on provider failure, stored email) is unchanged.
 - `?installation=` is no longer accepted.
 - The webhook is unchanged: Razorpay's signature already authenticates it, and `notes.installationId` was set by a session-checked checkout.
@@ -73,7 +73,7 @@ Order of checks: parse body (400) → key fingerprint (409) → secret (401) →
 
 ### 4.2 `apps/server/src/licensing.ts`
 
-- `fetchLatest()` sends the secret header. A 401 maps to `rejected` with the message `The licensing service doesn't recognise this installation. Contact ForkFlow support.`
+- `fetchLatest()` sends the secret header. A 401 maps to `rejected` with the message `The licensing service doesn't recognise this installation. Contact MasalaPOS support.`
 - New `Licensing.subscribeSession(): Promise<{ url: string } | { error: string; status: 409 | 503 }>`:
   - No service URL → 409 `Automatic renewal is not set up for this installation.`
   - Calls `POST /v1/subscribe-sessions`. On 404, run `fetchLatest()` once (it registers the installation) and retry once.

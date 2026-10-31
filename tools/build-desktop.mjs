@@ -18,7 +18,7 @@ rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: t
 const pkg = JSON.parse(readFileSync(join(root, "package.json")));
 // electron-updater runs in the Electron main process; it is copied like the server's runtime dependencies.
 const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*", "electron-updater": "*" };
-delete deps["@forkflow/core"]; delete deps["@forkflow/domain"];
+delete deps["@masalapos/core"]; delete deps["@masalapos/domain"];
 const installed = new Map();
 function locate(name, from) {
   const lookup = createRequire(join(from, "package.json"));
@@ -47,25 +47,27 @@ for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
 const google = googleOAuthClient(root);
 console.log(google.clientId ? `Google Drive backup: enabled (${google.clientId.split("-")[0]}…, from ${google.source === "environment" ? "environment" : relative(root, google.source)})` : "Google Drive backup: not configured (no Google OAuth client)");
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial),
+  define: { __MASALAPOS_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __MASALAPOS_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial),
     // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
-    __FORKFLOW_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __FORKFLOW_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
-  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
+    __MASALAPOS_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __MASALAPOS_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
+  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
-await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) } });
+await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) } });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
 // The Captain Android app, when built for this release by tools/build-captain-android.mjs.
 console.log(stageCaptainAndroid(join(root, "apps/captain-android/app/build/outputs/apk/release"), join(stage, "ui"), pkg.version));
-writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "forkflow-demo" : "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "ForkFlow customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
+writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "masalapos-demo" : "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "MasalaPOS customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));
 writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));
 
-// Small original F icon, rendered without extra image or native build tools.
+// Small MasalaPOS M icon, rendered without extra image or native build tools.
+const M_MARK = [[36,32],[46,32],[54,48],[62,32],[72,32],[72,76],[62,76],[62,50],[54,64],[46,50],[46,76],[36,76]];
+function markInk(xx, yy) { const px = xx * 108, py = yy * 108; let inside = false; for (let i = 0, j = M_MARK.length - 1; i < M_MARK.length; j = i++) { const [xi, yi] = M_MARK[i], [xj, yj] = M_MARK[j]; if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside; } return inside; }
 function crc32(bytes) { let crc = 0xffffffff; for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ 0xffffffff) >>> 0; }
 function chunk(type, data) { const payload = Buffer.concat([Buffer.from(type), data]); const size = Buffer.alloc(4), crc = Buffer.alloc(4); size.writeUInt32BE(data.length); crc.writeUInt32BE(crc32(payload)); return Buffer.concat([size, payload, crc]); }
 const size = 256, pixels = Buffer.alloc(size * (size * 4 + 1));
 for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
   const i = y * (size * 4 + 1) + 1 + x * 4;
-  const ink = x >= 64 && x < 96 && y >= 48 && y < 208 || x >= 96 && x < 192 && y >= 48 && y < 80 || x >= 96 && x < 168 && y >= 112 && y < 144;
+  const ink = markInk((x + .5) / size, (y + .5) / size);
   pixels.set(ink ? [255, 255, 255, 255] : [209, 45, 59, 255], i);
 }
 const header = Buffer.alloc(13); header.writeUInt32BE(size); header.writeUInt32BE(size, 4); header[8] = 8; header[9] = 6;

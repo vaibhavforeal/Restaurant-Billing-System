@@ -34,7 +34,7 @@ form. A future verified adapter must load secrets server-side.
 ## Import records
 
 Download the appropriate template and map your Zomato export to its columns. These are
-**ForkFlow interchange templates, not official Zomato export formats**. The public POS
+**MasalaPOS interchange templates, not official Zomato export formats**. The public POS
 guide does not document a settlement API; this release makes no automated settlement calls.
 
 Keep IDs as text, including leading zeros. CSV supports UTF-8 BOM, quoted commas and
@@ -164,5 +164,5 @@ evidence for the internal boundary, not Zomato sandbox or production certificati
 - Cashier connection fields are read-only; waiters retain the Captain interface.
 - Desktop bundle built successfully in a separate staging directory and was copied
   back to `build/desktop/app` after Windows prevented replacing the active directory.
-  Fully quit ForkFlow from the tray, then use `Start ForkFlow.cmd` to load this build.
+  Fully quit MasalaPOS from the tray, then use `Start MasalaPOS.cmd` to load this build.
   The distributable installer was not regenerated.

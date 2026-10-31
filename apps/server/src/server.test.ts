@@ -1,4 +1,4 @@
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer } from "./server.js";
 

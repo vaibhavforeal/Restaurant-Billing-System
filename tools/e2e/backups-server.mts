@@ -8,8 +8,8 @@ import { Backups } from "../../apps/server/src/backups.js";
 import { setupAdmin, createUser } from "../../apps/server/src/test-helpers.js";
 import { makeFakeSink } from "../../apps/server/src/print/sinks.js";
 
-const folder = mkdtempSync(join(tmpdir(), "forkflow-cloud-browser-"));
-const db = openDb(join(folder, "forkflow.db")); migrate(db, MIGRATIONS);
+const folder = mkdtempSync(join(tmpdir(), "masalapos-cloud-browser-"));
+const db = openDb(join(folder, "masalapos.db")); migrate(db, MIGRATIONS);
 const backups = new Backups(db, folder);
 const app = buildServer({ db, backups, port: 4169, sinkSend: makeFakeSink().send });
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist"), setHeaders: (reply) => reply.header("Cache-Control", "no-cache") });

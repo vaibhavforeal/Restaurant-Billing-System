@@ -1,6 +1,6 @@
-import type { ItemPrices, PriceTier } from "@forkflow/domain/pricing";
-import type { DefaultGstRate, GstMode } from "@forkflow/domain/gst";
-import type { ReceiptStyle } from "@forkflow/domain/receipt-styles";
+import type { ItemPrices, PriceTier } from "@masalapos/domain/pricing";
+import type { DefaultGstRate, GstMode } from "@masalapos/domain/gst";
+import type { ReceiptStyle } from "@masalapos/domain/receipt-styles";
 export interface Category {
   id: string;
   name: string;
@@ -162,7 +162,7 @@ export interface Order {
   captainId?: string | null;
   captainName?: string | null;
   priceTier: PriceTier;
-  stockWarnings: import("@forkflow/domain").StockWarning[];
+  stockWarnings: import("@masalapos/domain").StockWarning[];
   id: string;
   clientRef: string;
   type: "dine_in" | "parcel" | "zomato";

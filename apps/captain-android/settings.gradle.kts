@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "forkflow-captain"
+rootProject.name = "masalapos-captain"
 include(":app")

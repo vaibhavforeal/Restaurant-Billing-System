@@ -2,7 +2,7 @@ import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from "
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
-  type GuestMenu, type GuestReceipt, type GuestRequest, type GuestSubmission, type LicenseClaims, type QrTable, planModules } from "@forkflow/domain";
+  type GuestMenu, type GuestReceipt, type GuestRequest, type GuestSubmission, type LicenseClaims, type QrTable, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP, enableIntegration } from "./test-helpers.js";
@@ -11,7 +11,7 @@ import { localMinute } from "./reservation-rules.js";
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const apps: FastifyInstance[] = [];
-type Headers = { authorization: string; "x-forkflow-device": string };
+type Headers = { authorization: string; "x-masalapos-device": string };
 type Product = { id: string; name: string; variants: Array<{ id: string; name: string; pricePaise: number }> };
 type Order = { id: string; tableId: string; splitLabel: string; status: string; items: Array<{ id: string; productId: string; variantId: string | null; qty: number; status: string; note: string | null }> };
 
@@ -27,16 +27,16 @@ async function fixture() {
   const app = buildServer({ db, sinkSend: makeFakeSink().send, licensing: { publicKey, installationId, now: () => now } });
   apps.push(app);
   const device = "a".repeat(64);
-  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
   enableIntegration(app, "kds");
-  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const api = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
     revision: 1, plan: "pro", features: PLANS.pro.features, modules: planModules("pro"), maxDevices: PLANS.pro.maxDevices,
     issuedAt: now - 1000, expiresAt: now + 600_000, graceUntil: now + 1_200_000 };
-  /** A licence for `plan`; `features` narrows the modules, as when the ForkFlow owner leaves QR ordering out. */
+  /** A licence for `plan`; `features` narrows the modules, as when the MasalaPOS owner leaves QR ordering out. */
   async function activate(plan: "basic" | "pro", revision: number, features: { recipes?: boolean; qrOrdering?: boolean; kds?: boolean } = PLANS[plan].features) {
     const modules = { ...planModules(plan), recipes: features.recipes === true, qrOrdering: features.qrOrdering === true, kds: features.kds === true };
     const next = { ...claims, plan, revision, features: { recipes: modules.recipes, qrOrdering: modules.qrOrdering, kds: modules.kds }, modules, maxDevices: PLANS[plan].maxDevices };
@@ -108,7 +108,7 @@ async function fixture() {
     expect(created.statusCode, created.body).toBe(201);
     const loggedIn = await api("POST", "/api/login", { pin });
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
-    return { authorization: `Bearer ${loggedIn.json().token}`, "x-forkflow-device": device };
+    return { authorization: `Bearer ${loggedIn.json().token}`, "x-masalapos-device": device };
   }
   const count = (tableName: "orders" | "order_items" | "kots" | "guest_requests") =>
     (db.prepare(`SELECT COUNT(*) AS n FROM ${tableName}`).get() as { n: number }).n;
