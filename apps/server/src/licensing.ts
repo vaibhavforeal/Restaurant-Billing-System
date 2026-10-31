@@ -320,7 +320,13 @@ export class Licensing {
     return () => { stopped = true; clearInterval(timer); };
   }
   /** Close sockets a licence change revoked before telling the remaining clients. */
-  announceChange() { this.app.wsRevalidate(); this.app.broadcast("license.changed", {}); }
+  announceChange() {
+    this.app.wsRevalidate(); this.app.broadcast("license.changed", {});
+    for (const listener of this.changeListeners) { try { listener(); } catch { /* one listener must not stop the others */ } }
+  }
+  private changeListeners = new Set<() => void>();
+  /** Called after every licence or device change, e.g. so support reconnects as soon as the counter is activated. */
+  onChange(listener: () => void) { this.changeListeners.add(listener); }
   /** Whether a session created on `sessionDevice` may be used by the request's device credential. */
   deviceAllowed(sessionDevice: string | null | undefined, credential: unknown) {
     if (!this.enabled) return true;

@@ -82,6 +82,13 @@ export class SupportChannel {
     private readonly connect: (url: string, headers: Record<string, string>) => LiveLink, private readonly onStatus: (connected: boolean) => void = () => {}) {}
 
   start(): void { if (this.stopped) { this.stopped = false; this.open(); } }
+  /** Tries again now instead of waiting out the back-off (the counter was just activated, so the service will now accept it). */
+  retryNow(): void {
+    if (this.stopped || this.link) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.attempts = 0;
+    this.open();
+  }
   stop(): void {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
@@ -209,13 +216,19 @@ export function registerSupport(app: FastifyInstance, options: SupportOptions = 
     }
   }
 
+  /** Stop pressed on this PC: ends it here at once, whether or not the service hears about it. */
+  function stopHere(sessionId: string, reason: string, actorName: string | null = null) {
+    if (active?.sessionId !== sessionId) return;
+    channel?.send({ type: "remote.end", sessionId, reason });
+    desktop?.send({ type: "remote-stop", sessionId, reason });
+    record(sessionId, "ended", { agentName: active.agentName, actorName, detail: reason });
+    active = null;
+    announce();
+  }
+
   desktop?.onMessage((message) => {
     if (!isRemoteToServer(message) || active?.sessionId !== message.sessionId) return;
-    if (message.type === "remote-stop-request") {
-      channel?.send({ type: "remote.end", sessionId: message.sessionId, reason: "Stopped at the PC" });
-      desktop.send({ type: "remote-stop", sessionId: message.sessionId, reason: "Stopped at the PC" });
-      return;
-    }
+    if (message.type === "remote-stop-request") { stopHere(message.sessionId, "Stopped at the PC"); return; }
     if (message.state === "sharing" && active.startedAt === null) {
       active = { ...active, startedAt: Date.now() };
       record(message.sessionId, "started", { agentName: active.agentName });
@@ -229,6 +242,7 @@ export function registerSupport(app: FastifyInstance, options: SupportOptions = 
   });
 
   if (channel) {
+    app.licensing.onChange(() => channel.retryNow());
     app.addHook("onReady", async () => channel.start());
     app.addHook("preClose", async () => {
       if (active) desktop?.send({ type: "remote-stop", sessionId: active.sessionId, reason: "MasalaPOS is closing" });
@@ -288,10 +302,7 @@ export function registerSupport(app: FastifyInstance, options: SupportOptions = 
   app.post("/api/support/remote/stop", { preHandler: app.requireAuth }, async (req) => {
     assertThisPc(req);
     const { sessionId } = StopBody.parse(req.body);
-    if (active?.sessionId === sessionId) {
-      channel?.send({ type: "remote.end", sessionId, reason: `Stopped at the PC by ${req.user.name}` });
-      desktop?.send({ type: "remote-stop", sessionId, reason: "Stopped at the PC" });
-    }
+    stopHere(sessionId, "Stopped at the PC", req.user.name);
     return state();
   });
 
