@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { RestorePreview } from "@forkflow/domain";
 import { apiFetch, authHeaders, session } from "../api";
 import { CloudBackupSettings } from "./CloudBackupSettings";
+import { Icon } from "../Icon";
 import { backupKindLabels as kindLabels, formatBytes, formatWhen } from "../backup-format";
 import "../backups.css";
 
@@ -64,35 +65,56 @@ export function BackupSettings() {
   }
   const canRestore = !!status && !status.restoreBlockedReason;
   const latest = status?.backups[0];
+  const validStorage = Number.isInteger(days) && days >= 7 && days <= 365;
 
   return <section aria-label="Backups and recovery" className="backup-settings">
-    <h2>Backups & recovery</h2>
+    <header className="system-page-heading"><h2>Backups & recovery</h2><p>Keep your restaurant data safe, and get back to work when you need to.</p></header>
     {(error || status?.lastError || status?.secondError) && <p role="alert" className="backup-error">{error || status?.lastError || status?.secondError}</p>}
     <p role="status" className="backup-message">{message}</p>
+    {!status && !error && <p role="status">Loading your backups…</p>}
     {status && <>
+      <div className="backup-workspace"><div className="backup-main">
       <div className="backup-summary">
+        <span className="system-icon"><Icon name="folder" size={24} /></span>
         <div>
-          <strong>{latest ? `Last backup ${formatWhen(latest.createdAt)}` : "No backups yet"}</strong>
-          <p>ForkFlow backs up all restaurant data on this PC every day. The latest 10 manual and 10 before-update copies are kept as well.</p>
+          <h3>Backups on this PC</h3>
+          <p>Automatic daily copies of your restaurant data.</p>
         </div>
+        <dl className="backup-overview">
+          <div><dt>Latest backup</dt><dd>{latest ? formatWhen(latest.createdAt) : "No backups yet"}</dd></div>
+          <div><dt>Daily retention</dt><dd>{status.retentionDays} days</dd></div>
+          <div><dt>Saved copies</dt><dd>{status.backups.length}</dd></div>
+        </dl>
         <div className="backup-actions">
           <button disabled={busy} onClick={() => void run(async () => {
             setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "POST" }));
             setMessage("Backup saved on this PC.");
-          })}>Back up now</button>
+          })}><Icon name="refresh" size={16} />Back up now</button>
           <button className="primary" disabled={busy} onClick={() => void run(async () => {
             setMessage("Preparing backup file…");
             await saveResponse(await fetch("/api/system/backups/export", { method: "POST", headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), "ForkFlow backup.db");
             setStatus(await apiFetch<BackupStatus>("/api/system/backups"));
             setMessage("Backup file downloaded. Keep it somewhere safe, away from this PC, such as a USB drive.");
-          })}>Download backup file</button>
+          })}><Icon name="download" size={16} />Download backup file</button>
         </div>
       </div>
-      <p className="backup-hint">The backup file is one complete copy of this restaurant: menu and photos, orders, bills, customers, stock, staff and settings. It contains staff and customer details, so store it securely.</p>
+      <details className="backup-list backup-history" open>
+        <summary>Backup history <span>{status.backups.length} saved</span></summary>
+        <p className="backup-hint">Daily backups plus the latest 10 manual and 10 before-update copies.</p>
+        {status.backups.length ? <ul>{status.backups.map((b) => <li key={b.name}>
+          <span><strong>{formatWhen(b.createdAt)}</strong><small>{kindLabels[b.kind] ?? b.kind} · {formatBytes(b.bytes)}</small></span>
+          <span className="backup-row-actions">
+            <button aria-label={`Download backup from ${formatWhen(b.createdAt)}`} disabled={busy} onClick={() => void run(async () => {
+              await saveResponse(await fetch(`/api/system/backups/${encodeURIComponent(b.name)}`, { headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), b.name);
+            })}>Download</button>
+            {canRestore && <button aria-label={`Restore backup from ${formatWhen(b.createdAt)}`} disabled={busy || restoring} onClick={() => void stage(() => apiFetch<RestorePreview>("/api/system/restore/local", { method: "POST", body: JSON.stringify({ name: b.name }) }), "Checking backup…")}>Restore…</button>}
+          </span>
+        </li>)}</ul> : <p className="system-empty">No saved copies yet. Choose Back up now to create your first backup.</p>}
+      </details>
 
-      <h3>Restore</h3>
+      <section className="backup-restore"><div className="system-section-heading"><Icon name="refresh" size={20} /><h3>Restore a backup</h3></div>
       {canRestore ? <>
-        <p>Restore a backup file from a USB drive or download, or pick one of the backups below. You will see what it contains before anything changes.</p>
+        <p>Choose a file from a USB drive or download, or select a copy from Backup history. You will see what it contains before anything changes.</p>
         <input ref={fileInput} type="file" accept=".db" hidden onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
@@ -106,38 +128,28 @@ export function BackupSettings() {
         <button disabled={busy || restoring} onClick={() => fileInput.current?.click()}>Restore from a backup file…</button>
       </> : <p className="backup-hint">{status.restoreBlockedReason}</p>}
 
-      {preview && <div ref={reviewRef}><RestoreReview preview={preview} busy={busy || restoring} onCancel={cancelPreview} onConfirm={() => void run(async () => {
+      {preview && <div ref={reviewRef}><RestoreReview key={preview.token} preview={preview} busy={busy || restoring} onCancel={cancelPreview} onConfirm={() => void run(async () => {
         await apiFetch("/api/system/restore/confirm", { method: "POST", body: JSON.stringify({ token: preview.token }) });
         setRestoring(true); setPreview(null);
         setMessage("Restoring… ForkFlow will restart. Sign in again once it is back.");
       })} /></div>}
-
-      <details className="backup-list">
-        <summary>Backups on this PC ({status.backups.length})</summary>
-        {status.backups.length ? <ul>{status.backups.map((b) => <li key={b.name}>
-          <span><strong>{formatWhen(b.createdAt)}</strong><small>{kindLabels[b.kind] ?? b.kind} · {formatBytes(b.bytes)}</small></span>
-          <span className="backup-row-actions">
-            <button disabled={busy} onClick={() => void run(async () => {
-              await saveResponse(await fetch(`/api/system/backups/${encodeURIComponent(b.name)}`, { headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), b.name);
-            })}>Download</button>
-            {canRestore && <button disabled={busy || restoring} onClick={() => void stage(() => apiFetch<RestorePreview>("/api/system/restore/local", { method: "POST", body: JSON.stringify({ name: b.name }) }), "Checking backup…")}>Restore…</button>}
-          </span>
-        </li>)}</ul> : <p>No backups yet.</p>}
-      </details>
-
+      </section>
+      <p className="backup-hint backup-privacy">Each file includes your menu and photos, orders, bills, customers, stock, staff and settings. Store downloaded copies securely, away from this PC.</p>
+      </div><aside className="backup-sidebar" aria-label="Backup destinations">
       <CloudBackupSettings restoreBlockedReason={status.restoreBlockedReason} restoreBusy={busy || restoring}
         onRestore={(id) => void stage(() => apiFetch<RestorePreview>("/api/system/cloud-backups/restore", { method: "POST", body: JSON.stringify({ id }), signal: AbortSignal.timeout(30 * 60_000) }), "Downloading backup from Google Drive…")} />
 
-      <fieldset disabled={busy} className="backup-storage"><legend>Backup storage on this PC</legend>
-        <p>Saved in <code>{status.folder}</code></p>
+      <fieldset disabled={busy} className="backup-storage"><legend>Local storage settings</legend>
+        <p>Backup folder<code>{status.folder}</code></p>
         <label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label>
         <label>Also copy each backup to another folder (optional) <input placeholder="E:\ForkFlow Backups" value={second} onChange={(e) => setSecond(e.target.value)} /></label>
         <small>Use a USB drive or a synced folder on the main PC. A missing drive never stops the backup on this PC.</small>
-        <div><button onClick={() => void run(async () => {
+        <div><button disabled={!validStorage} onClick={() => void run(async () => {
           setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "PUT", body: JSON.stringify({ retentionDays: days, secondLocation: second }) }));
           setMessage("Backup settings saved. Use Back up now to check the second folder.");
         })}>Save backup settings</button></div>
       </fieldset>
+      </aside></div>
     </>}
   </section>;
 }

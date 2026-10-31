@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CloudBackupFile, CloudBackupStatus } from "@forkflow/domain";
 import { apiFetch } from "../api";
+import { Icon } from "../Icon";
 import { backupKindLabels as kindLabels, formatBytes, formatWhen } from "../backup-format";
 import "../cloud-backups.css";
 
@@ -69,7 +70,7 @@ export function CloudBackupSettings({ restoreBlockedReason, restoreBusy, onResto
   const canConnect = !!status && status.state !== "not_configured" && status.state !== "connected" && status.onMainPc;
 
   return <section className="cloud-backups" aria-labelledby={titleId}>
-    <div className="cloud-backup-heading"><h3 id={titleId}>Google Drive backup</h3><span className={`cloud-backup-state ${status?.state ?? ""}`} role="status">{status ? stateLabels[status.state] : "Loading…"}</span></div>
+    <div className="cloud-backup-heading"><span className="system-icon"><Icon name="cloud" size={22} /></span><div><h3 id={titleId}>Google Drive backup</h3><span className={`cloud-backup-state ${status?.state ?? ""}`} role="status">{status ? stateLabels[status.state] : "Loading…"}</span></div></div>
     {error && <p role="alert" className="cloud-backup-error">{error}</p>}
     {message && <p role="status">{message}</p>}
     {status && <>
