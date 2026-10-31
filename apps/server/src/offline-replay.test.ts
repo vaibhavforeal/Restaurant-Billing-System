@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 import { auth, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("replaying saved offline actions", () => {

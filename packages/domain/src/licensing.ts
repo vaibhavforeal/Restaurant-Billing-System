@@ -23,7 +23,7 @@ export const LicenseClaims = z.object({
   plan: z.enum(["basic", "pro"]),
   maxDevices: z.number().int().min(1).max(100),
   features: z.object({ recipes: z.boolean(), qrOrdering: z.boolean().default(false), kds: z.boolean().default(false) }).strict(),
-  /** What the ForkFlow owner allows this restaurant to use: the plan's defaults with the owner's choices applied. */
+  /** What the MasalaPOS owner allows this restaurant to use: the plan's defaults with the owner's choices applied. */
   modules: ModuleMapSchema,
   issuedAt: z.number().int().nonnegative().max(8_640_000_000_000_000),
   expiresAt: z.number().int().positive().max(8_640_000_000_000_000),
@@ -72,7 +72,7 @@ export interface LicenseEvent {
 }
 export interface LicenseHistory { events: LicenseEvent[]; nextBefore: number | null }
 export interface ActivationRequest {
-  format: "forkflow-activation-request"; version: 1; installationId: string;
+  format: "masalapos-activation-request"; version: 1; installationId: string;
   licenseId: string | null; organizationId: string | null; outletId: string | null;
   currentRevision: number; generatedAt: number; verificationKeyFingerprint: string;
 }

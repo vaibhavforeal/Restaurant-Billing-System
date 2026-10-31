@@ -1,5 +1,5 @@
-import type { Plan } from "@forkflow/domain/licensing";
-import { buildClaims, encodeEnvelope, readClaims, type Signer } from "@forkflow/license-issuer";
+import type { Plan } from "@masalapos/domain/licensing";
+import { buildClaims, encodeEnvelope, readClaims, type Signer } from "@masalapos/license-issuer";
 import type { D1Like, D1StatementLike } from "./env.js";
 import { getOwnerSettings, insertLicenseStatement, latestLicense, nextRevision, type InstallationRow, type LicenseRow } from "./store.js";
 
@@ -21,7 +21,7 @@ export async function issueLicense(deps: Deps, input: IssueInput): Promise<{ row
   const now = deps.now();
   // The installation row owns the identifiers and the revision comes from the store, so present buildClaims with a renewal of revision - 1.
   const claims = buildClaims({
-    format: "forkflow-activation-request", version: 1, installationId: i.installationId, licenseId: i.licenseId,
+    format: "masalapos-activation-request", version: 1, installationId: i.installationId, licenseId: i.licenseId,
     organizationId: i.organizationId, outletId: i.outletId, currentRevision: revision - 1, generatedAt: now,
     verificationKeyFingerprint: deps.signer.fingerprint,
   }, { plan: input.plan, expiresAt: input.expiresAt, graceUntil: input.graceUntil, trial: input.trial, modules: overrides }, now, deps.uuid);

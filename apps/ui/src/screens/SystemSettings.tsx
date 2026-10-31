@@ -60,14 +60,14 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
       <p>Verified daily snapshots are saved in <code>{status.folder}</code>. The latest 10 manual and 10 pre-update backups are also kept.</p>
       <fieldset disabled={busy}><legend>Backup storage</legend>
         <p><label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label></p>
-        <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\ForkFlow Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
+        <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\MasalaPOS Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
         <button onClick={() => void run(async () => {
           setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "PUT", body: JSON.stringify({ retentionDays: days, secondLocation: second }) }));
           setMessage("Backup settings saved. Use Back up now to check the second folder.");
         })}>Save backup settings</button>{" "}
         <button className="primary" onClick={() => void run(async () => { setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "POST" })); setMessage("Verified local backup saved."); })}>Back up now</button>
       </fieldset>
-      <p>To restore: on the main PC, open the ForkFlow tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
+      <p>To restore: on the main PC, open the MasalaPOS tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
       <details><summary>Available backups ({status.backups.length})</summary>
         <ul>{status.backups.map((b) => <li key={b.name} style={{ marginBlock: 8 }}>{new Date(b.createdAt).toLocaleString()} · {b.kind} · {Math.ceil(b.bytes / 1024)} KB {" "}
           <button disabled={busy} onClick={() => void run(() => download(`/api/system/backups/${encodeURIComponent(b.name)}`, b.name))}>Download</button>
@@ -79,14 +79,14 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
     <p>Use the same local network. Scan a QR code on a phone, or open its address on a counter PC. Every device needs a staff PIN.</p>
     {!connections.length && <p>No LAN address found. Connect this PC to Wi-Fi or Ethernet, then reopen Settings.</p>}
     <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>{connections.map((connection) => <div key={connection.url} style={{ border: "1px solid #ddd", padding: 16 }}>
-      <img src={connection.qr} width={220} height={220} alt={`Connect to ForkFlow at ${connection.url}`} />
+      <img src={connection.qr} width={220} height={220} alt={`Connect to MasalaPOS at ${connection.url}`} />
       <p><a href={connection.url} target="_blank" rel="noreferrer">{connection.url}</a></p>
-      <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-ForkFlow-Shortcut.ps1"))}>Download Edge shortcut setup</button>
+      <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-MasalaPOS-Shortcut.ps1"))}>Download Edge shortcut setup</button>
     </div>)}</div>
     <p>On a counter PC, right-click the downloaded file → Run with PowerShell to create a desktop shortcut. Reserve the main PC's IP address in your router so the address stays the same.</p>
     {kitchenDisplay && <>
     <h2>Kitchen displays</h2>
-    <p>Install ForkFlow Kitchen on a kitchen PC and enter a POS address above, or open a Kitchen link on a tablet. Create a staff member with the Kitchen role in Users, then sign in with that PIN.</p>
+    <p>Install MasalaPOS Kitchen on a kitchen PC and enter a POS address above, or open a Kitchen link on a tablet. Create a staff member with the Kitchen role in Users, then sign in with that PIN.</p>
     <ul>{connections.map(connection => <li key={connection.url}><a href={`${connection.url}/kitchen/`} target="_blank" rel="noreferrer">{connection.url}/kitchen/</a></li>)}</ul>
     {captain?.enabled && <><p>For tablet installation, use the trusted HTTPS connection:</p><ul>{captain.connections.map(connection => {
       const kitchenUrl = new URL("/kitchen/", connection.url).href;
@@ -96,12 +96,12 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
     </>}
     <h2>Android Captain app</h2>
     {apk && android ? <>
-      <p>1. On each Android tablet or phone, scan a download code and install ForkFlow Captain {apk.versionName}. Android asks once to allow installs from the browser.</p>
+      <p>1. On each Android tablet or phone, scan a download code and install MasalaPOS Captain {apk.versionName}. Android asks once to allow installs from the browser.</p>
       <div className="captain-connection-list">{android.downloads.map((link) => <div key={link.url}><img src={link.qr} width={180} height={180} alt={`Download the Captain app from ${link.url}`} /><p><a href={link.url}>{link.url}</a></p></div>)}</div>
       <p>2. Open the app, tap <strong>Scan pairing code</strong> and scan a code below. Then sign in with a waiter PIN.</p>
       <div className="captain-connection-list">{android.pairings.map((pairing) => <div key={pairing.origin}><img src={pairing.qr} width={180} height={180} alt={`Pair the Captain app with ${pairing.origin}`} /><p><code>{pairing.origin}</code></p></div>)}</div>
-      <p>{android.pairings[0]?.secure ? "The app checks the restaurant certificate itself, so there is nothing to install on the tablet." : "These connections are not encrypted. Run the Captain HTTPS setup below, then pair tablets again."} The app updates itself from this POS after each ForkFlow update.</p>
-    </> : <p>The Android app is not included in this ForkFlow build. Tablets can use Captain in the browser as described below.</p>}
+      <p>{android.pairings[0]?.secure ? "The app checks the restaurant certificate itself, so there is nothing to install on the tablet." : "These connections are not encrypted. Run the Captain HTTPS setup below, then pair tablets again."} The app updates itself from this POS after each MasalaPOS update.</p>
+    </> : <p>The Android app is not included in this MasalaPOS build. Tablets can use Captain in the browser as described below.</p>}
     <h2>Captain tablets</h2>
     {captain?.enabled ? <>
       <p>Trust the restaurant certificate on each tablet once, then open a secure Captain link below. Sign in with a staff PIN and choose Install Captain from the account menu.</p>

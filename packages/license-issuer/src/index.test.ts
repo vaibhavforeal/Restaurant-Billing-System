@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { LicenseClaims } from "@forkflow/domain/licensing";
+import { LicenseClaims } from "@masalapos/domain/licensing";
 import { verifyLicenseSignature } from "../../core/src/signed-license.js";
 import { buildClaims, encodeEnvelope, parseActivationRequest, webCryptoSigner } from "./index.js";
 
 const now = Date.UTC(2026, 9, 10, 10, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 const installationId = "44444444-4444-4444-8444-444444444444";
-const request = parseActivationRequest(JSON.stringify({ format: "forkflow-activation-request", version: 1, installationId, licenseId: null,
+const request = parseActivationRequest(JSON.stringify({ format: "masalapos-activation-request", version: 1, installationId, licenseId: null,
   organizationId: null, outletId: null, currentRevision: 0, generatedAt: now, verificationKeyFingerprint: "a".repeat(64) }));
 const terms = { plan: "pro" as const, expiresAt: now + 30 * DAY, graceUntil: now + 37 * DAY };
 

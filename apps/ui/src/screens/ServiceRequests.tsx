@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ServiceRequest } from "@forkflow/domain";
+import type { ServiceRequest } from "@masalapos/domain";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
 import { WorkspaceDialog } from "../WorkspaceDialog";

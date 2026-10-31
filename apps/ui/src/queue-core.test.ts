@@ -95,21 +95,21 @@ describe("offline queue core", () => {
 
   it("clears exactly the cart rows a punch carried, and keeps actions from an earlier restore for review", async () => {
     const store = memoryStore();
-    store.set("forkflow.draft.u.o1", JSON.stringify([{ clientRef: "r1" }, { clientRef: "r2" }, { clientRef: "r3" }]));
-    const punch = entry({ body: JSON.stringify({ items: [{ clientRef: "r1" }, { clientRef: "r2" }] }), draftKey: "forkflow.draft.u.o1" });
+    store.set("masalapos.draft.u.o1", JSON.stringify([{ clientRef: "r1" }, { clientRef: "r2" }, { clientRef: "r3" }]));
+    const punch = entry({ body: JSON.stringify({ items: [{ clientRef: "r1" }, { clientRef: "r2" }] }), draftKey: "masalapos.draft.u.o1" });
     const old = entry({ lane: "o9", generation: "g0" });
     saveEntry(store, punch); saveEntry(store, old);
     await runDue({ store, now: () => 1, random: () => 0.5, send: async () => ({ ok: true }) }, "u", "g1");
-    expect(JSON.parse(store.get("forkflow.draft.u.o1")!)).toEqual([{ clientRef: "r3" }]);
+    expect(JSON.parse(store.get("masalapos.draft.u.o1")!)).toEqual([{ clientRef: "r3" }]);
     expect(listEntries(store, "u")).toEqual([expect.objectContaining({ id: old.id, status: "attention" })]);
   });
 
   it("drops result records after a day and ignores other people's entries", () => {
     const store = memoryStore();
-    store.set("forkflow.queue-result.v2.x", JSON.stringify({ id: "x", status: "done", at: 0 }));
-    store.set("forkflow.queue-result.v2.y", JSON.stringify({ id: "y", status: "done", at: 86_000_000 }));
+    store.set("masalapos.queue-result.v2.x", JSON.stringify({ id: "x", status: "done", at: 0 }));
+    store.set("masalapos.queue-result.v2.y", JSON.stringify({ id: "y", status: "done", at: 86_000_000 }));
     pruneResults(store, 86_400_001);
-    expect(store.keys()).toEqual(["forkflow.queue-result.v2.y"]);
+    expect(store.keys()).toEqual(["masalapos.queue-result.v2.y"]);
     saveEntry(store, entry({ userId: "someone-else" }));
     expect(listEntries(store, "u")).toEqual([]);
     expect(store.keys().some((k) => k.startsWith(ENTRY_PREFIX))).toBe(true);

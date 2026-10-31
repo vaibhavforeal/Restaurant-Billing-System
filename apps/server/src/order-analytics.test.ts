@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7 } from "@forkflow/domain";
-import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import { uuidv7 } from "@masalapos/domain";
+import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 describe("order analytics", () => {

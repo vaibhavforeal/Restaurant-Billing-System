@@ -1,5 +1,5 @@
-import { MODULES, MODULE_IDS, isModuleId, resolveModules, type ModuleId, type ModuleOverrides } from "@forkflow/domain/modules";
-import { readClaims } from "@forkflow/license-issuer";
+import { MODULES, MODULE_IDS, isModuleId, resolveModules, type ModuleId, type ModuleOverrides } from "@masalapos/domain/modules";
+import { readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
 import type { Env } from "./env.js";
 import { issueOwnerRevision, type Deps } from "./issue.js";
@@ -12,7 +12,7 @@ import {
 } from "./store.js";
 
 /**
- * The ForkFlow owner control panel: one owner password (the OWNER_PASSWORD secret) opens an 8-hour session. The owner sees every
+ * The MasalaPOS owner control panel: one owner password (the OWNER_PASSWORD secret) opens an 8-hour session. The owner sees every
  * restaurant and decides which modules each may use; a change is signed into the restaurant's next licence revision, which the
  * counter picks up on its next check.
  */

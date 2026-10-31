@@ -1,4 +1,4 @@
-import { ActivationRequest, readClaims } from "@forkflow/license-issuer";
+import { ActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { issueLicense, type Deps } from "./issue.js";
 import { isWellFormedSecret, sha256Hex, verifyInstallationSecret } from "./secret.js";
 import { createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";

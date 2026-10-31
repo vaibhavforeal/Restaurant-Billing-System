@@ -1,4 +1,4 @@
-import type { TaxLine } from "@forkflow/domain";
+import type { TaxLine } from "@masalapos/domain";
 import { paiseToRupees } from "./money";
 
 /** The day-end line for Zomato bills, whose GST Zomato pays under section 9(5). */

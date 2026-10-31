@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -10,22 +10,22 @@ class PairingTest {
 
     @Test
     fun readsPairingCodesFromPosSettings() {
-        val request = Pairing.parse("forkflow-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443&ca=$fingerprint").single()
+        val request = Pairing.parse("masalapos-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443&ca=$fingerprint").single()
         assertEquals("https://192.168.1.50:4443", request.origin)
         assertEquals(fingerprint, request.caFingerprint)
     }
 
     @Test
     fun acceptsUnencryptedPairingCodesWithoutACertificate() {
-        val request = Pairing.parse("forkflow-captain://pair?server=http%3A%2F%2F192.168.1.50%3A4100").single()
+        val request = Pairing.parse("masalapos-captain://pair?server=http%3A%2F%2F192.168.1.50%3A4100").single()
         assertEquals("http://192.168.1.50:4100", request.origin)
         assertNull(request.caFingerprint)
     }
 
     @Test
     fun refusesHttpsPairingCodesWithoutAFingerprint() {
-        assertThrows(PairingException::class.java) { Pairing.parse("forkflow-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443") }
-        assertThrows(PairingException::class.java) { Pairing.parse("forkflow-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443&ca=ABCD") }
+        assertThrows(PairingException::class.java) { Pairing.parse("masalapos-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443") }
+        assertThrows(PairingException::class.java) { Pairing.parse("masalapos-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443&ca=ABCD") }
     }
 
     @Test

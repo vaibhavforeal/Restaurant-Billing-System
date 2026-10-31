@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { verifyLicenseSignature } from "@forkflow/core";
-import { LicenseClaims } from "@forkflow/domain/licensing";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { verifyLicenseSignature } from "@masalapos/core";
+import { LicenseClaims } from "@masalapos/domain/licensing";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate, type ActivateDeps, type Deps } from "./activate.js";
 import type { D1Like } from "./env.js";
 import { issueLicense } from "./issue.js";
@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 const request = (over: Record<string, unknown> = {}) => ({
-  format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
+  format: "masalapos-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
   currentRevision: 0, generatedAt: T0, verificationKeyFingerprint: signer.fingerprint, ...over,
 });
 const activate = async (over: Record<string, unknown> = {}, secret: string | null = TEST_SECRET) => {

@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -87,7 +87,7 @@ class CaptainActivity : Activity() {
             moveTaskToBack(true)
             return
         }
-        web.evaluateJavascript("window.forkflowBack ? window.forkflowBack() : false") { handled ->
+        web.evaluateJavascript("window.masalaposBack ? window.masalaposBack() : false") { handled ->
             if (handled != "true") moveTaskToBack(true)
         }
     }
@@ -118,9 +118,9 @@ class CaptainActivity : Activity() {
             allowFileAccess = false
             allowContentAccess = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            userAgentString = "$userAgentString ForkFlowCaptainAndroid/${BuildConfig.VERSION_NAME}"
+            userAgentString = "$userAgentString MasalaPOSCaptainAndroid/${BuildConfig.VERSION_NAME}"
         }
-        web.addJavascriptInterface(Bridge(), "ForkFlowAndroid")
+        web.addJavascriptInterface(Bridge(), "MasalaPOSAndroid")
         // Shows the confirm() prompts the POS uses before discarding unsent items.
         web.webChromeClient = WebChromeClient()
         web.webViewClient = Client()

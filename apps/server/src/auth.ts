@@ -1,5 +1,5 @@
-import { hashPassword, verifyPassword } from "@forkflow/core";
-import { KNOWN_PERMISSIONS, LoginBody, SetupBody, effectivePermissions, staffCan, uuidv7, type PermissionOverrides, type RoleName, type Database } from "@forkflow/domain";
+import { hashPassword, verifyPassword } from "@masalapos/core";
+import { KNOWN_PERMISSIONS, LoginBody, SetupBody, effectivePermissions, staffCan, uuidv7, type PermissionOverrides, type RoleName, type Database } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
 import { deviceHash } from "./licensing.js";
@@ -80,7 +80,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) return null;
     const session = sessionRecord(app.db, header.slice("Bearer ".length));
-    if (!session || !app.licensing.deviceAllowed(session.device, req.headers["x-forkflow-device"])) return null;
+    if (!session || !app.licensing.deviceAllowed(session.device, req.headers["x-masalapos-device"])) return null;
     return session.user;
   };
 
@@ -111,7 +111,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
   });
 
   app.post("/api/setup", async (req, reply) => {
-    if (app.licensing.enabled && !deviceHash(req.headers["x-forkflow-device"])) return reply.status(400).send({ error: "A device credential is required" });
+    if (app.licensing.enabled && !deviceHash(req.headers["x-masalapos-device"])) return reply.status(400).send({ error: "A device credential is required" });
     const body = SetupBody.parse(req.body);
     const existing = app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
     if (existing.n > 0) return reply.status(409).send({ error: "already set up" });
@@ -135,12 +135,12 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     });
     write();
 
-    const token = createSession(id, req.headers["x-forkflow-device"]);
+    const token = createSession(id, req.headers["x-masalapos-device"]);
     return reply.status(201).send({ token, user: authedUser(app.db, { id, name: body.adminName, role: "admin" }) });
   });
 
   app.post("/api/login", async (req, reply) => {
-    if (app.licensing.enabled && !deviceHash(req.headers["x-forkflow-device"])) return reply.status(400).send({ error: "A device credential is required" });
+    if (app.licensing.enabled && !deviceHash(req.headers["x-masalapos-device"])) return reply.status(400).send({ error: "A device credential is required" });
     const { pin } = LoginBody.parse(req.body);
     const ip = req.ip;
 
@@ -160,7 +160,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
       if (await verifyPassword(pin, u.pin_hash)) {
         // Success: reset throttle
         throttle.clearPinFailures(ip);
-        const token = createSession(u.id, req.headers["x-forkflow-device"]);
+        const token = createSession(u.id, req.headers["x-masalapos-device"]);
         return { token, user: authedUser(app.db, { id: u.id, name: u.name, role: u.role }) };
       }
     }

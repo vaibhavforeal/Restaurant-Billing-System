@@ -14,15 +14,15 @@ export function lanUrls(port: number): string[] {
 }
 export function edgeShortcut(url: string): string {
   // The only caller passes a URL generated from the server's own IPv4 interfaces.
-  return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\ForkFlow.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
+  return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\MasalaPOS.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
 }
 /** Copied into the UI build by tools/build-desktop.mjs when the Android app has been built. */
-export const CAPTAIN_APK_PATH = "/captain/android/ForkFlow-Captain.apk";
+export const CAPTAIN_APK_PATH = "/captain/android/MasalaPOS-Captain.apk";
 /** QR payload for the Android Captain app: the POS origin and, for HTTPS, the restaurant CA it must pin. */
 export function captainPairingUri(origin: string, fingerprint?: string): string {
   const params = new URLSearchParams({ server: origin });
   if (fingerprint) params.set("ca", fingerprint.replaceAll(":", "").toUpperCase());
-  return `forkflow-captain://pair?${params}`;
+  return `masalapos-captain://pair?${params}`;
 }
 export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4100, generation = "initial", captainHttps?: CaptainHttpsInfo, cloudBackups?: CloudBackups) {
   const manage = app.requirePermission("settings.manage");
@@ -59,12 +59,12 @@ export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4
   app.get("/captain/restaurant-ca.cer", async (_req, reply) => {
     if (!captainHttps?.enabled || !captainHttps.certificate) return reply.status(404).send({ error: "Captain HTTPS is not configured" });
     return reply.type("application/x-x509-ca-cert").header("Cache-Control", "no-store")
-      .header("Content-Disposition", 'attachment; filename="ForkFlow-Restaurant-CA.cer"').send(captainHttps.certificate);
+      .header("Content-Disposition", 'attachment; filename="MasalaPOS-Restaurant-CA.cer"').send(captainHttps.certificate);
   });
   app.get("/api/system/shortcut", { preHandler: manage }, async (req, reply) => {
     const { url } = z.object({ url: z.string() }).parse(req.query);
     if (!lanUrls(port).includes(url)) return reply.status(400).send({ error: "Choose a current server LAN address" });
-    return reply.type("text/plain").header("Content-Disposition", 'attachment; filename="Create-ForkFlow-Shortcut.ps1"').send(edgeShortcut(url));
+    return reply.type("text/plain").header("Content-Disposition", 'attachment; filename="Create-MasalaPOS-Shortcut.ps1"').send(edgeShortcut(url));
   });
   if (!backups) return;
   if (cloudBackups) {

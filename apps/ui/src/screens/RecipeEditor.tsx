@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import type { StockItem, StockLink, StockUnit } from "@forkflow/domain";
+import type { StockItem, StockLink, StockUnit } from "@masalapos/domain";
 import { ApiError, apiFetch } from "../api";
 import { uuid } from "../uuid";
 import { useNavigationGuard } from "../navigation-guard";

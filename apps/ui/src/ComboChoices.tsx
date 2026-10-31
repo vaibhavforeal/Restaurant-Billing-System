@@ -1,4 +1,4 @@
-import { ComboPickError, isFixedGroup, resolveComboPicks, type ComboChoice, type ComboGroup } from "@forkflow/domain/combos";
+import { ComboPickError, isFixedGroup, resolveComboPicks, type ComboChoice, type ComboGroup } from "@masalapos/domain/combos";
 import "./combo-choices.css";
 
 /** Why these picks cannot be added yet, in words for staff or a guest; null when they can. */

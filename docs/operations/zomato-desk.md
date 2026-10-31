@@ -7,7 +7,7 @@ is priced at Zomato prices, sends KOTs to the kitchen, moves through **Preparing
 
 Open Zomato orders also appear in **Open takeaways** on **Tables & orders**, as **Zomato #<id>** with their Zomato status, so the counter sees every pickup in one list. Tap one to open its order; **Ready** and **Picked up** are in the Zomato section.
 
-It works without any Zomato API access. ForkFlow does not talk to Zomato in this
+It works without any Zomato API access. MasalaPOS does not talk to Zomato in this
 release: statuses, prices and accept/reject are not sent to Zomato. Keep accepting
 orders in the Zomato partner app and punch each accepted order in here.
 

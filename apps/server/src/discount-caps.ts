@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Database, RoleName } from "@forkflow/domain";
+import type { Database, RoleName } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 

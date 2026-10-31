@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey, type Database } from "@forkflow/domain";
+import { localDateKey, type Database } from "@masalapos/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 

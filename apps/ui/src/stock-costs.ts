@@ -1,4 +1,4 @@
-import type { StockCostChange, StockMove, StockUnit } from "@forkflow/domain";
+import type { StockCostChange, StockMove, StockUnit } from "@masalapos/domain";
 import { rupeesToPaise } from "./money";
 
 const MILLI_PAISE_PER_RUPEE = 100_000;

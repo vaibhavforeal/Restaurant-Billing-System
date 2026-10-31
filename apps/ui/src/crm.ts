@@ -1,4 +1,4 @@
-import { daysUntilOccasion } from "@forkflow/domain/customers";
+import { daysUntilOccasion } from "@masalapos/domain/customers";
 import type { Customer } from "./types";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

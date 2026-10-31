@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import type { Env } from "./env.js";
 import worker from "./index.js";
 import { OTHER_SECRET, TEST_SECRET } from "./testing/secret.js";
@@ -17,7 +17,7 @@ const publicPem = pair.publicKey.export({ type: "spki", format: "pem" }).toStrin
 const privatePem = pair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const installationId = "66666666-6666-4666-8666-666666666666";
 // As it appears in the page source: the ">" is escaped.
-const EXPIRED = "This payment link has expired. In ForkFlow, open Settings &gt; Plan and devices and press Subscribe again.";
+const EXPIRED = "This payment link has expired. In MasalaPOS, open Settings &gt; Plan and devices and press Subscribe again.";
 const UNKNOWN_SESSION = "A".repeat(43);
 
 let env: Env;
@@ -51,7 +51,7 @@ const send = (method: string, path: string, body?: unknown, headers: Record<stri
   return worker.fetch(new Request(`https://licensing.test${path}`, init), env);
 };
 const activationRequest = async (over: Record<string, unknown> = {}) => ({
-  format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
+  format: "masalapos-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
   currentRevision: 0, generatedAt: T0, verificationKeyFingerprint: fingerprint, ...over,
 });
 const checkout = (session: string, over: Record<string, unknown> = {}) => ({ session, plan: "pro", period: "yearly", email: "owner@example.com", ...over });
@@ -199,7 +199,7 @@ describe("GET /subscribe", () => {
     expect(html).not.toContain(installationId);
     expect(html).toContain("https://checkout.razorpay.com/v1/checkout.js");
     expect(html).toContain("/v1/subscriptions");
-    expect(html).toContain("Payment received. Return to ForkFlow and press Check for renewal.");
+    expect(html).toContain("Payment received. Return to MasalaPOS and press Check for renewal.");
     expect(html).toContain(EXPIRED);
     expect(html).not.toMatch(/₹|Rs\.?\s?\d|INR/);
   });

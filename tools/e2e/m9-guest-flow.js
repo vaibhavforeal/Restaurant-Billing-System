@@ -23,7 +23,7 @@
     }
   };
   const openStaffDialog = async label => { await closeDialogs(); await click(document, label); return wait(() => activeModal(document), label + ' dialog'); };
-  const headers = { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
+  const headers = { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body) => { const res = await fetch('/api' + path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); const value = await res.json(); if (!res.ok) throw new Error(path + ': ' + JSON.stringify(value)); return value; };
   document.querySelectorAll('#guest-flow-qa').forEach(frame => frame.remove());
   await closeDialogs();

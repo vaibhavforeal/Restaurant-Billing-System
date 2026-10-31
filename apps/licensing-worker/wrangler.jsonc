@@ -1,9 +1,9 @@
 {
-  "name": "forkflow-licensing",
+  "name": "masalapos-licensing",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-10",
   "d1_databases": [
-    { "binding": "DB", "database_name": "forkflow-licensing", "database_id": "<set by wrangler d1 create>", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "masalapos-licensing", "database_id": "<set by wrangler d1 create>", "migrations_dir": "migrations" }
   ],
   // period must be 10 or 60 seconds; namespace_id is a string holding a positive integer.
   "ratelimits": [
@@ -12,7 +12,7 @@
   "env": {
     "test": {
       "d1_databases": [
-        { "binding": "DB", "database_name": "forkflow-licensing-test", "database_id": "<set by wrangler d1 create>", "migrations_dir": "migrations" }
+        { "binding": "DB", "database_name": "masalapos-licensing-test", "database_id": "<set by wrangler d1 create>", "migrations_dir": "migrations" }
       ],
       "ratelimits": [
         { "name": "LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }

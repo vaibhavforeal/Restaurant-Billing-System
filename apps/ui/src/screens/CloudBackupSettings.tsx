@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { CloudBackupStatus } from "@forkflow/domain";
+import type { CloudBackupStatus } from "@masalapos/domain";
 import { apiFetch } from "../api";
 import "../cloud-backups.css";
 
@@ -8,7 +8,7 @@ const stateLabels = { not_configured: "Not configured", not_connected: "Not conn
 export function CloudBackupSettings() {
   const [status, setStatus] = useState<CloudBackupStatus | null>(null);
   const [automatic, setAutomatic] = useState(true);
-  const [folderName, setFolderName] = useState("ForkFlow Backups");
+  const [folderName, setFolderName] = useState("MasalaPOS Backups");
   const [retentionDays, setRetentionDays] = useState(30);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

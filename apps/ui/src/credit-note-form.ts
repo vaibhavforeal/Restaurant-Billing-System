@@ -1,4 +1,4 @@
-import type { PayMode, PaymentMode } from "@forkflow/domain";
+import type { PayMode, PaymentMode } from "@masalapos/domain";
 
 export type { PayMode };
 export interface RefundRow { mode: PayMode; amountPaise: number }

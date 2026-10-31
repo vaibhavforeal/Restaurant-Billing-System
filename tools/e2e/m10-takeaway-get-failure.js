@@ -2,7 +2,7 @@
 // Run after m10-takeaway.js with agent-browser eval --stdin.
 (async () => {
   if (location.origin !== 'http://127.0.0.1:4121') throw new Error('Disposable http://127.0.0.1:4121 only');
-  const fixtures = JSON.parse(localStorage.getItem('forkflow.qa.m10.takeaway') || 'null');
+  const fixtures = JSON.parse(localStorage.getItem('masalapos.qa.m10.takeaway') || 'null');
   if (fixtures?.phase !== 'complete') throw new Error('Completed takeaway gate fixtures required');
   const nativeFetch = window.fetch.bind(window);
   const result = { status: 'running', checks: [], failedOrderReads: 0 };
@@ -26,14 +26,14 @@
     const toggle = actionScope().querySelector('.order-pane-switch [aria-controls="order-' + pane + '"]');
     if (visible(toggle) && toggle.getAttribute('aria-pressed') !== 'true') { toggle.click(); await pause(); }
   }
-  const headers = { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
+  const headers = { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' };
   const api = async path => {
     const response = await nativeFetch('/api' + path, { headers });
     const body = await response.json();
     if (!response.ok) throw new Error(path + ': ' + JSON.stringify(body));
     return body;
   };
-  const takeaway = () => JSON.parse(localStorage.getItem('forkflow.draft.takeaway.' + fixtures.userId) || 'null');
+  const takeaway = () => JSON.parse(localStorage.getItem('masalapos.draft.takeaway.' + fixtures.userId) || 'null');
   try {
     await closeBilling();
     if (!(await wait(() => button('home'), 'home navigation')).disabled) await click('home');
@@ -73,7 +73,7 @@
     check((await api('/orders/' + result.orderId)).order.status === 'settled', 'Order is settled despite the failed refresh');
     check((await api('/bills?status=all')).bills.filter(row => row.orderId === result.orderId).length === 1, 'One bill is issued');
     check(document.body.innerText.includes('Paid: UPI') && document.body.innerText.includes('Payment recorded.'), 'Paid confirmation remains visible with explicit refresh guidance');
-    check(!Object.keys(localStorage).some(key => key.startsWith('forkflow.queue.v2.')), 'Payment queue drains after success');
+    check(!Object.keys(localStorage).some(key => key.startsWith('masalapos.queue.v2.')), 'Payment queue drains after success');
     await click('View receipt');
     await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('UPI'), 'paid receipt');
     check(actionScope().querySelector('.billing-receipt-frame').contentDocument.body.innerText.includes('25.00'), 'Paid receipt remains available despite order refresh failure');
@@ -82,7 +82,7 @@
     result.status = 'failed'; result.error = String(error); result.page = document.body.innerText.slice(-2500);
   } finally {
     window.fetch = nativeFetch;
-    localStorage.setItem('forkflow.qa.m10.takeaway.get-failure', JSON.stringify(result));
+    localStorage.setItem('masalapos.qa.m10.takeaway.get-failure', JSON.stringify(result));
   }
   return result;
 })()

@@ -92,7 +92,7 @@ What would you like to work on next in the Restaurant Billing System—an existi
 ## Activity
 
     $ Get-Content README.md; Get-Content package.json; Get-Content PROJECT_PLAN.md -TotalCount 180; rg --files docs .claude; rg -n 'handoff|next session|Next steps|M3c|TODO|pending' docs .claude -g '*.md'
-    # ForkFlow
+    # MasalaPOS
     
     A local-only desktop POS for restaurants. One Windows PC runs everything â€”
     an Electron shell, a Fastify server, and a SQLite database. Extra billing
@@ -116,7 +116,7 @@ What would you like to work on next in the Restaurant Billing System—an existi
     npm run dev:desktop   # the real thing: Electron window + server + built UI
     ```
     
-    The database lives in `./data/forkflow.db` (override with FORKFLOW_DATA_DIR).
+    The database lives in `./data/masalapos.db` (override with MASALAPOS_DATA_DIR).
     Delete it to re-run first-time setup.
     
     ## Layout
@@ -131,7 +131,7 @@ What would you like to work on next in the Restaurant Billing System—an existi
       desktop/  Thin Electron shell: supervises the server, opens the window
     ```
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -143,11 +143,11 @@ What would you like to work on next in the Restaurant Billing System—an existi
       "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+        "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
         "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
         "dev:server": "tsx watch apps/server/src/main.ts",
-        "dev:ui": "npm run dev -w @forkflow/ui",
-        "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+        "dev:ui": "npm run dev -w @masalapos/ui",
+        "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
       },
       "devDependencies": {
         "@types/node": "^22.10.2",
@@ -159,7 +159,7 @@ What would you like to work on next in the Restaurant Billing System—an existi
     }
     # AI Restaurant Billing System â€” Architecture & Product Plan
     
-    > Working name: **ForkFlow** (placeholder â€” rename freely)
+    > Working name: **MasalaPOS** (placeholder â€” rename freely)
     > A next-generation, AI-native restaurant POS & billing platform. **We are not cloning PetPooja â€” we are making a product that is easier to adopt and smarter to run.** PetPooja's feature list is our floor, not our finish line. An offline-first hybrid SQLite + PostgreSQL data architecture and an AI co-pilot are the moat.
     
     **Status:** Phase 0 (foundations) built â€” see [`README.md`](./README.md). Phase 1 next.
@@ -401,18 +401,18 @@ What would you like to work on next in the Restaurant Billing System—an existi
     docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:2715:Implements send-to-kitchen grouping pending items by station, per-day
     docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:2841:  status: "pending" | "sent" | "cancelled";
     docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:2883:    status: "pending" | "sent" | "cancelled";
-    docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3395:- Produces: `OrderScreen({ user, orderId, onBack })` component. Loads order + categories + products; WS reload on `order.updated` (matching id) / `table.changed`; draft cart in `localStorage["forkflow.draft." + orderId]` (JSON array of `{clientRef, productId, variantId, name, pricePaise, qty, note}`; clientRef = `crypto.randomUUID()` at add time so punch retries dedupe); product grid by category tab (active products in active categories; product with active variants → inline variant buttons); cart ops qty +/-, note via `window.prompt`, remove; **Punch** → POST items then clear draft; punched list with status chips; cancel: pending → `confirm()` then POST cancel; sent → visible only when `user.role === "admin" || user.role === "cashier"`, `window.prompt` reason (required); **Send to kitchen** → POST send, surface 409 messages; **Cancel order** → visible only when no sent items, `confirm()` then POST; totals footer = sum over non-cancelled items of pricePaise*qty (display only, `paiseToRupees`).
+    docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3395:- Produces: `OrderScreen({ user, orderId, onBack })` component. Loads order + categories + products; WS reload on `order.updated` (matching id) / `table.changed`; draft cart in `localStorage["masalapos.draft." + orderId]` (JSON array of `{clientRef, productId, variantId, name, pricePaise, qty, note}`; clientRef = `crypto.randomUUID()` at add time so punch retries dedupe); product grid by category tab (active products in active categories; product with active variants → inline variant buttons); cart ops qty +/-, note via `window.prompt`, remove; **Punch** → POST items then clear draft; punched list with status chips; cancel: pending → `confirm()` then POST cancel; sent → visible only when `user.role === "admin" || user.role === "cashier"`, `window.prompt` reason (required); **Send to kitchen** → POST send, surface 409 messages; **Cancel order** → visible only when no sent items, `confirm()` then POST; totals footer = sum over non-cancelled items of pricePaise*qty (display only, `paiseToRupees`).
     docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3503:    if (item.status === "pending") {
     docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3647:                backgroundColor: item.status === "pending" ? "#fff3cd" : item.status === "sent" ? "#d1ecf1" : "#f8d7da",
     docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3710:list with status chips, cancel (pending: confirm; sent: admin/cashier
-    docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3884:`FORKFLOW_DATA_DIR=<scratch>` server + built UI on :4100, then in a real browser: setup → Tables → admin "Manage tables" add two tables with areas → tap a free table → OrderScreen: punch a variant product and a no-station product (draft survives a reload before punching) → Send to kitchen → Kitchen page: ticket appears (WS live), items listed, mark Done → back to Tables (occupied) → cancel-sent flow as admin (reason prompt; waiter must not see the button) → cancel remaining pending items → cancel order → table free again → New parcel order round trip → create a waiter user (Users screen), log in as waiter: sees home+tables tabs only; kitchen-role user lands directly on the Kitchen board.
+    docs\superpowers\plans\2026-08-14-m3a-orders-kot.md:3884:`MASALAPOS_DATA_DIR=<scratch>` server + built UI on :4100, then in a real browser: setup → Tables → admin "Manage tables" add two tables with areas → tap a free table → OrderScreen: punch a variant product and a no-station product (draft survives a reload before punching) → Send to kitchen → Kitchen page: ticket appears (WS live), items listed, mark Done → back to Tables (occupied) → cancel-sent flow as admin (reason prompt; waiter must not see the button) → cancel remaining pending items → cancel order → table free again → New parcel order round trip → create a waiter user (Users screen), log in as waiter: sees home+tables tabs only; kitchen-role user lands directly on the Kitchen board.
     docs\superpowers\plans\2026-08-15-m3b-printing-ws.md:4327:            expect(page1.get_by_text("pending", exact=True)).to_be_visible()
     docs\agents\handoff\2026-08-15-002-m3a-gate-m3s-splits-m3b-printing.md:4:**Session scope:** Picked up the 001 handoff → M3a browser gate (the M3b blocker) → user requested table splits mid-session → M3s spec+plan+build+merge → M3b plan+build+merge. M4 Billing is planned-next, not started.
     docs\agents\handoff\2026-08-15-002-m3a-gate-m3s-splits-m3b-printing.md:24:## Files changed (map, not diff — new/changed since handoff 001)
     docs\agents\handoff\2026-08-15-002-m3a-gate-m3s-splits-m3b-printing.md:56:- **Playwright MCP absent all session** (as in handoff 001). The hermes venv Python (`~/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe`, PYTHONIOENCODING=utf-8) is the working runner; browsers already installed and matching.
     docs\agents\handoff\2026-08-15-002-m3a-gate-m3s-splits-m3b-printing.md:77:## Next steps
     docs\agents\handoff\2026-08-15-002-m3a-gate-m3s-splits-m3b-printing.md:80:2. **Write the M4 Billing plan** (subagent pattern: groundwork Explore → contracts → parallel writers → adversarial review → fixer → user sign-off). Scope from spec: GST bills (gapless `bill_no` via the seeded sequence, CGST/SGST per-rate table), settle with payments (cash/UPI/card), receipt template (80/58, reuse EscPos/templates/queue — export contextLine while there), stationless `pending` items swept at billing, table frees when ALL its orders settle (derivation already handles it), day-end report. `bills`/`payments`/`bill_taxes` tables exist since migration 001. Bills are per order → splits bill separately for free.
-    docs\agents\handoff\2026-08-15-001-m2-catalog-m3a-orders-kot.md:8:Pick up the M1 handoff and advance ForkFlow (local-only desktop POS) through its milestones: clear the M1 acceptance gate, then plan and ship M2 (Catalog: categories/products/variants, settings, users admin) and as much of M3 (Tables + KOT) as possible, executing subagent-driven per the established pattern.
+    docs\agents\handoff\2026-08-15-001-m2-catalog-m3a-orders-kot.md:8:Pick up the M1 handoff and advance MasalaPOS (local-only desktop POS) through its milestones: clear the M1 acceptance gate, then plan and ship M2 (Catalog: categories/products/variants, settings, users admin) and as much of M3 (Tables + KOT) as possible, executing subagent-driven per the established pattern.
     docs\agents\handoff\2026-08-15-001-m2-catalog-m3a-orders-kot.md:20:1. **M1 acceptance passed** (the previous handoff's human-gate): real-Chromium click-through of setup → logout (old token verified 401 server-side) → PIN-pad login, against the production serving path on a scratch DB.
     docs\agents\handoff\2026-08-15-001-m2-catalog-m3a-orders-kot.md:26:## Files changed (map, not diff — new/changed since the M1 handoff)
     docs\agents\handoff\2026-08-15-001-m2-catalog-m3a-orders-kot.md:43:| `apps/server/src/kots.ts` | Send-to-kitchen (groups pending stationed items, per-day kot_no inside the send transaction), active-KOT board (constant-query, tableName join), idempotent done. |
@@ -480,7 +480,7 @@ Its not completed fully, so picking up where I left
     ## Files in flight
     
     - Nothing uncommitted/unpushed/stashed. `main` checked out. Both SDD workspaces deleted (git is the record).
-    - `.e2e-scratch/` (gitignored) still holds the superseded morning-session gate script + scratch DB; `D:/scratch/forkflow-gate*` dirs hold gate scratch DBs — all disposable.
+    - `.e2e-scratch/` (gitignored) still holds the superseded morning-session gate script + scratch DB; `D:/scratch/masalapos-gate*` dirs hold gate scratch DBs — all disposable.
     - `data/` still does not exist — no one has run the app for real.
     
     ## Failed attempts
@@ -503,7 +503,7 @@ Its not completed fully, so picking up where I left
     
     ## What a fresh agent would otherwise rediscover
     
-    - **Gate run recipe**: `npm run build -w @forkflow/ui` → `FORKFLOW_DATA_DIR="D:/scratch/<fresh>" npx tsx apps/server/src/main.ts` (background) → `PYTHONIOENCODING=utf-8 <hermes-python> tools/e2e/gate.py` with `GATE_LAN=http://192.168.180.24:4100`. KOT-number assertions require a FRESH DB. Stop the server via netstat-PID + `powershell Stop-Process`, never the task wrapper.
+    - **Gate run recipe**: `npm run build -w @masalapos/ui` → `MASALAPOS_DATA_DIR="D:/scratch/<fresh>" npx tsx apps/server/src/main.ts` (background) → `PYTHONIOENCODING=utf-8 <hermes-python> tools/e2e/gate.py` with `GATE_LAN=http://192.168.180.24:4100`. KOT-number assertions require a FRESH DB. Stop the server via netstat-PID + `powershell Stop-Process`, never the task wrapper.
     - **`PRAGMA foreign_keys=OFF` is a no-op inside a transaction; `defer_foreign_keys=ON` is the in-transaction tool** (see migration 004's comment).
     - **Snapshot convention** (first in repo): tests snapshot `renderBytes(buffer)` via `toMatchSnapshot()`; `__snapshots__/*.snap` are committed. renderBytes is command-aware (per-command parameter counts) — extend its maps if EscPos grows new commands.
     - **Fresh installs have zero printers**; the seeded 'Kitchen' station has `printer_id = NULL` until assigned in Settings — send-to-kitchen silently skips printing then (kitchen display is the fallback).
@@ -653,7 +653,7 @@ Its not completed fully, so picking up where I left
     
     ## 8. Distribution
     
-    One installer: **`ForkFlow-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine — no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
+    One installer: **`MasalaPOS-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine — no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
     
     Known platform limits accepted for v1: LAN clients run over plain `http://` (service workers/PWA install unavailable — "Add to Home Screen" shortcut works); a true PWA later requires a small vendor-hosted DNS+cert service (Plex pattern), deferred.
     
@@ -674,7 +674,7 @@ Its not completed fully, so picking up where I left
     - **Restaurant WiFi quality bounds LAN client reliability**; static IP recommended at setup, QR reconnect provided.
     - **Electron footprint** (~100MB installer) accepted for the all-TypeScript stack and thin-shell design.
     {
-      "name": "@forkflow/server",
+      "name": "@masalapos/server",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -685,14 +685,14 @@ Its not completed fully, so picking up where I left
       "dependencies": {
         "@fastify/static": "^10.1.3",
         "@fastify/websocket": "^11.3.0",
-        "@forkflow/core": "*",
-        "@forkflow/domain": "*",
+        "@masalapos/core": "*",
+        "@masalapos/domain": "*",
         "fastify": "^5.11.3",
         "zod": "^4.4.3"
       }
     }
     {
-      "name": "@forkflow/ui",
+      "name": "@masalapos/ui",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -832,7 +832,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
     *.db-journal
     *.db-wal
     gate-*.png
-    .forkflow/
+    .masalapos/
     data/
     .e2e-scratch/
     
@@ -874,7 +874,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
       type PrinterCreateInput, type PrinterUpdateInput,
       type StationCreateInput, type StationUpdateInput,
     } from "./printer-schemas.js";
-    import type { Role } from "@forkflow/core";
+    import type { Role } from "@masalapos/core";
     
     export type RoleName = "admin" | "cashier" | "waiter" | "kitchen";
     
@@ -907,7 +907,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
     export function roleFor(name: RoleName): Role {
       return ROLES[name] ?? { name, permissions: [] };
     }
-    import type { Database } from "@forkflow/domain";
+    import type { Database } from "@masalapos/domain";
     import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
     import { ZodError } from "zod";
     import { registerAuth } from "./auth.js";
@@ -1015,7 +1015,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
         enqueuePrint(stationId: string, kind: "kot" | "cancel", label: string, bytes: Buffer): void;
       }
     }
-    import type { Database } from "@forkflow/domain";
+    import type { Database } from "@masalapos/domain";
     
     export interface OrderRow {
       id: string;
@@ -1351,7 +1351,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
         db.prepare("INSERT INTO sequences (name, value) VALUES ('bill_no', 0)").run();
       },
     };
-    import { SettingsUpdate } from "@forkflow/domain";
+    import { SettingsUpdate } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     
     interface SettingsRow {
@@ -1498,7 +1498,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
     
       return pos.bytes();
     }
-    import { uuidv7 } from "@forkflow/domain";
+    import { uuidv7 } from "@masalapos/domain";
     import type { SinkSend, PrinterTarget } from "./sinks.js";
     
     export interface PrintJobJson {
@@ -1635,7 +1635,7 @@ I’ll pick up there: GST totals, bills, cash/UPI/card settlement, receipts, and
         if (hasMore) this.processQueue(printerId);
       }
     }
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { buildServer } from "./server.js";
     import { makeFakeSink } from "./print/sinks.js";
@@ -1808,7 +1808,7 @@ For billing, should menu prices include GST, or should GST be added at checkout?
       const [error, setError] = useState("");
       const [pending, setPending] = useState(false);
     
-      const draftKey = `forkflow.draft.${orderId}`;
+      const draftKey = `masalapos.draft.${orderId}`;
     
       async function reload() {
         const [o, c, p] = await Promise.all([
@@ -2375,7 +2375,7 @@ For billing, should menu prices include GST, or should GST be added at checkout?
     
       return (
         <nav style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-          <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+          <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
           {tabs.map((t) => (
             <button
               key={t.label}
@@ -2393,7 +2393,7 @@ For billing, should menu prices include GST, or should GST be added at checkout?
         </nav>
       );
     }
-    const TOKEN_KEY = "forkflow.token";
+    const TOKEN_KEY = "masalapos.token";
     
     export const session = {
       onUnauthorized: null as (() => void) | null,
@@ -2444,8 +2444,8 @@ For billing, should menu prices include GST, or should GST be added at checkout?
 ## Activity
 
     $ Get-Content -Encoding utf8 apps/server/src/orders.ts; Get-Content -Encoding utf8 apps/server/src/tables.ts; Get-Content apps/server/src/print/escpos.ts; Get-Content packages/domain/src/migrations/index.ts; Get-Content apps/ui/src/money.ts; Get-Content apps/server/src/main.ts; Get-Content tools/e2e/README.md
-    import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
-    import { can } from "@forkflow/core";
+    import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@masalapos/domain";
+    import { can } from "@masalapos/core";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -2752,7 +2752,7 @@ For billing, should menu prices include GST, or should GST be added at checkout?
         return { order: result };
       });
     }
-    import { TableCreate, TableUpdate, uuidv7 } from "@forkflow/domain";
+    import { TableCreate, TableUpdate, uuidv7 } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     
@@ -2951,7 +2951,7 @@ For billing, should menu prices include GST, or should GST be added at checkout?
       if (!Number.isFinite(n) || n < 0) return null;
       return Math.round(n * 100);
     }
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import fastifyStatic from "@fastify/static";
     import { existsSync, mkdirSync } from "node:fs";
     import { dirname, join, resolve } from "node:path";
@@ -2960,10 +2960,10 @@ For billing, should menu prices include GST, or should GST be added at checkout?
     import { redactUrl } from "./log-redact.js";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
+    const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
     mkdirSync(dataDir, { recursive: true });
     
-    const db = openDb(join(dataDir, "forkflow.db"));
+    const db = openDb(join(dataDir, "masalapos.db"));
     migrate(db, MIGRATIONS);
     
     const app = buildServer({
@@ -2990,10 +2990,10 @@ For billing, should menu prices include GST, or should GST be added at checkout?
       });
     }
     
-    const PORT = Number(process.env["FORKFLOW_PORT"] ?? 4100);
+    const PORT = Number(process.env["MASALAPOS_PORT"] ?? 4100);
     await app.listen({ host: "0.0.0.0", port: PORT });
-    console.log(`ForkFlow server on http://localhost:${PORT} (db: ${join(dataDir, "forkflow.db")})`);
-    # ForkFlow E2E Gate
+    console.log(`MasalaPOS server on http://localhost:${PORT} (db: ${join(dataDir, "masalapos.db")})`);
+    # MasalaPOS E2E Gate
     
     Browser-based acceptance test for M3a (orders/KOT) and M3s (table splits).
     
@@ -3010,17 +3010,17 @@ For billing, should menu prices include GST, or should GST be added at checkout?
     
     1. **Build the UI production bundle** (the server serves the production build):
        ```bash
-       npm run build -w @forkflow/ui
+       npm run build -w @masalapos/ui
        ```
     
-    2. **Start the ForkFlow server with a fresh scratch database**:
+    2. **Start the MasalaPOS server with a fresh scratch database**:
        ```bash
-       FORKFLOW_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
+       MASALAPOS_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
        ```
     
        Example (Git Bash on Windows):
        ```bash
-       FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+       MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
        ```
     
        The server will initialize a fresh DB on first run. To re-run the gate from scratch, delete the scratch directory and restart the server.
@@ -3123,7 +3123,7 @@ For billing, should menu prices include GST, or should GST be added at checkout?
     
       return (
         <nav style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-          <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+          <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
           {tabs.map((t) => (
             <button
               key={t.label}
@@ -3357,8 +3357,8 @@ For billing, should menu prices include GST, or should GST be added at checkout?
           });
           await loadAll();
         } catch (e) {
-    import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
-    import { can } from "@forkflow/core";
+    import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@masalapos/domain";
+    import { can } from "@masalapos/core";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -4946,7 +4946,7 @@ The current code already has bill and payment tables, so the billing work can ex
 
     $ npm.cmd test
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run
     
     failed to load config from C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\vitest.config.ts
@@ -4987,11 +4987,11 @@ The current code already has bill and payment tables, so the billing work can ex
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 8.57s
@@ -5000,7 +5000,7 @@ The current code already has bill and payment tables, so the billing work can ex
 
     $ npm.cmd test
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run
     
     
@@ -5068,7 +5068,7 @@ I’m also adding a check between bill preview and confirmation so another count
     import { createHash } from "node:crypto";
     import { z } from "zod";
     import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-      type Bill, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
+      type Bill, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     import { loadOrderJson } from "./mappers.js";
@@ -5245,7 +5245,7 @@ I’m also adding a check between bill preview and confirmation so another count
        if (orderType === "parcel") return "Parcel";
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\reports.ts
     import type { FastifyInstance } from "fastify";
-    import { localDateKey } from "@forkflow/domain";
+    import { localDateKey } from "@masalapos/domain";
     import { z } from "zod";
     import { httpError } from "./http-error.js";
     
@@ -5290,7 +5290,7 @@ I’m also adding a check between bill preview and confirmation so another count
 ## Activity
 
     $ Get-Content apps/ui/src/api.ts; Get-Content apps/ui/src/App.tsx -Tail 28; Get-Content packages/core/src/rbac.ts; Get-Content apps/server/src/print/queue.test.ts -TotalCount 25
-    const TOKEN_KEY = "forkflow.token";
+    const TOKEN_KEY = "masalapos.token";
     
     export const session = {
       onUnauthorized: null as (() => void) | null,
@@ -5443,7 +5443,7 @@ I also found that the current order screen explicitly says prices exclude tax, s
 
     file changes: Completed · 2 changes
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\print\receipt.ts
-    import type { Bill } from "@forkflow/domain";
+    import type { Bill } from "@masalapos/domain";
     import { EscPos, CHARS_PER_LINE } from "./escpos.js";
     import { contextLine } from "./templates.js";
     
@@ -5819,7 +5819,7 @@ I’m applying the React review and browser verification skills to check the ful
      
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\BillingPanel.tsx
     import { useEffect, useRef, useState } from "react";
-    import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
+    import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
     import { ApiError, apiFetch, session } from "../api";
     import { paiseToRupees, rupeesToPaise } from "../money";
     import type { Order, PrintJobInfo } from "../types";
@@ -5849,7 +5849,7 @@ I’m applying the React review and browser verification skills to check the ful
       const [discount, setDiscount] = useState("0");
       const [reason, setReason] = useState("");
       const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-      const [printerId, setPrinterId] = useState(() => localStorage.getItem("forkflow.receipt-printer") ?? "");
+      const [printerId, setPrinterId] = useState(() => localStorage.getItem("masalapos.receipt-printer") ?? "");
       const [payments, setPayments] = useState<PaymentDraft[]>([]);
       const [busy, setBusy] = useState(false);
       const lock = useRef(false);
@@ -5939,7 +5939,7 @@ I’m applying the React review and browser verification skills to check the ful
         setFrameReady(false); setHtml(await response.text());
       }
       function changePrinter(value: string) {
-        setPrinterId(value); localStorage.setItem("forkflow.receipt-printer", value);
+        setPrinterId(value); localStorage.setItem("masalapos.receipt-printer", value);
         setPreview(null); createRequest.current = null;
       }
       const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -5989,7 +5989,7 @@ I’m applying the React review and browser verification skills to check the ful
     }
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\Bills.tsx
     import { useEffect, useState } from "react";
-    import type { Bill } from "@forkflow/domain";
+    import type { Bill } from "@masalapos/domain";
     import { apiFetch, session } from "../api";
     import { paiseToRupees } from "../money";
     import { connectWs } from "../ws";
@@ -6035,7 +6035,7 @@ I’m applying the React review and browser verification skills to check the ful
     import { useEffect, useState } from "react";
     import { apiFetch } from "../api";
     import { paiseToRupees } from "../money";
-    import type { TaxLine } from "@forkflow/domain";
+    import type { TaxLine } from "@masalapos/domain";
     
     interface Report {
       date: string; timezone: string;
@@ -6153,7 +6153,7 @@ I’m applying the React review and browser verification skills to check the ful
        return (
     -    <nav style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
     +    <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-           <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+           <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\api.ts
     @@ -36,3 +36,3 @@
          const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -6180,11 +6180,11 @@ I’m applying the React review and browser verification skills to check the ful
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 9.28s
@@ -6201,7 +6201,7 @@ I’m applying the React review and browser verification skills to check the ful
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\billing.test.ts
     import { afterEach, beforeEach, describe, expect, it } from "vitest";
     import type { FastifyInstance } from "fastify";
-    import { uuidv7, type Bill } from "@forkflow/domain";
+    import { uuidv7, type Bill } from "@masalapos/domain";
     import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
     
     describe("billing and day-end", () => {
@@ -6450,7 +6450,7 @@ I’m applying the React review and browser verification skills to check the ful
                // Defensive: if onChange throws, log but don't wedge the printer
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\print\receipt.test.ts
     import { describe, expect, it } from "vitest";
-    import { calculateBill, type Bill } from "@forkflow/domain";
+    import { calculateBill, type Bill } from "@masalapos/domain";
     import { receiptHtml, receiptSlip } from "./receipt.js";
     import { renderBytes } from "./render-bytes.js";
     
@@ -6458,7 +6458,7 @@ I’m applying the React review and browser verification skills to check the ful
       ...calculateBill([{ name: "Meal", pricePaise: 10000, qty: 2, gstRate: 5 }]),
       id: "bill-1", billNo: 42, orderId: "order-1", status: "paid", discountNote: null,
       createdAt: new Date(2026, 8, 28, 13, 30).getTime(),
-      receipt: { restaurantName: "ForkFlow Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", taxInclusive: false,
+      receipt: { restaurantName: "MasalaPOS Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", taxInclusive: false,
         orderType: "dine_in", tableName: "T1", splitLabel: "B", items: [{ name: "Meal", pricePaise: 10000, qty: 2, gstRate: 5 }] },
       payments: [{ mode: "cash", amountPaise: 10000, refNote: null, createdAt: 1 }, { mode: "upi", amountPaise: 11000, refNote: null, createdAt: 1 }],
     };
@@ -6487,7 +6487,7 @@ I’m applying the React review and browser verification skills to check the ful
 
     $ npm.cmd test -- --update
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run --update
     
     
@@ -6536,8 +6536,8 @@ I’m applying the React review and browser verification skills to check the ful
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     apps/server/src/print/receipt.test.ts(7,23): error TS2353: Object literal may only specify known properties, and 'name' does not exist in type '{ pricePaise: number; qty: number; gstRate: number; }'.
     ✗ (1) • 6.79s
@@ -6560,9 +6560,9 @@ I also fixed a printer-queue issue noted in the handoff: reaching the history li
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     failed to load config from C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\vite.config.ts
@@ -6595,7 +6595,7 @@ I also fixed a printer-queue issue noted in the handoff: reaching the history li
     npm error Lifecycle script `build` failed with error:
     npm error code 1
     npm error path C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui
-    npm error workspace @forkflow/ui@0.0.0
+    npm error workspace @masalapos/ui@0.0.0
     npm error location C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui
     npm error command failed
     npm error command C:\Windows\system32\cmd.exe /d /s /c vite build
@@ -6603,9 +6603,9 @@ I also fixed a printer-queue issue noted in the handoff: reaching the history li
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -6677,7 +6677,7 @@ I also fixed a printer-queue issue noted in the handoff: reaching the history li
     // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
     
     exports[`receipts > renders a 58mm GST receipt with split and payment details 1`] = `
-    "<1B><40><1B><61><01><1B><45><01>ForkFlow Cafe
+    "<1B><40><1B><61><01><1B><45><01>MasalaPOS Cafe
     <1B><45><00>12 Market Road
     GSTIN: 29ABCDE1234F1Z5
     FSSAI: 12345678901234
@@ -6703,7 +6703,7 @@ I also fixed a printer-queue issue noted in the handoff: reaching the history li
     `;
     
     exports[`receipts > renders a 80mm GST receipt with split and payment details 1`] = `
-    "<1B><40><1B><61><01><1B><45><01>ForkFlow Cafe
+    "<1B><40><1B><61><01><1B><45><01>MasalaPOS Cafe
     <1B><45><00>12 Market Road
     GSTIN: 29ABCDE1234F1Z5
     FSSAI: 12345678901234
@@ -6866,7 +6866,7 @@ I also fixed a printer-queue issue noted in the handoff: reaching the history li
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m4-browser'; $env:FORKFLOW_PORT = '4110'; node --import tsx apps/server/src/main.ts
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m4-browser'; $env:MASALAPOS_PORT = '4110'; node --import tsx apps/server/src/main.ts
     node:internal/modules/run_main:107
         triggerUncaughtException(
         ^
@@ -6899,17 +6899,17 @@ The app is running on a separate test database. I’m checking the screens and t
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 open http://localhost:4110
-    [agent-browser]✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 open http://localhost:4110
+    [agent-browser]✓ MasalaPOS POS
      launched browser
       http://localhost:4110/
     ✓ • 2.10s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 screenshot .e2e-scratch/m4-start.png; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 errors
-    - generic "Set up ForkFlowStart" [ref=e1] clickable [onclick]
-      - heading "Set up ForkFlow" [level=1, ref=e2]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 screenshot .e2e-scratch/m4-start.png; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 errors
+    - generic "Set up MasalaPOSStart" [ref=e1] clickable [onclick]
+      - heading "Set up MasalaPOS" [level=1, ref=e2]
       - textbox "Restaurant name" [ref=e3]
       - textbox "Your name (admin)" [ref=e4]
       - textbox "Admin PIN (4-6 digits)" [ref=e5]
@@ -6923,14 +6923,14 @@ The app is running on a separate test database. I’m checking the screens and t
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 fill @e3 'ForkFlow Test Cafe'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 fill @e4 'Test Admin'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 fill @e5 '1234'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 click @e6; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
-    ✗ Element not found: ForkFlow Test Cafe. Verify the selector, role, or name is correct and the element exists in the DOM.
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 fill @e3 'MasalaPOS Test Cafe'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 fill @e4 'Test Admin'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 fill @e5 '1234'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 click @e6; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
+    ✗ Element not found: MasalaPOS Test Cafe. Verify the selector, role, or name is correct and the element exists in the DOM.
     ✗ Element not found: Test Admin. Verify the selector, role, or name is correct and the element exists in the DOM.
     ✓ Done
     Missing arguments for: click
     Usage: agent-browser click <selector> [--new-tab] [--human]
-    - generic "Set up ForkFlowStart" [ref=e1] clickable [onclick]
-      - heading "Set up ForkFlow" [level=1, ref=e2]
+    - generic "Set up MasalaPOSStart" [ref=e1] clickable [onclick]
+      - heading "Set up MasalaPOS" [level=1, ref=e2]
       - textbox "Restaurant name" [ref=e3]
       - textbox "Your name (admin)" [ref=e4]
       - textbox "Admin PIN (4-6 digits)" [ref=e5]
@@ -6939,16 +6939,16 @@ The app is running on a separate test database. I’m checking the screens and t
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 fill '@e3' 'ForkFlow Test Cafe'
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 fill '@e4' 'Test Admin'
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 fill '@e5' '1234'
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 click '@e6'
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 fill '@e3' 'MasalaPOS Test Cafe'
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 fill '@e4' 'Test Admin'
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 fill '@e5' '1234'
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 click '@e6'
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
     ✓ Done
     ✓ Done
     ✓ Done
     ✓ Done
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
       - button "Home" [disabled, ref=e14]
       - button "Tables" [ref=e15]
       - button "Bills" [ref=e16]
@@ -6969,10 +6969,10 @@ The app is running on a separate test database. I’m checking the screens and t
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 click '@e19'
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 click '@e19'
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
     ✓ Done
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
       - button "Home" [disabled, ref=e14]
       - button "Tables" [ref=e15]
       - button "Bills" [ref=e16]
@@ -6995,7 +6995,7 @@ The app is running on a separate test database. I’m checking the screens and t
 
     $ npm.cmd test
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run
     
     
@@ -7013,19 +7013,19 @@ The app is running on a separate test database. I’m checking the screens and t
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 20.13s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
       - button "Home" [disabled, ref=e14]
       - button "Tables" [ref=e15]
       - button "Bills" [ref=e16]
@@ -7050,11 +7050,11 @@ The browser setup screen loads correctly, and the app opens after first-time set
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 find role button click --name Catalog --exact
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 errors
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 find role button click --name Catalog --exact
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 errors
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
     ✓ Done
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e1] clickable [onclick]
       - button "Home" [disabled, ref=e14]
       - button "Tables" [ref=e15]
       - button "Bills" [ref=e16]
@@ -7075,7 +7075,7 @@ The browser setup screen loads correctly, and the app opens after first-time set
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval 'document.querySelectorAll("button")[5].click()'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval 'document.querySelectorAll("button")[5].click()'
         .\.e2D
     ✗ Evaluation error: ReferenceError: button is not defined
         at <anonymous>:1:27
@@ -7097,7 +7097,7 @@ The browser setup screen loads correctly, and the app opens after first-time set
 
 ## Activity
 
-    $ Get-Content -Raw .e2e-scratch/inspect.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+    $ Get-Content -Raw .e2e-scratch/inspect.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     "{\"buttons\":[{\"text\":\"home\",\"box\":{\"x\":100.828125,\"y\":16,\"width\":63.5625,\"height\":31,\"top\":16,\"right\":164.390625,\"bottom\":47,\"left\":100.828125}},{\"text\":\"tables\",\"box\":{\"x\":172.390625,\"y\":16,\"width\":66.546875,\"height\":31,\"top\":16,\"right\":238.9375,\"bottom\":47,\"left\":172.390625}},{\"text\":\"bills\",\"box\":{\"x\":246.9375,\"y\":16,\"width\":52.453125,\"height\":31,\"top\":16,\"right\":299.390625,\"bottom\":47,\"left\":246.9375}},{\"text\":\"reports\",\"box\":{\"x\":307.390625,\"y\":16,\"width\":74.6875,\"height\":31,\"top\":16,\"right\":382.078125,\"bottom\":47,\"left\":307.390625}},{\"text\":\"kitchen\",\"box\":{\"x\":390.078125,\"y\":16,\"width\":72.46875,\"height\":31,\"top\":16,\"right\":462.546875,\"bottom\":47,\"left\":390.078125}},{\"text\":\"catalog\",\"box\":{\"x\":470.546875,\"y\":16,\"width\":73.953125,\"height\":31,\"top\":16,\"right\":544.5,\"bottom\":47,\"left\":470.546875}},{\"text\":\"users\",\"box\":{\"x\":552.5,\"y\":16,\"width\":62.8125,\"height\":31,\"top\":16,\"right\":615.3125,\"bottom\":47,\"left\":552.5}},{\"text\":\"settings\",\"box\":{\"x\":623.3125,\"y\":16,\"width\":76.171875,\"height\":31,\"top\":16,\"right\":699.484375,\"bottom\":47,\"left\":623.3125}},{\"text\":\"Log out\",\"box\":{\"x\":1169.515625,\"y\":16,\"width\":72.484375,\"height\":31,\"top\":16,\"right\":1242,\"bottom\":47,\"left\":1169.515625}},{\"text\":\"Tables\",\"box\":{\"x\":389,\"y\":142.75,\"width\":480,\"height\":65,\"top\":142.75,\"right\":869,\"bottom\":207.75,\"left\":389}},{\"text\":\"Kitchen\",\"box\":{\"x\":389,\"y\":219.75,\"width\":480,\"height\":65,\"top\":219.75,\"right\":869,\"bottom\":284.75,\"left\":389}},{\"text\":\"Bills\",\"box\":{\"x\":389,\"y\":296.75,\"width\":480,\"height\":65,\"top\":296.75,\"right\":869,\"bottom\":361.75,\"left\":389}},{\"text\":\"Day-end report\",\"box\":{\"x\":389,\"y\":373.75,\"width\":480,\"height\":65,\"top\":373.75,\"right\":869,\"bottom\":438.75,\"left\":389}},{\"text\":\"Catalog\",\"box\":{\"x\":389,\"y\":450.75,\"width\":480,\"height\":65,\"top\":450.75,\"right\":869,\"bottom\":515.75,\"left\":389}},{\"text\":\"Users\",\"box\":{\"x\":389,\"y\":527.75,\"width\":480,\"height\":65,\"top\":527.75,\"right\":869,\"bottom\":592.75,\"left\":389}},{\"text\":\"Settings\",\"box\":{\"x\":389,\"y\":604.75,\"width\":480,\"height\":65,\"top\":604.75,\"right\":869,\"bottom\":669.75,\"left\":389}}],\"overlay\":false}"
     ✓ • 321ms
 
@@ -7109,10 +7109,10 @@ The browser setup screen loads correctly, and the app opens after first-time set
 
 ## Activity
 
-    $ Get-Content -Raw .e2e-scratch/click-catalog.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
+    $ Get-Content -Raw .e2e-scratch/click-catalog.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
     "clicked catalog"
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outCategoriesAddProductsNew p" [ref=e1] clickable [onclick]
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outCategoriesAddProductsNew p" [ref=e1] clickable [onclick]
       - button "Home" [ref=e14]
       - button "Tables" [ref=e15]
       - button "Bills" [ref=e16]
@@ -7552,7 +7552,7 @@ The browser setup screen loads correctly, and the app opens after first-time set
         await new Promise((resolve) => setTimeout(resolve, 60));
       };
       const api = async (path, method = 'GET', body) => {
-        const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const data = await r.json(); if (!r.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
       };
       const suffix = Date.now();
@@ -7618,7 +7618,7 @@ The browser setup screen loads correctly, and the app opens after first-time set
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     ✗ Evaluation error: Error: Disabled: Billing gate 1790617156439
         at click (<anonymous>:13:120)
         at async checkout (<anonymous>:38:5)
@@ -7643,7 +7643,7 @@ The browser tool’s click command isn’t consistently triggering React buttons
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     {
       "exclusiveBill": 2,
       "inclusiveBill": 1,
@@ -7666,11 +7666,11 @@ The browser tool’s click command isn’t consistently triggering React buttons
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 screenshot --full
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 errors
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 screenshot --full
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 errors
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790617202967.png
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outDay-end reportBusiness dat" [ref=e1] clickable [onclick]
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outDay-end reportBusiness dat" [ref=e1] clickable [onclick]
       - button "Home" [ref=e14]
       - button "Tables" [ref=e15]
       - button "Bills" [ref=e16]
@@ -7703,7 +7703,7 @@ The browser tool’s click command isn’t consistently triggering React buttons
 
     $ & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false diff --check; Get-Content packages/domain/package.json; Get-Content apps/desktop/package.json; Get-Content node_modules/esbuild/package.json -TotalCount 25; Get-Content node_modules/electron/package.json -TotalCount 25
     {
-      "name": "@forkflow/domain",
+      "name": "@masalapos/domain",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -7720,7 +7720,7 @@ The browser tool’s click command isn’t consistently triggering React buttons
       }
     }
     {
-      "name": "@forkflow/desktop",
+      "name": "@masalapos/desktop",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -7800,7 +7800,7 @@ I’m finishing the documentation and continuation notes so the next session can
 
     $ Get-Content -Encoding utf8 apps/ui/src/screens/BillingPanel.tsx -TotalCount 120; Get-Content README.md -Encoding utf8 -TotalCount 65; & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false status --short
     import { useEffect, useRef, useState } from "react";
-    import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
+    import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
     import { ApiError, apiFetch, session } from "../api";
     import { paiseToRupees, rupeesToPaise } from "../money";
     import type { Order, PrintJobInfo } from "../types";
@@ -7830,7 +7830,7 @@ I’m finishing the documentation and continuation notes so the next session can
       const [discount, setDiscount] = useState("0");
       const [reason, setReason] = useState("");
       const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-      const [printerId, setPrinterId] = useState(() => localStorage.getItem("forkflow.receipt-printer") ?? "");
+      const [printerId, setPrinterId] = useState(() => localStorage.getItem("masalapos.receipt-printer") ?? "");
       const [payments, setPayments] = useState<PaymentDraft[]>([]);
       const [busy, setBusy] = useState(false);
       const lock = useRef(false);
@@ -7919,7 +7919,7 @@ I’m finishing the documentation and continuation notes so the next session can
           return { mode: p.mode, amountPaise, refNote: p.refNote };
         });
         if (rows.reduce((sum, p) => sum + p.amountPaise, 0) !== bill.totalPaise) throw new Error("Payments must exactly match the bill total");
-    # ForkFlow
+    # MasalaPOS
     
     A local-only desktop POS for restaurants. One Windows PC runs everything —
     an Electron shell, a Fastify server, and a SQLite database. Extra billing
@@ -7943,7 +7943,7 @@ I’m finishing the documentation and continuation notes so the next session can
     npm run dev:desktop   # the real thing: Electron window + server + built UI
     ```
     
-    The database lives in `./data/forkflow.db` (override with FORKFLOW_DATA_DIR).
+    The database lives in `./data/masalapos.db` (override with MASALAPOS_DATA_DIR).
     Delete it to re-run first-time setup.
     
     ## Layout
@@ -8018,10 +8018,10 @@ I’m finishing the documentation and continuation notes so the next session can
      npm test              # vitest across all workspaces
     @@ -24,4 +28,37 @@
      
-    -The database lives in `./data/forkflow.db` (override with FORKFLOW_DATA_DIR).
+    -The database lives in `./data/masalapos.db` (override with MASALAPOS_DATA_DIR).
     -Delete it to re-run first-time setup.
-    +Use Node.js 24+. The database lives in `./data/forkflow.db` (override with
-    +`FORKFLOW_DATA_DIR`). Use a separate scratch data directory for testing.
+    +Use Node.js 24+. The database lives in `./data/masalapos.db` (override with
+    +`MASALAPOS_DATA_DIR`). Use a separate scratch data directory for testing.
     +
     +On this Windows/npm 11 installation, npm tried `node-gyp rebuild` for
     +better-sqlite3 despite its bundled prebuild. `npm ci --ignore-scripts` installed
@@ -8103,7 +8103,7 @@ I’m finishing the documentation and continuation notes so the next session can
     +```powershell
     +# Substitute your installed agent-browser executable if different.
     +Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js |
-    +  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+    +  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     +```
     +
     +The gate uses DOM events in the real browser (works around native-click issues
@@ -8113,9 +8113,9 @@ I’m finishing the documentation and continuation notes so the next session can
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -8132,7 +8132,7 @@ I’m finishing the documentation and continuation notes so the next session can
 
     $ npm.cmd test -- apps/server/src/billing.test.ts
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run apps/server/src/billing.test.ts
     
     
@@ -8164,13 +8164,13 @@ I’m finishing the documentation and continuation notes so the next session can
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 reload
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 reload
     http://localhost:4110/
     ✓ • 191ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     ✗ Evaluation error: Error: Timed out: button settings. Page:
         at waitFor (<anonymous>:10:11)
         at async click (<anonymous>:13:45)
@@ -8193,7 +8193,7 @@ I’m finishing the documentation and continuation notes so the next session can
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>ForkFlow POS</title>
+        <title>MasalaPOS POS</title>
         <script type="module" crossorigin src="/assets/index-CSO7xmEP.js"></script>
       </head>
       <body>
@@ -8214,9 +8214,9 @@ The final UI build is ready. I’m restarting the test server so it serves the r
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m4-browser'; $env:FORKFLOW_PORT = '4110'; node --import tsx apps/server/src/main.ts
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m4-browser'; $env:MASALAPOS_PORT = '4110'; node --import tsx apps/server/src/main.ts
     {"level":30,"time":1790616505214,"pid":15420,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://127.0.0.1:4110"}
-    ForkFlow server on http://localhost:4110 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m4-browser\forkflow.db)
+    MasalaPOS server on http://localhost:4110 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m4-browser\masalapos.db)
     {"level":30,"time":1790616505214,"pid":15420,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://192.168.171.101:4110"}
     {"level":30,"time":1790616586552,"pid":15420,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","req":{"method":"GET","url":"/"},"msg":"incoming request"}
     {"level":30,"time":1790616586573,"pid":15420,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","res":{"statusCode":200},"responseTime":20.133399999991525,"msg":"request completed"}
@@ -8560,14 +8560,14 @@ The final UI build is ready. I’m restarting the test server so it serves the r
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 reload
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 reload
     http://localhost:4110/
     ✓ • 219ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 snapshot -i
-    - generic "ForkFlowhometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e52] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 snapshot -i
+    - generic "MasalaPOShometablesbillsreportskitchencataloguserssettingsTest AdminLog outSigned in as Test Admin (a" [ref=e52] clickable [onclick]
       - button "Home" [disabled, ref=e60]
       - button "Tables" [ref=e61]
       - button "Bills" [ref=e62]
@@ -8588,7 +8588,7 @@ The final UI build is ready. I’m restarting the test server so it serves the r
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     {
       "exclusiveBill": 4,
       "inclusiveBill": 3,
@@ -8611,11 +8611,11 @@ The final UI build is ready. I’m restarting the test server so it serves the r
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/view-receipt.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 screenshot --full
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/view-receipt.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 screenshot --full
     {
-      "page": "ForkFlow\nHome\nTables\nBills\nReports\nKitchen\nCatalog\nUsers\nSettings\nTest Admin\nLog out\nParcel — settled\n← Back\nPunched items\n1 × Gate meal 1790617458239\nsent\nTotal: ₹105.00\nMenu total. Final taxes and discounts are shown in billing.\nBill #3 — paid\n\nReceipt printer \nBrowser / A4 receipt\n\nMenu prices include GST\n\nSubtotal: ₹105.00 · Discount: ₹0.00\n\nGST rate\tTaxable\tCGST\tSGST\n5%\t₹100.00\t₹2.50 (2.5%)\t₹2.50 (2.5%)\n\nRound off: ₹0.00\n\nPayable: ₹105.00\n\nPaid: CASH ₹50.00 + UPI ₹55.00\n\nView receipt\nPrint / save PDF",
-      "receipt": "ForkFlow Test Cafe\n\nBill #3 · PAID\n\n28/9/2026, 23:14:19\nParcel\n\nPrices include GST\n\nItem\tQty\tRate ₹\tAmount ₹\nGate meal 1790617458239\t1\t105.00\t105.00\nGST breakdown (₹)\nGST rate\tTaxable\tCGST\tSGST\n5%\t100.00\t2.50 (2.5%)\t2.50 (2.5%)\nSubtotal\t₹105.00\nDiscount\t−₹0.00\nCGST + SGST (included)\t₹5.00\nRound off\t₹0.00\nTotal\t₹105.00\nCASH\t₹50.00\nUPI\t₹55.00"
+      "page": "MasalaPOS\nHome\nTables\nBills\nReports\nKitchen\nCatalog\nUsers\nSettings\nTest Admin\nLog out\nParcel — settled\n← Back\nPunched items\n1 × Gate meal 1790617458239\nsent\nTotal: ₹105.00\nMenu total. Final taxes and discounts are shown in billing.\nBill #3 — paid\n\nReceipt printer \nBrowser / A4 receipt\n\nMenu prices include GST\n\nSubtotal: ₹105.00 · Discount: ₹0.00\n\nGST rate\tTaxable\tCGST\tSGST\n5%\t₹100.00\t₹2.50 (2.5%)\t₹2.50 (2.5%)\n\nRound off: ₹0.00\n\nPayable: ₹105.00\n\nPaid: CASH ₹50.00 + UPI ₹55.00\n\nView receipt\nPrint / save PDF",
+      "receipt": "MasalaPOS Test Cafe\n\nBill #3 · PAID\n\n28/9/2026, 23:14:19\nParcel\n\nPrices include GST\n\nItem\tQty\tRate ₹\tAmount ₹\nGate meal 1790617458239\t1\t105.00\t105.00\nGST breakdown (₹)\nGST rate\tTaxable\tCGST\tSGST\n5%\t100.00\t2.50 (2.5%)\t2.50 (2.5%)\nSubtotal\t₹105.00\nDiscount\t−₹0.00\nCGST + SGST (included)\t₹5.00\nRound off\t₹0.00\nTotal\t₹105.00\nCASH\t₹50.00\nUPI\t₹55.00"
     }
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790618661022.png
     ✓ • 1.86s
@@ -8698,7 +8698,7 @@ I’m saving the continuation notes now. The changes are local and haven’t bee
       before attempting desktop launch. Browser/server development is working.
     - Vite/tsx need subprocess permission beyond the sandbox on this machine.
     - Test server: port **4110**, data `.e2e-scratch/m4-browser`, process **17716** at
-      end of work. Test setup: ForkFlow Test Cafe, Test Admin, PIN 1234. Test data only.
+      end of work. Test setup: MasalaPOS Test Cafe, Test Admin, PIN 1234. Test data only.
     - agent-browser is scratch-installed at `.e2e-scratch/qa`; Windows native clicks
       were unreliable, so the browser gate uses DOM events via `eval --stdin`.
     - Restart the production-serving test server after a Vite rebuild: Fastify static
@@ -8753,7 +8753,7 @@ I’m saving the continuation notes now. The changes are local and haven’t bee
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 close
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 close
     ✓ Browser closed
     ✓ • 550ms
 
@@ -8773,9 +8773,9 @@ Changes are local, not pushed. Test preview: http://localhost:4110
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m4-browser'; $env:FORKFLOW_PORT = '4110'; node --import tsx apps/server/src/main.ts
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m4-browser'; $env:MASALAPOS_PORT = '4110'; node --import tsx apps/server/src/main.ts
     {"level":30,"time":1790617392452,"pid":17716,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://127.0.0.1:4110"}
-    ForkFlow server on http://localhost:4110 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m4-browser\forkflow.db)
+    MasalaPOS server on http://localhost:4110 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m4-browser\masalapos.db)
     {"level":30,"time":1790617392452,"pid":17716,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://192.168.171.101:4110"}
     {"level":30,"time":1790617457282,"pid":17716,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","req":{"method":"GET","url":"/"},"msg":"incoming request"}
     {"level":30,"time":1790617457292,"pid":17716,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","res":{"statusCode":304},"responseTime":9.200499999991735,"msg":"request completed"}
@@ -9185,7 +9185,7 @@ I’ll continue with inventory: stock items, product links, automatic deductions
       before attempting desktop launch. Browser/server development is working.
     - Vite/tsx need subprocess permission beyond the sandbox on this machine.
     - Test server: port **4110**, data `.e2e-scratch/m4-browser`, process **17716** at
-      end of work. Test setup: ForkFlow Test Cafe, Test Admin, PIN 1234. Test data only.
+      end of work. Test setup: MasalaPOS Test Cafe, Test Admin, PIN 1234. Test data only.
     - agent-browser is scratch-installed at `.e2e-scratch/qa`; Windows native clicks
       were unreliable, so the browser gate uses DOM events via `eval --stdin`.
     - Restart the production-serving test server after a Vite rebuild: Fastify static
@@ -9212,7 +9212,7 @@ I’ll continue with inventory: stock items, product links, automatic deductions
     report counts cancelled orders, not individual cancelled item events (the
     existing item schema has no cancellation timestamp).
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -9224,11 +9224,11 @@ I’ll continue with inventory: stock items, product links, automatic deductions
       "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+        "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
         "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
         "dev:server": "tsx watch apps/server/src/main.ts",
-        "dev:ui": "npm run dev -w @forkflow/ui",
-        "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+        "dev:ui": "npm run dev -w @masalapos/ui",
+        "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
       },
       "devDependencies": {
         "@types/node": "^22.10.2",
@@ -9251,8 +9251,8 @@ When stock runs out, should staff still be able to send orders to the kitchen?
 ## Activity
 
     $ Get-Content -Encoding utf8 apps/server/src/orders.ts; Get-Content apps/ui/src/NavBar.tsx; Get-Content apps/ui/src/App.tsx -Tail 50; Get-Content apps/ui/src/screens/Home.tsx; Get-Content apps/ui/src/types.ts; Get-Content apps/server/src/server.ts -Tail 35; Get-Content packages/domain/src/roles.ts; Get-Content packages/domain/src/migrations/index.ts
-    import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
-    import { can } from "@forkflow/core";
+    import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@masalapos/domain";
+    import { can } from "@masalapos/core";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -9628,7 +9628,7 @@ When stock runs out, should staff still be able to send orders to the kitchen?
     
       return (
         <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-          <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+          <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
           {tabs.map((t) => (
             <button
               key={t.label}
@@ -9924,7 +9924,7 @@ When stock runs out, should staff still be able to send orders to the kitchen?
         enqueuePrint(stationId: string, kind: "kot" | "cancel", label: string, bytes: Buffer): void;
       }
     }
-    import type { Role } from "@forkflow/core";
+    import type { Role } from "@masalapos/core";
     
     export type RoleName = "admin" | "cashier" | "waiter" | "kitchen";
     
@@ -9970,7 +9970,7 @@ When stock runs out, should staff still be able to send orders to the kitchen?
 ## Activity
 
     $ Get-Content -Encoding utf8 apps/server/src/kots.ts; Get-Content -Encoding utf8 apps/server/src/billing.ts; Get-Content -Encoding utf8 packages/domain/src/migrations/001-initial.ts | Select-Object -Skip 185; Get-Content packages/domain/src/db.ts; Get-Content packages/domain/src/migrate.ts
-    import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
+    import { nextSequence, localDateKey, uuidv7 } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -10197,7 +10197,7 @@ When stock runs out, should staff still be able to send orders to the kitchen?
     import { createHash } from "node:crypto";
     import { z } from "zod";
     import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-      type Bill, type ReceiptSnapshot, type TaxLine } from "@forkflow/domain";
+      type Bill, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     import { loadOrderJson } from "./mappers.js";
@@ -10506,7 +10506,7 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
       const [error, setError] = useState("");
       const [pending, setPending] = useState(false);
     
-      const draftKey = `forkflow.draft.${orderId}`;
+      const draftKey = `masalapos.draft.${orderId}`;
     
       async function reload() {
         const [o, c, p] = await Promise.all([
@@ -10624,7 +10624,7 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
     
       const total = order.items.filter((i) => i.status !== "cancelled").reduce((sum, i) => sum + i.pricePaise * i.qty, 0);
     
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { buildServer } from "./server.js";
     import { makeFakeSink } from "./print/sinks.js";
@@ -10704,8 +10704,8 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
         "types": ["node"],
         "baseUrl": ".",
         "paths": {
-          "@forkflow/domain": ["packages/domain/src/index.ts"],
-          "@forkflow/core": ["packages/core/src/index.ts"]
+          "@masalapos/domain": ["packages/domain/src/index.ts"],
+          "@masalapos/core": ["packages/core/src/index.ts"]
         }
       },
       "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"],
@@ -10884,7 +10884,7 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
       VariantCreate, VariantUpdate,
       StationCreate, StationUpdate,
       uuidv7,
-    } from "@forkflow/domain";
+    } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     
@@ -11202,7 +11202,7 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\billing.ts
     @@ -8,2 +8,4 @@
      import { receiptSlip, receiptHtml } from "./print/receipt.js";
-    +import { consumeStock } from "@forkflow/domain";
+    +import { consumeStock } from "@masalapos/domain";
     +import { publishStock } from "./stock.js";
      
     @@ -82,2 +84,3 @@
@@ -11222,8 +11222,8 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
          const order = result.created ? broadcast(orderId) : loadOrderJson(db, orderId);
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\kots.ts
     @@ -1,2 +1,3 @@
-    -import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
-    +import { nextSequence, localDateKey, uuidv7, consumeStock } from "@forkflow/domain";
+    -import { nextSequence, localDateKey, uuidv7 } from "@masalapos/domain";
+    +import { nextSequence, localDateKey, uuidv7, consumeStock } from "@masalapos/domain";
     +import { publishStock } from "./stock.js";
      import type { FastifyInstance } from "fastify";
     @@ -42,3 +43,4 @@
@@ -11246,8 +11246,8 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
      
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\mappers.ts
     @@ -1,2 +1,2 @@
-    -import type { Database } from "@forkflow/domain";
-    +import { orderStockWarnings, type Database } from "@forkflow/domain";
+    -import type { Database } from "@masalapos/domain";
+    +import { orderStockWarnings, type Database } from "@masalapos/domain";
      
     @@ -115,3 +115,4 @@
          items: items.map(orderItemJson),
@@ -11260,7 +11260,7 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
      import type { FastifyInstance } from "fastify";
     -import { httpError } from "./http-error.js";
     +import { httpError } from "./http-error.js";
-    +import { reverseStock } from "@forkflow/domain";
+    +import { reverseStock } from "@masalapos/domain";
     +import { publishStock } from "./stock.js";
      import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
     @@ -218,5 +220,9 @@
@@ -11289,7 +11289,7 @@ Orders will stay available when stock runs out, with a visible warning. I’ll k
     import { z } from "zod";
     import type { FastifyInstance } from "fastify";
     import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, stockMilli, stockJson, appendStockMove, uuidv7,
-      type StockRow, type StockLink, type StockMove } from "@forkflow/domain";
+      type StockRow, type StockLink, type StockMove } from "@masalapos/domain";
     import { httpError } from "./http-error.js";
     
     /** Publish only after the caller has committed the transaction. */
@@ -11421,7 +11421,7 @@ The stock changes are now connected to the order transactions: kitchen items ded
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\NavBar.tsx
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\Inventory.tsx
     import { useEffect, useRef, useState } from "react";
-    import type { StockItem, StockLink, StockMove, StockUnit } from "@forkflow/domain";
+    import type { StockItem, StockLink, StockMove, StockUnit } from "@masalapos/domain";
     import { apiFetch, session, type User } from "../api";
     import type { Product } from "../types";
     import { uuid } from "../uuid";
@@ -11656,7 +11656,7 @@ The stock changes are now connected to the order transactions: kitchen items ded
      
     -export interface Order {
     +export interface Order {
-    +  stockWarnings: import("@forkflow/domain").StockWarning[];
+    +  stockWarnings: import("@masalapos/domain").StockWarning[];
        id: string;
 
 ## Activity
@@ -11696,7 +11696,7 @@ The stock changes are now connected to the order transactions: kitchen items ded
 
     $ npm.cmd test
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run
     
     
@@ -11714,11 +11714,11 @@ The stock changes are now connected to the order transactions: kitchen items ded
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 21.98s
@@ -11735,7 +11735,7 @@ I’m testing retries, cancellations after link changes, and rollback when a sto
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\stock.test.ts
     import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
     import type { FastifyInstance } from "fastify";
-    import { uuidv7, type StockItem, type Bill } from "@forkflow/domain";
+    import { uuidv7, type StockItem, type Bill } from "@masalapos/domain";
     import { freshAppWithFakeSink, setupAdmin, auth, createUser } from "./test-helpers.js";
     
     describe("inventory", () => {
@@ -11957,8 +11957,8 @@ I’m testing retries, cancellations after link changes, and rollback when a sto
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     apps/server/src/stock.test.ts(73,49): error TS1005: ',' expected.
     apps/server/src/stock.test.ts(73,51): error TS1005: ',' expected.
@@ -12010,7 +12010,7 @@ I’m testing retries, cancellations after link changes, and rollback when a sto
 
     $ npm.cmd test -- packages/domain/src/stock.test.ts packages/domain/src/migrations/006-inventory-ledger.test.ts apps/server/src/stock.test.ts
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run packages/domain/src/stock.test.ts packages/domain/src/migrations/006-inventory-ledger.test.ts apps/server/src/stock.test.ts
     
     
@@ -12491,7 +12491,7 @@ I’m testing retries, cancellations after link changes, and rollback when a sto
 
     $ npm.cmd test -- packages/domain/src/stock.test.ts packages/domain/src/migrations/006-inventory-ledger.test.ts apps/server/src/stock.test.ts
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run packages/domain/src/stock.test.ts packages/domain/src/migrations/006-inventory-ledger.test.ts apps/server/src/stock.test.ts
     
     
@@ -12509,11 +12509,11 @@ I’m testing retries, cancellations after link changes, and rollback when a sto
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 10.37s
@@ -12526,9 +12526,9 @@ Next I’ll use the browser verification skills to check the full flow from stoc
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -12565,7 +12565,7 @@ Next I’ll use the browser verification skills to check the full flow from stoc
         await new Promise((r) => setTimeout(r, 70));
       };
       const api = async (path, method = 'GET', body) => {
-        const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const json = await response.json(); if (!response.ok) throw new Error(`${path}: ${JSON.stringify(json)}`); return json;
       };
       const suffix = Date.now(); const name = `Gate ingredient ${suffix}`;
@@ -12648,19 +12648,19 @@ Next I’ll use the browser verification skills to check the full flow from stoc
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 open http://localhost:4110
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 open http://localhost:4110
+    ✓ MasalaPOS POS
     [agent-browser] launched browser
       http://localhost:4110/
     ✓ • 2.74s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 snapshot -i
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 screenshot
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 errors
-    - generic "ForkFlow123456789⌫0OK" [ref=e1] clickable [onclick]
-      - heading "ForkFlow" [level=1, ref=e2]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 snapshot -i
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 screenshot
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 errors
+    - generic "MasalaPOS123456789⌫0OK" [ref=e1] clickable [onclick]
+      - heading "MasalaPOS" [level=1, ref=e2]
       - button "1" [ref=e3]
       - button "2" [ref=e4]
       - button "3" [ref=e5]
@@ -12694,7 +12694,7 @@ Next I’ll use the browser verification skills to check the full flow from stoc
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m5-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m5-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     "Test admin login submitted"
     ✓ • 668ms
 
@@ -12704,8 +12704,8 @@ The test app restarted successfully with the inventory migration applied to the 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 snapshot -i
-    - generic "ForkFlowhometablesbillsreportsinventorykitchencataloguserssettingsTest AdminLog outSigned in as Test" [ref=e1] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 snapshot -i
+    - generic "MasalaPOShometablesbillsreportsinventorykitchencataloguserssettingsTest AdminLog outSigned in as Test" [ref=e1] clickable [onclick]
       - button "Home" [disabled, ref=e23]
       - button "Tables" [ref=e24]
       - button "Bills" [ref=e25]
@@ -12728,7 +12728,7 @@ The test app restarted successfully with the inventory migration applied to the 
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     ✗ Evaluation error: Error: Disabled: tables
         at click (<anonymous>:12:108)
         at async punch (<anonymous>:43:5)
@@ -12748,7 +12748,7 @@ The test app restarted successfully with the inventory migration applied to the 
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     {
       "checks": [
         "Stock item created from the form with an opening balance",
@@ -12783,14 +12783,14 @@ I’m checking the finished screen and rerunning billing to confirm both GST mod
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 screenshot --full
-        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 errors
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 screenshot --full
+        .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 errors
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790620441113.png
     ✓ • 748ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     ✗ Evaluation error: Error: Browser receipt is ready to print
         at check (<anonymous>:6:51)
         at <anonymous>:58:3
@@ -12819,7 +12819,7 @@ I’m checking the finished screen and rerunning billing to confirm both GST mod
 
     $ npm.cmd test
     
-    > forkflow@0.0.0 test
+    > masalapos@0.0.0 test
     > vitest run
     
     
@@ -12848,7 +12848,7 @@ I’m checking the finished screen and rerunning billing to confirm both GST mod
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     {
       "exclusiveBill": 8,
       "inclusiveBill": 7,
@@ -12992,7 +12992,7 @@ I’m updating the README and handoff notes. The next milestone is backups, reco
     - `data/` production database was not created. Both gates add uniquely named
       test stock/menu fixtures and bills to the scratch DB; rerunning is supported.
     - agent-browser: `.e2e-scratch/qa/node_modules/.bin/agent-browser.cmd`. Used
-      session `forkflow-m5`. As in M4, use DOM events through `eval --stdin` because
+      session `masalapos-m5`. As in M4, use DOM events through `eval --stdin` because
       native clicks are unreliable on this Windows setup.
     - Rebuild UI before restarting production-serving test server (static asset
       routes are registered on startup). See M4 handoff for npm/SQLite install notes.
@@ -13018,7 +13018,7 @@ I’m updating the README and handoff notes. The next milestone is backups, reco
     +
     +```powershell
     +Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js |
-    +  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+    +  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     +```
     +
     +The gate creates menu fixtures through the API, then exercises stock creation,
@@ -13097,11 +13097,11 @@ I’m updating the README and handoff notes. The next milestone is backups, reco
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 17.92s
@@ -13118,7 +13118,7 @@ I’m updating the README and handoff notes. The next milestone is backups, reco
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 close
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 close
     ✓ Browser closed
     ✓ • 799ms
 
@@ -13210,7 +13210,7 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
     - `data/` production database was not created. Both gates add uniquely named
       test stock/menu fixtures and bills to the scratch DB; rerunning is supported.
     - agent-browser: `.e2e-scratch/qa/node_modules/.bin/agent-browser.cmd`. Used
-      session `forkflow-m5`. As in M4, use DOM events through `eval --stdin` because
+      session `masalapos-m5`. As in M4, use DOM events through `eval --stdin` because
       native clicks are unreliable on this Windows setup.
     - Rebuild UI before restarting production-serving test server (static asset
       routes are registered on startup). See M4 handoff for npm/SQLite install notes.
@@ -13225,7 +13225,7 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
     Remaining existing limitations: physical printers untested, in-memory print
     queue, Bluetooth timeout/Windows printer-name escaping follow-ups, no bill void
     or refund flow. None of those were expanded in this inventory milestone.
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import fastifyStatic from "@fastify/static";
     import { existsSync, mkdirSync } from "node:fs";
     import { dirname, join, resolve } from "node:path";
@@ -13234,10 +13234,10 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
     import { redactUrl } from "./log-redact.js";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
+    const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
     mkdirSync(dataDir, { recursive: true });
     
-    const db = openDb(join(dataDir, "forkflow.db"));
+    const db = openDb(join(dataDir, "masalapos.db"));
     migrate(db, MIGRATIONS);
     
     const app = buildServer({
@@ -13264,9 +13264,9 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
       });
     }
     
-    const PORT = Number(process.env["FORKFLOW_PORT"] ?? 4100);
+    const PORT = Number(process.env["MASALAPOS_PORT"] ?? 4100);
     await app.listen({ host: "0.0.0.0", port: PORT });
-    console.log(`ForkFlow server on http://localhost:${PORT} (db: ${join(dataDir, "forkflow.db")})`);
+    console.log(`MasalaPOS server on http://localhost:${PORT} (db: ${join(dataDir, "masalapos.db")})`);
     import type { Database } from "better-sqlite3";
     
     export interface Migration {
@@ -13307,7 +13307,7 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
       }
     }
     {
-      "name": "@forkflow/desktop",
+      "name": "@masalapos/desktop",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -13325,7 +13325,7 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
     apps/desktop\src\main.ts
     apps/desktop\package.json
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -13337,11 +13337,11 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
       "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+        "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
         "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
         "dev:server": "tsx watch apps/server/src/main.ts",
-        "dev:ui": "npm run dev -w @forkflow/ui",
-        "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+        "dev:ui": "npm run dev -w @masalapos/ui",
+        "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
       },
       "devDependencies": {
         "@types/node": "^22.10.2",
@@ -13436,8 +13436,8 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
     app.on("window-all-closed", () => {
       app.quit();
     });
-    import { hashPassword, verifyPassword, can } from "@forkflow/core";
-    import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@forkflow/domain";
+    import { hashPassword, verifyPassword, can } from "@masalapos/core";
+    import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@masalapos/domain";
     import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
     import { randomBytes } from "node:crypto";
     
@@ -13765,7 +13765,7 @@ I’ll continue with backups, recovery, and Windows packaging. I’ll first chec
     
     ## 8. Distribution
     
-    One installer: **`ForkFlow-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine — no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
+    One installer: **`MasalaPOS-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine — no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
     
     Known platform limits accepted for v1: LAN clients run over plain `http://` (service workers/PWA install unavailable — "Add to Home Screen" shortcut works); a true PWA later requires a small vendor-hosted DNS+cert service (Plex pattern), deferred.
     
@@ -13849,7 +13849,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
 
     $ Get-Content package.json; Get-Content apps/server/src/main.ts; Get-Content apps/desktop/src/main.ts; Get-Content apps/desktop/package.json; Get-Content tsconfig.json; Get-Content apps/server/tsconfig.json
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -13861,11 +13861,11 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+        "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
         "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
         "dev:server": "tsx watch apps/server/src/main.ts",
-        "dev:ui": "npm run dev -w @forkflow/ui",
-        "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+        "dev:ui": "npm run dev -w @masalapos/ui",
+        "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
       },
       "devDependencies": {
         "@types/node": "^22.10.2",
@@ -13875,7 +13875,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
         "vitest": "^4.1.10"
       }
     }
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import fastifyStatic from "@fastify/static";
     import { existsSync, mkdirSync } from "node:fs";
     import { dirname, join, resolve } from "node:path";
@@ -13884,10 +13884,10 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     import { redactUrl } from "./log-redact.js";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
+    const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
     mkdirSync(dataDir, { recursive: true });
     
-    const db = openDb(join(dataDir, "forkflow.db"));
+    const db = openDb(join(dataDir, "masalapos.db"));
     migrate(db, MIGRATIONS);
     
     const app = buildServer({
@@ -13914,9 +13914,9 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       });
     }
     
-    const PORT = Number(process.env["FORKFLOW_PORT"] ?? 4100);
+    const PORT = Number(process.env["MASALAPOS_PORT"] ?? 4100);
     await app.listen({ host: "0.0.0.0", port: PORT });
-    console.log(`ForkFlow server on http://localhost:${PORT} (db: ${join(dataDir, "forkflow.db")})`);
+    console.log(`MasalaPOS server on http://localhost:${PORT} (db: ${join(dataDir, "masalapos.db")})`);
     import { spawn, type ChildProcess } from "node:child_process";
     import { dirname, resolve } from "node:path";
     import { fileURLToPath } from "node:url";
@@ -13998,7 +13998,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       app.quit();
     });
     {
-      "name": "@forkflow/desktop",
+      "name": "@masalapos/desktop",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -14022,8 +14022,8 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
         "types": ["node"],
         "baseUrl": ".",
         "paths": {
-          "@forkflow/domain": ["packages/domain/src/index.ts"],
-          "@forkflow/core": ["packages/core/src/index.ts"]
+          "@masalapos/domain": ["packages/domain/src/index.ts"],
+          "@masalapos/core": ["packages/core/src/index.ts"]
         }
       },
       "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"],
@@ -14187,7 +14187,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     
     ## 8. Distribution
     
-    One installer: **`ForkFlow-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine â€” no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
+    One installer: **`MasalaPOS-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine â€” no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
     
     Known platform limits accepted for v1: LAN clients run over plain `http://` (service workers/PWA install unavailable â€” "Add to Home Screen" shortcut works); a true PWA later requires a small vendor-hosted DNS+cert service (Plex pattern), deferred.
     
@@ -14212,7 +14212,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
 ## Activity
 
     $ Get-Content apps/server/src/server.ts; Get-Content apps/server/src/settings.ts; Get-Content apps/server/src/auth.ts; Get-Content packages/domain/src/db.ts; Get-Content packages/domain/src/migrate.ts; Get-Content apps/server/package.json; Get-Content packages/domain/package.json
-    import type { Database } from "@forkflow/domain";
+    import type { Database } from "@masalapos/domain";
     import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
     import { ZodError } from "zod";
     import { registerAuth } from "./auth.js";
@@ -14326,7 +14326,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
         enqueuePrint(stationId: string, kind: "kot" | "cancel", label: string, bytes: Buffer): void;
       }
     }
-    import { SettingsUpdate } from "@forkflow/domain";
+    import { SettingsUpdate } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     
     interface SettingsRow {
@@ -14365,8 +14365,8 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
         return { settings: readSettings() };
       });
     }
-    import { hashPassword, verifyPassword, can } from "@forkflow/core";
-    import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@forkflow/domain";
+    import { hashPassword, verifyPassword, can } from "@masalapos/core";
+    import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@masalapos/domain";
     import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
     import { randomBytes } from "node:crypto";
     
@@ -14595,7 +14595,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       }
     }
     {
-      "name": "@forkflow/server",
+      "name": "@masalapos/server",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -14606,14 +14606,14 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       "dependencies": {
         "@fastify/static": "^10.1.3",
         "@fastify/websocket": "^11.3.0",
-        "@forkflow/core": "*",
-        "@forkflow/domain": "*",
+        "@masalapos/core": "*",
+        "@masalapos/domain": "*",
         "fastify": "^5.11.3",
         "zod": "^4.4.3"
       }
     }
     {
-      "name": "@forkflow/domain",
+      "name": "@masalapos/domain",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -15150,7 +15150,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
         </div>
       );
     }
-    const TOKEN_KEY = "forkflow.token";
+    const TOKEN_KEY = "masalapos.token";
     
     export const session = {
       onUnauthorized: null as (() => void) | null,
@@ -15211,9 +15211,9 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     apps/ui/src\screens\OrderScreen.tsx:103:      localStorage.removeItem(draftKey);
     apps/ui/src\screens\OrderScreen.tsx:119:  function sendToKitchen() {
     apps/ui/src\screens\OrderScreen.tsx:306:          <button onClick={sendToKitchen} disabled={pending} style={{ padding: "10px 24px", fontWeight: 700 }}>
-    apps/ui/src\screens\BillingPanel.tsx:32:  const [printerId, setPrinterId] = useState(() => localStorage.getItem("forkflow.receipt-printer") ?? "");
+    apps/ui/src\screens\BillingPanel.tsx:32:  const [printerId, setPrinterId] = useState(() => localStorage.getItem("masalapos.receipt-printer") ?? "");
     apps/ui/src\screens\BillingPanel.tsx:70:      }).catch(() => { /* reconnect or next poll will recover */ });
-    apps/ui/src\screens\BillingPanel.tsx:134:    setPrinterId(value); localStorage.setItem("forkflow.receipt-printer", value);
+    apps/ui/src\screens\BillingPanel.tsx:134:    setPrinterId(value); localStorage.setItem("masalapos.receipt-printer", value);
     {
       "extends": "../../tsconfig.base.json",
       "compilerOptions": {
@@ -15255,7 +15255,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     *.db-journal
     *.db-wal
     gate-*.png
-    .forkflow/
+    .masalapos/
     data/
     .e2e-scratch/
     
@@ -15477,7 +15477,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     ## Full Compiled Document
     
     For the complete guide with all rules expanded: `AGENTS.md`
-    # ForkFlow
+    # MasalaPOS
     
     A local-only desktop POS for restaurants. One Windows PC runs everything â€”
     an Electron shell, a Fastify server, and a SQLite database. Extra billing
@@ -15507,8 +15507,8 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     npm run dev:desktop   # the real thing: Electron window + server + built UI
     ```
     
-    Use Node.js 24+. The database lives in `./data/forkflow.db` (override with
-    `FORKFLOW_DATA_DIR`). Use a separate scratch data directory for testing.
+    Use Node.js 24+. The database lives in `./data/masalapos.db` (override with
+    `MASALAPOS_DATA_DIR`). Use a separate scratch data directory for testing.
     
     On this Windows/npm 11 installation, npm tried `node-gyp rebuild` for
     better-sqlite3 despite its bundled prebuild. `npm ci --ignore-scripts` installed
@@ -15612,7 +15612,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       const [error, setError] = useState("");
       const [pending, setPending] = useState(false);
     
-      const draftKey = `forkflow.draft.${orderId}`;
+      const draftKey = `masalapos.draft.${orderId}`;
     
       async function reload() {
         const [o, c, p] = await Promise.all([
@@ -15905,7 +15905,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       );
     }
     import { useEffect, useRef, useState } from "react";
-    import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
+    import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
     import { ApiError, apiFetch, session } from "../api";
     import { paiseToRupees, rupeesToPaise } from "../money";
     import type { Order, PrintJobInfo } from "../types";
@@ -15935,7 +15935,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       const [discount, setDiscount] = useState("0");
       const [reason, setReason] = useState("");
       const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-      const [printerId, setPrinterId] = useState(() => localStorage.getItem("forkflow.receipt-printer") ?? "");
+      const [printerId, setPrinterId] = useState(() => localStorage.getItem("masalapos.receipt-printer") ?? "");
       const [payments, setPayments] = useState<PaymentDraft[]>([]);
       const [busy, setBusy] = useState(false);
       const lock = useRef(false);
@@ -16037,7 +16037,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
         setFrameReady(false); setHtml(await response.text());
       }
       function changePrinter(value: string) {
-        setPrinterId(value); localStorage.setItem("forkflow.receipt-printer", value);
+        setPrinterId(value); localStorage.setItem("masalapos.receipt-printer", value);
         setPreview(null); createRequest.current = null;
       }
       const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -16417,8 +16417,8 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
     export default defineConfig({
       resolve: {
         alias: {
-          "@forkflow/domain": pkg("domain"),
-          "@forkflow/core": pkg("core"),
+          "@masalapos/domain": pkg("domain"),
+          "@masalapos/core": pkg("core"),
         },
       },
       test: {
@@ -16442,7 +16442,7 @@ I’m continuing M6 with backup and recovery protection first, then Windows pack
       "include": ["src", "vite.config.ts"]
     }
     {
-      "name": "@forkflow/core",
+      "name": "@masalapos/core",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -17056,7 +17056,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
 ## Activity
 
     $ Get-Content apps/server/src/kots.ts; Get-Content packages/domain/src/migrations/index.ts; Get-Content apps/server/src/test-helpers.ts; Get-Content apps/ui/src/screens/BillingPanel.tsx | Select-Object -Skip 88 -First 55; Get-Content apps/server/src/ws.ts
-    import { nextSequence, localDateKey, uuidv7, consumeStock } from "@forkflow/domain";
+    import { nextSequence, localDateKey, uuidv7, consumeStock } from "@masalapos/domain";
     import { publishStock } from "./stock.js";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
@@ -17293,7 +17293,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
     import { migration006 } from "./006-inventory-ledger.js";
     
     export const MIGRATIONS: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006];
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { buildServer } from "./server.js";
     import { makeFakeSink } from "./print/sinks.js";
@@ -17417,7 +17417,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
         setFrameReady(false); setHtml(await response.text());
       }
       function changePrinter(value: string) {
-        setPrinterId(value); localStorage.setItem("forkflow.receipt-printer", value);
+        setPrinterId(value); localStorage.setItem("masalapos.receipt-printer", value);
         setPreview(null); createRequest.current = null;
       }
       const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -17517,7 +17517,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
 
 ## Activity
 
-    $ npm.cmd install --ignore-scripts --no-audit --no-fund proper-lockfile qrcode -w @forkflow/server
+    $ npm.cmd install --ignore-scripts --no-audit --no-fund proper-lockfile qrcode -w @masalapos/server
     npm error code ENOTCACHED
     npm error request to https://registry.npmjs.org/proper-lockfile failed: cache mode is 'only-if-cached' but no cached response is available.
     npm error Log files were not written due to an error writing to the directory: C:\Users\AR\AppData\Local\npm-cache\_logs
@@ -17526,7 +17526,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
 
 ## Activity
 
-    $ npm.cmd install --ignore-scripts --no-audit --no-fund --offline=false proper-lockfile qrcode -w @forkflow/server
+    $ npm.cmd install --ignore-scripts --no-audit --no-fund --offline=false proper-lockfile qrcode -w @masalapos/server
     
     added 31 packages in 7s
     ✓ • 7.50s
@@ -17536,13 +17536,13 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
     file changes: Completed · 2 changes
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\backups.ts
     import DatabaseCtor from "better-sqlite3";
-    import { MIGRATIONS, localDateKey, type Database } from "@forkflow/domain";
+    import { MIGRATIONS, localDateKey, type Database } from "@masalapos/domain";
     import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, openSync, fsyncSync, closeSync, readFileSync, writeFileSync } from "node:fs";
     import { isAbsolute, join, resolve } from "node:path";
     import { randomUUID } from "node:crypto";
     import { z } from "zod";
     
-    const managedName = /^forkflow-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
+    const managedName = /^masalapos-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
     export const BackupConfig = z.object({
       retentionDays: z.number().int().min(7).max(365).default(30),
       secondLocation: z.string().trim().max(1024).default("").refine((p) => !p || isAbsolute(p), "Use an absolute folder path on the server PC"),
@@ -17561,7 +17561,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
       try { fsyncSync(fd); } finally { closeSync(fd); }
     }
     
-    /** Read-only validation: a snapshot must be a complete, supported ForkFlow database. */
+    /** Read-only validation: a snapshot must be a complete, supported MasalaPOS database. */
     export function verifyBackup(path: string): number {
       const check = new DatabaseCtor(path, { readonly: true, fileMustExist: true });
       try {
@@ -17600,7 +17600,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
         return this.status();
       }
       create(kind: Kind) {
-        const name = `forkflow-${kind}-${this.now()}-${randomUUID()}.db`;
+        const name = `masalapos-${kind}-${this.now()}-${randomUUID()}.db`;
         const target = join(this.folder, name);
         const temp = `${target}.partial`;
         try {
@@ -17666,7 +17666,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
      */
     export function restoreDatabase(dataDir: string, source?: string): string | null {
       const journal = join(dataDir, "restore-pending.json");
-      const live = join(dataDir, "forkflow.db");
+      const live = join(dataDir, "masalapos.db");
       const staged = join(dataDir, "restore-staged.db");
       if (source) {
         if (existsSync(journal)) throw new Error("An interrupted restore must finish first");
@@ -17682,7 +17682,7 @@ The main gaps are confirmed: startup migrates without a backup, Electron depends
       if (state.phase === "archive") {
         verifyBackup(staged);
         for (const suffix of ["", "-wal", "-shm", "-journal"]) {
-          const from = live + suffix, to = join(state.archive, "forkflow.db" + suffix);
+          const from = live + suffix, to = join(state.archive, "masalapos.db" + suffix);
           if (existsSync(from)) {
             if (existsSync(to)) throw new Error("Recovery archive collision; contact support");
             renameSync(from, to);
@@ -17711,7 +17711,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
 
     file changes: Completed · 3 changes
     Delete: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\main.ts
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import fastifyStatic from "@fastify/static";
     import { existsSync, mkdirSync } from "node:fs";
     import { dirname, join, resolve } from "node:path";
@@ -17720,10 +17720,10 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
     import { redactUrl } from "./log-redact.js";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
+    const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
     mkdirSync(dataDir, { recursive: true });
     
-    const db = openDb(join(dataDir, "forkflow.db"));
+    const db = openDb(join(dataDir, "masalapos.db"));
     migrate(db, MIGRATIONS);
     
     const app = buildServer({
@@ -17750,9 +17750,9 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
       });
     }
     
-    const PORT = Number(process.env["FORKFLOW_PORT"] ?? 4100);
+    const PORT = Number(process.env["MASALAPOS_PORT"] ?? 4100);
     await app.listen({ host: "0.0.0.0", port: PORT });
-    console.log(`ForkFlow server on http://localhost:${PORT} (db: ${join(dataDir, "forkflow.db")})`);
+    console.log(`MasalaPOS server on http://localhost:${PORT} (db: ${join(dataDir, "masalapos.db")})`);
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\server.ts
     @@ -15,2 +15,4 @@
      import { registerStock } from "./stock.js";
@@ -17790,7 +17790,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
     }
     export function edgeShortcut(url: string): string {
       // The only caller passes a URL generated from the server's own IPv4 interfaces.
-      return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\ForkFlow.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
+      return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\MasalaPOS.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
     }
     export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4100, generation = "initial") {
       const manage = app.requirePermission("settings.manage");
@@ -17801,7 +17801,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
       app.get("/api/system/shortcut", { preHandler: manage }, async (req, reply) => {
         const { url } = z.object({ url: z.string() }).parse(req.query);
         if (!lanUrls(port).includes(url)) return reply.status(400).send({ error: "Choose a current server LAN address" });
-        return reply.type("text/plain").header("Content-Disposition", 'attachment; filename="Create-ForkFlow-Shortcut.ps1"').send(edgeShortcut(url));
+        return reply.type("text/plain").header("Content-Disposition", 'attachment; filename="Create-MasalaPOS-Shortcut.ps1"').send(edgeShortcut(url));
       });
       if (!backups) return;
       app.get("/api/system/backups", { preHandler: manage }, async () => backups.status());
@@ -17819,7 +17819,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
 
     file changes: Completed · 1 changes
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\main.ts
-    import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     import fastifyStatic from "@fastify/static";
     import { existsSync, mkdirSync, readFileSync } from "node:fs";
     import { dirname, join, resolve } from "node:path";
@@ -17831,21 +17831,21 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
     import { restoreDatabase } from "./recovery.js";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
-    const port = Number(process.env["FORKFLOW_PORT"] ?? 4100);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid FORKFLOW_PORT");
+    const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
+    const port = Number(process.env["MASALAPOS_PORT"] ?? 4100);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid MASALAPOS_PORT");
     mkdirSync(dataDir, { recursive: true });
     const release = await lockfile.lock(dataDir, { stale: 600_000, update: 5000, retries: 0 });
     let db: ReturnType<typeof openDb> | undefined;
     let closing = false;
     try {
       restoreDatabase(dataDir);
-      if (process.env["FORKFLOW_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["FORKFLOW_RESTORE"]));
-      db = openDb(join(dataDir, "forkflow.db"));
+      if (process.env["MASALAPOS_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["MASALAPOS_RESTORE"]));
+      db = openDb(join(dataDir, "masalapos.db"));
       const current = db.pragma("user_version", { simple: true }) as number;
       if (current > MIGRATIONS.at(-1)!.version) throw new Error("Database is newer than this app. Install the newer version; do not downgrade.");
       const backups = new Backups(db, dataDir);
-      const version = process.env["FORKFLOW_APP_VERSION"] ?? "development";
+      const version = process.env["MASALAPOS_APP_VERSION"] ?? "development";
       const versionPath = join(dataDir, "app-version.json");
       const prior = existsSync(versionPath) ? JSON.parse(readFileSync(versionPath, "utf8")).version : null;
       if (current > 0 && (current < MIGRATIONS.at(-1)!.version || prior !== version)) backups.create("pre-update");
@@ -17853,14 +17853,14 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
       atomicJson(versionPath, { version });
       const generationPath = join(dataDir, "recovery-generation.json");
       const generation = existsSync(generationPath) ? JSON.parse(readFileSync(generationPath, "utf8")).generation as string : "initial";
-      const app = buildServer({ db, backups, port, generation, instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
+      const app = buildServer({ db, backups, port, generation, instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
         serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
       } });
       const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };
       daily();
       const timer = setInterval(daily, 60 * 60 * 1000); timer.unref();
       app.addHook("onClose", async () => { clearInterval(timer); db?.close(); await release(); });
-      const uiDist = process.env["FORKFLOW_UI_DIR"] ?? resolve(here, "../../ui/dist");
+      const uiDist = process.env["MASALAPOS_UI_DIR"] ?? resolve(here, "../../ui/dist");
       if (existsSync(uiDist)) {
         await app.register(fastifyStatic, { root: uiDist, wildcard: true });
         app.setNotFoundHandler((req, reply) => {
@@ -17874,7 +17874,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
       const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void } }).parentPort;
       parent?.on("message", ({ data }) => { if (data === "shutdown") void close().then(() => process.exit(0)); });
       await app.listen({ host: "0.0.0.0", port });
-      console.log(`ForkFlow server on http://localhost:${port} (db: ${join(dataDir, "forkflow.db")})`);
+      console.log(`MasalaPOS server on http://localhost:${port} (db: ${join(dataDir, "masalapos.db")})`);
     } catch (error) {
       if (db?.open) db.close();
       await release().catch(() => {});
@@ -17898,7 +17898,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
       const server = createServer((socket) => socket.end());
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
-        server.listen(`\\\\.\\pipe\\forkflow-${hash}`, () => { server.off("error", reject); resolve(); });
+        server.listen(`\\\\.\\pipe\\masalapos-${hash}`, () => { server.off("error", reject); resolve(); });
       });
       return () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
@@ -18055,8 +18055,8 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
       id: string; userId: string; generation: string; path: string; body: string;
       label: string; createdAt: number; error?: string; draftKey?: string;
     }
-    const PREFIX = "forkflow.queue.v1.";
-    const GENERATION = "forkflow.generation";
+    const PREFIX = "masalapos.queue.v1.";
+    const GENERATION = "masalapos.generation";
     let actor: string | null = null;
     let running = false;
     let generationChecked = false;
@@ -18113,8 +18113,8 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
         if (previous && previous !== generation) {
           // Keep a readable archive, but never replay drafts created after a restore point.
           const saved: Record<string, string> = {};
-          for (const key of Object.keys(localStorage)) if (key.startsWith("forkflow.draft.") || key.startsWith(PREFIX)) saved[key] = localStorage.getItem(key)!;
-          localStorage.setItem(`forkflow.recovery-archive.${Date.now()}`, JSON.stringify(saved));
+          for (const key of Object.keys(localStorage)) if (key.startsWith("masalapos.draft.") || key.startsWith(PREFIX)) saved[key] = localStorage.getItem(key)!;
+          localStorage.setItem(`masalapos.recovery-archive.${Date.now()}`, JSON.stringify(saved));
           Object.keys(saved).forEach((key) => localStorage.removeItem(key));
           localStorage.setItem(GENERATION, generation);
           window.alert("The server was restored from backup. Saved drafts and queued actions were archived for review. Sign in again and check your open orders.");
@@ -18138,7 +18138,7 @@ Backup creation now verifies the SQLite snapshot before retaining it, and keeps 
             }
             localStorage.removeItem(PREFIX + entry.id);
             waiters.get(entry.id)?.resolve(result); waiters.delete(entry.id);
-            window.dispatchEvent(new CustomEvent("forkflow:ack", { detail: entry }));
+            window.dispatchEvent(new CustomEvent("masalapos:ack", { detail: entry }));
           } catch (error) {
             if (!(error instanceof ApiError) || error.status >= 500 || error.status === 401 || error.status === 429) break;
             entry.error = error.message;
@@ -18186,7 +18186,7 @@ The retry queue now saves actions on the device under the staff member who creat
       const [error, setError] = useState("");
       const [pending, setPending] = useState(false);
     
-      const draftKey = `forkflow.draft.${orderId}`;
+      const draftKey = `masalapos.draft.${orderId}`;
     
       async function reload() {
         const [o, c, p] = await Promise.all([
@@ -18518,7 +18518,7 @@ The retry queue now saves actions on the device under the staff member who creat
     -  const [error, setError] = useState("");
     -  const [pending, setPending] = useState(false);
     -
-    -  const draftKey = `forkflow.draft.${orderId}`;
+    -  const draftKey = `masalapos.draft.${orderId}`;
     -
     -  async function reload() {
     -    const [o, c, p] = await Promise.all([
@@ -18687,9 +18687,9 @@ The retry queue now saves actions on the device under the staff member who creat
     +}
     +
     +export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-    +  const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+    +  const draftKey = `masalapos.draft.${user.id}.${orderId}`;
     +  function readDraft(): DraftItem[] {
-    +    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+    +    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
     +  }
     +  const [order, setOrder] = useState<Order | null>(null);
     +  const [categories, setCategories] = useState<Category[]>([]);
@@ -18719,7 +18719,7 @@ The retry queue now saves actions on the device under the staff member who creat
     +    const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
     +    const unsub = subscribeQueue(refresh);
     +    const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-    +    window.addEventListener("forkflow:ack", acknowledged);
+    +    window.addEventListener("masalapos:ack", acknowledged);
     +    const dispose = connectWs({
     +      onEvent: (event, data) => {
     +        if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -18729,13 +18729,13 @@ The retry queue now saves actions on the device under the staff member who creat
     +      onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
     +      onAuthFail: () => session.clear(),
     +    });
-    +    return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+    +    return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
     +  }, [orderId, draftKey]);
     +
     +  function saveDraft(next: DraftItem[]): boolean {
     +    try {
     +      localStorage.setItem(draftKey, JSON.stringify(next));
-    +      localStorage.removeItem(`forkflow.draft.${orderId}`);
+    +      localStorage.removeItem(`masalapos.draft.${orderId}`);
     +      setDraft(next); return true;
     +    } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
     +  }
@@ -19200,14 +19200,14 @@ The retry queue now saves actions on the device under the staff member who creat
           <p>Verified daily snapshots are saved in <code>{status.folder}</code>. The latest 10 manual and 10 pre-update backups are also kept.</p>
           <fieldset disabled={busy}><legend>Backup storage</legend>
             <p><label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label></p>
-            <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\ForkFlow Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
+            <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\MasalaPOS Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
             <button onClick={() => void run(async () => {
               setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "PUT", body: JSON.stringify({ retentionDays: days, secondLocation: second }) }));
               setMessage("Backup settings saved. Use Back up now to check the second folder.");
             })}>Save backup settings</button>{" "}
             <button onClick={() => void run(async () => { setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "POST" })); setMessage("Verified local backup saved."); })}>Back up now</button>
           </fieldset>
-          <p>To restore: on the main PC, open the ForkFlow tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
+          <p>To restore: on the main PC, open the MasalaPOS tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
           <details><summary>Available backups ({status.backups.length})</summary>
             <ul>{status.backups.map((b) => <li key={b.name} style={{ marginBlock: 8 }}>{new Date(b.createdAt).toLocaleString()} · {b.kind} · {Math.ceil(b.bytes / 1024)} KB {" "}
               <button disabled={busy} onClick={() => void run(() => download(`/api/system/backups/${encodeURIComponent(b.name)}`, b.name))}>Download</button>
@@ -19218,9 +19218,9 @@ The retry queue now saves actions on the device under the staff member who creat
         <p>Use the same local network. Scan a QR code on a phone, or open its address on a counter PC. Every device needs a staff PIN.</p>
         {!connections.length && <p>No LAN address found. Connect this PC to Wi-Fi or Ethernet, then reopen Settings.</p>}
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>{connections.map((connection) => <div key={connection.url} style={{ border: "1px solid #ddd", padding: 16 }}>
-          <img src={connection.qr} width={220} height={220} alt={`Connect to ForkFlow at ${connection.url}`} />
+          <img src={connection.qr} width={220} height={220} alt={`Connect to MasalaPOS at ${connection.url}`} />
           <p><a href={connection.url} target="_blank" rel="noreferrer">{connection.url}</a></p>
-          <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-ForkFlow-Shortcut.ps1"))}>Download Edge shortcut setup</button>
+          <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-MasalaPOS-Shortcut.ps1"))}>Download Edge shortcut setup</button>
         </div>)}</div>
         <p>On a counter PC, right-click the downloaded file → Run with PowerShell to create a desktop shortcut. Reserve the main PC's IP address in your router so the address stays the same.</p>
       </section>;
@@ -19290,7 +19290,7 @@ The retry queue now saves actions on the device under the staff member who creat
                 ...wrappers.getters,
             });
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -19302,11 +19302,11 @@ The retry queue now saves actions on the device under the staff member who creat
       "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+        "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
         "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
         "dev:server": "tsx watch apps/server/src/main.ts",
-        "dev:ui": "npm run dev -w @forkflow/ui",
-        "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+        "dev:ui": "npm run dev -w @masalapos/ui",
+        "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
       },
       "devDependencies": {
         "@types/node": "^22.10.2",
@@ -19324,8 +19324,8 @@ The retry queue now saves actions on the device under the staff member who creat
     15679:    static fork(modulePath: string, args?: string[], options?: ForkOptions): UtilityProcess;
     15769:    on(event: 'exit', listener: (
     
-    > forkflow@0.0.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.0.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     apps/server/src/backups.ts(35,9): error TS2571: Object is of type 'unknown'.
     ✗ (1) • 4.87s
@@ -19432,9 +19432,9 @@ The retry queue now saves actions on the device under the staff member who creat
     import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const port = process.env["FORKFLOW_PORT"] ?? "4100";
+    const port = process.env["MASALAPOS_PORT"] ?? "4100";
     const url = `http://127.0.0.1:${port}`;
-    const dataDir = process.env["FORKFLOW_DATA_DIR"] ?? join(app.getPath("userData"), "data");
+    const dataDir = process.env["MASALAPOS_DATA_DIR"] ?? join(app.getPath("userData"), "data");
     let server: UtilityProcess | null = null;
     let window: BrowserWindow | null = null;
     let tray: Tray | null = null;
@@ -19459,7 +19459,7 @@ The retry queue now saves actions on the device under the staff member who creat
       async function failure(message: string) {
         if (errorShown || quitting || recovering) return;
         errorShown = true;
-        const { response } = await dialog.showMessageBox({ type: "error", title: "ForkFlow needs attention", message,
+        const { response } = await dialog.showMessageBox({ type: "error", title: "MasalaPOS needs attention", message,
           detail: `Your data is in ${dataDir}. See server.log for details.`, buttons: ["Retry", "Open data folder", "Restore backup", "Quit"], cancelId: 3 });
         errorShown = false;
         if (response === 0) { restarts = 0; startServer(); }
@@ -19471,9 +19471,9 @@ The retry queue now saves actions on the device under the staff member who creat
         if (quitting || server) return;
         const instanceId = randomUUID();
         const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
-          cwd: here, stdio: "pipe", serviceName: "ForkFlow POS server",
-          env: { ...process.env, FORKFLOW_DATA_DIR: dataDir, FORKFLOW_UI_DIR: join(here, "ui"), FORKFLOW_PORT: port,
-            FORKFLOW_APP_VERSION: app.getVersion(), FORKFLOW_INSTANCE_ID: instanceId, ...(restorePath ? { FORKFLOW_RESTORE: restorePath } : {}) },
+          cwd: here, stdio: "pipe", serviceName: "MasalaPOS POS server",
+          env: { ...process.env, MASALAPOS_DATA_DIR: dataDir, MASALAPOS_UI_DIR: join(here, "ui"), MASALAPOS_PORT: port,
+            MASALAPOS_APP_VERSION: app.getVersion(), MASALAPOS_INSTANCE_ID: instanceId, ...(restorePath ? { MASALAPOS_RESTORE: restorePath } : {}) },
         });
         server = child;
         let healthy = false;
@@ -19519,14 +19519,14 @@ The retry queue now saves actions on the device under the staff member who creat
         stopping = false;
       }
       async function restore() {
-        const selection = await dialog.showOpenDialog({ title: "Choose a ForkFlow backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
+        const selection = await dialog.showOpenDialog({ title: "Choose a MasalaPOS backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
         if (selection.canceled || !selection.filePaths[0]) return;
         const { response } = await dialog.showMessageBox({ type: "warning", title: "Restore backup", message: "Stop work on all counters before restoring.",
           detail: `Restore ${selection.filePaths[0]}? Current data will be archived; all changes since this snapshot will leave the live database. Staff must sign in again and review open orders.`, buttons: ["Cancel", "Restore this backup"], defaultId: 0, cancelId: 0 });
         if (response !== 1) return;
         recovering = true;
         await stopServer();
-        await window?.loadURL("data:text/html,<h2>Restoring ForkFlow backup…</h2>");
+        await window?.loadURL("data:text/html,<h2>Restoring MasalaPOS backup…</h2>");
         restarts = 5; // invalid backups produce a reviewable error, never silently fall back
         startServer(selection.filePaths[0]);
         recovering = false;
@@ -19534,18 +19534,18 @@ The retry queue now saves actions on the device under the staff member who creat
       app.on("second-instance", showWindow);
       app.whenReady().then(() => {
         window = new BrowserWindow({ width: 1280, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
-        void window.loadURL("data:text/html,<h2>Starting ForkFlow…</h2><p>Preparing the database and checking backups.</p>");
+        void window.loadURL("data:text/html,<h2>Starting MasalaPOS…</h2><p>Preparing the database and checking backups.</p>");
         window.webContents.setWindowOpenHandler(({ url: target }) => { if (/^https?:\/\//.test(target)) void shell.openExternal(target); return { action: "deny" }; });
         window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(url + "/") && target !== url) event.preventDefault(); });
         window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
         tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
-        tray.setToolTip("ForkFlow — restaurant POS server");
+        tray.setToolTip("MasalaPOS — restaurant POS server");
         tray.setContextMenu(Menu.buildFromTemplate([
-          { label: "Open ForkFlow", click: showWindow },
+          { label: "Open MasalaPOS", click: showWindow },
           { label: "Open data and backups", click: () => { void shell.openPath(dataDir); } },
           { label: "Restore backup…", click: () => { void restore(); } },
           { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
-          { type: "separator" }, { label: "Quit ForkFlow (stops all counters)", click: () => app.quit() },
+          { type: "separator" }, { label: "Quit MasalaPOS (stops all counters)", click: () => app.quit() },
         ]));
         tray.on("double-click", showWindow);
         if (app.isPackaged && !existsSync(join(dataDir, "desktop-initialized"))) {
@@ -19553,7 +19553,7 @@ The retry queue now saves actions on the device under the staff member who creat
           appendFileSync(join(dataDir, "desktop-initialized"), "1");
         }
         startServer();
-      }).catch((error: unknown) => { writeLog(String(error)); void failure("ForkFlow startup failed."); });
+      }).catch((error: unknown) => { writeLog(String(error)); void failure("MasalaPOS startup failed."); });
       app.on("before-quit", (event) => {
         if (quitting) return;
         event.preventDefault(); quitting = true;
@@ -19569,8 +19569,8 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     file changes: Completed · 3 changes
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\electron-builder.yml
-    appId: in.forkflow.pos
-    productName: ForkFlow
+    appId: in.masalapos.pos
+    productName: MasalaPOS
     directories:
       app: build/desktop/app
       output: dist/installer
@@ -19587,7 +19587,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
         - target: nsis
           arch: [x64]
       icon: build/desktop/icon.ico
-      artifactName: "ForkFlow-Setup-${version}.${ext}"
+      artifactName: "MasalaPOS-Setup-${version}.${ext}"
     nsis:
       oneClick: false
       perMachine: true
@@ -19611,7 +19611,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     const pkg = JSON.parse(readFileSync(join(root, "package.json")));
     const req = createRequire(join(root, "package.json"));
     const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*" };
-    delete deps["@forkflow/core"]; delete deps["@forkflow/domain"];
+    delete deps["@masalapos/core"]; delete deps["@masalapos/domain"];
     const installed = new Map();
     function locate(name, from) {
       const lookup = createRequire(join(from, "package.json"));
@@ -19638,11 +19638,11 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     }
     for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
     await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-      plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
+      plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
     });
     await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true });
     cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
-    writeFileSync(join(stage, "package.json"), JSON.stringify({ name: "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
+    writeFileSync(join(stage, "package.json"), JSON.stringify({ name: "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));
     
     // Small original F icon, rendered without extra image or native build tools.
     function crc32(bytes) { let crc = 0xffffffff; for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ 0xffffffff) >>> 0; }
@@ -19661,16 +19661,16 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     console.log(`Desktop staged at ${stage}; ${installed.size} dependency packages copied from the lockfile installation.`);
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\tools\installer.nsh
     !macro customInstall
-      nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="ForkFlow POS LAN"'
-      nsExec::ExecToLog 'netsh advfirewall firewall add rule name="ForkFlow POS LAN" dir=in action=allow program="$INSTDIR\ForkFlow.exe" protocol=TCP localport=4100 profile=private remoteip=localsubnet enable=yes'
+      nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="MasalaPOS POS LAN"'
+      nsExec::ExecToLog 'netsh advfirewall firewall add rule name="MasalaPOS POS LAN" dir=in action=allow program="$INSTDIR\MasalaPOS.exe" protocol=TCP localport=4100 profile=private remoteip=localsubnet enable=yes'
       Pop $0
       ${If} $0 != 0
-        MessageBox MB_OK|MB_ICONEXCLAMATION "ForkFlow was installed, but Windows could not add the LAN firewall rule. Billing on this PC will work. Ask your administrator to allow ForkFlow on private networks for other counters."
+        MessageBox MB_OK|MB_ICONEXCLAMATION "MasalaPOS was installed, but Windows could not add the LAN firewall rule. Billing on this PC will work. Ask your administrator to allow MasalaPOS on private networks for other counters."
       ${EndIf}
     !macroend
     
     !macro customUnInstall
-      nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="ForkFlow POS LAN"'
+      nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="MasalaPOS POS LAN"'
     !macroend
 
 ## Activity
@@ -19684,7 +19684,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
        },
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\package.json
     @@ -2,6 +2,6 @@
-       "name": "forkflow",
+       "name": "masalapos",
     -  "version": "0.0.0",
     +  "version": "0.6.0",
        "private": true,
@@ -19693,10 +19693,10 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     +  "description": "Local Windows restaurant POS with SQLite, GST billing, kitchen orders and inventory.",
        "workspaces": [
     @@ -17,3 +17,6 @@
-         "dev:ui": "npm run dev -w @forkflow/ui",
-    -    "dev:desktop": "npm run build -w @forkflow/ui && npm run build -w @forkflow/desktop && npm run start -w @forkflow/desktop"
+         "dev:ui": "npm run dev -w @masalapos/ui",
+    -    "dev:desktop": "npm run build -w @masalapos/ui && npm run build -w @masalapos/desktop && npm run start -w @masalapos/desktop"
     +    "dev:desktop": "npm run build:desktop && electron build/desktop/app",
-    +    "build:desktop": "npm run build -w @forkflow/ui && node tools/build-desktop.mjs",
+    +    "build:desktop": "npm run build -w @masalapos/ui && node tools/build-desktop.mjs",
     +    "package:win": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64",
     +    "package:dir": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64 --dir"
        },
@@ -19706,7 +19706,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     $ Get-Content apps/server/src/kots.test.ts | Select-Object -First 120; Get-Content packages/domain/src/migrations/001-initial.test.ts | Select-Object -Last 40; Get-Content tools/e2e/m5-inventory.js | Select-Object -First 60; Get-Content node_modules/better-sqlite3/lib/index.js
     import { afterEach, describe, expect, it } from "vitest";
     import { auth, createUser, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
-    import { uuidv7 } from "@forkflow/domain";
+    import { uuidv7 } from "@masalapos/domain";
     
     let app: ReturnType<typeof freshApp>;
     afterEach(async () => {
@@ -19884,7 +19884,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
         await new Promise((r) => setTimeout(r, 70));
       };
       const api = async (path, method = 'GET', body) => {
-        const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const json = await response.json(); if (!response.ok) throw new Error(`${path}: ${JSON.stringify(json)}`); return json;
       };
       const suffix = Date.now(); const name = `Gate ingredient ${suffix}`;
@@ -19933,11 +19933,11 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 15.24s
@@ -19955,7 +19955,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync } from "node:fs";
     import { tmpdir } from "node:os";
     import { join } from "node:path";
-    import { MIGRATIONS, migrate, openDb, type Database } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
     import { Backups, atomicJson, verifyBackup } from "./backups.js";
     import { restoreDatabase } from "./recovery.js";
     import { prepareDatabase } from "./startup.js";
@@ -19963,8 +19963,8 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     
     const folders: string[] = [], databases: Database[] = [];
     function fixture(version = MIGRATIONS.length) {
-      const folder = mkdtempSync(join(tmpdir(), "forkflow-backup-test-")); folders.push(folder);
-      const db = openDb(join(folder, "forkflow.db")); databases.push(db);
+      const folder = mkdtempSync(join(tmpdir(), "masalapos-backup-test-")); folders.push(folder);
+      const db = openDb(join(folder, "masalapos.db")); databases.push(db);
       migrate(db, MIGRATIONS.slice(0, version));
       return { folder, db };
     }
@@ -19979,7 +19979,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
       expect(verifyBackup(path)).toBe(MIGRATIONS.length);
       const copy = openDb(path); databases.push(copy);
       expect(copy.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Snapshot Cafe" });
-      expect(backups.download("../forkflow.db")).toBeNull();
+      expect(backups.download("../masalapos.db")).toBeNull();
     });
     it("takes one daily snapshot per local day and prunes only managed expired snapshots", () => {
       const { folder, db } = fixture(); let now = Date.now();
@@ -20029,26 +20029,26 @@ Electron now uses its bundled runtime to launch the server, with health checks a
       db.prepare("UPDATE settings SET restaurant_name = 'Before'").run();
       const backup = backups.create("manual"); db.prepare("UPDATE settings SET restaurant_name = 'After'").run(); db.close();
       const archive = restoreDatabase(folder, join(backups.folder, backup.name));
-      expect(existsSync(join(archive!, "forkflow.db"))).toBe(true);
-      const restored = openDb(join(folder, "forkflow.db")); databases.push(restored);
+      expect(existsSync(join(archive!, "masalapos.db"))).toBe(true);
+      const restored = openDb(join(folder, "masalapos.db")); databases.push(restored);
       expect(restored.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Before" });
       expect(JSON.parse(readFileSync(join(folder, "recovery-generation.json"), "utf8")).generation).toBeTruthy();
       expect(existsSync(join(folder, "restore-pending.json"))).toBe(false);
     });
     it("rejects corrupt or unrelated input before touching live data", () => {
-      const { folder, db } = fixture(); db.close(); const before = readFileSync(join(folder, "forkflow.db"));
+      const { folder, db } = fixture(); db.close(); const before = readFileSync(join(folder, "masalapos.db"));
       const invalid = join(folder, "invalid.db"); writeFileSync(invalid, "bad");
       expect(() => restoreDatabase(folder, invalid)).toThrow();
-      expect(readFileSync(join(folder, "forkflow.db"))).toEqual(before);
+      expect(readFileSync(join(folder, "masalapos.db"))).toEqual(before);
     });
     it("resumes interrupted archive and install phases without losing the old database", () => {
       const { folder, db } = fixture(); const backup = new Backups(db, folder).create("manual"); db.close();
       copyFileSync(join(folder, "backups", backup.name), join(folder, "restore-staged.db"));
       const archive = join(folder, "recovery", "test"); mkdirSync(archive, { recursive: true });
-      renameSync(join(folder, "forkflow.db"), join(archive, "forkflow.db"));
+      renameSync(join(folder, "masalapos.db"), join(archive, "masalapos.db"));
       atomicJson(join(folder, "restore-pending.json"), { archive, phase: "archive" });
       expect(restoreDatabase(folder)).toBe(archive);
-      expect(verifyBackup(join(folder, "forkflow.db"))).toBe(MIGRATIONS.length);
+      expect(verifyBackup(join(folder, "masalapos.db"))).toBe(MIGRATIONS.length);
       expect(restoreDatabase(folder)).toBeNull();
     });
     it("rejects a second writer lock and allows restart after release", async () => {
@@ -20058,8 +20058,8 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     });
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\main.ts
     @@ -1,2 +1,2 @@
-    -import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
-    +import { openDb } from "@forkflow/domain";
+    -import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
+    +import { openDb } from "@masalapos/domain";
      import fastifyStatic from "@fastify/static";
     @@ -8,3 +8,4 @@
      import { redactUrl } from "./log-redact.js";
@@ -20068,11 +20068,11 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     +import { prepareDatabase } from "./startup.js";
      import { restoreDatabase } from "./recovery.js";
     @@ -23,11 +24,5 @@
-       db = openDb(join(dataDir, "forkflow.db"));
+       db = openDb(join(dataDir, "masalapos.db"));
     -  const current = db.pragma("user_version", { simple: true }) as number;
     -  if (current > MIGRATIONS.at(-1)!.version) throw new Error("Database is newer than this app. Install the newer version; do not downgrade.");
        const backups = new Backups(db, dataDir);
-       const version = process.env["FORKFLOW_APP_VERSION"] ?? "development";
+       const version = process.env["MASALAPOS_APP_VERSION"] ?? "development";
     -  const versionPath = join(dataDir, "app-version.json");
     -  const prior = existsSync(versionPath) ? JSON.parse(readFileSync(versionPath, "utf8")).version : null;
     -  if (current > 0 && (current < MIGRATIONS.at(-1)!.version || prior !== version)) backups.create("pre-update");
@@ -20081,7 +20081,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     +  prepareDatabase(db, backups, version);
        const generationPath = join(dataDir, "recovery-generation.json");
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\server\src\startup.ts
-    import { MIGRATIONS, migrate, type Database } from "@forkflow/domain";
+    import { MIGRATIONS, migrate, type Database } from "@masalapos/domain";
     import { existsSync, readFileSync } from "node:fs";
     import { join } from "node:path";
     import { atomicJson, type Backups } from "./backups.js";
@@ -20157,7 +20157,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     import { mkdtempSync, rmSync } from "node:fs";
     import { tmpdir } from "node:os";
     import { join } from "node:path";
-    import { migrate, MIGRATIONS, openDb } from "@forkflow/domain";
+    import { migrate, MIGRATIONS, openDb } from "@masalapos/domain";
     import { Backups } from "./backups.js";
     import { buildServer } from "./server.js";
     import { auth, createUser, setupAdmin } from "./test-helpers.js";
@@ -20166,7 +20166,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     let app: ReturnType<typeof buildServer>; let folder: string;
     afterEach(async () => { await app?.close(); if (app?.db.open) app.db.close(); if (folder) rmSync(folder, { recursive: true, force: true }); });
     it("restricts backups and network details to admins and downloads only managed snapshots", async () => {
-      folder = mkdtempSync(join(tmpdir(), "forkflow-system-test-")); const db = openDb(join(folder, "forkflow.db")); migrate(db, MIGRATIONS);
+      folder = mkdtempSync(join(tmpdir(), "masalapos-system-test-")); const db = openDb(join(folder, "masalapos.db")); migrate(db, MIGRATIONS);
       app = buildServer({ db, backups: new Backups(db, folder) });
       const admin = await setupAdmin(app); const cashier = await createUser(app, admin.token, { name: "Cashier", pin: "4321", role: "cashier" });
       for (const path of ["/api/system/backups", "/api/system/connections"]) {
@@ -20191,7 +20191,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     $ npm.cmd test -- apps/server/src/backups.test.ts apps/server/src/system.test.ts apps/server/src/kots.test.ts
     
-    > forkflow@0.6.0 test
+    > masalapos@0.6.0 test
     > vitest run apps/server/src/backups.test.ts apps/server/src/system.test.ts apps/server/src/kots.test.ts
     
     failed to load config from C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\vitest.config.ts
@@ -20232,7 +20232,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     $ npm.cmd test -- apps/server/src/backups.test.ts apps/server/src/system.test.ts apps/server/src/kots.test.ts
     
-    > forkflow@0.6.0 test
+    > masalapos@0.6.0 test
     > vitest run apps/server/src/backups.test.ts apps/server/src/system.test.ts apps/server/src/kots.test.ts
     
     
@@ -20357,7 +20357,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     ```powershell
     # Substitute your installed agent-browser executable if different.
     Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js |
-      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     ```
     
     The gate uses DOM events in the real browser (works around native-click issues
@@ -20372,7 +20372,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     
     ```powershell
     Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js |
-      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     ```
     
     The gate creates menu fixtures through the API, then exercises stock creation,
@@ -20392,11 +20392,11 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     failed to load config from C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\vite.config.ts
@@ -20429,7 +20429,7 @@ Electron now uses its bundled runtime to launch the server, with health checks a
     npm error Lifecycle script `build` failed with error:
     npm error code 1
     npm error path C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui
-    npm error workspace @forkflow/ui@0.0.0
+    npm error workspace @masalapos/ui@0.0.0
     npm error location C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui
     npm error command failed
     npm error command C:\Windows\system32\cmd.exe /d /s /c vite build
@@ -20439,11 +20439,11 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 14.55s
@@ -20452,11 +20452,11 @@ Electron now uses its bundled runtime to launch the server, with health checks a
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -20507,13 +20507,13 @@ The first 23 integration tests pass, including pre-migration backup failure, cor
 
     $ Get-Content package-lock.json | Select-Object -First 24; Test-Path .e2e-scratch/qa/node_modules/playwright-core; Get-CimInstance Win32_Process -Filter 'ProcessId = 1780' | Select-Object ProcessId,CommandLine
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.0.0",
       "lockfileVersion": 3,
       "requires": true,
       "packages": {
         "": {
-          "name": "forkflow",
+          "name": "masalapos",
           "version": "0.0.0",
           "workspaces": [
             "packages/*",
@@ -20544,7 +20544,7 @@ The first 23 integration tests pass, including pre-migration backup failure, cor
 
     $ npm.cmd test
     
-    > forkflow@0.6.0 test
+    > masalapos@0.6.0 test
     > vitest run
     
     
@@ -20562,11 +20562,11 @@ The first 23 integration tests pass, including pre-migration backup failure, cor
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -20586,32 +20586,32 @@ The first 23 integration tests pass, including pre-migration backup failure, cor
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\package-lock.json
     @@ -1,4 +1,4 @@
      {
-    -  "name": "forkflow",
+    -  "name": "masalapos",
     -  "version": "0.0.0",
-    +  "name": "forkflow",
+    +  "name": "masalapos",
     +  "version": "0.6.0",
        "lockfileVersion": 3,
     @@ -7,4 +7,4 @@
          "": {
-    -      "name": "forkflow",
+    -      "name": "masalapos",
     -      "version": "0.0.0",
-    +      "name": "forkflow",
+    +      "name": "masalapos",
     +      "version": "0.6.0",
            "workspaces": [
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 open http://localhost:4111
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 open http://localhost:4111
+    ✓ MasalaPOS POS
     [agent-browser]  http://localhost:4111/
      launched browser
     ✓ • 3.26s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 errors; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 screenshot .e2e-scratch/m6-start.png
-    - generic "Set up ForkFlowStart" [ref=e1] clickable [onclick]
-      - heading "Set up ForkFlow" [level=1, ref=e2]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 errors; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 screenshot .e2e-scratch/m6-start.png
+    - generic "Set up MasalaPOSStart" [ref=e1] clickable [onclick]
+      - heading "Set up MasalaPOS" [level=1, ref=e2]
       - textbox "Restaurant name" [ref=e3]
       - textbox "Your name (admin)" [ref=e4]
       - textbox "Admin PIN (4-6 digits)" [ref=e5]
@@ -20625,8 +20625,8 @@ The first 23 integration tests pass, including pre-migration backup failure, cor
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval "document.body.innerText"
-    "Set up ForkFlow\nStart"
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval "document.body.innerText"
+    "Set up MasalaPOS\nStart"
     ✓ • 187ms
 
 ## Assistant
@@ -20635,7 +20635,7 @@ All 254 tests pass, and the staged server is running with the production UI on a
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 fill '@e3' 'ForkFlow Resilience Cafe'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 fill '@e4' 'Test Admin'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 fill '@e5' '1234'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval "document.querySelector('button').click()"
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 fill '@e3' 'MasalaPOS Resilience Cafe'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 fill '@e4' 'Test Admin'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 fill '@e5' '1234'; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval "document.querySelector('button').click()"
     ✓ Done
     ✓ Done
     ✓ Done
@@ -20782,7 +20782,7 @@ All 254 tests pass, and the staged server is running with the production UI on a
     
       return (
         <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-          <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+          <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
           {tabs.map((t) => (
             <button
               key={t.label}
@@ -20870,21 +20870,21 @@ All 254 tests pass, and the staged server is running with the production UI on a
       const click = async (text) => { const b = await waitFor(() => button(text), text); if (b.disabled) throw new Error(`Disabled ${text}`); b.click(); await new Promise((r) => setTimeout(r, 100)); };
       const nativeFetch = window.fetch.bind(window);
       const api = async (path, method = "GET", body) => {
-        const res = await nativeFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const res = await nativeFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const data = await res.json(); if (!res.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
       };
-      await waitFor(() => localStorage.getItem("forkflow.generation"), "server generation checked");
+      await waitFor(() => localStorage.getItem("masalapos.generation"), "server generation checked");
       await click("settings"); await waitFor(() => button("Back up now"), "backup controls");
       const count = (await api("/system/backups")).backups.length;
       await click("Back up now"); await waitFor(() => document.body.innerText.includes("Verified local backup saved"), "manual backup");
       const backups = await api("/system/backups");
       check(backups.backups.length === count + 1, "Manual backup created from Settings");
-      const copy = await nativeFetch(`/api/system/backups/${backups.backups[0].name}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+      const copy = await nativeFetch(`/api/system/backups/${backups.backups[0].name}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
       check(new TextDecoder().decode((await copy.arrayBuffer()).slice(0, 15)) === "SQLite format 3", "Backup download contains a SQLite snapshot");
       const connections = await api("/system/connections");
       if (connections.connections.length) {
-        check([...document.querySelectorAll("img")].some((img) => img.alt.includes("Connect to ForkFlow") && img.complete && img.naturalWidth > 0), "LAN QR code renders locally");
-        const shortcut = await nativeFetch(`/api/system/shortcut?url=${encodeURIComponent(connections.connections[0].url)}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+        check([...document.querySelectorAll("img")].some((img) => img.alt.includes("Connect to MasalaPOS") && img.complete && img.naturalWidth > 0), "LAN QR code renders locally");
+        const shortcut = await nativeFetch(`/api/system/shortcut?url=${encodeURIComponent(connections.connections[0].url)}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
         check((await shortcut.text()).includes(`--app=${connections.connections[0].url}`), "Edge shortcut targets the displayed LAN address");
       }
       const stamp = Date.now();
@@ -20896,7 +20896,7 @@ All 254 tests pass, and the staged server is running with the production UI on a
       const productButton = () => [...document.querySelectorAll("button")].find((b) => b.textContent.includes(product.name));
       (await waitFor(productButton, "menu product")).click();
       await waitFor(() => button("Punch"), "saved draft");
-      const draftKey = Object.keys(localStorage).find((key) => key.startsWith("forkflow.draft.") && localStorage.getItem(key).includes(product.id));
+      const draftKey = Object.keys(localStorage).find((key) => key.startsWith("masalapos.draft.") && localStorage.getItem(key).includes(product.id));
       check(!!draftKey, "Cart persisted before any request");
       const orderId = draftKey.split(".").at(-1);
       const { order } = await api(`/orders/${orderId}`);
@@ -20924,7 +20924,7 @@ All 254 tests pass, and the staged server is running with the production UI on a
         await click("Punch"); await waitFor(() => !button("Punch"), "second punch");
         losePath = `/api/orders/${orderId}/send`; lost = false;
         await click("Send to kitchen");
-        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "kitchen acknowledgement replay");
+        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v1.")), "kitchen acknowledgement replay");
         const sent = (await api(`/orders/${orderId}`)).order;
         check(sent.items.length === 2 && sent.items.every((i) => i.status === "sent"), "Kitchen retry keeps one saved send request");
         check((await api("/kots")).kots.filter((k) => k.orderId === orderId).length === 1, "Lost kitchen acknowledgement does not duplicate KOTs");
@@ -20932,12 +20932,12 @@ All 254 tests pass, and the staged server is running with the production UI on a
         losePath = `/api/orders/${orderId}/bill`; lost = false;
         await click("Issue bill");
         await waitFor(() => button("Settle bill"), "bill issued after response loss");
-        await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "bill queue cleared");
+        await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v1.")), "bill queue cleared");
         const { bill } = await api(`/orders/${orderId}/bill`);
         check(bill.status === "unpaid", "Bill issue resolves a lost acknowledgement from the same saved request");
         losePath = `/api/bills/${bill.id}/settle`; lost = false;
         await click("Settle bill");
-        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "settlement replay");
+        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v1.")), "settlement replay");
         const paid = (await api(`/orders/${orderId}/bill`)).bill;
         check(paid.status === "paid" && paid.payments.length === 1, "Lost settlement acknowledgement records payment only once");
       } finally { window.fetch = nativeFetch; }
@@ -20947,7 +20947,7 @@ All 254 tests pass, and the staged server is running with the production UI on a
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     ✗ Evaluation error: Error: Local scratch server required
         at <anonymous>:3:77
         at <anonymous>:88:3
@@ -20955,7 +20955,7 @@ All 254 tests pass, and the staged server is running with the production UI on a
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 get url; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval "location.origin"; Get-Content tools/e2e/m6-resilience.js | Select-Object -First 5
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 get url; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval "location.origin"; Get-Content tools/e2e/m6-resilience.js | Select-Object -First 5
     about:blank
     "null"
     // Run with agent-browser eval --stdin, on a scratch server signed in as admin.
@@ -20967,11 +20967,11 @@ All 254 tests pass, and the staged server is running with the production UI on a
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 open http://localhost:4111; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 snapshot -i
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 open http://localhost:4111; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 snapshot -i
+    ✓ MasalaPOS POS
       http://localhost:4111/
-    - generic "ForkFlow123456789⌫0OK" [ref=e7] clickable [onclick]
-      - heading "ForkFlow" [level=1, ref=e8]
+    - generic "MasalaPOS123456789⌫0OK" [ref=e7] clickable [onclick]
+      - heading "MasalaPOS" [level=1, ref=e8]
       - button "1" [ref=e9]
       - button "2" [ref=e10]
       - button "3" [ref=e11]
@@ -21006,27 +21006,27 @@ All 254 tests pass, and the staged server is running with the production UI on a
       • downloaded electron zip extracted successfully  output=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked
       • searching for node modules  pm=npm searchDir=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\build\desktop\app
       • duplicate dependency references  dependencies=["ajv@8.20.0","fast-json-stringify@7.0.1","fastq@1.20.1","ajv-formats@3.0.1","ajv@8.20.0","string-width@4.2.3","string-width@4.2.3","strip-ansi@6.0.1","strip-ansi@6.0.1"]
-      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\ForkFlow.exe
-      • signing with signtool.exe  path=dist\installer\win-unpacked\ForkFlow.exe
-      • building        target=nsis file=dist\installer\ForkFlow-Setup-0.6.0.exe archs=x64 oneClick=false perMachine=true
+      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\MasalaPOS.exe
+      • signing with signtool.exe  path=dist\installer\win-unpacked\MasalaPOS.exe
+      • building        target=nsis file=dist\installer\MasalaPOS-Setup-0.6.0.exe archs=x64 oneClick=false perMachine=true
       • downloaded      label=nsis-3.0.4.1.7z progress=100%
       • downloaded      label=7zip-win-x64.tar.gz progress=100%
       • signing with signtool.exe  path=dist\installer\win-unpacked\resources\elevate.exe
       • downloaded      label=nsis-resources-3.4.1.7z progress=100%
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.0.__uninstaller.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.0.exe
-      • building block map  blockMapFile=dist\installer\ForkFlow-Setup-0.6.0.exe.blockmap
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.0.__uninstaller.exe
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.0.exe
+      • building block map  blockMapFile=dist\installer\MasalaPOS-Setup-0.6.0.exe.blockmap
     ✓ • 2m 17s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval "(async()=>{for(const digit of '1234'){[...document.querySelectorAll('button')].find(b=>b.textContent===digit).click();await new Promise(r=>setTimeout(r,100));}[...document.querySelectorAll('button')].find(b=>b.textContent==='OK').click();return 'submitted';})()"
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval "(async()=>{for(const digit of '1234'){[...document.querySelectorAll('button')].find(b=>b.textContent===digit).click();await new Promise(r=>setTimeout(r,100));}[...document.querySelectorAll('button')].find(b=>b.textContent==='OK').click();return 'submitted';})()"
     "submitted"
     ✓ • 694ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     {
       "checks": [
         "Manual backup created from Settings",
@@ -21056,7 +21056,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\desktop\src\main.ts
     @@ -113,2 +113,6 @@
          window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
-    +    if (app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+    +    if (app.isPackaged && process.env["MASALAPOS_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
     +      app.setLoginItemSettings({ openAtLogin: true });
     +      appendFileSync(join(dataDir, "desktop-initialized"), "1");
     +    }
@@ -21078,7 +21078,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 screenshot; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 errors; Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 screenshot; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 errors; Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790624122987.png
     ✗ Evaluation error: Error: Disabled: settings
         at click (<anonymous>:13:120)
@@ -21092,7 +21092,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval "[...document.querySelectorAll('button')].find(b=>b.textContent==='home').click()"; Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval "[...document.querySelectorAll('button')].find(b=>b.textContent==='home').click()"; Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     ✗ Evaluation error: SyntaxError: Unexpected token '='
     ✗ Evaluation error: Error: Disabled: settings
         at click (<anonymous>:13:120)
@@ -21104,11 +21104,11 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -21146,7 +21146,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
 ## Activity
 
-    $ Get-Content -Raw .e2e-scratch/m6-home.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin; Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    $ Get-Content -Raw .e2e-scratch/m6-home.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin; Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     null
     {
       "exclusiveBill": 3,
@@ -21599,7 +21599,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     {
       "checks": [
         "Stock item created from the form with an opening balance",
@@ -21639,7 +21639,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
       • searching for node modules  pm=npm searchDir=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\build\desktop\app
       • duplicate dependency references  dependencies=["end-of-stream@1.4.5","readable-stream@3.6.2","once@1.4.0","minimatch@10.2.6","path-scurry@2.0.2","brace-expansion@5.0.9","string-width@4.2.3","string-width@4.2.3","strip-ansi@6.0.1","strip-ansi@6.0.1","string_decoder@1.3.0"]
       • cannot find path for dependency  dependencies=["@fastify/static@undefined","@fastify/websocket@undefined","@fastify/ajv-compiler@undefined","@fastify/error@undefined","@fastify/fast-json-stringify-compiler@undefined","@fastify/proxy-addr@undefined","abstract-logging@undefined","avvio@undefined","@fastify/merge-json-schemas@undefined","ajv-formats@undefined","ajv@undefined","@pinojs/redact@undefined","atomic-sleep@undefined","ansi-regex@undefined","ansi-styles@undefined"]
-      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\ForkFlow.exe
+      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\MasalaPOS.exe
       ⨯ Application entry file "main.js" in the "C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked\resources\app.asar" is corrupted: Error: "main.js" was not found in this archive  failedTask=build stackTrace=Error: Application entry file "main.js" in the "C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked\resources\app.asar" is corrupted: Error: "main.js" was not found in this archive
         at error (C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\node_modules\app-builder-lib\src\asar\asarFileChecker.ts:7:12)
         at checkFileInArchive (C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\node_modules\app-builder-lib\src\asar\asarFileChecker.ts:16:11)
@@ -21655,9 +21655,9 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-browser'; $env:FORKFLOW_PORT = '4111'; $env:FORKFLOW_UI_DIR = Join-Path (Get-Location) 'build/desktop/app/ui'; node build/desktop/app/server/main.mjs
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-browser'; $env:MASALAPOS_PORT = '4111'; $env:MASALAPOS_UI_DIR = Join-Path (Get-Location) 'build/desktop/app/ui'; node build/desktop/app/server/main.mjs
     {"level":30,"time":1790623630495,"pid":7280,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://127.0.0.1:4111"}
-    ForkFlow server on http://localhost:4111 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m6-browser\forkflow.db)
+    MasalaPOS server on http://localhost:4111 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m6-browser\masalapos.db)
     {"level":30,"time":1790623630496,"pid":7280,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://192.168.171.101:4111"}
     {"level":30,"time":1790623651306,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","req":{"method":"GET","url":"/"},"msg":"incoming request"}
     {"level":30,"time":1790623651335,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","res":{"statusCode":200},"responseTime":28.39730000000054,"msg":"request completed"}
@@ -21808,7 +21808,7 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
     {"level":30,"time":1790623969538,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-23","res":{"statusCode":200},"responseTime":30.39020000002347,"msg":"request completed"}
     {"level":30,"time":1790623969618,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-24","req":{"method":"GET","url":"/api/system/backups"},"msg":"incoming request"}
     {"level":30,"time":1790623969621,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-24","res":{"statusCode":200},"responseTime":2.994600000034552,"msg":"request completed"}
-    {"level":30,"time":1790623969626,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-25","req":{"method":"GET","url":"/api/system/backups/forkflow-manual-1790623969510-3528a925-01ec-4c4c-b783-f5973eb222d5.db"},"msg":"incoming request"}
+    {"level":30,"time":1790623969626,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-25","req":{"method":"GET","url":"/api/system/backups/masalapos-manual-1790623969510-3528a925-01ec-4c4c-b783-f5973eb222d5.db"},"msg":"incoming request"}
     {"level":30,"time":1790623969642,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-25","res":{"statusCode":200},"responseTime":16.07600000000093,"msg":"request completed"}
     {"level":30,"time":1790623969647,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-26","req":{"method":"GET","url":"/api/system/connections"},"msg":"incoming request"}
     {"level":30,"time":1790623969671,"pid":7280,"hostname":"DESKTOPV8MKLB6","reqId":"req-26","res":{"statusCode":200},"responseTime":24.25419999996666,"msg":"request completed"}
@@ -22957,11 +22957,11 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -22979,11 +22979,11 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 10.30s
@@ -23231,11 +23231,11 @@ The 12 new browser checks pass: drafts survive navigation, an offline punch pres
 
 ## Activity
 
-    $ Get-Item 'dist/installer/ForkFlow-Setup-0.6.0.exe' | Select-Object Name,Length; Get-AuthenticodeSignature 'dist/installer/ForkFlow-Setup-0.6.0.exe' | Select-Object Status
+    $ Get-Item 'dist/installer/MasalaPOS-Setup-0.6.0.exe' | Select-Object Name,Length; Get-AuthenticodeSignature 'dist/installer/MasalaPOS-Setup-0.6.0.exe' | Select-Object Status
     
     Name                        Length
     ----                        ------
-    ForkFlow-Setup-0.6.0.exe 109935572
+    MasalaPOS-Setup-0.6.0.exe 109935572
     
     
     
@@ -23257,13 +23257,13 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
       • downloaded electron zip extracted successfully  output=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked
       • searching for node modules  pm=npm searchDir=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\build\desktop\app
       • duplicate dependency references  dependencies=["ajv@8.20.0","fast-json-stringify@7.0.1","fastq@1.20.1","ajv-formats@3.0.1","ajv@8.20.0","string-width@4.2.3","string-width@4.2.3","strip-ansi@6.0.1","strip-ansi@6.0.1"]
-      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\ForkFlow.exe
-      • signing with signtool.exe  path=dist\installer\win-unpacked\ForkFlow.exe
-      • building        target=nsis file=dist\installer\ForkFlow-Setup-0.6.0.exe archs=x64 oneClick=false perMachine=true
+      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\MasalaPOS.exe
+      • signing with signtool.exe  path=dist\installer\win-unpacked\MasalaPOS.exe
+      • building        target=nsis file=dist\installer\MasalaPOS-Setup-0.6.0.exe archs=x64 oneClick=false perMachine=true
       • signing with signtool.exe  path=dist\installer\win-unpacked\resources\elevate.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.0.__uninstaller.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.0.exe
-      • building block map  blockMapFile=dist\installer\ForkFlow-Setup-0.6.0.exe.blockmap
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.0.__uninstaller.exe
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.0.exe
+      • building block map  blockMapFile=dist\installer\MasalaPOS-Setup-0.6.0.exe.blockmap
     ✓ • 2m 16s
 
 ## Activity
@@ -23294,7 +23294,7 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
      ```
     @@ -39,2 +41,9 @@
      
-    +The installer is written to `dist/installer/ForkFlow-Setup-0.6.0.exe`.
+    +The installer is written to `dist/installer/MasalaPOS-Setup-0.6.0.exe`.
     +Installed data is kept in the user's application-data folder, separate from the
     +development database. Open it from the tray menu. Closing the window keeps the
     +server running; use the tray's Quit action to stop all counters. The current
@@ -23305,9 +23305,9 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\docs\operations\backup-and-recovery.md
     # Backups, recovery and Windows installation
     
-    ForkFlow 0.6 runs one server process. The server owns the SQLite database; other
+    MasalaPOS 0.6 runs one server process. The server owns the SQLite database; other
     counters connect through the browser. Close the window to keep the server in the
-    tray. **Quit ForkFlow** in the tray menu stops service for every counter.
+    tray. **Quit MasalaPOS** in the tray menu stops service for every counter.
     
     ## Build and install
     
@@ -23327,22 +23327,22 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     runtime. The builder's first run downloads Electron/NSIS packaging tools.
     Close apps or test servers using `build/desktop/app` before rebuilding it.
     
-    Output: `dist/installer/ForkFlow-Setup-0.6.0.exe`. The package includes the server,
+    Output: `dist/installer/MasalaPOS-Setup-0.6.0.exe`. The package includes the server,
     UI, runtime and SQLite. Customer PCs do not need Node, npm or a compiler.
     
     Run the installer as administrator. It installs a private-network, local-subnet
     firewall rule for TCP 4100 and creates the main PC shortcut. First launch enables
     Windows login autostart; toggle **Start with Windows** from the tray menu.
     Do not run development and installed servers on the same port at the same time.
-    Changing `FORKFLOW_PORT` also requires changing the firewall rule.
+    Changing `MASALAPOS_PORT` also requires changing the firewall rule.
     
     The current build is unsigned. Use a Windows signing certificate for a public
     release. An installer build and packaged-runtime smoke test do not verify UAC,
     firewall access from a second PC, or login startup on a clean customer machine.
     
-    Installed data defaults to `%APPDATA%\forkflow-desktop\data`. **Open data and
+    Installed data defaults to `%APPDATA%\masalapos-desktop\data`. **Open data and
     backups** in the tray is the authoritative location. Development defaults to
-    `./data`, or the absolute folder in `FORKFLOW_DATA_DIR`. The installer never
+    `./data`, or the absolute folder in `MASALAPOS_DATA_DIR`. The installer never
     overwrites restaurant data, and uninstall retains it. Existing development data
     is not automatically imported; take a manual backup and restore it in the app.
     
@@ -23363,7 +23363,7 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     
     Each snapshot uses SQLite `VACUUM INTO`, integrity/reference checks, a disk flush
     and a rename from `.partial`. It includes committed WAL data. Never copy only the
-    live `forkflow.db` while the app is running. Large snapshots can briefly pause
+    live `masalapos.db` while the app is running. Large snapshots can briefly pause
     requests; queued order actions remain saved on their originating device.
     
     A pre-update snapshot is mandatory before a pending migration or app-version
@@ -23394,9 +23394,9 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     require its accompanying WAL to inspect. Do not copy an archive's DB alone over
     the live database. Use a verified snapshot for normal recovery.
     
-    For development-only recovery, with all servers stopped, set `FORKFLOW_DATA_DIR`
-    and `FORKFLOW_RESTORE` to absolute paths for one launch of
-    `node --import tsx apps/server/src/main.ts`. Remove `FORKFLOW_RESTORE` immediately
+    For development-only recovery, with all servers stopped, set `MASALAPOS_DATA_DIR`
+    and `MASALAPOS_RESTORE` to absolute paths for one launch of
+    `node --import tsx apps/server/src/main.ts`. Remove `MASALAPOS_RESTORE` immediately
     after that launch; never put it in a persistent environment or startup task.
     Windows locks release automatically on process termination. The non-Windows
     development fallback uses a 10-minute stale-lock interval after a forced kill.
@@ -23442,7 +23442,7 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     +
     +```powershell
     +Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js |
-    +  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+    +  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     +```
     +
     +The gate checks manual backup/download, LAN QR and shortcut generation, draft
@@ -23451,9 +23451,9 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     +fetch function after fault injection. With a LAN interface it reports 12 checks.
     +Run the M4 and M5 gates as checkout/stock regression checks.
     +
-    +For packaged-runtime QA, set `FORKFLOW_DATA_DIR` to an absolute scratch folder,
-    +`FORKFLOW_PORT` to an unused port, and `FORKFLOW_DISABLE_AUTOSTART=1` before
-    +launching `dist/installer/win-unpacked/ForkFlow.exe --remote-debugging-port=4122`.
+    +For packaged-runtime QA, set `MASALAPOS_DATA_DIR` to an absolute scratch folder,
+    +`MASALAPOS_PORT` to an unused port, and `MASALAPOS_DISABLE_AUTOSTART=1` before
+    +launching `dist/installer/win-unpacked/MasalaPOS.exe --remote-debugging-port=4122`.
     +Connect agent-browser to 4122. Check the rendered setup flow, complete setup,
     +verify SQLite-backed API calls and backup creation, terminate only its identified
     +utility server child and check that a new health instance ID appears. Quit the
@@ -23462,16 +23462,16 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-desktop'; $env:FORKFLOW_PORT = '4112'; $env:FORKFLOW_DISABLE_AUTOSTART = '1'; $m6Desktop = Start-Process -FilePath (Join-Path (Get-Location) 'dist/installer/win-unpacked/ForkFlow.exe') -ArgumentList '--remote-debugging-port=4122' -WindowStyle Hidden -PassThru; $m6Desktop.Id
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-desktop'; $env:MASALAPOS_PORT = '4112'; $env:MASALAPOS_DISABLE_AUTOSTART = '1'; $m6Desktop = Start-Process -FilePath (Join-Path (Get-Location) 'dist/installer/win-unpacked/MasalaPOS.exe') -ArgumentList '--remote-debugging-port=4122' -WindowStyle Hidden -PassThru; $m6Desktop.Id
     1256
     ✓ • 387ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop connect 4122; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop errors
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop connect 4122; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop errors
     [agent-browser] launched browser
     ✓ Done
-    - heading "Starting ForkFlowâ€¦" [level=2, ref=e1]
+    - heading "Starting MasalaPOSâ€¦" [level=2, ref=e1]
     ✓ • 917ms
 
 ## Activity
@@ -23498,25 +23498,25 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
 
 ## Activity
 
-    $ Get-ChildItem .e2e-scratch/m6-desktop -Force; Get-Content .e2e-scratch/m6-desktop/server.log -Tail 20 -ErrorAction SilentlyContinue; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop console; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop get url
+    $ Get-ChildItem .e2e-scratch/m6-desktop -Force; Get-Content .e2e-scratch/m6-desktop/server.log -Tail 20 -ErrorAction SilentlyContinue; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop console; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop get url
     about:blank
     ✓ • 1.43s
 
 ## Activity
 
-    $ Get-CimInstance Win32_Process -Filter "Name = 'ForkFlow.exe' OR Name = 'electron.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List
+    $ Get-CimInstance Win32_Process -Filter "Name = 'MasalaPOS.exe' OR Name = 'electron.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List
     
     
     ProcessId       : 1256
     ParentProcessId : 14856
     CommandLine     : "C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing
-                      Software\dist\installer\win-unpacked\ForkFlow.exe" --remote-debugging-port=4122
+                      Software\dist\installer\win-unpacked\MasalaPOS.exe" --remote-debugging-port=4122
     
     ProcessId       : 12088
     ParentProcessId : 1256
     CommandLine     : "C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing
-                      Software\dist\installer\win-unpacked\ForkFlow.exe" --type=gpu-process
-                      --user-data-dir="C:\Users\AR\AppData\Roaming\forkflow-desktop" --gpu-preferences=UAAAAAAAAADgAAAEAAAA
+                      Software\dist\installer\win-unpacked\MasalaPOS.exe" --type=gpu-process
+                      --user-data-dir="C:\Users\AR\AppData\Roaming\masalapos-desktop" --gpu-preferences=UAAAAAAAAADgAAAEAAAA
                       AAAAAAAAAGAAOAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAA
                       AAAAAAACAAAAAAAAAA= --field-trial-handle=1828,i,6588335414918031828,4067105669457238196,262144
                       --enable-features=PdfUseShowSaveFilePicker --disable-features=DropInputEventsWhilePaintHolding,LocalN
@@ -23528,9 +23528,9 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     ProcessId       : 6780
     ParentProcessId : 1256
     CommandLine     : "C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing
-                      Software\dist\installer\win-unpacked\ForkFlow.exe" --type=utility
+                      Software\dist\installer\win-unpacked\MasalaPOS.exe" --type=utility
                       --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none
-                      --user-data-dir="C:\Users\AR\AppData\Roaming\forkflow-desktop"
+                      --user-data-dir="C:\Users\AR\AppData\Roaming\masalapos-desktop"
                       --field-trial-handle=1828,i,6588335414918031828,4067105669457238196,262144
                       --enable-features=PdfUseShowSaveFilePicker --disable-features=DropInputEventsWhilePaintHolding,LocalN
                       etworkAccessChecks,NetworkServiceSandbox,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TraceSiteI
@@ -23541,8 +23541,8 @@ Billing and inventory browser regressions also pass. A rebuild hit Windows’ fi
     ProcessId       : 1592
     ParentProcessId : 1256
     CommandLine     : "C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing
-                      Software\dist\installer\win-unpacked\ForkFlow.exe" --type=renderer
-                      --user-data-dir="C:\Users\AR\AppData\Roaming\forkflow-desktop"
+                      Software\dist\installer\win-unpacked\MasalaPOS.exe" --type=renderer
+                      --user-data-dir="C:\Users\AR\AppData\Roaming\masalapos-desktop"
                       --app-path="C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing
                       Software\dist\installer\win-unpacked\resources\app.asar" --enable-sandbox
                       --remote-debugging-port=4122 --video-capture-use-gpu-memory-buffer --lang=en-US
@@ -23565,8 +23565,8 @@ The packaged app opens, but its server has not started. I’m investigating that
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 snapshot -i; Get-ChildItem .e2e-scratch/m6-desktop -Force; Get-Process -Id 1256 | Select-Object Id,CPU,Responding,MainWindowTitle
-    - heading "Starting ForkFlowâ€¦" [level=2, ref=e2]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 snapshot -i; Get-ChildItem .e2e-scratch/m6-desktop -Force; Get-Process -Id 1256 | Select-Object Id,CPU,Responding,MainWindowTitle
+    - heading "Starting MasalaPOSâ€¦" [level=2, ref=e2]
     
       Id    CPU Responding MainWindowTitle
       --    --- ---------- ---------------
@@ -23587,12 +23587,12 @@ The packaged app opens, but its server has not started. I’m investigating that
 
     $ node .e2e-scratch/inspect-asar.mjs
     ocess.env,
-            FORKFLOW_DATA_DIR: dataDir,
-            FORKFLOW_UI_DIR: join(here, "ui"),
-            FORKFLOW_PORT: port,
-            FORKFLOW_APP_VERSION: app.getVersion(),
-            FORKFLOW_INSTANCE_ID: instanceId,
-            ...restorePath ? { FORKFLOW_RESTORE: restorePath } : {}
+            MASALAPOS_DATA_DIR: dataDir,
+            MASALAPOS_UI_DIR: join(here, "ui"),
+            MASALAPOS_PORT: port,
+            MASALAPOS_APP_VERSION: app.getVersion(),
+            MASALAPOS_INSTANCE_ID: instanceId,
+            ...restorePath ? { MASALAPOS_RESTORE: restorePath } : {}
           }
         });
         server = child;
@@ -23650,7 +23650,7 @@ The packaged app opens, but its server has not started. I’m investigating that
         errorShown = true;
         const { response } = await dialog.showMessageBox({
           type: "error",
-          title: "ForkFlow needs attention",
+          title: "MasalaPOS needs attention",
           message,
           detail: `Your data is in ${dataDir}. See server.log for details.`,
           buttons: ["Retry", "Open data folder", "Restore backup", "Quit"],
@@ -23682,7 +23682,7 @@ The packaged app opens, but its server has not started. I’m investigating that
         stopping = false;
       }
       async function restore() {
-        const selection = await dialog.showOpenDialog({ title: "Choose a ForkFlow backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
+        const selection = await dialog.showOpenDialog({ title: "Choose a MasalaPOS backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
         if (selection.canceled || !selection.filePaths[0]) return;
         const { response } = await dialog.showMessageBox({
           type: "warning",
@@ -23696,7 +23696,7 @@ The packaged app opens, but its server has not started. I’m investigating that
         if (response !== 1) return;
         recovering = true;
         await stopServer();
-        await window?.loadURL("data:text/html,<h2>Restoring ForkFlow backup\u2026</h2>");
+        await window?.loadURL("data:text/html,<h2>Restoring MasalaPOS backup\u2026</h2>");
         restarts = 5;
         startServer2(selection.filePaths[0]);
         recovering = false;
@@ -23704,7 +23704,7 @@ The packaged app opens, but its server has not started. I’m investigating that
       app.on("second-instance", showWindow2);
       app.whenReady().then(() => {
         window = new BrowserWindow({ width: 1280, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
-        void window.loadURL("data:text/html,<h2>Starting ForkFlow\u2026</h2><p>Preparing the database and checking backups.</p>");
+        void window.loadURL("data:text/html,<h2>Starting MasalaPOS\u2026</h2><p>Preparing the database and checking backups.</p>");
         window.webContents.setWindowOpenHandler(({ url: target }) => {
           if (/^https?:\/\//.test(target)) void shell.openExternal(target);
           return { action: "deny" };
@@ -23718,14 +23718,14 @@ The packaged app opens, but its server has not started. I’m investigating that
             window?.hide();
           }
         });
-        if (app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+        if (app.isPackaged && process.env["MASALAPOS_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
           app.setLoginItemSettings({ openAtLogin: true });
           appendFileSync(join(dataDir, "desktop-initialized"), "1");
         }
         tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
-        tray.setToolTip("ForkFlow \u2014 restaurant POS server");
+        tray.setToolTip("MasalaPOS \u2014 restaurant POS server");
         tray.setContextMenu(Menu.buildFromTemplate([
-          { label: "Open ForkFlow", click: showWindow2 },
+          { label: "Open MasalaPOS", click: showWindow2 },
           { label: "Open data and backups", click: () => {
             void shell.openPath(dataDir);
           } },
@@ -23734,13 +23734,13 @@ The packaged app opens, but its server has not started. I’m investigating that
           } },
           { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
           { type: "separator" },
-          { label: "Quit ForkFlow (stops all counters)", click: () => app.quit() }
+          { label: "Quit MasalaPOS (stops all counters)", click: () => app.quit() }
         ]));
         tray.on("double-click", showWindow2);
         startServer2();
       }).catch((error) => {
         writeLog(String(error));
-        void failure("ForkFlow startup failed.");
+        void failure("MasalaPOS startup failed.");
       });
       app.on("before-quit", (event) => {
         if (quitting) return;
@@ -23783,22 +23783,22 @@ The packaged app opens, but its server has not started. I’m investigating that
          tray.on("double-click", showWindow);
     -    startServer();
     +    writeLog("Tray menu ready\n");
-       }).catch((error: unknown) => { writeLog(String(error)); void failure("ForkFlow startup failed."); });
+       }).catch((error: unknown) => { writeLog(String(error)); void failure("MasalaPOS startup failed."); });
 
 ## Activity
 
-    $ $m6Stopped = Get-CimInstance Win32_Process -Filter 'ProcessId = 1256'; if ($m6Stopped.CommandLine -like '*win-unpacked\ForkFlow.exe*--remote-debugging-port=4122*') { Stop-Process -Id 1256 } else { throw 'Test desktop identity mismatch' }
+    $ $m6Stopped = Get-CimInstance Win32_Process -Filter 'ProcessId = 1256'; if ($m6Stopped.CommandLine -like '*win-unpacked\MasalaPOS.exe*--remote-debugging-port=4122*') { Stop-Process -Id 1256 } else { throw 'Test desktop identity mismatch' }
     ✓ • 632ms
 
 ## Activity
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -23814,15 +23814,15 @@ The packaged app opens, but its server has not started. I’m investigating that
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-desktop'; $env:FORKFLOW_PORT = '4112'; $env:FORKFLOW_DISABLE_AUTOSTART = '1'; $m6Dev = Start-Process -FilePath (Join-Path (Get-Location) 'node_modules/electron/dist/electron.exe') -ArgumentList 'build/desktop/app','--remote-debugging-port=4122','--inspect=9233' -WorkingDirectory (Get-Location) -WindowStyle Hidden -PassThru -RedirectStandardError '.e2e-scratch/m6-electron-stderr.log' -RedirectStandardOutput '.e2e-scratch/m6-electron-stdout.log'; $m6Dev.Id
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-desktop'; $env:MASALAPOS_PORT = '4112'; $env:MASALAPOS_DISABLE_AUTOSTART = '1'; $m6Dev = Start-Process -FilePath (Join-Path (Get-Location) 'node_modules/electron/dist/electron.exe') -ArgumentList 'build/desktop/app','--remote-debugging-port=4122','--inspect=9233' -WorkingDirectory (Get-Location) -WindowStyle Hidden -PassThru -RedirectStandardError '.e2e-scratch/m6-electron-stderr.log' -RedirectStandardOutput '.e2e-scratch/m6-electron-stdout.log'; $m6Dev.Id
     18368
     ✓ • 331ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 snapshot -i
-    - generic "Set up ForkFlowStart" [ref=e3] clickable [onclick]
-      - heading "Set up ForkFlow" [level=1, ref=e4]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 snapshot -i
+    - generic "Set up MasalaPOSStart" [ref=e3] clickable [onclick]
+      - heading "Set up MasalaPOS" [level=1, ref=e4]
       - textbox "Restaurant name" [ref=e5]
       - textbox "Your name (admin)" [ref=e6]
       - textbox "Admin PIN (4-6 digits)" [ref=e7]
@@ -23836,7 +23836,7 @@ The packaged app opens, but its server has not started. I’m investigating that
     Tray menu ready
     Server spawned (3324)
     {"level":30,"time":1790624788328,"pid":3324,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://127.0.0.1:4112"}
-    ForkFlow server on http://localhost:4112 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m6-desktop\forkflow.db)
+    MasalaPOS server on http://localhost:4112 (db: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\.e2e-scratch\m6-desktop\masalapos.db)
     {"level":30,"time":1790624788329,"pid":3324,"hostname":"DESKTOPV8MKLB6","msg":"Server listening at http://192.168.171.101:4112"}
     {"level":30,"time":1790624790046,"pid":3324,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","req":{"method":"GET","url":"/api/health"},"msg":"incoming request"}
     {"level":30,"time":1790624790050,"pid":3324,"hostname":"DESKTOPV8MKLB6","reqId":"req-1","res":{"statusCode":200},"responseTime":3.6878999999998996,"msg":"request completed"}
@@ -23872,9 +23872,9 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\desktop\src\main.ts
     @@ -48,3 +48,3 @@
          const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
-    -      cwd: here, stdio: "pipe", serviceName: "ForkFlow POS server",
-    +      cwd: dataDir, stdio: "pipe", serviceName: "ForkFlow POS server",
-           env: { ...process.env, FORKFLOW_DATA_DIR: dataDir, FORKFLOW_UI_DIR: join(here, "ui"), FORKFLOW_PORT: port,
+    -      cwd: here, stdio: "pipe", serviceName: "MasalaPOS POS server",
+    +      cwd: dataDir, stdio: "pipe", serviceName: "MasalaPOS POS server",
+           env: { ...process.env, MASALAPOS_DATA_DIR: dataDir, MASALAPOS_UI_DIR: join(here, "ui"), MASALAPOS_PORT: port,
     @@ -58,2 +58,9 @@
          const started = Date.now();
     +    const spawnCheck = setTimeout(() => {
@@ -23910,11 +23910,11 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -23971,11 +23971,11 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.0 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.0 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -23993,11 +23993,11 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 7.67s
@@ -24121,8 +24121,8 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
     const electron = "process.getBuiltinModule('module').createRequire(process.execPath)('electron')";
     const checks = [];
     try {
-      const context = await evaluate("({path: process.execPath, data: process.env.FORKFLOW_DATA_DIR, autostart: process.env.FORKFLOW_DISABLE_AUTOSTART})");
-      assert.match(context.path.replaceAll("\\", "/"), /win-unpacked\/ForkFlow\.exe$/i);
+      const context = await evaluate("({path: process.execPath, data: process.env.MASALAPOS_DATA_DIR, autostart: process.env.MASALAPOS_DISABLE_AUTOSTART})");
+      assert.match(context.path.replaceAll("\\", "/"), /win-unpacked\/MasalaPOS\.exe$/i);
       assert.match(context.data.replaceAll("\\", "/"), /\.e2e-scratch\//);
       assert.equal(context.autostart, "1");
       const health = await (await fetch(base + "/api/health")).json(); assert.equal(health.ok, true);
@@ -24135,7 +24135,7 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
       const backup = await fetch(base + "/api/system/backups", { method: "POST", headers }); assert.ok(backup.ok);
       const snapshot = await backup.json(); assert.ok(snapshot.name); checks.push("Packaged server creates a verified backup");
       const metrics = await evaluate(`${electron}.app.getAppMetrics().map(m => ({pid:m.pid,type:m.type,name:m.name,serviceName:m.serviceName}))`);
-      const child = metrics.find((m) => m.name === "ForkFlow POS server" || m.serviceName === "ForkFlow POS server");
+      const child = metrics.find((m) => m.name === "MasalaPOS POS server" || m.serviceName === "MasalaPOS POS server");
       assert.ok(child, JSON.stringify(metrics));
       process.kill(child.pid);
       let restarted;
@@ -24165,13 +24165,13 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
       • downloaded electron zip extracted successfully  output=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked
       • searching for node modules  pm=npm searchDir=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\build\desktop\app
       • duplicate dependency references  dependencies=["ajv@8.20.0","fast-json-stringify@7.0.1","fastq@1.20.1","ajv-formats@3.0.1","ajv@8.20.0","string-width@4.2.3","string-width@4.2.3","strip-ansi@6.0.1","strip-ansi@6.0.1"]
-      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\ForkFlow.exe
-      • signing with signtool.exe  path=dist\installer\win-unpacked\ForkFlow.exe
-      • building        target=nsis file=dist\installer\ForkFlow-Setup-0.6.0.exe archs=x64 oneClick=false perMachine=true
+      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\MasalaPOS.exe
+      • signing with signtool.exe  path=dist\installer\win-unpacked\MasalaPOS.exe
+      • building        target=nsis file=dist\installer\MasalaPOS-Setup-0.6.0.exe archs=x64 oneClick=false perMachine=true
       • signing with signtool.exe  path=dist\installer\win-unpacked\resources\elevate.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.0.__uninstaller.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.0.exe
-      • building block map  blockMapFile=dist\installer\ForkFlow-Setup-0.6.0.exe.blockmap
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.0.__uninstaller.exe
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.0.exe
+      • building block map  blockMapFile=dist\installer\MasalaPOS-Setup-0.6.0.exe.blockmap
     ✓ • 1m 30s
 
 ## Activity
@@ -24190,15 +24190,15 @@ I found the cause: the packaged app tried to use its ASAR archive as the server�
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-desktop'; $env:FORKFLOW_PORT = '4112'; $env:FORKFLOW_DISABLE_AUTOSTART = '1'; $m6Final = Start-Process -FilePath (Join-Path (Get-Location) 'dist/installer/win-unpacked/ForkFlow.exe') -ArgumentList '--remote-debugging-port=4122','--inspect=9233' -WindowStyle Hidden -PassThru -RedirectStandardError '.e2e-scratch/m6-packaged-stderr.log'; $m6Final.Id
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/m6-desktop'; $env:MASALAPOS_PORT = '4112'; $env:MASALAPOS_DISABLE_AUTOSTART = '1'; $m6Final = Start-Process -FilePath (Join-Path (Get-Location) 'dist/installer/win-unpacked/MasalaPOS.exe') -ArgumentList '--remote-debugging-port=4122','--inspect=9233' -WindowStyle Hidden -PassThru -RedirectStandardError '.e2e-scratch/m6-packaged-stderr.log'; $m6Final.Id
     10964
     ✓ • 298ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 errors; Get-Content .e2e-scratch/m6-desktop/server.log -Tail 5
-    - generic "Set up ForkFlowStart" [ref=e9] clickable [onclick]
-      - heading "Set up ForkFlow" [level=1, ref=e10]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 snapshot -i; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 errors; Get-Content .e2e-scratch/m6-desktop/server.log -Tail 5
+    - generic "Set up MasalaPOSStart" [ref=e9] clickable [onclick]
+      - heading "Set up MasalaPOS" [level=1, ref=e10]
       - textbox "Restaurant name" [ref=e11]
       - textbox "Your name (admin)" [ref=e12]
       - textbox "Admin PIN (4-6 digits)" [ref=e13]
@@ -24247,7 +24247,7 @@ The packaged app now passes all six runtime checks. Its bundled SQLite server st
 
 ## Activity
 
-    $ Get-Content -Raw .e2e-scratch/m6-reload.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 eval --stdin; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 snapshot -i; Get-Content -Raw .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 eval --stdin
+    $ Get-Content -Raw .e2e-scratch/m6-reload.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 eval --stdin; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 snapshot -i; Get-Content -Raw .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 eval --stdin
     null
     (no interactive elements)
     "submitted"
@@ -24255,7 +24255,7 @@ The packaged app now passes all six runtime checks. Its bundled SQLite server st
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 eval --stdin
     ✗ Evaluation error: Error: Disabled Punch
         at click (<anonymous>:12:108)
         at async <anonymous>:66:5
@@ -24273,7 +24273,7 @@ The packaged app now passes all six runtime checks. Its bundled SQLite server st
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 eval --stdin
     ✗ Evaluation error: TypeError: Cannot read properties of undefined (reading 'click')
         at <anonymous>:60:20
     ✗ (1) • 1.49s
@@ -24289,7 +24289,7 @@ The packaged app now passes all six runtime checks. Its bundled SQLite server st
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 eval --stdin
     {
       "checks": [
         "Manual backup created from Settings",
@@ -24317,7 +24317,7 @@ The packaged app now passes all six runtime checks. Its bundled SQLite server st
 
 ## Activity
 
-    $ Get-Content -Raw .e2e-scratch/m6-scroll.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 eval --stdin; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 screenshot; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop --cdp 4122 errors
+    $ Get-Content -Raw .e2e-scratch/m6-scroll.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 eval --stdin; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 screenshot; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop --cdp 4122 errors
     {
       "interrupted": false
     }
@@ -24330,12 +24330,12 @@ The packaged app now passes all six runtime checks. Its bundled SQLite server st
 
 ## Activity
 
-    $ Get-AuthenticodeSignature 'dist/installer/ForkFlow-Setup-0.6.0.exe' | Format-List Status,StatusMessage; Get-FileHash 'dist/installer/ForkFlow-Setup-0.6.0.exe' -Algorithm SHA256 | Format-List Hash; Test-Path data; Test-Path .e2e-scratch/m6-desktop/desktop-initialized
+    $ Get-AuthenticodeSignature 'dist/installer/MasalaPOS-Setup-0.6.0.exe' | Format-List Status,StatusMessage; Get-FileHash 'dist/installer/MasalaPOS-Setup-0.6.0.exe' -Algorithm SHA256 | Format-List Hash; Test-Path data; Test-Path .e2e-scratch/m6-desktop/desktop-initialized
     
     
     Status        : NotSigned
     StatusMessage : The file C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing
-                    Software\dist\installer\ForkFlow-Setup-0.6.0.exe is not digitally signed. You cannot run this script
+                    Software\dist\installer\MasalaPOS-Setup-0.6.0.exe is not digitally signed. You cannot run this script
                     on the current system. For more information about running scripts and setting execution policy, see
                     about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170
     
@@ -24418,7 +24418,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     - Final NSIS build succeeded. Signature status: **NotSigned**.
     - No production `data/` database was created. QA autostart was disabled.
     
-    Artifact: `dist/installer/ForkFlow-Setup-0.6.0.exe`.
+    Artifact: `dist/installer/MasalaPOS-Setup-0.6.0.exe`.
     
     SHA-256:
     `199BA987327A0C37723FB967A52FCB2061510CCE3F28569974D921F241F183AC`
@@ -24467,7 +24467,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
 
 ## Activity
 
-    $ node .e2e-scratch/electron-quit.mjs; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop close; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 close; Get-Content .e2e-scratch/m6-desktop/server.log -Tail 2
+    $ node .e2e-scratch/electron-quit.mjs; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop close; .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 close; Get-Content .e2e-scratch/m6-desktop/server.log -Tail 2
     {"id":1,"result":{"result":{"type":"undefined"}}}
     ✓ Browser closed
     ✓ Browser closed
@@ -24477,7 +24477,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
 
 ## Activity
 
-    $ & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false -c core.autocrlf=false diff --check; Get-Item dist/installer/ForkFlow-Setup-0.6.0.exe | Select-Object Name,Length
+    $ & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false -c core.autocrlf=false diff --check; Get-Item dist/installer/MasalaPOS-Setup-0.6.0.exe | Select-Object Name,Length
     .claude/settings.json:1: trailing whitespace.
     +{
     .claude/settings.json:2: trailing whitespace.
@@ -24553,7 +24553,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     .gitignore:10: trailing whitespace.
     +gate-*.png
     .gitignore:11: trailing whitespace.
-    +.forkflow/
+    +.masalapos/
     .gitignore:12: trailing whitespace.
     +data/
     .gitignore:13: trailing whitespace.
@@ -24577,7 +24577,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     PROJECT_PLAN.md:2: trailing whitespace.
     +
     PROJECT_PLAN.md:3: trailing whitespace.
-    +> Working name: **ForkFlow** (placeholder — rename freely)
+    +> Working name: **MasalaPOS** (placeholder — rename freely)
     PROJECT_PLAN.md:4: trailing whitespace.
     +> A next-generation, AI-native restaurant POS & billing platform. **We are not cloning PetPooja — we are making a product that is easier to adopt and smarter to run.** PetPooja's feature list is our floor, not our finish line. An offline-first hybrid SQLite + PostgreSQL data architecture and an AI co-pilot are the moat.
     PROJECT_PLAN.md:5: trailing whitespace.
@@ -25279,7 +25279,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     PROJECT_PLAN.md:353: trailing whitespace.
     +```
     PROJECT_PLAN.md:354: trailing whitespace.
-    +forkflow/
+    +masalapos/
     PROJECT_PLAN.md:355: trailing whitespace.
     +├─ apps/
     PROJECT_PLAN.md:356: trailing whitespace.
@@ -25333,7 +25333,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     PROJECT_PLAN.md:380: trailing whitespace.
     +4. **AI autonomy default:** ship Autopilot features as approve-first (recommended) or let power users enable full auto?
     PROJECT_PLAN.md:381: trailing whitespace.
-    +5. **Product name** (ForkFlow is a placeholder).
+    +5. **Product name** (MasalaPOS is a placeholder).
     PROJECT_PLAN.md:382: trailing whitespace.
     +
     PROJECT_PLAN.md:383: trailing whitespace.
@@ -25343,7 +25343,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     PROJECT_PLAN.md:385: trailing whitespace.
     +*Next step once you approve direction: I scaffold Phase 0 (monorepo + Drizzle dual-dialect schema + auth + a working SQLite⇄Postgres offline sync spike), then build the Phase 1 billing core.*
     README.md:1: trailing whitespace.
-    +# ForkFlow
+    +# MasalaPOS
     README.md:2: trailing whitespace.
     +
     README.md:3: trailing whitespace.
@@ -25419,7 +25419,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/desktop/package.json:1: trailing whitespace.
     +{
     apps/desktop/package.json:2: trailing whitespace.
-    +  "name": "@forkflow/desktop",
+    +  "name": "@masalapos/desktop",
     apps/desktop/package.json:3: trailing whitespace.
     +  "version": "0.0.0",
     apps/desktop/package.json:4: trailing whitespace.
@@ -25469,7 +25469,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/package.json:1: trailing whitespace.
     +{
     apps/server/package.json:2: trailing whitespace.
-    +  "name": "@forkflow/server",
+    +  "name": "@masalapos/server",
     apps/server/package.json:3: trailing whitespace.
     +  "version": "0.0.0",
     apps/server/package.json:4: trailing whitespace.
@@ -25491,9 +25491,9 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/package.json:12: trailing whitespace.
     +    "@fastify/websocket": "^11.3.0",
     apps/server/package.json:13: trailing whitespace.
-    +    "@forkflow/core": "*",
+    +    "@masalapos/core": "*",
     apps/server/package.json:14: trailing whitespace.
-    +    "@forkflow/domain": "*",
+    +    "@masalapos/domain": "*",
     apps/server/package.json:15: trailing whitespace.
     +    "fastify": "^5.11.3",
     apps/server/package.json:16: trailing whitespace.
@@ -25507,7 +25507,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/package.json:20: trailing whitespace.
     +}
     apps/server/src/auth.test.ts:1: trailing whitespace.
-    +import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    +import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     apps/server/src/auth.test.ts:2: trailing whitespace.
     +import { afterEach, describe, expect, it } from "vitest";
     apps/server/src/auth.test.ts:3: trailing whitespace.
@@ -25801,9 +25801,9 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/auth.test.ts:147: trailing whitespace.
     +    // create a waiter directly in the DB (user CRUD endpoints arrive in Milestone 2)
     apps/server/src/auth.test.ts:148: trailing whitespace.
-    +    const { hashPassword } = await import("@forkflow/core");
+    +    const { hashPassword } = await import("@masalapos/core");
     apps/server/src/auth.test.ts:149: trailing whitespace.
-    +    const { uuidv7 } = await import("@forkflow/domain");
+    +    const { uuidv7 } = await import("@masalapos/domain");
     apps/server/src/auth.test.ts:150: trailing whitespace.
     +    app.db
     apps/server/src/auth.test.ts:151: trailing whitespace.
@@ -25943,9 +25943,9 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/auth.test.ts:218: trailing whitespace.
     +});
     apps/server/src/auth.ts:1: trailing whitespace.
-    +import { hashPassword, verifyPassword, can } from "@forkflow/core";
+    +import { hashPassword, verifyPassword, can } from "@masalapos/core";
     apps/server/src/auth.ts:2: trailing whitespace.
-    +import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@forkflow/domain";
+    +import { LoginBody, SetupBody, roleFor, uuidv7, type RoleName, type Database } from "@masalapos/domain";
     apps/server/src/auth.ts:3: trailing whitespace.
     +import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
     apps/server/src/auth.ts:4: trailing whitespace.
@@ -26737,7 +26737,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/catalog.ts:6: trailing whitespace.
     +  uuidv7,
     apps/server/src/catalog.ts:7: trailing whitespace.
-    +} from "@forkflow/domain";
+    +} from "@masalapos/domain";
     apps/server/src/catalog.ts:8: trailing whitespace.
     +import type { FastifyInstance } from "fastify";
     apps/server/src/catalog.ts:9: trailing whitespace.
@@ -27259,7 +27259,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/kots.test.ts:2: trailing whitespace.
     +import { auth, createUser, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
     apps/server/src/kots.test.ts:3: trailing whitespace.
-    +import { uuidv7 } from "@forkflow/domain";
+    +import { uuidv7 } from "@masalapos/domain";
     apps/server/src/kots.test.ts:4: trailing whitespace.
     +
     apps/server/src/kots.test.ts:5: trailing whitespace.
@@ -30709,9 +30709,9 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/orders.test.ts:822: trailing whitespace.
     +});
     apps/server/src/orders.ts:1: trailing whitespace.
-    +import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
+    +import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@masalapos/domain";
     apps/server/src/orders.ts:2: trailing whitespace.
-    +import { can } from "@forkflow/core";
+    +import { can } from "@masalapos/core";
     apps/server/src/orders.ts:3: trailing whitespace.
     +import type { FastifyInstance } from "fastify";
     apps/server/src/orders.ts:7: trailing whitespace.
@@ -31979,7 +31979,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/print/queue.test.ts:170: trailing whitespace.
     +});
     apps/server/src/print/queue.ts:1: trailing whitespace.
-    +import { uuidv7 } from "@forkflow/domain";
+    +import { uuidv7 } from "@masalapos/domain";
     apps/server/src/print/queue.ts:2: trailing whitespace.
     +import type { SinkSend, PrinterTarget } from "./sinks.js";
     apps/server/src/print/queue.ts:3: trailing whitespace.
@@ -32777,7 +32777,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/print/sinks.ts:117: trailing whitespace.
     +            DOCINFO di = new DOCINFO();
     apps/server/src/print/sinks.ts:118: trailing whitespace.
-    +            di.pDocName = "ForkFlow Print Job";
+    +            di.pDocName = "MasalaPOS Print Job";
     apps/server/src/print/sinks.ts:119: trailing whitespace.
     +            di.pDataType = "RAW";
     apps/server/src/print/sinks.ts:120: trailing whitespace.
@@ -34209,7 +34209,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/printers.test.ts:403: trailing whitespace.
     +});
     apps/server/src/printers.ts:1: trailing whitespace.
-    +import { PrinterCreate, PrinterUpdate, StationCreate, StationUpdate, uuidv7 } from "@forkflow/domain";
+    +import { PrinterCreate, PrinterUpdate, StationCreate, StationUpdate, uuidv7 } from "@masalapos/domain";
     apps/server/src/printers.ts:2: trailing whitespace.
     +import type { FastifyInstance } from "fastify";
     apps/server/src/printers.ts:3: trailing whitespace.
@@ -34417,7 +34417,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/printers.ts:104: trailing whitespace.
     +}
     apps/server/src/server.test.ts:1: trailing whitespace.
-    +import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    +import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     apps/server/src/server.test.ts:2: trailing whitespace.
     +import { afterEach, describe, expect, it } from "vitest";
     apps/server/src/server.test.ts:3: trailing whitespace.
@@ -34463,7 +34463,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/server.test.ts:23: trailing whitespace.
     +});
     apps/server/src/server.ts:1: trailing whitespace.
-    +import type { Database } from "@forkflow/domain";
+    +import type { Database } from "@masalapos/domain";
     apps/server/src/server.ts:2: trailing whitespace.
     +import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
     apps/server/src/server.ts:3: trailing whitespace.
@@ -34775,7 +34775,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/settings.test.ts:53: trailing whitespace.
     +});
     apps/server/src/settings.ts:1: trailing whitespace.
-    +import { SettingsUpdate } from "@forkflow/domain";
+    +import { SettingsUpdate } from "@masalapos/domain";
     apps/server/src/settings.ts:2: trailing whitespace.
     +import type { FastifyInstance } from "fastify";
     apps/server/src/settings.ts:3: trailing whitespace.
@@ -34843,7 +34843,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/tables.test.ts:2: trailing whitespace.
     +import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
     apps/server/src/tables.test.ts:3: trailing whitespace.
-    +import { uuidv7 } from "@forkflow/domain";
+    +import { uuidv7 } from "@masalapos/domain";
     apps/server/src/tables.test.ts:4: trailing whitespace.
     +
     apps/server/src/tables.test.ts:5: trailing whitespace.
@@ -35315,7 +35315,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/tables.test.ts:238: trailing whitespace.
     +});
     apps/server/src/tables.ts:1: trailing whitespace.
-    +import { TableCreate, TableUpdate, uuidv7 } from "@forkflow/domain";
+    +import { TableCreate, TableUpdate, uuidv7 } from "@masalapos/domain";
     apps/server/src/tables.ts:2: trailing whitespace.
     +import type { FastifyInstance } from "fastify";
     apps/server/src/tables.ts:3: trailing whitespace.
@@ -35515,7 +35515,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     apps/server/src/tables.ts:100: trailing whitespace.
     +}
     apps/server/src/test-helpers.ts:1: trailing whitespace.
-    +import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+    +import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
     apps/server/src/test-helpers.ts:2: trailing whitespace.
     +import type { FastifyInstance } from "fastify";
     apps/server/src/test-helpers.ts:3: trailing whitespace.
@@ -40525,7 +40525,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     package-lock.json:6988: trailing whitespace.
     +    "packages/core": {
     package-lock.json:6989: trailing whitespace.
-    +      "name": "@forkflow/core",
+    +      "name": "@masalapos/core",
     package-lock.json:6990: trailing whitespace.
     +      "version": "0.0.0"
     package-lock.json:6991: trailing whitespace.
@@ -40533,7 +40533,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     package-lock.json:6992: trailing whitespace.
     +    "packages/domain": {
     package-lock.json:6993: trailing whitespace.
-    +      "name": "@forkflow/domain",
+    +      "name": "@masalapos/domain",
     package-lock.json:6994: trailing whitespace.
     +      "version": "0.0.0",
     package-lock.json:6995: trailing whitespace.
@@ -40559,7 +40559,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     package.json:1: trailing whitespace.
     +{
     package.json:2: trailing whitespace.
-    +  "name": "forkflow",
+    +  "name": "masalapos",
     package.json:4: trailing whitespace.
     +  "private": true,
     package.json:5: trailing whitespace.
@@ -40579,13 +40579,13 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     package.json:13: trailing whitespace.
     +    "test:watch": "vitest",
     package.json:14: trailing whitespace.
-    +    "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+    +    "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
     package.json:15: trailing whitespace.
     +    "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
     package.json:16: trailing whitespace.
     +    "dev:server": "tsx watch apps/server/src/main.ts",
     package.json:17: trailing whitespace.
-    +    "dev:ui": "npm run dev -w @forkflow/ui",
+    +    "dev:ui": "npm run dev -w @masalapos/ui",
     package.json:22: trailing whitespace.
     +  },
     package.json:23: trailing whitespace.
@@ -40615,7 +40615,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     packages/core/package.json:1: trailing whitespace.
     +{
     packages/core/package.json:2: trailing whitespace.
-    +  "name": "@forkflow/core",
+    +  "name": "@masalapos/core",
     packages/core/package.json:3: trailing whitespace.
     +  "version": "0.0.0",
     packages/core/package.json:4: trailing whitespace.
@@ -40939,7 +40939,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     packages/domain/package.json:1: trailing whitespace.
     +{
     packages/domain/package.json:2: trailing whitespace.
-    +  "name": "@forkflow/domain",
+    +  "name": "@masalapos/domain",
     packages/domain/package.json:3: trailing whitespace.
     +  "version": "0.0.0",
     packages/domain/package.json:4: trailing whitespace.
@@ -43027,7 +43027,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     packages/domain/src/printer-schemas.ts:33: trailing whitespace.
     +export type StationUpdateInput = z.infer<typeof StationUpdate>;
     packages/domain/src/roles.test.ts:1: trailing whitespace.
-    +import { can } from "@forkflow/core";
+    +import { can } from "@masalapos/core";
     packages/domain/src/roles.test.ts:2: trailing whitespace.
     +import { describe, expect, it } from "vitest";
     packages/domain/src/roles.test.ts:3: trailing whitespace.
@@ -43111,7 +43111,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     packages/domain/src/roles.test.ts:42: trailing whitespace.
     +});
     packages/domain/src/roles.ts:1: trailing whitespace.
-    +import type { Role } from "@forkflow/core";
+    +import type { Role } from "@masalapos/core";
     packages/domain/src/roles.ts:2: trailing whitespace.
     +
     packages/domain/src/roles.ts:3: trailing whitespace.
@@ -45883,7 +45883,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     spikes/menu-ingestion/tsconfig.json:13: trailing whitespace.
     +}
     tools/e2e/README.md:1: trailing whitespace.
-    +# ForkFlow E2E Gate
+    +# MasalaPOS E2E Gate
     tools/e2e/README.md:2: trailing whitespace.
     +
     tools/e2e/README.md:3: trailing whitespace.
@@ -45917,17 +45917,17 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     tools/e2e/README.md:17: trailing whitespace.
     +   ```bash
     tools/e2e/README.md:18: trailing whitespace.
-    +   npm run build -w @forkflow/ui
+    +   npm run build -w @masalapos/ui
     tools/e2e/README.md:19: trailing whitespace.
     +   ```
     tools/e2e/README.md:20: trailing whitespace.
     +
     tools/e2e/README.md:21: trailing whitespace.
-    +2. **Start the ForkFlow server with a fresh scratch database**:
+    +2. **Start the MasalaPOS server with a fresh scratch database**:
     tools/e2e/README.md:22: trailing whitespace.
     +   ```bash
     tools/e2e/README.md:23: trailing whitespace.
-    +   FORKFLOW_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
+    +   MASALAPOS_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
     tools/e2e/README.md:24: trailing whitespace.
     +   ```
     tools/e2e/README.md:25: trailing whitespace.
@@ -45937,7 +45937,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     tools/e2e/README.md:27: trailing whitespace.
     +   ```bash
     tools/e2e/README.md:28: trailing whitespace.
-    +   FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+    +   MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
     tools/e2e/README.md:29: trailing whitespace.
     +   ```
     tools/e2e/README.md:30: trailing whitespace.
@@ -46003,7 +46003,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     tools/e2e/README.md:61: trailing whitespace.
     +- Ctrl+C in the terminal where it's running, OR
     tools/e2e/gate.py:1: trailing whitespace.
-    +# ForkFlow e2e gate — click-through acceptance test for M3a (orders/KOT) + M3s (splits).
+    +# MasalaPOS e2e gate — click-through acceptance test for M3a (orders/KOT) + M3s (splits).
     tools/e2e/gate.py:2: trailing whitespace.
     +# Run: python tools/e2e/gate.py
     tools/e2e/gate.py:3: trailing whitespace.
@@ -46121,7 +46121,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     tools/e2e/gate.py:59: trailing whitespace.
     +            page1.goto(BASE)
     tools/e2e/gate.py:60: trailing whitespace.
-    +            expect(page1.get_by_role("heading", name="Set up ForkFlow")).to_be_visible()
+    +            expect(page1.get_by_role("heading", name="Set up MasalaPOS")).to_be_visible()
     tools/e2e/gate.py:61: trailing whitespace.
     +            page1.get_by_placeholder("Restaurant name").fill("Testaurant")
     tools/e2e/gate.py:62: trailing whitespace.
@@ -46971,9 +46971,9 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     tsconfig.json:10: trailing whitespace.
     +    "paths": {
     tsconfig.json:11: trailing whitespace.
-    +      "@forkflow/domain": ["packages/domain/src/index.ts"],
+    +      "@masalapos/domain": ["packages/domain/src/index.ts"],
     tsconfig.json:12: trailing whitespace.
-    +      "@forkflow/core": ["packages/core/src/index.ts"]
+    +      "@masalapos/core": ["packages/core/src/index.ts"]
     tsconfig.json:13: trailing whitespace.
     +    }
     tsconfig.json:14: trailing whitespace.
@@ -47003,9 +47003,9 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     vitest.config.ts:9: trailing whitespace.
     +    alias: {
     vitest.config.ts:10: trailing whitespace.
-    +      "@forkflow/domain": pkg("domain"),
+    +      "@masalapos/domain": pkg("domain"),
     vitest.config.ts:11: trailing whitespace.
-    +      "@forkflow/core": pkg("core"),
+    +      "@masalapos/core": pkg("core"),
     vitest.config.ts:12: trailing whitespace.
     +    },
     vitest.config.ts:13: trailing whitespace.
@@ -47023,14 +47023,14 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
     
     Name                        Length
     ----                        ------
-    ForkFlow-Setup-0.6.0.exe 109935821
+    MasalaPOS-Setup-0.6.0.exe 109935821
     
     
     ✓ • 446ms
 
 ## Activity
 
-    $ & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false diff --check; Get-FileHash 'dist/installer/ForkFlow-Setup-0.6.0.exe' -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+    $ & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false diff --check; Get-FileHash 'dist/installer/MasalaPOS-Setup-0.6.0.exe' -Algorithm SHA256 | Select-Object -ExpandProperty Hash
     199BA987327A0C37723FB967A52FCB2061510CCE3F28569974D921F241F183AC
     ✓ • 841ms
 
@@ -47038,7 +47038,7 @@ The full M6 browser flow also passes inside the packaged app, and I’ve checked
 
 Implemented M6: verified backups and recovery, saved checkout retries, desktop crash recovery, LAN QR/shortcuts, and Windows packaging.
 
-[Windows installer](</C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/dist/installer/ForkFlow-Setup-0.6.0.exe>)
+[Windows installer](</C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/dist/installer/MasalaPOS-Setup-0.6.0.exe>)
 
 Validation passed: 254 tests, billing/inventory/resilience browser checks, and six packaged-app checks.
 
@@ -47760,9 +47760,9 @@ I’ll use a light interface with red accents for primary actions and navigation
     }
     
     export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-      const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+      const draftKey = `masalapos.draft.${user.id}.${orderId}`;
       function readDraft(): DraftItem[] {
-        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
       }
       const [order, setOrder] = useState<Order | null>(null);
       const [categories, setCategories] = useState<Category[]>([]);
@@ -47792,7 +47792,7 @@ I’ll use a light interface with red accents for primary actions and navigation
         const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
         const unsub = subscribeQueue(refresh);
         const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-        window.addEventListener("forkflow:ack", acknowledged);
+        window.addEventListener("masalapos:ack", acknowledged);
         const dispose = connectWs({
           onEvent: (event, data) => {
             if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -47802,13 +47802,13 @@ I’ll use a light interface with red accents for primary actions and navigation
           onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
           onAuthFail: () => session.clear(),
         });
-        return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+        return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
       }, [orderId, draftKey]);
     
       function saveDraft(next: DraftItem[]): boolean {
         try {
           localStorage.setItem(draftKey, JSON.stringify(next));
-          localStorage.removeItem(`forkflow.draft.${orderId}`);
+          localStorage.removeItem(`masalapos.draft.${orderId}`);
           setDraft(next); return true;
         } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
       }
@@ -48282,7 +48282,7 @@ I’ll use a light interface with red accents for primary actions and navigation
     
       return (
         <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-          <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+          <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
           {tabs.map((t) => (
             <button
               key={t.label}
@@ -48305,7 +48305,7 @@ I’ll use a light interface with red accents for primary actions and navigation
     
     createRoot(document.getElementById("root")!).render(<App />);
     {
-      "name": "@forkflow/ui",
+      "name": "@masalapos/ui",
       "version": "0.0.0",
       "private": true,
       "type": "module",
@@ -48378,9 +48378,9 @@ I’ll use a light interface with red accents for primary actions and navigation
     }
     
     export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-      const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+      const draftKey = `masalapos.draft.${user.id}.${orderId}`;
       function readDraft(): DraftItem[] {
-        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
       }
       const [order, setOrder] = useState<Order | null>(null);
       const [categories, setCategories] = useState<Category[]>([]);
@@ -48410,7 +48410,7 @@ I’ll use a light interface with red accents for primary actions and navigation
         const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
         const unsub = subscribeQueue(refresh);
         const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-        window.addEventListener("forkflow:ack", acknowledged);
+        window.addEventListener("masalapos:ack", acknowledged);
         const dispose = connectWs({
           onEvent: (event, data) => {
             if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -48420,13 +48420,13 @@ I’ll use a light interface with red accents for primary actions and navigation
           onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
           onAuthFail: () => session.clear(),
         });
-        return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+        return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
       }, [orderId, draftKey]);
     
       function saveDraft(next: DraftItem[]): boolean {
         try {
           localStorage.setItem(draftKey, JSON.stringify(next));
-          localStorage.removeItem(`forkflow.draft.${orderId}`);
+          localStorage.removeItem(`masalapos.draft.${orderId}`);
           setDraft(next); return true;
         } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
       }
@@ -48723,7 +48723,7 @@ I’ll use a light interface with red accents for primary actions and navigation
     
       return (
         <div style={{ maxWidth: 280, margin: "10vh auto", textAlign: "center", fontFamily: "system-ui" }}>
-          <h1>ForkFlow</h1>
+          <h1>MasalaPOS</h1>
           <div style={{ fontSize: 32, letterSpacing: 8, minHeight: 44 }}>{"â€¢".repeat(pin.length)}</div>
           <div style={{ color: "crimson", minHeight: 24 }}>{error}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
@@ -48769,7 +48769,7 @@ I’ll use a light interface with red accents for primary actions and navigation
     
       return (
         <form onSubmit={submit} style={{ maxWidth: 320, margin: "10vh auto", display: "grid", gap: 12, fontFamily: "system-ui" }}>
-          <h1>Set up ForkFlow</h1>
+          <h1>Set up MasalaPOS</h1>
           <input placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
           <input placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
           <input type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} />
@@ -48972,7 +48972,7 @@ I’ll use a light interface with red accents for primary actions and navigation
     }
     
     export interface Order {
-      stockWarnings: import("@forkflow/domain").StockWarning[];
+      stockWarnings: import("@masalapos/domain").StockWarning[];
       id: string;
       clientRef: string;
       type: "dine_in" | "parcel";
@@ -49032,7 +49032,7 @@ I’ll use a light interface with red accents for primary actions and navigation
 
     $ Get-Content -Raw -Encoding utf8 apps/ui/src/screens/BillingPanel.tsx; rg -n 'return \(|return <|<h[123]|<fieldset|<table' apps/ui/src/screens -g '*.tsx'; Get-Content apps/ui/index.html
     import { useEffect, useRef, useState } from "react";
-    import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
+    import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
     import { ApiError, apiFetch, session } from "../api";
     import { paiseToRupees, rupeesToPaise } from "../money";
     import type { Order, PrintJobInfo } from "../types";
@@ -49063,7 +49063,7 @@ I’ll use a light interface with red accents for primary actions and navigation
       const [discount, setDiscount] = useState("0");
       const [reason, setReason] = useState("");
       const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-      const [printerId, setPrinterId] = useState(() => localStorage.getItem("forkflow.receipt-printer") ?? "");
+      const [printerId, setPrinterId] = useState(() => localStorage.getItem("masalapos.receipt-printer") ?? "");
       const [payments, setPayments] = useState<PaymentDraft[]>([]);
       const [busy, setBusy] = useState(false);
       const lock = useRef(false);
@@ -49163,7 +49163,7 @@ I’ll use a light interface with red accents for primary actions and navigation
         setFrameReady(false); setHtml(await response.text());
       }
       function changePrinter(value: string) {
-        setPrinterId(value); localStorage.setItem("forkflow.receipt-printer", value);
+        setPrinterId(value); localStorage.setItem("masalapos.receipt-printer", value);
         setPreview(null); createRequest.current = null;
       }
       const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -49252,7 +49252,7 @@ I’ll use a light interface with red accents for primary actions and navigation
     apps/ui/src/screens\Inventory.tsx:174:  return <section style={panel}><h3>Product stock link</h3>
     apps/ui/src/screens\Inventory.tsx:195:    return () => { active = false; };
     apps/ui/src/screens\Inventory.tsx:206:  return <div><p role="alert" style={{ color: "crimson" }}>{error}</p><p role="status">{message}</p>
-    apps/ui/src/screens\OrderScreen.tsx:63:    return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+    apps/ui/src/screens\OrderScreen.tsx:63:    return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
     apps/ui/src/screens\OrderScreen.tsx:149:  if (!order) return <p style={{ fontFamily: "system-ui", padding: 16 }}>Loading order...</p>;
     apps/ui/src/screens\OrderScreen.tsx:157:  return (
     apps/ui/src/screens\OrderScreen.tsx:160:        <h2>
@@ -49272,9 +49272,9 @@ I’ll use a light interface with red accents for primary actions and navigation
     apps/ui/src/screens\ProductEditor.tsx:105:      <h2>{product ? `Edit: ${product.name}` : "New product"}</h2>
     apps/ui/src/screens\ProductEditor.tsx:141:      <h3 style={{ marginBottom: 0 }}>Variants (portions)</h3>
     apps/ui/src/screens\Setup.tsx:24:  return (
-    apps/ui/src/screens\Setup.tsx:26:      <h1>Set up ForkFlow</h1>
+    apps/ui/src/screens\Setup.tsx:26:      <h1>Set up MasalaPOS</h1>
     apps/ui/src/screens\Login.tsx:29:  return (
-    apps/ui/src/screens\Login.tsx:31:      <h1>ForkFlow</h1>
+    apps/ui/src/screens\Login.tsx:31:      <h1>MasalaPOS</h1>
     apps/ui/src/screens\SystemSettings.tsx:30:    return () => { active = false; };
     apps/ui/src/screens\SystemSettings.tsx:37:  return <section aria-label="Backups and connections" style={{ marginTop: 32, borderTop: "1px solid #ccc", paddingTop: 16 }}>
     apps/ui/src/screens\SystemSettings.tsx:38:    <h2>Backups & recovery</h2>
@@ -49295,7 +49295,7 @@ I’ll use a light interface with red accents for primary actions and navigation
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>ForkFlow POS</title>
+        <title>MasalaPOS POS</title>
       </head>
       <body>
         <div id="root"></div>
@@ -49372,7 +49372,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
       return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}><path d={paths[name]} /></svg>;
     }
     export function Brand() {
-      return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>ForkFlow<span className="brand-caption">RESTAURANT POS</span></span></div>;
+      return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>MasalaPOS<span className="brand-caption">RESTAURANT POS</span></span></div>;
     }
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\NavBar.tsx
     @@ -1,2 +1,3 @@
@@ -49383,7 +49383,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
     @@ -71,4 +72,6 @@
        return (
     -    <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-    -      <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+    -      <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
     +    <nav className="sidebar" aria-label="Main navigation">
     +      <Brand />
     +      <div className="nav-caption">WORKSPACE</div>
@@ -49606,7 +49606,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
     import { Brand } from "../Icon";
     
     export function AuthLayout({ children }: { children: ReactNode }) {
-      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>ForkFlow · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
+      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>MasalaPOS · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
     }
     Delete: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\Home.tsx
     import type { Page } from "../NavBar";
@@ -49743,7 +49743,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
     
       return (
         <div style={{ maxWidth: 280, margin: "10vh auto", textAlign: "center", fontFamily: "system-ui" }}>
-          <h1>ForkFlow</h1>
+          <h1>MasalaPOS</h1>
           <div style={{ fontSize: 32, letterSpacing: 8, minHeight: 44 }}>{"•".repeat(pin.length)}</div>
           <div style={{ color: "crimson", minHeight: 24 }}>{error}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
@@ -49790,7 +49790,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
     
       return (
         <form onSubmit={submit} style={{ maxWidth: 320, margin: "10vh auto", display: "grid", gap: 12, fontFamily: "system-ui" }}>
-          <h1>Set up ForkFlow</h1>
+          <h1>Set up MasalaPOS</h1>
           <input placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
           <input placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
           <input type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" maxLength={6} onChange={(e) => setPin(e.target.value)} />
@@ -49829,7 +49829,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
         if (next.length === 6) void submit(next);
       }
       return <AuthLayout><form className="auth-form" onSubmit={(e) => { e.preventDefault(); void submit(pin); }}>
-        <p className="eyebrow">WELCOME TO FORKFLOW</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
+        <p className="eyebrow">WELCOME TO MASALAPOS</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
         <label>Staff PIN<input className="pin-input" aria-label="Staff PIN" type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} disabled={busy} onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setError(""); }} /></label>
         <div className="error-message" role="alert">{error}</div>
         <div className="pin-pad">{["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((key) => <button key={key} type="button" disabled={busy} className={key === "OK" ? "primary" : ""} aria-label={key === "⌫" ? "Delete last digit" : key} onClick={() => { if (key === "⌫") setPin((p) => p.slice(0, -1)); else if (key === "OK") void submit(pin); else press(key); }}>{key}</button>)}</div>
@@ -49857,7 +49857,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
         } catch { setError("Setup failed. Check the fields and use a 4–6 digit PIN."); }
         finally { lock.current = false; setBusy(false); }
       }
-      return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up ForkFlow</h2><p>A few details, and you’re ready to take your first order.</p>
+      return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up MasalaPOS</h2><p>A few details, and you’re ready to take your first order.</p>
         <label>Restaurant name<input required placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} disabled={busy} /></label>
         <label>Your name<input required placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} disabled={busy} /></label>
         <label>Admin PIN<input required type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" pattern="[0-9]{4,6}" maxLength={6} onChange={(e) => setPin(e.target.value)} disabled={busy} /></label>
@@ -49888,9 +49888,9 @@ I’m using white panels, a soft grey background, and red for selected navigatio
     }
     
     export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-      const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+      const draftKey = `masalapos.draft.${user.id}.${orderId}`;
       function readDraft(): DraftItem[] {
-        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
       }
       const [order, setOrder] = useState<Order | null>(null);
       const [categories, setCategories] = useState<Category[]>([]);
@@ -49920,7 +49920,7 @@ I’m using white panels, a soft grey background, and red for selected navigatio
         const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
         const unsub = subscribeQueue(refresh);
         const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-        window.addEventListener("forkflow:ack", acknowledged);
+        window.addEventListener("masalapos:ack", acknowledged);
         const dispose = connectWs({
           onEvent: (event, data) => {
             if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -49930,13 +49930,13 @@ I’m using white panels, a soft grey background, and red for selected navigatio
           onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
           onAuthFail: () => session.clear(),
         });
-        return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+        return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
       }, [orderId, draftKey]);
     
       function saveDraft(next: DraftItem[]): boolean {
         try {
           localStorage.setItem(draftKey, JSON.stringify(next));
-          localStorage.removeItem(`forkflow.draft.${orderId}`);
+          localStorage.removeItem(`masalapos.draft.${orderId}`);
           setDraft(next); return true;
         } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
       }
@@ -51583,11 +51583,11 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
 
     $ npm.cmd run typecheck; Get-Content apps/ui/src/screens/Catalog.tsx | Select-Object -Skip 65 -First 95; Get-Content apps/ui/src/screens/Settings.tsx | Select-Object -Skip 270 -First 55; Get-Content apps/ui/src/screens/Inventory.tsx | Select-Object -First 105
     
-    > forkflow@0.6.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     
@@ -51741,7 +51741,7 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
                 {printers.map((p) =>
                   editingPrinterId === p.id ? (
     import { useEffect, useRef, useState } from "react";
-    import type { StockItem, StockLink, StockMove, StockUnit } from "@forkflow/domain";
+    import type { StockItem, StockLink, StockMove, StockUnit } from "@masalapos/domain";
     import { apiFetch, session, type User } from "../api";
     import type { Product } from "../types";
     import { uuid } from "../uuid";
@@ -53891,7 +53891,7 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
 
     $ Get-Content -Raw -Encoding utf8 apps/ui/src/screens/Bills.tsx
     import { useEffect, useState } from "react";
-    import type { Bill } from "@forkflow/domain";
+    import type { Bill } from "@masalapos/domain";
     import { apiFetch, session } from "../api";
     import { paiseToRupees } from "../money";
     import { connectWs } from "../ws";
@@ -53952,7 +53952,7 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
     import { useEffect, useState } from "react";
     import { apiFetch } from "../api";
     import { paiseToRupees } from "../money";
-    import type { TaxLine } from "@forkflow/domain";
+    import type { TaxLine } from "@masalapos/domain";
     
     interface Report {
       date: string; timezone: string;
@@ -54813,7 +54813,7 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
 
     $ Get-Content -Raw -Encoding utf8 apps/ui/src/screens/Inventory.tsx
     import { useEffect, useRef, useState } from "react";
-    import type { StockItem, StockLink, StockMove, StockUnit } from "@forkflow/domain";
+    import type { StockItem, StockLink, StockMove, StockUnit } from "@masalapos/domain";
     import { apiFetch, session, type User } from "../api";
     import type { Product } from "../types";
     import { uuid } from "../uuid";
@@ -55102,14 +55102,14 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
           <p>Verified daily snapshots are saved in <code>{status.folder}</code>. The latest 10 manual and 10 pre-update backups are also kept.</p>
           <fieldset disabled={busy}><legend>Backup storage</legend>
             <p><label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label></p>
-            <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\ForkFlow Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
+            <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\MasalaPOS Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
             <button onClick={() => void run(async () => {
               setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "PUT", body: JSON.stringify({ retentionDays: days, secondLocation: second }) }));
               setMessage("Backup settings saved. Use Back up now to check the second folder.");
             })}>Save backup settings</button>{" "}
             <button onClick={() => void run(async () => { setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "POST" })); setMessage("Verified local backup saved."); })}>Back up now</button>
           </fieldset>
-          <p>To restore: on the main PC, open the ForkFlow tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
+          <p>To restore: on the main PC, open the MasalaPOS tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
           <details><summary>Available backups ({status.backups.length})</summary>
             <ul>{status.backups.map((b) => <li key={b.name} style={{ marginBlock: 8 }}>{new Date(b.createdAt).toLocaleString()} · {b.kind} · {Math.ceil(b.bytes / 1024)} KB {" "}
               <button disabled={busy} onClick={() => void run(() => download(`/api/system/backups/${encodeURIComponent(b.name)}`, b.name))}>Download</button>
@@ -55120,9 +55120,9 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
         <p>Use the same local network. Scan a QR code on a phone, or open its address on a counter PC. Every device needs a staff PIN.</p>
         {!connections.length && <p>No LAN address found. Connect this PC to Wi-Fi or Ethernet, then reopen Settings.</p>}
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>{connections.map((connection) => <div key={connection.url} style={{ border: "1px solid #ddd", padding: 16 }}>
-          <img src={connection.qr} width={220} height={220} alt={`Connect to ForkFlow at ${connection.url}`} />
+          <img src={connection.qr} width={220} height={220} alt={`Connect to MasalaPOS at ${connection.url}`} />
           <p><a href={connection.url} target="_blank" rel="noreferrer">{connection.url}</a></p>
-          <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-ForkFlow-Shortcut.ps1"))}>Download Edge shortcut setup</button>
+          <button disabled={busy} onClick={() => void run(() => download(`/api/system/shortcut?url=${encodeURIComponent(connection.url)}`, "Create-MasalaPOS-Shortcut.ps1"))}>Download Edge shortcut setup</button>
         </div>)}</div>
         <p>On a counter PC, right-click the downloaded file → Run with PowerShell to create a desktop shortcut. Reserve the main PC's IP address in your router so the address stays the same.</p>
       </section>;
@@ -55176,17 +55176,17 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
 
 ## Activity
 
-    $ npm.cmd run typecheck; npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run typecheck; npm.cmd run build -w @masalapos/ui
     
-    > forkflow@0.6.0 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.0 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     failed to load config from C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\vite.config.ts
@@ -55219,7 +55219,7 @@ The new layout now has a sidebar, searchable menu cards, and an order panel that
     npm error Lifecycle script `build` failed with error:
     npm error code 1
     npm error path C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui
-    npm error workspace @forkflow/ui@0.0.0
+    npm error workspace @masalapos/ui@0.0.0
     npm error location C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui
     npm error command failed
     npm error command C:\Windows\system32\cmd.exe /d /s /c vite build
@@ -55237,7 +55237,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
     $ Get-Content -Raw -Encoding utf8 package.json, tools/e2e/README.md, apps/server/src/main.ts
     {
-      "name": "forkflow",
+      "name": "masalapos",
       "version": "0.6.0",
       "private": true,
       "type": "module",
@@ -55249,12 +55249,12 @@ The light theme with red accents is implemented. I’m checking it at desktop an
       "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit && npm run typecheck -w @forkflow/ui",
+        "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui",
         "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
         "dev:server": "tsx watch apps/server/src/main.ts",
-        "dev:ui": "npm run dev -w @forkflow/ui",
+        "dev:ui": "npm run dev -w @masalapos/ui",
         "dev:desktop": "npm run build:desktop && electron build/desktop/app",
-        "build:desktop": "npm run build -w @forkflow/ui && node tools/build-desktop.mjs",
+        "build:desktop": "npm run build -w @masalapos/ui && node tools/build-desktop.mjs",
         "package:win": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64",
         "package:dir": "npm run build:desktop && electron-builder --config electron-builder.yml --win --x64 --dir"
       },
@@ -55271,7 +55271,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
       }
     }
     
-    # ForkFlow E2E Gate
+    # MasalaPOS E2E Gate
     
     Browser-based acceptance test for M3a (orders/KOT) and M3s (table splits).
     
@@ -55288,17 +55288,17 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     
     1. **Build the UI production bundle** (the server serves the production build):
        ```bash
-       npm run build -w @forkflow/ui
+       npm run build -w @masalapos/ui
        ```
     
-    2. **Start the ForkFlow server with a fresh scratch database**:
+    2. **Start the MasalaPOS server with a fresh scratch database**:
        ```bash
-       FORKFLOW_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
+       MASALAPOS_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
        ```
     
        Example (Git Bash on Windows):
        ```bash
-       FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+       MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
        ```
     
        The server will initialize a fresh DB on first run. To re-run the gate from scratch, delete the scratch directory and restart the server.
@@ -55347,7 +55347,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     ```powershell
     # Substitute your installed agent-browser executable if different.
     Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js |
-      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
     ```
     
     The gate uses DOM events in the real browser (works around native-click issues
@@ -55362,7 +55362,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     
     ```powershell
     Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js |
-      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
     ```
     
     The gate creates menu fixtures through the API, then exercises stock creation,
@@ -55382,7 +55382,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     
     ```powershell
     Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js |
-      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+      .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
     ```
     
     The gate checks manual backup/download, LAN QR and shortcut generation, draft
@@ -55391,9 +55391,9 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     fetch function after fault injection. With a LAN interface it reports 12 checks.
     Run the M4 and M5 gates as checkout/stock regression checks.
     
-    For packaged-runtime QA, set `FORKFLOW_DATA_DIR` to an absolute scratch folder,
-    `FORKFLOW_PORT` to an unused port, and `FORKFLOW_DISABLE_AUTOSTART=1` before
-    launching `dist/installer/win-unpacked/ForkFlow.exe --remote-debugging-port=4122`.
+    For packaged-runtime QA, set `MASALAPOS_DATA_DIR` to an absolute scratch folder,
+    `MASALAPOS_PORT` to an unused port, and `MASALAPOS_DISABLE_AUTOSTART=1` before
+    launching `dist/installer/win-unpacked/MasalaPOS.exe --remote-debugging-port=4122`.
     Connect agent-browser to 4122. Check the rendered setup flow, complete setup,
     verify SQLite-backed API calls and backup creation, terminate only its identified
     utility server child and check that a new health instance ID appears. Quit the
@@ -55407,7 +55407,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     for visual inspection. Quit it from the tray after verification; debug ports
     are only for QA and should not be enabled in a restaurant launch shortcut.
     
-    import { openDb } from "@forkflow/domain";
+    import { openDb } from "@masalapos/domain";
     import fastifyStatic from "@fastify/static";
     import { existsSync, mkdirSync, readFileSync } from "node:fs";
     import { dirname, join, resolve } from "node:path";
@@ -55420,30 +55420,30 @@ The light theme with red accents is implemented. I’m checking it at desktop an
     import { restoreDatabase } from "./recovery.js";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
-    const port = Number(process.env["FORKFLOW_PORT"] ?? 4100);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid FORKFLOW_PORT");
+    const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
+    const port = Number(process.env["MASALAPOS_PORT"] ?? 4100);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid MASALAPOS_PORT");
     mkdirSync(dataDir, { recursive: true });
     const release = await lockDataDirectory(dataDir);
     let db: ReturnType<typeof openDb> | undefined;
     let closing = false;
     try {
       restoreDatabase(dataDir);
-      if (process.env["FORKFLOW_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["FORKFLOW_RESTORE"]));
-      db = openDb(join(dataDir, "forkflow.db"));
+      if (process.env["MASALAPOS_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["MASALAPOS_RESTORE"]));
+      db = openDb(join(dataDir, "masalapos.db"));
       const backups = new Backups(db, dataDir);
-      const version = process.env["FORKFLOW_APP_VERSION"] ?? "development";
+      const version = process.env["MASALAPOS_APP_VERSION"] ?? "development";
       prepareDatabase(db, backups, version);
       const generationPath = join(dataDir, "recovery-generation.json");
       const generation = existsSync(generationPath) ? JSON.parse(readFileSync(generationPath, "utf8")).generation as string : "initial";
-      const app = buildServer({ db, backups, port, generation, instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
+      const app = buildServer({ db, backups, port, generation, instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
         serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
       } });
       const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };
       daily();
       const timer = setInterval(daily, 60 * 60 * 1000); timer.unref();
       app.addHook("onClose", async () => { clearInterval(timer); db?.close(); await release(); });
-      const uiDist = process.env["FORKFLOW_UI_DIR"] ?? resolve(here, "../../ui/dist");
+      const uiDist = process.env["MASALAPOS_UI_DIR"] ?? resolve(here, "../../ui/dist");
       if (existsSync(uiDist)) {
         await app.register(fastifyStatic, { root: uiDist, wildcard: true });
         app.setNotFoundHandler((req, reply) => {
@@ -55457,7 +55457,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
       const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void } }).parentPort;
       parent?.on("message", ({ data }) => { if (data === "shutdown") void close().then(() => process.exit(0)); });
       await app.listen({ host: "0.0.0.0", port });
-      console.log(`ForkFlow server on http://localhost:${port} (db: ${join(dataDir, "forkflow.db")})`);
+      console.log(`MasalaPOS server on http://localhost:${port} (db: ${join(dataDir, "masalapos.db")})`);
     } catch (error) {
       if (db?.open) db.close();
       await release().catch(() => {});
@@ -55468,9 +55468,9 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -56083,7 +56083,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/ui-red'; $env:FORKFLOW_PORT = '4113'; node --import tsx apps/server/src/main.ts
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/ui-red'; $env:MASALAPOS_PORT = '4113'; node --import tsx apps/server/src/main.ts
     node:internal/modules/run_main:107
         triggerUncaughtException(
         ^
@@ -56110,18 +56110,18 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    [agent-browser]✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    [agent-browser]✓ MasalaPOS POS
       http://localhost:4113/
      launched browser
     ✓ • 4.12s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e1] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e1] clickable [onclick]
       - heading "A little less admin. A lot more service." [level=1, ref=e2]
-      - heading "Set up ForkFlow" [level=2, ref=e3]
+      - heading "Set up MasalaPOS" [level=2, ref=e3]
       - textbox "Restaurant name" [required, ref=e5]
       - textbox "Your name" [required, ref=e6]
       - textbox "Admin PIN" [required, ref=e7]
@@ -56130,7 +56130,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790627764479.png
     ✓ • 519ms
 
@@ -56140,7 +56140,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui errors
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui errors
     ✓ • 2.29s
 
 ## Activity
@@ -56168,7 +56168,7 @@ The light theme with red accents is implemented. I’m checking it at desktop an
         await new Promise((resolve) => setTimeout(resolve, 60));
       };
       const api = async (path, method = 'GET', body) => {
-        const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const data = await r.json(); if (!r.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
       };
       const suffix = Date.now();
@@ -56275,32 +56275,32 @@ The light theme with red accents is implemented. I’m checking it at desktop an
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui fill @e5 'The Red Fork'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui fill @e5 'The Red Fork'
     ✗ Element not found: The Red Fork. Verify the selector, role, or name is correct and the element exists in the DOM.
     ✗ (1) • 2.43s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui fill @e6 'Vaibhav'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui fill @e6 'Vaibhav'
     ✗ Element not found: Vaibhav. Verify the selector, role, or name is correct and the element exists in the DOM.
     ✗ (1) • 726ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui fill @e7 '1234'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui fill @e7 '1234'
     ✓ Done
     ✓ • 896ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click @e4
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click @e4
     Missing arguments for: click
     Usage: agent-browser click <selector> [--new-tab] [--human]
     ✗ (1) • 647ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
     (no interactive elements)
     ✓ • 463ms
 
@@ -56310,8 +56310,8 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 211ms
 
@@ -56338,7 +56338,7 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
         } catch { setError("Setup failed. Check the fields and use a 4–6 digit PIN."); }
         finally { lock.current = false; setBusy(false); }
       }
-      return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up ForkFlow</h2><p>A few details, and you’re ready to take your first order.</p>
+      return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up MasalaPOS</h2><p>A few details, and you’re ready to take your first order.</p>
         <label>Restaurant name<input required placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} disabled={busy} /></label>
         <label>Your name<input required placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} disabled={busy} /></label>
         <label>Admin PIN<input required type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" pattern="[0-9]{4,6}" maxLength={6} onChange={(e) => setPin(e.target.value)} disabled={busy} /></label>
@@ -56562,9 +56562,9 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
     }
     
     export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-      const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+      const draftKey = `masalapos.draft.${user.id}.${orderId}`;
       function readDraft(): DraftItem[] {
-        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
       }
       const [order, setOrder] = useState<Order | null>(null);
       const [categories, setCategories] = useState<Category[]>([]);
@@ -56595,7 +56595,7 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
         const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
         const unsub = subscribeQueue(refresh);
         const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-        window.addEventListener("forkflow:ack", acknowledged);
+        window.addEventListener("masalapos:ack", acknowledged);
         const dispose = connectWs({
           onEvent: (event, data) => {
             if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -56605,13 +56605,13 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
           onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
           onAuthFail: () => session.clear(),
         });
-        return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+        return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
       }, [orderId, draftKey]);
     
       function saveDraft(next: DraftItem[]): boolean {
         try {
           localStorage.setItem(draftKey, JSON.stringify(next));
-          localStorage.removeItem(`forkflow.draft.${orderId}`);
+          localStorage.removeItem(`masalapos.draft.${orderId}`);
           setDraft(next); return true;
         } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
       }
@@ -56789,19 +56789,19 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-setup.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
-    "ForkFlow\nRESTAURANT POS\nWORKSPACE\nHome\nTables\nBills\nReports\nInventory\nKitchen\nCatalog\nUsers\nSettings\nV\nVaibhav\nAdmin\nLog Out\nWorkspace/Overview\n29 Sept 2026\nAdmin\nWelcome back, Vaibhav.\n\nHere’s what’s happening at your restaurant.\n\nTake an order\n\nOpen orders\n\n0\n\nAvailable tables\n\n0\n\nAwaiting payment\n\n0\n\nLET’S GET SERVICE STARTED\n\nA good service starts here.\n\nChoose a table, take a takeaway order, or pick up where your team left off.\n\nOpen tables\nYOUR WORKSPACE\nTables\nDine-in and takeaway orders\nKitchen\nKeep every ticket moving\nBills\nPayments, history and receipts\nDay-end report\nSales, tax and payment totals\nInventory\nStock levels and movements\nCatalog\nYour menu, prices and portions\nUsers\nManage your team and access\nSettings\nRestaurant, printers and backups"
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-setup.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
+    "MasalaPOS\nRESTAURANT POS\nWORKSPACE\nHome\nTables\nBills\nReports\nInventory\nKitchen\nCatalog\nUsers\nSettings\nV\nVaibhav\nAdmin\nLog Out\nWorkspace/Overview\n29 Sept 2026\nAdmin\nWelcome back, Vaibhav.\n\nHere’s what’s happening at your restaurant.\n\nTake an order\n\nOpen orders\n\n0\n\nAvailable tables\n\n0\n\nAwaiting payment\n\n0\n\nLET’S GET SERVICE STARTED\n\nA good service starts here.\n\nChoose a table, take a takeaway order, or pick up where your team left off.\n\nOpen tables\nYOUR WORKSPACE\nTables\nDine-in and takeaway orders\nKitchen\nKeep every ticket moving\nBills\nPayments, history and receipts\nDay-end report\nSales, tax and payment totals\nInventory\nStock levels and movements\nCatalog\nYour menu, prices and portions\nUsers\nManage your team and access\nSettings\nRestaurant, printers and backups"
     ✓ • 1.50s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790627842125.png
     ✓ • 892ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     ✗ Evaluation error: Error: Disabled: Save
         at click (<anonymous>:13:120)
         at async mode (<anonymous>:31:72)
@@ -57355,7 +57355,7 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
         await new Promise((r) => setTimeout(r, 70));
       };
       const api = async (path, method = 'GET', body) => {
-        const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const json = await response.json(); if (!response.ok) throw new Error(`${path}: ${JSON.stringify(json)}`); return json;
       };
       const suffix = Date.now(); const name = `Gate ingredient ${suffix}`;
@@ -57446,21 +57446,21 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
       const click = async (text) => { const b = await waitFor(() => { const candidate = button(text); return candidate && !candidate.disabled ? candidate : null; }, `enabled ${text}`); b.click(); await new Promise((r) => setTimeout(r, 100)); };
       const nativeFetch = window.fetch.bind(window);
       const api = async (path, method = "GET", body) => {
-        const res = await nativeFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        const res = await nativeFetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
         const data = await res.json(); if (!res.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
       };
-      await waitFor(() => localStorage.getItem("forkflow.generation"), "server generation checked");
+      await waitFor(() => localStorage.getItem("masalapos.generation"), "server generation checked");
       await click("settings"); await waitFor(() => button("Back up now"), "backup controls");
       const count = (await api("/system/backups")).backups.length;
       await click("Back up now"); await waitFor(() => document.body.innerText.includes("Verified local backup saved"), "manual backup");
       const backups = await api("/system/backups");
       check(backups.backups.length === count + 1, "Manual backup created from Settings");
-      const copy = await nativeFetch(`/api/system/backups/${backups.backups[0].name}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+      const copy = await nativeFetch(`/api/system/backups/${backups.backups[0].name}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
       check(new TextDecoder().decode((await copy.arrayBuffer()).slice(0, 15)) === "SQLite format 3", "Backup download contains a SQLite snapshot");
       const connections = await api("/system/connections");
       if (connections.connections.length) {
-        check([...document.querySelectorAll("img")].some((img) => img.alt.includes("Connect to ForkFlow") && img.complete && img.naturalWidth > 0), "LAN QR code renders locally");
-        const shortcut = await nativeFetch(`/api/system/shortcut?url=${encodeURIComponent(connections.connections[0].url)}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+        check([...document.querySelectorAll("img")].some((img) => img.alt.includes("Connect to MasalaPOS") && img.complete && img.naturalWidth > 0), "LAN QR code renders locally");
+        const shortcut = await nativeFetch(`/api/system/shortcut?url=${encodeURIComponent(connections.connections[0].url)}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
         check((await shortcut.text()).includes(`--app=${connections.connections[0].url}`), "Edge shortcut targets the displayed LAN address");
       }
       const stamp = Date.now();
@@ -57472,7 +57472,7 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
       const productButton = () => [...document.querySelectorAll("button")].find((b) => b.textContent.includes(product.name));
       (await waitFor(productButton, "menu product")).click();
       await waitFor(() => button("Punch"), "saved draft");
-      const draftKey = Object.keys(localStorage).find((key) => key.startsWith("forkflow.draft.") && localStorage.getItem(key).includes(product.id));
+      const draftKey = Object.keys(localStorage).find((key) => key.startsWith("masalapos.draft.") && localStorage.getItem(key).includes(product.id));
       check(!!draftKey, "Cart persisted before any request");
       const orderId = draftKey.split(".").at(-1);
       const { order } = await api(`/orders/${orderId}`);
@@ -57501,7 +57501,7 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
         await click("Punch"); await waitFor(() => !button("Punch"), "second punch");
         losePath = `/api/orders/${orderId}/send`; lost = false;
         await click("Send to kitchen");
-        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "kitchen acknowledgement replay");
+        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v1.")), "kitchen acknowledgement replay");
         const sent = (await api(`/orders/${orderId}`)).order;
         check(sent.items.length === 2 && sent.items.every((i) => i.status === "sent"), "Kitchen retry keeps one saved send request");
         check((await api("/kots")).kots.filter((k) => k.orderId === orderId).length === 1, "Lost kitchen acknowledgement does not duplicate KOTs");
@@ -57509,12 +57509,12 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
         losePath = `/api/orders/${orderId}/bill`; lost = false;
         await click("Issue bill");
         await waitFor(() => button("Settle bill"), "bill issued after response loss");
-        await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "bill queue cleared");
+        await waitFor(() => !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v1.")), "bill queue cleared");
         const { bill } = await api(`/orders/${orderId}/bill`);
         check(bill.status === "unpaid", "Bill issue resolves a lost acknowledgement from the same saved request");
         losePath = `/api/bills/${bill.id}/settle`; lost = false;
         await click("Settle bill");
-        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("forkflow.queue.v1.")), "settlement replay");
+        await waitFor(() => lost && !Object.keys(localStorage).some((key) => key.startsWith("masalapos.queue.v1.")), "settlement replay");
         const paid = (await api(`/orders/${orderId}/bill`)).bill;
         check(paid.status === "paid" && paid.payments.length === 1, "Lost settlement acknowledgement records payment only once");
       } finally { window.fetch = nativeFetch; }
@@ -57526,8 +57526,8 @@ The first preview loads correctly: white surfaces, red actions, and a clean setu
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e8] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e8] clickable [onclick]
       - navigation "Main navigation" [ref=e9]
         - button "home" [ref=e10]
         - button "tables" [ref=e11]
@@ -58398,9 +58398,9 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -58416,14 +58416,14 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 263ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     {
       "exclusiveBill": 2,
       "inclusiveBill": 1,
@@ -58446,7 +58446,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     {
       "checks": [
         "Stock item created from the form with an opening balance",
@@ -58482,7 +58482,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
       VariantCreate, VariantUpdate,
       StationCreate, StationUpdate,
       uuidv7,
-    } from "@forkflow/domain";
+    } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     
@@ -58736,7 +58736,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
       });
     }
     
-    import { TableCreate, TableUpdate, uuidv7 } from "@forkflow/domain";
+    import { TableCreate, TableUpdate, uuidv7 } from "@masalapos/domain";
     import type { FastifyInstance } from "fastify";
     import { httpError } from "./http-error.js";
     
@@ -58841,7 +58841,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-home.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-home.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     null
     ✓ • 296ms
 
@@ -58849,7 +58849,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
     $ Get-Content -Raw -Encoding utf8 apps/ui/src/screens/BillingPanel.tsx, apps/ui/src/screens/Inventory.tsx
     import { useEffect, useRef, useState } from "react";
-    import type { Bill, BillCreateInput, BillTotals } from "@forkflow/domain";
+    import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
     import { ApiError, apiFetch, session } from "../api";
     import { paiseToRupees, rupeesToPaise } from "../money";
     import type { Order, PrintJobInfo } from "../types";
@@ -58880,7 +58880,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
       const [discount, setDiscount] = useState("0");
       const [reason, setReason] = useState("");
       const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-      const [printerId, setPrinterId] = useState(() => localStorage.getItem("forkflow.receipt-printer") ?? "");
+      const [printerId, setPrinterId] = useState(() => localStorage.getItem("masalapos.receipt-printer") ?? "");
       const [payments, setPayments] = useState<PaymentDraft[]>([]);
       const [busy, setBusy] = useState(false);
       const lock = useRef(false);
@@ -58980,7 +58980,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
         setFrameReady(false); setHtml(await response.text());
       }
       function changePrinter(value: string) {
-        setPrinterId(value); localStorage.setItem("forkflow.receipt-printer", value);
+        setPrinterId(value); localStorage.setItem("masalapos.receipt-printer", value);
         setPreview(null); createRequest.current = null;
       }
       const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -59030,7 +59030,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
     }
     
     import { useEffect, useRef, useState } from "react";
-    import type { StockItem, StockLink, StockMove, StockUnit } from "@forkflow/domain";
+    import type { StockItem, StockLink, StockMove, StockUnit } from "@masalapos/domain";
     import { apiFetch, session, type User } from "../api";
     import type { Product } from "../types";
     import { uuid } from "../uuid";
@@ -59249,7 +59249,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     {
       "checks": [
         "Manual backup created from Settings",
@@ -59276,7 +59276,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
     (async () => {
       if (location.port !== '4113') throw Error('Scratch UI server required');
       const api = async (path, method = 'GET', body) => {
-        const response = await fetch('/api' + path, {method, headers: {authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
+        const response = await fetch('/api' + path, {method, headers: {authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
         const data = await response.json(); if (!response.ok) throw Error(JSON.stringify(data)); return data;
       };
       for (const p of (await api('/products')).products) await api('/products/' + p.id, 'PATCH', {isActive:false});
@@ -59310,7 +59310,7 @@ I found and fixed a settings-loading issue: the form could briefly be edited bef
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-seed.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-seed.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     ✗ Evaluation error: Error: {"error":"validation","issues":[{"expected":"array","code":"invalid_type","path":["itemIds"],"message":"Invalid input: expected array, received undefined"}]}
         at api (<anonymous>:5:65)
         at async <anonymous>:29:5
@@ -59327,7 +59327,7 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
     (async () => {
       if (location.port !== '4113') throw Error('Scratch UI server required');
       const api = async (path, method = 'GET', body) => {
-        const response = await fetch('/api' + path, {method, headers: {authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
+        const response = await fetch('/api' + path, {method, headers: {authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'content-type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
         const data = await response.json(); if (!response.ok) throw Error(JSON.stringify(data)); return data;
       };
       const tables = (await api('/tables')).tables;
@@ -59348,20 +59348,20 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-seed-finish.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-seed-finish.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     "Fixture ready"
     ✓ • 530ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628165419.png
     ✓ • 244ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e70] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e70] clickable [onclick]
       - navigation "Main navigation" [ref=e71]
         - button "home" [ref=e72]
         - button "tables" [disabled, ref=e73]
@@ -59401,20 +59401,20 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click '@e92'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click '@e92'
     ✓ Done
     ✓ • 138ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628179610.png
     ✓ • 213ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e70] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e70] clickable [onclick]
       - navigation "Main navigation" [ref=e71]
         - button "home" [ref=e72]
         - button "tables" [disabled, ref=e73]
@@ -59466,19 +59466,19 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 390 844
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 390 844
     ✓ Done
     ✓ • 144ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628195590.png
     ✓ • 209ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval 'document.documentElement.scrollWidth'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval 'document.documentElement.scrollWidth'
     390
     ✓ • 123ms
 
@@ -59612,7 +59612,7 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
         if (next.length === 6) void submit(next);
       }
       return <AuthLayout><form className="auth-form" onSubmit={(e) => { e.preventDefault(); void submit(pin); }}>
-        <p className="eyebrow">WELCOME TO FORKFLOW</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
+        <p className="eyebrow">WELCOME TO MASALAPOS</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
         <label>Staff PIN<input className="pin-input" aria-label="Staff PIN" type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} disabled={busy} onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setError(""); }} /></label>
         <div className="error-message" role="alert">{error}</div>
         <div className="pin-pad">{["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((key) => <button key={key} type="button" disabled={busy} className={key === "OK" ? "primary" : ""} aria-label={key === "⌫" ? "Delete last digit" : key} onClick={() => { if (key === "⌫") setPin((p) => p.slice(0, -1)); else if (key === "OK") void submit(pin); else press(key); }}>{key}</button>)}</div>
@@ -59786,20 +59786,20 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
     import { Brand } from "../Icon";
     
     export function AuthLayout({ children }: { children: ReactNode }) {
-      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>ForkFlow · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
+      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>MasalaPOS · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
     }
     
     ✓ • 161ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click '@e80'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click '@e80'
     ✓ Done
     ✓ • 145ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot --full
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot --full
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628219964.png
     ✓ • 265ms
 
@@ -59824,7 +59824,7 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-layout-check.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-layout-check.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     [
       {
         "overflow": [],
@@ -59907,9 +59907,9 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
     }
     
     export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-      const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+      const draftKey = `masalapos.draft.${user.id}.${orderId}`;
       function readDraft(): DraftItem[] {
-        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
       }
       const [order, setOrder] = useState<Order | null>(null);
       const [categories, setCategories] = useState<Category[]>([]);
@@ -59940,7 +59940,7 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
         const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
         const unsub = subscribeQueue(refresh);
         const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-        window.addEventListener("forkflow:ack", acknowledged);
+        window.addEventListener("masalapos:ack", acknowledged);
         const dispose = connectWs({
           onEvent: (event, data) => {
             if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -59950,13 +59950,13 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
           onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
           onAuthFail: () => session.clear(),
         });
-        return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+        return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
       }, [orderId, draftKey]);
     
       function saveDraft(next: DraftItem[]): boolean {
         try {
           localStorage.setItem(draftKey, JSON.stringify(next));
-          localStorage.removeItem(`forkflow.draft.${orderId}`);
+          localStorage.removeItem(`masalapos.draft.${orderId}`);
           setDraft(next); return true;
         } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
       }
@@ -60169,13 +60169,13 @@ All 42 billing, inventory, and recovery browser checks passed. Both GST modes st
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 834 1112
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 834 1112
     ✓ Done
     ✓ • 332ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-layout-check.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-layout-check.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     [
       {
         "overflow": [],
@@ -60240,8 +60240,8 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e70] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e70] clickable [onclick]
       - navigation "Main navigation" [ref=e71]
         - button "home" [ref=e72]
         - button "tables" [ref=e73]
@@ -60307,14 +60307,14 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
 ## Activity
 
-    $ Get-CimInstance Win32_Process -Filter "Name = 'ForkFlow.exe' OR Name = 'electron.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List
+    $ Get-CimInstance Win32_Process -Filter "Name = 'MasalaPOS.exe' OR Name = 'electron.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List
     ✓ • 719ms
 
 ## Activity
 
     $ Get-Content -Raw -Encoding utf8 electron-builder.yml, tools/build-desktop.mjs, .e2e-scratch/electron-quit.mjs; & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' status --short
-    appId: in.forkflow.pos
-    productName: ForkFlow
+    appId: in.masalapos.pos
+    productName: MasalaPOS
     directories:
       app: build/desktop/app
       output: dist/installer
@@ -60331,7 +60331,7 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
         - target: nsis
           arch: [x64]
       icon: build/desktop/icon.ico
-      artifactName: "ForkFlow-Setup-${version}.${ext}"
+      artifactName: "MasalaPOS-Setup-${version}.${ext}"
     nsis:
       oneClick: false
       perMachine: true
@@ -60354,7 +60354,7 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
     rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
     const pkg = JSON.parse(readFileSync(join(root, "package.json")));
     const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*" };
-    delete deps["@forkflow/core"]; delete deps["@forkflow/domain"];
+    delete deps["@masalapos/core"]; delete deps["@masalapos/domain"];
     const installed = new Map();
     function locate(name, from) {
       const lookup = createRequire(join(from, "package.json"));
@@ -60381,11 +60381,11 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
     }
     for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
     await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-      plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
+      plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
     });
     await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron"], sourcemap: true });
     cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
-    writeFileSync(join(stage, "package.json"), JSON.stringify({ name: "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
+    writeFileSync(join(stage, "package.json"), JSON.stringify({ name: "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));
     
     // Small original F icon, rendered without extra image or native build tools.
     function crc32(bytes) { let crc = 0xffffffff; for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ 0xffffffff) >>> 0; }
@@ -60508,13 +60508,13 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click '@e77'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click '@e77'
     ✓ Done
     ✓ • 145ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628367937.png
     ✓ • 226ms
 
@@ -60523,18 +60523,18 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
     file changes: Completed · 3 changes
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\package-lock.json
     @@ -2,3 +2,3 @@
-       "name": "forkflow",
+       "name": "masalapos",
     -  "version": "0.6.0",
     +  "version": "0.6.1",
        "lockfileVersion": 3,
     @@ -8,3 +8,3 @@
-           "name": "forkflow",
+           "name": "masalapos",
     -      "version": "0.6.0",
     +      "version": "0.6.1",
            "workspaces": [
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\package.json
     @@ -2,3 +2,3 @@
-       "name": "forkflow",
+       "name": "masalapos",
     -  "version": "0.6.0",
     +  "version": "0.6.1",
        "private": true,
@@ -60549,11 +60549,11 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.1 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.1 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -60572,11 +60572,11 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.1 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.1 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 18.10s
@@ -60587,8 +60587,8 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 224ms
 
@@ -60746,11 +60746,11 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.1 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.1 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -60781,14 +60781,14 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 954ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-interactions.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-interactions.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     ✗ Evaluation error: Error: UI did not become ready
         at wait (<anonymous>:3:122)
         at async <anonymous>:19:17
@@ -60796,13 +60796,13 @@ The phone and tablet checks show no page-wide horizontal overflow. The mobile or
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 1440 900
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 1440 900
     ✓ Done
     ✓ • 1.93s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628629273.png
     ✓ • 2.91s
 
@@ -60816,8 +60816,8 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e184] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e184] clickable [onclick]
       - navigation "Main navigation" [ref=e185]
         - button "home" [ref=e186]
         - button "tables" [disabled, ref=e187]
@@ -60914,14 +60914,14 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 1.66s
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-interactions.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-interactions.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     [
       "Available filter only shows free tables",
       "Table search combines with status filter",
@@ -60936,13 +60936,13 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui errors
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui errors
     ✓ • 637ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e221] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e221] clickable [onclick]
       - navigation "Main navigation" [ref=e222]
         - button "home" [ref=e223]
         - button "tables" [disabled, ref=e224]
@@ -61015,8 +61015,8 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
     const electron = "process.getBuiltinModule('module').createRequire(process.execPath)('electron')";
     const checks = [];
     try {
-      const context = await evaluate("({path: process.execPath, data: process.env.FORKFLOW_DATA_DIR, autostart: process.env.FORKFLOW_DISABLE_AUTOSTART})");
-      assert.match(context.path.replaceAll("\\", "/"), /win-unpacked\/ForkFlow\.exe$/i);
+      const context = await evaluate("({path: process.execPath, data: process.env.MASALAPOS_DATA_DIR, autostart: process.env.MASALAPOS_DISABLE_AUTOSTART})");
+      assert.match(context.path.replaceAll("\\", "/"), /win-unpacked\/MasalaPOS\.exe$/i);
       assert.match(context.data.replaceAll("\\", "/"), /\.e2e-scratch\//);
       assert.equal(context.autostart, "1");
       const health = await (await fetch(base + "/api/health")).json(); assert.equal(health.ok, true);
@@ -61029,7 +61029,7 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
       const backup = await fetch(base + "/api/system/backups", { method: "POST", headers }); assert.ok(backup.ok);
       const snapshot = await backup.json(); assert.ok(snapshot.name); checks.push("Packaged server creates a verified backup");
       const metrics = await evaluate(`${electron}.app.getAppMetrics().map(m => ({pid:m.pid,type:m.type,name:m.name,serviceName:m.serviceName}))`);
-      const child = metrics.find((m) => m.name === "ForkFlow POS server" || m.serviceName === "ForkFlow POS server");
+      const child = metrics.find((m) => m.name === "MasalaPOS POS server" || m.serviceName === "MasalaPOS POS server");
       assert.ok(child, JSON.stringify(metrics));
       process.kill(child.pid);
       let restarted;
@@ -61054,9 +61054,9 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
     import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
     
     const here = dirname(fileURLToPath(import.meta.url));
-    const port = process.env["FORKFLOW_PORT"] ?? "4100";
+    const port = process.env["MASALAPOS_PORT"] ?? "4100";
     const url = `http://127.0.0.1:${port}`;
-    const dataDir = process.env["FORKFLOW_DATA_DIR"] ?? join(app.getPath("userData"), "data");
+    const dataDir = process.env["MASALAPOS_DATA_DIR"] ?? join(app.getPath("userData"), "data");
     let server: UtilityProcess | null = null;
     let window: BrowserWindow | null = null;
     let tray: Tray | null = null;
@@ -61082,7 +61082,7 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
       async function failure(message: string) {
         if (errorShown || quitting || recovering) return;
         errorShown = true;
-        const { response } = await dialog.showMessageBox({ type: "error", title: "ForkFlow needs attention", message,
+        const { response } = await dialog.showMessageBox({ type: "error", title: "MasalaPOS needs attention", message,
           detail: `Your data is in ${dataDir}. See server.log for details.`, buttons: ["Retry", "Open data folder", "Restore backup", "Quit"], cancelId: 3 });
         errorShown = false;
         if (response === 0) { restarts = 0; startServer(); }
@@ -61095,9 +61095,9 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
         writeLog("Starting server utility process\n");
         const instanceId = randomUUID();
         const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
-          cwd: dataDir, stdio: "pipe", serviceName: "ForkFlow POS server",
-          env: { ...process.env, FORKFLOW_DATA_DIR: dataDir, FORKFLOW_UI_DIR: join(here, "ui"), FORKFLOW_PORT: port,
-            FORKFLOW_APP_VERSION: app.getVersion(), FORKFLOW_INSTANCE_ID: instanceId, ...(restorePath ? { FORKFLOW_RESTORE: restorePath } : {}) },
+          cwd: dataDir, stdio: "pipe", serviceName: "MasalaPOS POS server",
+          env: { ...process.env, MASALAPOS_DATA_DIR: dataDir, MASALAPOS_UI_DIR: join(here, "ui"), MASALAPOS_PORT: port,
+            MASALAPOS_APP_VERSION: app.getVersion(), MASALAPOS_INSTANCE_ID: instanceId, ...(restorePath ? { MASALAPOS_RESTORE: restorePath } : {}) },
         });
         server = child;
         child.on("spawn", () => writeLog(`Server spawned (${child.pid})\n`));
@@ -61152,14 +61152,14 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
         stopping = false;
       }
       async function restore() {
-        const selection = await dialog.showOpenDialog({ title: "Choose a ForkFlow backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
+        const selection = await dialog.showOpenDialog({ title: "Choose a MasalaPOS backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
         if (selection.canceled || !selection.filePaths[0]) return;
         const { response } = await dialog.showMessageBox({ type: "warning", title: "Restore backup", message: "Stop work on all counters before restoring.",
           detail: `Restore ${selection.filePaths[0]}? Current data will be archived; all changes since this snapshot will leave the live database. Staff must sign in again and review open orders.`, buttons: ["Cancel", "Restore this backup"], defaultId: 0, cancelId: 0 });
         if (response !== 1) return;
         recovering = true;
         await stopServer();
-        await window?.loadURL("data:text/html,<h2>Restoring ForkFlow backup…</h2>");
+        await window?.loadURL("data:text/html,<h2>Restoring MasalaPOS backup…</h2>");
         restarts = 5; // invalid backups produce a reviewable error, never silently fall back
         startServer(selection.filePaths[0]);
         recovering = false;
@@ -61167,28 +61167,28 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
       app.on("second-instance", showWindow);
       app.whenReady().then(() => {
         window = new BrowserWindow({ width: 1280, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
-        void window.loadURL("data:text/html,<h2>Starting ForkFlow…</h2><p>Preparing the database and checking backups.</p>");
+        void window.loadURL("data:text/html,<h2>Starting MasalaPOS…</h2><p>Preparing the database and checking backups.</p>");
         window.webContents.setWindowOpenHandler(({ url: target }) => { if (/^https?:\/\//.test(target)) void shell.openExternal(target); return { action: "deny" }; });
         window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(url + "/") && target !== url) event.preventDefault(); });
         window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
-        if (app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+        if (app.isPackaged && process.env["MASALAPOS_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
           app.setLoginItemSettings({ openAtLogin: true });
           appendFileSync(join(dataDir, "desktop-initialized"), "1");
         }
         startServer();
         writeLog("Creating tray menu\n");
         tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
-        tray.setToolTip("ForkFlow — restaurant POS server");
+        tray.setToolTip("MasalaPOS — restaurant POS server");
         tray.setContextMenu(Menu.buildFromTemplate([
-          { label: "Open ForkFlow", click: showWindow },
+          { label: "Open MasalaPOS", click: showWindow },
           { label: "Open data and backups", click: () => { void shell.openPath(dataDir); } },
           { label: "Restore backup…", click: () => { void restore(); } },
           { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
-          { type: "separator" }, { label: "Quit ForkFlow (stops all counters)", click: () => app.quit() },
+          { type: "separator" }, { label: "Quit MasalaPOS (stops all counters)", click: () => app.quit() },
         ]));
         tray.on("double-click", showWindow);
         writeLog("Tray menu ready\n");
-      }).catch((error: unknown) => { writeLog(String(error)); void failure("ForkFlow startup failed."); });
+      }).catch((error: unknown) => { writeLog(String(error)); void failure("MasalaPOS startup failed."); });
       app.on("before-quit", (event) => {
         if (quitting) return;
         event.preventDefault(); quitting = true;
@@ -61200,32 +61200,32 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click '@e232'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click '@e232'
     ✓ Done
     ✓ • 565ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628822125.png
     ✓ • 743ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 390 844
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 390 844
     ✓ Done
     ✓ • 808ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790628823991.png
     ✓ • 588ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e221] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e221] clickable [onclick]
       - heading "Ready for service?" [level=2, ref=e267]
       - textbox "Staff PIN" [ref=e280]
       - button "1" [ref=e268]
@@ -61252,20 +61252,20 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui fill '@e280' '1234'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui fill '@e280' '1234'
     ✓ Done
     ✓ • 6.54s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui press Enter
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui press Enter
     ✓ Done
     ✓ • 7.76s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e221] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e221] clickable [onclick]
       - navigation "Main navigation" [ref=e281]
         - button "home" [disabled, ref=e283]
         - button "tables" [ref=e284]
@@ -61296,11 +61296,11 @@ The updated app is building as version 0.6.1. The light theme now covers login, 
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.1 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.1 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 57.27s
@@ -61312,7 +61312,7 @@ The new search, table filters, portion selection, quantity controls, and checkou
 ## Activity
 
     $ Get-Content -Raw -Encoding utf8 README.md, 'C:/Users/AR/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/react-best-practices/SKILL.md'; & 'C:\Users\AR\AppData\Local\Programs\Git\cmd\git.exe' -c core.safecrlf=false diff --check
-    # ForkFlow
+    # MasalaPOS
     
     A local-only desktop POS for restaurants. One Windows PC runs everything —
     an Electron shell, a Fastify server, and a SQLite database. Extra billing
@@ -61345,8 +61345,8 @@ The new search, table filters, portion selection, quantity controls, and checkou
     npm run package:win   # self-contained Windows x64 NSIS installer
     ```
     
-    Use Node.js 24+. The database lives in `./data/forkflow.db` (override with
-    `FORKFLOW_DATA_DIR`). Use a separate scratch data directory for testing.
+    Use Node.js 24+. The database lives in `./data/masalapos.db` (override with
+    `MASALAPOS_DATA_DIR`). Use a separate scratch data directory for testing.
     
     On this Windows/npm 11 installation, npm tried `node-gyp rebuild` for
     better-sqlite3 despite its bundled prebuild. `npm ci --ignore-scripts` installed
@@ -61354,7 +61354,7 @@ The new search, table filters, portion selection, quantity controls, and checkou
     That fallback skips Electron's download; run `node node_modules/electron/install.js`
     before using `dev:desktop`. The browser/server development path works without it.
     
-    The installer is written to `dist/installer/ForkFlow-Setup-0.6.0.exe`.
+    The installer is written to `dist/installer/MasalaPOS-Setup-0.6.0.exe`.
     Installed data is kept in the user's application-data folder, separate from the
     development database. Open it from the tray menu. Closing the window keeps the
     server running; use the tray's Quit action to stop all counters. The current
@@ -61598,13 +61598,13 @@ The new search, table filters, portion selection, quantity controls, and checkou
       • downloaded electron zip extracted successfully  output=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked
       • searching for node modules  pm=npm searchDir=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\build\desktop\app
       • duplicate dependency references  dependencies=["ajv@8.20.0","fast-json-stringify@7.0.1","fastq@1.20.1","ajv-formats@3.0.1","ajv@8.20.0","string-width@4.2.3","string-width@4.2.3","strip-ansi@6.0.1","strip-ansi@6.0.1"]
-      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\ForkFlow.exe
-      • signing with signtool.exe  path=dist\installer\win-unpacked\ForkFlow.exe
-      • building        target=nsis file=dist\installer\ForkFlow-Setup-0.6.1.exe archs=x64 oneClick=false perMachine=true
+      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\MasalaPOS.exe
+      • signing with signtool.exe  path=dist\installer\win-unpacked\MasalaPOS.exe
+      • building        target=nsis file=dist\installer\MasalaPOS-Setup-0.6.1.exe archs=x64 oneClick=false perMachine=true
       • signing with signtool.exe  path=dist\installer\win-unpacked\resources\elevate.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.1.__uninstaller.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.1.exe
-      • building block map  blockMapFile=dist\installer\ForkFlow-Setup-0.6.1.exe.blockmap
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.1.__uninstaller.exe
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.1.exe
+      • building block map  blockMapFile=dist\installer\MasalaPOS-Setup-0.6.1.exe.blockmap
     ✓ • 4m 26s
 
 ## Activity
@@ -61614,14 +61614,14 @@ The new search, table filters, portion selection, quantity controls, and checkou
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click '@e284'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click '@e284'
     ✓ Done
     ✓ • 471ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e221] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSWORKSPACEhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadm" [ref=e221] clickable [onclick]
       - navigation "Main navigation" [ref=e281]
         - button "home" [ref=e283]
         - button "tables" [disabled, ref=e284]
@@ -61660,7 +61660,7 @@ The new search, table filters, portion selection, quantity controls, and checkou
 
 ## Activity
 
-    $ $env:FORKFLOW_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/ui-desktop'; $env:FORKFLOW_PORT = '4112'; $env:FORKFLOW_DISABLE_AUTOSTART = '1'; Start-Process -FilePath '.\dist\installer\win-unpacked\ForkFlow.exe' -ArgumentList '--remote-debugging-port=4122','--inspect=9233' -WindowStyle Hidden -PassThru | Select-Object Id
+    $ $env:MASALAPOS_DATA_DIR = Join-Path (Get-Location) '.e2e-scratch/ui-desktop'; $env:MASALAPOS_PORT = '4112'; $env:MASALAPOS_DISABLE_AUTOSTART = '1'; Start-Process -FilePath '.\dist\installer\win-unpacked\MasalaPOS.exe' -ArgumentList '--remote-debugging-port=4122','--inspect=9233' -WindowStyle Hidden -PassThru | Select-Object Id
     
       Id
       --
@@ -61671,34 +61671,34 @@ The new search, table filters, portion selection, quantity controls, and checkou
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui click '@e315'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui click '@e315'
     ✗ Unknown ref: e315
     ✗ (1) • 5.97s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790638961585.png
     ✓ • 693ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 1440 900
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 1440 900
     ✓ Done
     ✓ • 384ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790638962864.png
     ✓ • 414ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop-ui --cdp 4122 snapshot -i
-    - generic "ForkFlowRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e1] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop-ui --cdp 4122 snapshot -i
+    - generic "MasalaPOSRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e1] clickable [onclick]
       - heading "A little less admin. A lot more service." [level=1, ref=e2]
-      - heading "Set up ForkFlow" [level=2, ref=e3]
+      - heading "Set up MasalaPOS" [level=2, ref=e3]
       - textbox "Restaurant name" [required, ref=e5]
       - textbox "Your name" [required, ref=e6]
       - textbox "Admin PIN" [required, ref=e7]
@@ -61707,7 +61707,7 @@ The new search, table filters, portion selection, quantity controls, and checkou
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop-ui --cdp 4122 screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop-ui --cdp 4122 screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790638978542.png
     ✓ • 549ms
 
@@ -61729,7 +61729,7 @@ The new search, table filters, portion selection, quantity controls, and checkou
 
 ## Activity
 
-    $ Get-FileHash -Algorithm SHA256 -LiteralPath 'dist/installer/ForkFlow-Setup-0.6.1.exe'; Get-Item -LiteralPath 'dist/installer/ForkFlow-Setup-0.6.1.exe' | Select-Object Length
+    $ Get-FileHash -Algorithm SHA256 -LiteralPath 'dist/installer/MasalaPOS-Setup-0.6.1.exe'; Get-Item -LiteralPath 'dist/installer/MasalaPOS-Setup-0.6.1.exe' | Select-Object Length
     
     Algorithm       Hash                                                                   Path
     ---------       ----                                                                   ----
@@ -61751,33 +61751,33 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-reload.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop-ui --cdp 4122 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-reload.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop-ui --cdp 4122 eval --stdin
     null
     ✓ • 889ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop-ui --cdp 4122 eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop-ui --cdp 4122 eval --stdin
     "submitted"
     ✓ • 1.13s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-desktop-ui --cdp 4122 screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-desktop-ui --cdp 4122 screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639001687.png
     ✓ • 828ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 599ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e1] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e1] clickable [onclick]
       - heading "A little less admin. A lot more service." [level=1, ref=e2]
       - heading "Ready for service?" [level=2, ref=e3]
       - textbox "Staff PIN" [ref=e16]
@@ -61797,7 +61797,7 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     ✗ Evaluation error: TypeError: Cannot read properties of undefined (reading 'click')
         at <anonymous>:3:80
         at <anonymous>:8:3
@@ -61818,7 +61818,7 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-preview.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-preview.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     ✗ Evaluation error: Error: Preview missing
         at wait (<anonymous>:2:119)
         at async <anonymous>:3:4
@@ -61826,19 +61826,19 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639032093.png
     ✓ • 449ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 390 844
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 390 844
     ✓ Done
     ✓ • 436ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639033367.png
     ✓ • 414ms
 
@@ -61850,15 +61850,15 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 570ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui snapshot -i
-    - generic "ForkFlowRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e17] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui snapshot -i
+    - generic "MasalaPOSRESTAURANT POSMADE FOR YOUR EVERYDAY SERVICEA little less admin.A lot more service.Orders, k" [ref=e17] clickable [onclick]
       - heading "Ready for service?" [level=2, ref=e18]
       - textbox "Staff PIN" [ref=e31]
       - button "1" [ref=e19]
@@ -61891,10 +61891,10 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ Get-CimInstance Win32_Process -Filter "Name = 'ForkFlow.exe'" | Select-Object ProcessId,CommandLine | Format-List
+    $ Get-CimInstance Win32_Process -Filter "Name = 'MasalaPOS.exe'" | Select-Object ProcessId,CommandLine | Format-List
     Get-CimInstance : Access denied
     At line:2 char:1
-    + Get-CimInstance Win32_Process -Filter "Name = 'ForkFlow.exe'" | Selec ...
+    + Get-CimInstance Win32_Process -Filter "Name = 'MasalaPOS.exe'" | Selec ...
     + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         + CategoryInfo          : PermissionDenied: (:) [Get-CimInstance], CimException
         + FullyQualifiedErrorId : HRESULT 0x80041003,Microsoft.Management.Infrastructure.CimCmdlets.GetCimInstanceCommand
@@ -61903,37 +61903,37 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui fill '@e31' '1234'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui fill '@e31' '1234'
     ✓ Done
     ✓ • 491ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui press Enter
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui press Enter
     ✓ Done
     ✓ • 478ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-preview.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-preview.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui eval --stdin
     "Ready"
     ✓ • 1.03s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639068578.png
     ✓ • 538ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui set viewport 1440 900
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui set viewport 1440 900
     ✓ Done
     ✓ • 570ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639070280.png
     ✓ • 694ms
 
@@ -61968,8 +61968,8 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
      
     @@ -42,3 +51,3 @@
      
-    -The installer is written to `dist/installer/ForkFlow-Setup-0.6.0.exe`.
-    +The installer is written to `dist/installer/ForkFlow-Setup-0.6.1.exe`.
+    -The installer is written to `dist/installer/MasalaPOS-Setup-0.6.0.exe`.
+    +The installer is written to `dist/installer/MasalaPOS-Setup-0.6.1.exe`.
      Installed data is kept in the user's application-data folder, separate from the
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\docs\agents\handoff\2026-09-29-003-light-red-ui.md
     # Light and red UI — 0.6.1
@@ -62016,7 +62016,7 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
     
     ## Artifact
     
-    `dist/installer/ForkFlow-Setup-0.6.1.exe` — 109,943,418 bytes, unsigned.
+    `dist/installer/MasalaPOS-Setup-0.6.1.exe` — 109,943,418 bytes, unsigned.
     
     SHA256: `5CCCF4305E9FF86698C5AEF0C3E274A32C6E28ADA8B76C167AA9464CA39FAF58`
     
@@ -62032,7 +62032,7 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-ui close
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-ui close
     ✓ Browser closed
     ✓ • 916ms
 
@@ -62041,7 +62041,7 @@ Version 0.6.1 is built, and all six packaged-app checks passed, including startu
 Done—light interface with red accents across the app, including responsive ordering, checkout, tables, and login.
 
 - [View UI preview](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/docs/screenshots/ui-red-desktop.png>)
-- [Windows installer v0.6.1 (unsigned)](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/dist/installer/ForkFlow-Setup-0.6.1.exe>)
+- [Windows installer v0.6.1 (unsigned)](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/dist/installer/MasalaPOS-Setup-0.6.1.exe>)
 
 Passed 50 browser checks, 6 desktop checks, typecheck, and builds. Changes remain local.
 
@@ -62735,7 +62735,7 @@ I’ll remove the extra explanatory text and simplify the dashboard so it fits w
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 apps/ui/src/ConnectionStatus.tsx; Get-Content -Raw -Encoding utf8 docs/agents/handoff/2026-09-29-003-light-red-ui.md; Get-Process ForkFlow -ErrorAction SilentlyContinue | Select-Object Id; Test-NetConnection -ComputerName localhost -Port 4113 -InformationLevel Quiet
+    $ Get-Content -Raw -Encoding utf8 apps/ui/src/ConnectionStatus.tsx; Get-Content -Raw -Encoding utf8 docs/agents/handoff/2026-09-29-003-light-red-ui.md; Get-Process MasalaPOS -ErrorAction SilentlyContinue | Select-Object Id; Test-NetConnection -ComputerName localhost -Port 4113 -InformationLevel Quiet
     import { useEffect, useState } from "react";
     import { discardRequest, queuedRequests, queueConnected, startQueue, subscribeQueue } from "./retry-queue";
     import { connectWs } from "./ws";
@@ -62804,7 +62804,7 @@ I’ll remove the extra explanatory text and simplify the dashboard so it fits w
     
     ## Artifact
     
-    `dist/installer/ForkFlow-Setup-0.6.1.exe` — 109,943,418 bytes, unsigned.
+    `dist/installer/MasalaPOS-Setup-0.6.1.exe` — 109,943,418 bytes, unsigned.
     
     SHA256: `5CCCF4305E9FF86698C5AEF0C3E274A32C6E28ADA8B76C167AA9464CA39FAF58`
     
@@ -62845,14 +62845,14 @@ I’ll remove the extra explanatory text and simplify the dashboard so it fits w
       return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}><path d={paths[name]} /></svg>;
     }
     export function Brand() {
-      return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>ForkFlow<span className="brand-caption">RESTAURANT POS</span></span></div>;
+      return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>MasalaPOS<span className="brand-caption">RESTAURANT POS</span></span></div>;
     }
     
     import type { ReactNode } from "react";
     import { Brand } from "../Icon";
     
     export function AuthLayout({ children }: { children: ReactNode }) {
-      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>ForkFlow · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
+      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>MasalaPOS · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
     }
     
     import { useRef, useState } from "react";
@@ -62880,7 +62880,7 @@ I’ll remove the extra explanatory text and simplify the dashboard so it fits w
         if (next.length === 6) void submit(next);
       }
       return <AuthLayout><form className="auth-form" onSubmit={(e) => { e.preventDefault(); void submit(pin); }}>
-        <p className="eyebrow">WELCOME TO FORKFLOW</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
+        <p className="eyebrow">WELCOME TO MASALAPOS</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
         <label>Staff PIN<input className="pin-input" aria-label="Staff PIN" type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} disabled={busy} onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setError(""); }} /></label>
         <div className="error-message" role="alert">{error}</div>
         <div className="pin-pad">{["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((key) => <button key={key} type="button" disabled={busy} className={key === "OK" ? "primary" : ""} aria-label={key === "⌫" ? "Delete last digit" : key} onClick={() => { if (key === "⌫") setPin((p) => p.slice(0, -1)); else if (key === "OK") void submit(pin); else press(key); }}>{key}</button>)}</div>
@@ -62961,7 +62961,7 @@ I’ll remove the extra explanatory text and simplify the dashboard so it fits w
     apps/ui/src/screens\Kitchen.tsx:48:    <div className="page-header"><div><h2>Kitchen display</h2><p>Fresh tickets, clear instructions. Ready when your team is.</p></div><span className="role-badge">{kots.length} active tickets</span></div>
     apps/ui/src/screens\Kitchen.tsx:50:    {kots.length === 0 && <div className="panel empty-state"><Icon name="kitchen" size={36} /><h3>The kitchen is all caught up</h3><p>No active KOTs. New orders will appear here when sent.</p></div>}
     apps/ui/src/screens\Kitchen.tsx:54:      <ul className="ticket-items">{kot.items.map((item) => <li key={item.id} style={{ textDecoration: item.status === "cancelled" ? "line-through" : "none", opacity: item.status === "cancelled" ? .5 : 1 }}>{item.qty} × {item.name}{item.note && <small>{item.note}</small>}</li>)}</ul>
-    apps/ui/src/screens\Login.tsx:26:    <p className="eyebrow">WELCOME TO FORKFLOW</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
+    apps/ui/src/screens\Login.tsx:26:    <p className="eyebrow">WELCOME TO MASALAPOS</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
     apps/ui/src/screens\Login.tsx:30:    <div className="auth-footnote">Your PIN gives you access to your team’s workspace.</div>
     apps/ui/src/screens\DayEnd.tsx:28:      <p>{report.date} · Server timezone: {report.timezone}</p>
     apps/ui/src/screens\DayEnd.tsx:44:      <p>Includes payments for older bills. This can differ from today's issued sales.</p>
@@ -62983,16 +62983,16 @@ I’ll remove the extra explanatory text and simplify the dashboard so it fits w
     apps/ui/src/screens\OrderScreen.tsx:200:            <div className="cart-row-top"><strong>{d.name}{d.note && <small>{d.note}</small>}</strong><span>₹{paiseToRupees(d.pricePaise * d.qty)}</span></div>
     apps/ui/src/screens\OrderScreen.tsx:215:            <div className="cart-row-top"><strong>{item.qty} × {item.name}{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}</strong><span>₹{paiseToRupees(item.pricePaise * item.qty)}</span></div>
     apps/ui/src/screens\OrderScreen.tsx:220:        <div className="cart-total"><div><span>Total</span><span>₹{paiseToRupees(total)}</span></div><p>Punched menu total. Final taxes and discounts are shown in billing.</p></div>
-    apps/ui/src/screens\AuthLayout.tsx:5:  return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>ForkFlow · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
-    apps/ui/src/screens\Setup.tsx:21:  return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up ForkFlow</h2><p>A few details, and you’re ready to take your first order.</p>
+    apps/ui/src/screens\AuthLayout.tsx:5:  return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>MasalaPOS · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
+    apps/ui/src/screens\Setup.tsx:21:  return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up MasalaPOS</h2><p>A few details, and you’re ready to take your first order.</p>
     apps/ui/src/screens\Settings.tsx:279:      <div className="page-header"><div><h2>Settings</h2><p>A restaurant setup that works for your team.</p></div></div>
     apps/ui/src/screens\Settings.tsx:297:          <small>Applies to new bills. Existing bills keep their original tax calculation.</small>
     apps/ui/src/screens\Tables.tsx:164:    <div className="page-header"><div><h2>Tables & orders</h2><p>Every table, every order. Keep your service flowing.</p></div><div className="actions">
     apps/ui/src/screens\Tables.tsx:191:      {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "Make room for your first guests"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Use Manage tables to add your dining areas and tables, or start a parcel order." : "An admin can add tables. You can start a parcel order now."}</p></div>}
     apps/ui/src/screens\SystemSettings.tsx:42:      <p>Verified daily snapshots are saved in <code>{status.folder}</code>. The latest 10 manual and 10 pre-update backups are also kept.</p>
     apps/ui/src/screens\SystemSettings.tsx:44:        <p><label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label></p>
-    apps/ui/src/screens\SystemSettings.tsx:45:        <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\ForkFlow Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
-    apps/ui/src/screens\SystemSettings.tsx:52:      <p>To restore: on the main PC, open the ForkFlow tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
+    apps/ui/src/screens\SystemSettings.tsx:45:        <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\MasalaPOS Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
+    apps/ui/src/screens\SystemSettings.tsx:52:      <p>To restore: on the main PC, open the MasalaPOS tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
     apps/ui/src/screens\SystemSettings.tsx:60:    <p>Use the same local network. Scan a QR code on a phone, or open its address on a counter PC. Every device needs a staff PIN.</p>
     apps/ui/src/screens\SystemSettings.tsx:61:    {!connections.length && <p>No LAN address found. Connect this PC to Wi-Fi or Ethernet, then reopen Settings.</p>}
     apps/ui/src/screens\SystemSettings.tsx:64:      <p><a href={connection.url} target="_blank" rel="noreferrer">{connection.url}</a></p>
@@ -63660,7 +63660,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
       return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}><path d={paths[name]} /></svg>;
     }
     export function Brand() {
-      return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>ForkFlow<span className="brand-caption">RESTAURANT POS</span></span></div>;
+      return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>MasalaPOS<span className="brand-caption">RESTAURANT POS</span></span></div>;
     }
     
     ✓ • 376ms
@@ -63671,8 +63671,8 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\Icon.tsx
     @@ -25,3 +25,3 @@
      export function Brand() {
-    -  return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>ForkFlow<span className="brand-caption">RESTAURANT POS</span></span></div>;
-    +  return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>ForkFlow</span></div>;
+    -  return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>MasalaPOS<span className="brand-caption">RESTAURANT POS</span></span></div>;
+    +  return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>MasalaPOS</span></div>;
      }
 
 ## Activity
@@ -63682,7 +63682,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
     import { Brand } from "../Icon";
     
     export function AuthLayout({ children }: { children: ReactNode }) {
-      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>ForkFlow · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
+      return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>MasalaPOS · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
     }
     
     ✓ • 379ms
@@ -63693,7 +63693,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\AuthLayout.tsx
     @@ -4,3 +4,3 @@
      export function AuthLayout({ children }: { children: ReactNode }) {
-    -  return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>ForkFlow · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
+    -  return <div className="auth-shell"><aside className="auth-intro"><Brand /><div><p className="eyebrow">MADE FOR YOUR EVERYDAY SERVICE</p><h1>A little less admin.<br /><span>A lot more service.</span></h1><p>Orders, kitchen, billing and stock. Everything your team needs, in one place.</p></div><small>MasalaPOS · Your restaurant, running smoothly.</small></aside><div className="auth-main">{children}</div></div>;
     +  return <div className="auth-shell"><main className="auth-card"><Brand />{children}</main></div>;
      }
 
@@ -63725,7 +63725,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
         if (next.length === 6) void submit(next);
       }
       return <AuthLayout><form className="auth-form" onSubmit={(e) => { e.preventDefault(); void submit(pin); }}>
-        <p className="eyebrow">WELCOME TO FORKFLOW</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
+        <p className="eyebrow">WELCOME TO MASALAPOS</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
         <label>Staff PIN<input className="pin-input" aria-label="Staff PIN" type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} disabled={busy} onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setError(""); }} /></label>
         <div className="error-message" role="alert">{error}</div>
         <div className="pin-pad">{["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((key) => <button key={key} type="button" disabled={busy} className={key === "OK" ? "primary" : ""} aria-label={key === "⌫" ? "Delete last digit" : key} onClick={() => { if (key === "⌫") setPin((p) => p.slice(0, -1)); else if (key === "OK") void submit(pin); else press(key); }}>{key}</button>)}</div>
@@ -63741,7 +63741,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\Login.tsx
     @@ -25,3 +25,3 @@
        return <AuthLayout><form className="auth-form" onSubmit={(e) => { e.preventDefault(); void submit(pin); }}>
-    -    <p className="eyebrow">WELCOME TO FORKFLOW</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
+    -    <p className="eyebrow">WELCOME TO MASALAPOS</p><h2>Ready for service?</h2><p>Enter your staff PIN to open your workspace.</p>
     +    <h2>Sign in</h2>
          <label>Staff PIN<input className="pin-input" aria-label="Staff PIN" type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} disabled={busy} onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setError(""); }} /></label>
     @@ -29,3 +29,2 @@
@@ -63772,7 +63772,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
         } catch { setError("Setup failed. Check the fields and use a 4–6 digit PIN."); }
         finally { lock.current = false; setBusy(false); }
       }
-      return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up ForkFlow</h2><p>A few details, and you’re ready to take your first order.</p>
+      return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up MasalaPOS</h2><p>A few details, and you’re ready to take your first order.</p>
         <label>Restaurant name<input required placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} disabled={busy} /></label>
         <label>Your name<input required placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} disabled={busy} /></label>
         <label>Admin PIN<input required type="password" placeholder="Admin PIN (4-6 digits)" value={pin} inputMode="numeric" pattern="[0-9]{4,6}" maxLength={6} onChange={(e) => setPin(e.target.value)} disabled={busy} /></label>
@@ -63788,8 +63788,8 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\apps\ui\src\screens\Setup.tsx
     @@ -20,3 +20,3 @@
        }
-    -  return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up ForkFlow</h2><p>A few details, and you’re ready to take your first order.</p>
-    +  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Set up ForkFlow</h2>
+    -  return <AuthLayout><form onSubmit={submit} className="auth-form"><p className="eyebrow">A FRESH START</p><h2>Set up MasalaPOS</h2><p>A few details, and you’re ready to take your first order.</p>
+    +  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Set up MasalaPOS</h2>
          <label>Restaurant name<input required placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} disabled={busy} /></label>
 
 ## Activity
@@ -64655,9 +64655,9 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
     }
     
     export function OrderScreen({ user, orderId, onBack, onOpenOrder }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void }) {
-      const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+      const draftKey = `masalapos.draft.${user.id}.${orderId}`;
       function readDraft(): DraftItem[] {
-        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+        try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
       }
       const [order, setOrder] = useState<Order | null>(null);
       const [categories, setCategories] = useState<Category[]>([]);
@@ -64688,7 +64688,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
         const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
         const unsub = subscribeQueue(refresh);
         const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-        window.addEventListener("forkflow:ack", acknowledged);
+        window.addEventListener("masalapos:ack", acknowledged);
         const dispose = connectWs({
           onEvent: (event, data) => {
             if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -64698,13 +64698,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
           onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
           onAuthFail: () => session.clear(),
         });
-        return () => { dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+        return () => { dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
       }, [orderId, draftKey]);
     
       function saveDraft(next: DraftItem[]): boolean {
         try {
           localStorage.setItem(draftKey, JSON.stringify(next));
-          localStorage.removeItem(`forkflow.draft.${orderId}`);
+          localStorage.removeItem(`masalapos.draft.${orderId}`);
           setDraft(next); return true;
         } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
       }
@@ -64903,7 +64903,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
     $ Get-Content -Raw -Encoding utf8 apps/ui/src/screens/Inventory.tsx
     import { useEffect, useRef, useState } from "react";
-    import type { StockItem, StockLink, StockMove, StockUnit } from "@forkflow/domain";
+    import type { StockItem, StockLink, StockMove, StockUnit } from "@masalapos/domain";
     import { apiFetch, session, type User } from "../api";
     import type { Product } from "../types";
     import { uuid } from "../uuid";
@@ -65201,9 +65201,9 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ npm.cmd run build -w @forkflow/ui
+    $ npm.cmd run build -w @masalapos/ui
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -65221,27 +65221,27 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
     $ npm.cmd run typecheck
     
-    > forkflow@0.6.1 typecheck
-    > tsc --noEmit && npm run typecheck -w @forkflow/ui
+    > masalapos@0.6.1 typecheck
+    > tsc --noEmit && npm run typecheck -w @masalapos/ui
     
     
-    > @forkflow/ui@0.0.0 typecheck
+    > @masalapos/ui@0.0.0 typecheck
     > tsc --noEmit
     
     ✓ • 19.44s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean open http://localhost:4113
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean open http://localhost:4113
     [agent-browser] launched browser
-    ✓ ForkFlow POS
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 2.22s
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean snapshot -i
-    - generic "ForkFlowSign inStaff PIN123456789⌫0OK" [ref=e1] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean snapshot -i
+    - generic "MasalaPOSSign inStaff PIN123456789⌫0OK" [ref=e1] clickable [onclick]
       - heading "Sign in" [level=2, ref=e2]
       - textbox "Staff PIN" [ref=e15]
       - button "1" [ref=e3]
@@ -65260,7 +65260,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/m6-login.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     ✗ Evaluation error: TypeError: Cannot read properties of undefined (reading 'click')
         at <anonymous>:3:80
         at <anonymous>:8:3
@@ -65268,13 +65268,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 1280 720
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 1280 720
     ✓ Done
     ✓ • 521ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639443006.png
     ✓ • 559ms
 
@@ -65284,45 +65284,45 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean snapshot -i
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean snapshot -i
     (no interactive elements)
     ✓ • 491ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean fill '@e15' '1234'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean fill '@e15' '1234'
     ✗ Unknown ref: e15
     ✗ (1) • 517ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean press Enter
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean press Enter
     ✓ Done
     ✓ • 466ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639461360.png
     ✓ • 578ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean get url
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean get url
     about:blank
     ✓ • 760ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean open http://localhost:4113
-    ✓ ForkFlow POS
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean open http://localhost:4113
+    ✓ MasalaPOS POS
       http://localhost:4113/
     ✓ • 713ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean snapshot -i
-    - generic "ForkFlowSign inStaff PIN123456789⌫0OK" [ref=e16] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean snapshot -i
+    - generic "MasalaPOSSign inStaff PIN123456789⌫0OK" [ref=e16] clickable [onclick]
       - heading "Sign in" [level=2, ref=e17]
       - textbox "Staff PIN" [ref=e30]
       - button "1" [ref=e18]
@@ -65341,20 +65341,20 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean fill '@e30' '1234'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean fill '@e30' '1234'
     ✓ Done
     ✓ • 507ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean press Enter
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean press Enter
     ✓ Done
     ✓ • 554ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean snapshot -i
-    - generic "ForkFlowhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadminLog outDashboardNew o" [ref=e16] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean snapshot -i
+    - generic "MasalaPOShometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadminLog outDashboardNew o" [ref=e16] clickable [onclick]
       - navigation "Main navigation" [ref=e31]
         - button "home" [disabled, ref=e32]
         - button "tables" [ref=e33]
@@ -65376,7 +65376,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639502595.png
     ✓ • 916ms
 
@@ -65407,7 +65407,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "actions": [
         "New order",
@@ -65438,13 +65438,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 1280 600
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 1280 600
     ✓ Done
     ✓ • 550ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "actions": [
         "New order",
@@ -65471,13 +65471,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 1024 600
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 1024 600
     ✓ Done
     ✓ • 491ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "actions": [
         "New order",
@@ -65504,13 +65504,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 834 1112
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 834 1112
     ✓ Done
     ✓ • 418ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "actions": [
         "New order",
@@ -65537,13 +65537,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 390 844
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 390 844
     ✓ Done
     ✓ • 499ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "actions": [
         "New order",
@@ -65570,13 +65570,13 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 360 640
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 360 640
     ✓ Done
     ✓ • 474ms
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/dashboard-fit.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "actions": [
         "New order",
@@ -65603,7 +65603,7 @@ I’m keeping the dashboard to three live totals and four shortcuts. I’m also 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639525687.png
     ✓ • 494ms
 
@@ -65617,7 +65617,7 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     {
       "exclusiveBill": 7,
       "inclusiveBill": 6,
@@ -65640,7 +65640,7 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
 
 ## Activity
 
-    $ Get-CimInstance Win32_Process -Filter "Name = 'ForkFlow.exe' OR Name = 'electron.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List
+    $ Get-CimInstance Win32_Process -Filter "Name = 'MasalaPOS.exe' OR Name = 'electron.exe'" | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List
     ✓ • 801ms
 
 ## Activity
@@ -65648,18 +65648,18 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
     file changes: Completed · 2 changes
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\package-lock.json
     @@ -2,3 +2,3 @@
-       "name": "forkflow",
+       "name": "masalapos",
     -  "version": "0.6.1",
     +  "version": "0.6.2",
        "lockfileVersion": 3,
     @@ -8,3 +8,3 @@
-           "name": "forkflow",
+           "name": "masalapos",
     -      "version": "0.6.1",
     +      "version": "0.6.2",
            "workspaces": [
     Update { move_path: None }: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\package.json
     @@ -2,3 +2,3 @@
-       "name": "forkflow",
+       "name": "masalapos",
     -  "version": "0.6.1",
     +  "version": "0.6.2",
        "private": true,
@@ -65668,11 +65668,11 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
 
     $ npm.cmd run build:desktop
     
-    > forkflow@0.6.2 build:desktop
-    > npm run build -w @forkflow/ui && node tools/build-desktop.mjs
+    > masalapos@0.6.2 build:desktop
+    > npm run build -w @masalapos/ui && node tools/build-desktop.mjs
     
     
-    > @forkflow/ui@0.0.0 build
+    > @masalapos/ui@0.0.0 build
     > vite build
     
     vite v8.2.1 building client environment for production...
@@ -65694,7 +65694,7 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
 
 ## Activity
 
-    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-preview.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean eval --stdin
+    $ Get-Content -Raw -Encoding utf8 .e2e-scratch/ui-preview.js | .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean eval --stdin
     ✗ Evaluation error: Error: Preview missing
         at wait (<anonymous>:2:119)
         at async <anonymous>:5:14
@@ -65702,20 +65702,20 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean set viewport 1280 720
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean set viewport 1280 720
     ✓ Done
     ✓ • 622ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639604276.png
     ✓ • 621ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean snapshot -i
-    - generic "ForkFlowhometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadminLog outT02 · Aopen+ S" [ref=e16] clickable [onclick]
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean snapshot -i
+    - generic "MasalaPOShometablesbillsreportsinventorykitchencataloguserssettingsVVaibhavadminLog outT02 · Aopen+ S" [ref=e16] clickable [onclick]
       - navigation "Main navigation" [ref=e31]
         - button "home" [ref=e32]
         - button "tables" [disabled, ref=e33]
@@ -65816,19 +65816,19 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean click '@e64'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean click '@e64'
     ✓ Done
     ✓ • 494ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639648393.png
     ✓ • 510ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean errors
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean errors
     ✓ • 444ms
 
 ## Activity
@@ -65846,8 +65846,8 @@ The simplified dashboard now fits without scrolling at desktop, tablet, and phon
      [Desktop preview](docs/screenshots/ui-red-desktop.png) ·
     @@ -51,3 +57,3 @@
      
-    -The installer is written to `dist/installer/ForkFlow-Setup-0.6.1.exe`.
-    +The installer is written to `dist/installer/ForkFlow-Setup-0.6.2.exe`.
+    -The installer is written to `dist/installer/MasalaPOS-Setup-0.6.1.exe`.
+    +The installer is written to `dist/installer/MasalaPOS-Setup-0.6.2.exe`.
      Installed data is kept in the user's application-data folder, separate from the
     Add: C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\docs\agents\handoff\2026-09-29-004-simple-ui.md
     # Simplified interface — 0.6.2
@@ -65931,13 +65931,13 @@ The cleanup is complete, and the billing checks still pass. I’m finishing the 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean click '@e41'
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean click '@e41'
     ✓ Done
     ✓ • 465ms
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean screenshot
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean screenshot
     ✓ Screenshot saved to C:\Users\AR\.agent-browser\tmp\screenshots\screenshot-1790639682233.png
     ✓ • 659ms
 
@@ -66089,11 +66089,11 @@ The cleanup is complete, and the billing checks still pass. I’m finishing the 
 
 ## Activity
 
-    $ Get-Item -LiteralPath 'dist/installer/ForkFlow-Setup-0.6.2.exe' -ErrorAction SilentlyContinue | Select-Object Name,Length,LastWriteTime; Get-Date -Format 'HH:mm:ss'
+    $ Get-Item -LiteralPath 'dist/installer/MasalaPOS-Setup-0.6.2.exe' -ErrorAction SilentlyContinue | Select-Object Name,Length,LastWriteTime; Get-Date -Format 'HH:mm:ss'
     
     Name                        Length LastWriteTime
     ----                        ------ -------------
-    ForkFlow-Setup-0.6.2.exe 109942577 9/29/2026 5:26:02 AM
+    MasalaPOS-Setup-0.6.2.exe 109942577 9/29/2026 5:26:02 AM
     05:26:14
     
     
@@ -66101,7 +66101,7 @@ The cleanup is complete, and the billing checks still pass. I’m finishing the 
 
 ## Activity
 
-    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-clean close
+    $ .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-clean close
     ✓ Browser closed
     ✓ • 1.04s
 
@@ -66117,13 +66117,13 @@ The cleanup is complete, and the billing checks still pass. I’m finishing the 
       • downloaded electron zip extracted successfully  output=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\dist\installer\win-unpacked
       • searching for node modules  pm=npm searchDir=C:\Users\AR\Documents\PassMark\Softares\Restaurant Billing Software\build\desktop\app
       • duplicate dependency references  dependencies=["ajv@8.20.0","fast-json-stringify@7.0.1","fastq@1.20.1","ajv-formats@3.0.1","ajv@8.20.0","string-width@4.2.3","string-width@4.2.3","strip-ansi@6.0.1","strip-ansi@6.0.1"]
-      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\ForkFlow.exe
-      • signing with signtool.exe  path=dist\installer\win-unpacked\ForkFlow.exe
-      • building        target=nsis file=dist\installer\ForkFlow-Setup-0.6.2.exe archs=x64 oneClick=false perMachine=true
+      • updating asar integrity executable resource  executablePath=dist\installer\win-unpacked\MasalaPOS.exe
+      • signing with signtool.exe  path=dist\installer\win-unpacked\MasalaPOS.exe
+      • building        target=nsis file=dist\installer\MasalaPOS-Setup-0.6.2.exe archs=x64 oneClick=false perMachine=true
       • signing with signtool.exe  path=dist\installer\win-unpacked\resources\elevate.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.2.__uninstaller.exe
-      • signing with signtool.exe  path=dist\installer\ForkFlow-Setup-0.6.2.exe
-      • building block map  blockMapFile=dist\installer\ForkFlow-Setup-0.6.2.exe.blockmap
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.2.__uninstaller.exe
+      • signing with signtool.exe  path=dist\installer\MasalaPOS-Setup-0.6.2.exe
+      • building block map  blockMapFile=dist\installer\MasalaPOS-Setup-0.6.2.exe.blockmap
     ✓ • 3m 19s
 
 ## Assistant
@@ -66132,7 +66132,7 @@ The updated package contains the verified simplified UI. The dashboard has no ve
 
 ## Activity
 
-    $ Get-FileHash -Algorithm SHA256 -LiteralPath 'dist/installer/ForkFlow-Setup-0.6.2.exe' | Select-Object -ExpandProperty Hash
+    $ Get-FileHash -Algorithm SHA256 -LiteralPath 'dist/installer/MasalaPOS-Setup-0.6.2.exe' | Select-Object -ExpandProperty Hash
     42C52318A2665B91501B4291F3CB52BB4990EC57F044129A951079343378EFBD
     ✓ • 1.49s
 
@@ -66145,7 +66145,7 @@ The updated package contains the verified simplified UI. The dashboard has no ve
     +
     +## Artifact
     +
-    +`dist/installer/ForkFlow-Setup-0.6.2.exe` — 109,942,577 bytes, unsigned.
+    +`dist/installer/MasalaPOS-Setup-0.6.2.exe` — 109,942,577 bytes, unsigned.
     +SHA256: `42C52318A2665B91501B4291F3CB52BB4990EC57F044129A951079343378EFBD`
     +
     +Windows packaging completed successfully. The packaged version, HTML, JavaScript
@@ -66157,7 +66157,7 @@ The updated package contains the verified simplified UI. The dashboard has no ve
 
 Simplified the UI: removed banners, repeated descriptions, and extra decoration. The dashboard now has three totals and four shortcuts, with no scrolling at all six tested screen sizes.
 
-[Dashboard preview](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/docs/screenshots/dashboard-simple-desktop.png>) · [Updated installer v0.6.2](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/dist/installer/ForkFlow-Setup-0.6.2.exe>)
+[Dashboard preview](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/docs/screenshots/dashboard-simple-desktop.png>) · [Updated installer v0.6.2](<C:/Users/AR/Documents/PassMark/Softares/Restaurant Billing Software/dist/installer/MasalaPOS-Setup-0.6.2.exe>)
 
 Build, typecheck, and billing checks passed.
 
@@ -66182,7 +66182,7 @@ I’ll review the local changes, commit them, and push the project to GitHub.
     *.db-journal
     *.db-wal
     gate-*.png
-    .forkflow/
+    .masalapos/
     data/
     .e2e-scratch/
     
@@ -66387,7 +66387,7 @@ I’ll review the local changes, commit them, and push the project to GitHub.
 
     $ npm.cmd test
     
-    > forkflow@0.6.2 test
+    > masalapos@0.6.2 test
     > vitest run
     
     

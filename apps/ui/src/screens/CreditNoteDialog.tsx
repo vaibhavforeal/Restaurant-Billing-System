@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { Bill, BillCreditNote } from "@forkflow/domain";
-import { receiptGstMode } from "@forkflow/domain/gst";
+import type { Bill, BillCreditNote } from "@masalapos/domain";
+import { receiptGstMode } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditReason, defaultRefundRows, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";

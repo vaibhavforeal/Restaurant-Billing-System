@@ -88,7 +88,7 @@ bills, persisted payment, dialog closure, navigation and table availability.
 The UI build and workspace type checks also passed.
 
 The desktop update is staged in `build/desktop/settle-tables` to avoid replacing
-the running build. `Start ForkFlow.cmd` falls back to this complete stage when
+the running build. `Start MasalaPOS.cmd` falls back to this complete stage when
 the default `app/main.js` is absent (ahead of the previous `order-captains` and
 `reports-captains` stages). Quit the running app from its tray menu before
 relaunching to load it.

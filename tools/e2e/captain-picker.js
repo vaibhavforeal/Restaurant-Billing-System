@@ -12,7 +12,7 @@
   const select = async name => { choice(name).click(); await wait(() => !dialog() && !trigger().disabled); };
   let failed = false, delay = false, requests = 0, lastPath;
   const api = async path => {
-    const response = await originalFetch(path, { headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'x-forkflow-device': localStorage.getItem('forkflow.device.v1') } });
+    const response = await originalFetch(path, { headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'x-masalapos-device': localStorage.getItem('masalapos.device.v1') } });
     if (!response.ok) throw Error(await response.text()); return response.json();
   };
   window.fetch = async (...args) => {

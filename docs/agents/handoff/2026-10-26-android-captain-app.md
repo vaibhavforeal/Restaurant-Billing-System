@@ -9,7 +9,7 @@ distribution from the POS (not the Play Store).
 - `apps/captain-android/`: Kotlin app, AGP 9.4.1 with built-in Kotlin, Gradle 9.8.2
   wrapper, minSdk 24, targetSdk 36, compileSdk 37, no AppCompat. Dependencies:
   androidx.core (FileProvider) and zxing-android-embedded (QR scan).
-  - `SetupActivity`: scans `forkflow-captain://pair?server=<origin>&ca=<sha256>` or
+  - `SetupActivity`: scans `masalapos-captain://pair?server=<origin>&ca=<sha256>` or
     takes a typed address (tries `https://host:4443`, then `http://host:4100`).
     Downloads `/captain/restaurant-ca.cer`, checks the fingerprint (or shows it for
     staff to compare), checks `/api/health` with the pinned CA. Plain HTTP gets an
@@ -18,7 +18,7 @@ distribution from the POS (not the Play Store).
     proceeds only for the paired origin when `RestaurantTrust.accepts` (signed by
     the pinned CA, in date, SAN matches). Keeps the screen on, handles edge-to-edge
     insets including the IME, native reconnect screen, back button through
-    `window.forkflowBack`, JS bridge `ForkFlowAndroid` (version/server/changeServer).
+    `window.masalaposBack`, JS bridge `MasalaPOSAndroid` (version/server/changeServer).
   - `AppUpdater`: reads `/captain/android/version.json` on start and every 6 h,
     downloads the APK over the pinned connection, checks the SHA-256, installs via
     FileProvider. Asks for the "install unknown apps" permission when needed.
@@ -35,7 +35,7 @@ distribution from the POS (not the Play Store).
   `<dialog>` via a cancel event, then leaves the order.
 - Build: `npm run build:captain-android` (`tools/build-captain-android.mjs`) finds
   a JDK 17+ (JAVA_HOME, else the Android Studio JBR) and the SDK, signs with
-  `~/.forkflow/captain-android/signing.properties` (or `FORKFLOW_ANDROID_SIGNING`),
+  `~/.masalapos/captain-android/signing.properties` (or `MASALAPOS_ANDROID_SIGNING`),
   and runs `testDebugUnitTest assembleRelease`. AGP 9 creates unit-test tasks for
   debug only. `--create-signing-key` makes the key on first use.
   `tools/captain-android-release.mjs` (called by `build-desktop.mjs`) copies the APK
@@ -66,12 +66,12 @@ is empty. Admins and cashiers keep the picker. Test added in
 
 ## Artifacts and state
 
-- `dist/captain-android/ForkFlow-Captain-0.7.0.apk` (signed release 0.7.0).
-- `dist/dev/ForkFlow-Dev-Setup-0.7.0.exe` (includes the APK and the picker fix).
-- Release key: `C:\Users\aiadmin\.forkflow\captain-android\` (outside the repo).
+- `dist/captain-android/MasalaPOS-Captain-0.7.0.apk` (signed release 0.7.0).
+- `dist/dev/MasalaPOS-Dev-Setup-0.7.0.exe` (includes the APK and the picker fix).
+- Release key: `C:\Users\aiadmin\.masalapos\captain-android\` (outside the repo).
   The user plans to keep it in a password manager now and move to CI secrets later.
 - Nothing committed. `apps/server/src/print/__snapshots__/*.snap` show
   line-ending-only changes from a vitest run. Restoring them with `git checkout`
   was blocked by the permission classifier, so the user needs to run it.
-- Rebuilding `build/desktop/app` while ForkFlow Dev runs from it fails with EPERM
+- Rebuilding `build/desktop/app` while MasalaPOS Dev runs from it fails with EPERM
   and leaves a half-deleted stage. Ask the user to close the app first.

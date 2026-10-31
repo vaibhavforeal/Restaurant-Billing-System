@@ -14,12 +14,12 @@ describe("Windows RAW transport", () => {
       const options = args[2] as ExecFileOptions;
       const callback = args[3] as (error: Error | null, stdout: string, stderr: string) => void;
       scriptPath = (args[1] as string[]).at(-1)!;
-      payloadPath = options.env!["FORKFLOW_PRINT_PAYLOAD"]!;
+      payloadPath = options.env!["MASALAPOS_PRINT_PAYLOAD"]!;
       const script = readFileSync(scriptPath, "utf8");
       expect(script).not.toContain(printerName);
       expect(script).toContain("$ErrorActionPreference = 'Stop'");
       expect(script).toContain("written != bytes.Length");
-      expect(Buffer.from(options.env!["FORKFLOW_PRINT_NAME"]!, "base64").toString("utf8")).toBe(printerName);
+      expect(Buffer.from(options.env!["MASALAPOS_PRINT_NAME"]!, "base64").toString("utf8")).toBe(printerName);
       expect(readFileSync(payloadPath).toString()).toBe("receipt bytes");
       expect(options.windowsHide).toBe(true);
       callback(null, "", ""); return {} as ChildProcess;

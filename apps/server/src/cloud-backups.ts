@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { CloudBackupPreferences, type CloudBackupAccount, type CloudBackupSettings, type CloudBackupStatus } from "@forkflow/domain";
+import { CloudBackupPreferences, type CloudBackupAccount, type CloudBackupSettings, type CloudBackupStatus } from "@masalapos/domain";
 import { atomicJson, verifyBackup, type Backups } from "./backups.js";
 import { httpError } from "./http-error.js";
 
@@ -156,7 +156,7 @@ export class CloudBackups {
     if (!this.ready()) return Promise.resolve();
     // Defer work so a local backup response never waits for network I/O.
     this.active = Promise.resolve().then(() => this.drain()).then(() => { this.storageError = null; }).catch(() => {
-      this.storageError = "Cloud backup could not save its upload progress. Local backups are still available; ForkFlow will try again.";
+      this.storageError = "Cloud backup could not save its upload progress. Local backups are still available; MasalaPOS will try again.";
     }).finally(() => { this.active = null; });
     return this.active;
   }
@@ -204,7 +204,7 @@ export class CloudBackups {
       } catch {
         entry.attempts++;
         entry.nextAttemptAt = this.now() + Math.min(3_600_000, 60_000 * 2 ** Math.min(entry.attempts - 1, 6));
-        this.state.lastError = "Cloud upload was not confirmed. Your local backup is safe; ForkFlow will retry.";
+        this.state.lastError = "Cloud upload was not confirmed. Your local backup is safe; MasalaPOS will retry.";
         this.save();
         break;
       } finally { clearTimeout(timeout); this.controller = null; }

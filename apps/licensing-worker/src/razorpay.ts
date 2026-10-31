@@ -11,7 +11,7 @@
 //   Body: { event, payload: { subscription: { entity: { id, status, current_end (Unix SECONDS, null before the first cycle), notes } },
 //   payment: { entity: { id } } } }. `payment` is present for subscription.charged and subscription.completed only; other events carry only `subscription`.
 //   `notes` is an object when set but `[]` (an empty array) when empty. https://razorpay.com/docs/webhooks/subscriptions/ (markdown: add ".md")
-import type { Plan } from "@forkflow/domain/licensing";
+import type { Plan } from "@masalapos/domain/licensing";
 import type { Env, Period } from "./env.js";
 
 export const TOTAL_COUNT: Record<Period, number> = { monthly: 120, yearly: 10 };

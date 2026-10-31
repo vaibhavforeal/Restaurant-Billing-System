@@ -17,7 +17,7 @@ rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: t
 const pkg = JSON.parse(readFileSync(join(root, "package.json")));
 // electron-updater runs in the Electron main process; it is copied like the server's runtime dependencies.
 const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*", "electron-updater": "*" };
-delete deps["@forkflow/core"]; delete deps["@forkflow/domain"];
+delete deps["@masalapos/core"]; delete deps["@masalapos/domain"];
 const installed = new Map();
 function locate(name, from) {
   const lookup = createRequire(join(from, "package.json"));
@@ -44,14 +44,14 @@ function copyDependency(name, from, parent = stage) {
 }
 for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
-  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
+  define: { __MASALAPOS_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __MASALAPOS_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) },
+  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
-await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) } });
+await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) } });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
 // The Captain Android app, when built for this release by tools/build-captain-android.mjs.
 console.log(stageCaptainAndroid(join(root, "apps/captain-android/app/build/outputs/apk/release"), join(stage, "ui"), pkg.version));
-writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "forkflow-demo" : "forkflow-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "ForkFlow customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "ForkFlow", private: true, dependencies: deps }, null, 2));
+writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "masalapos-demo" : "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "MasalaPOS customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));
 writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));
 
 // Small original F icon, rendered without extra image or native build tools.

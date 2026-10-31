@@ -1,4 +1,4 @@
-import { isFixedGroup, type ComboGroup } from "@forkflow/domain/combos";
+import { isFixedGroup, type ComboGroup } from "@masalapos/domain/combos";
 import type { OrderItem, Product } from "./types";
 
 /** The catalog items a combo holds for these picks: every fixed item, and the picked options. */

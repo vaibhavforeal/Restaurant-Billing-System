@@ -3,8 +3,8 @@
 
 export const ownerPage = () => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ForkFlow owner panel</title><link rel="stylesheet" href="/owner/app.css"></head>
-<body><header><h1>ForkFlow owner panel</h1><button id="logout" type="button" hidden>Sign out</button></header>
+<title>MasalaPOS owner panel</title><link rel="stylesheet" href="/owner/app.css"></head>
+<body><header><h1>MasalaPOS owner panel</h1><button id="logout" type="button" hidden>Sign out</button></header>
 <main id="app"><p>Loading…</p></main>
 <script src="/owner/app.js"></script></body></html>`;
 
@@ -58,7 +58,7 @@ function renderList(list,count){
   var q=query.trim().toLowerCase();
   var shown=data.restaurants.filter(function(r){return!q||[r.displayName,r.contactEmail,r.installationId].some(function(v){return v&&v.toLowerCase().indexOf(q)>=0})});
   count.textContent=shown.length+" of "+data.restaurants.length+" restaurants";list.replaceChildren();
-  if(!data.restaurants.length)list.append(el("p","No restaurants yet. A restaurant appears here the first time its ForkFlow connects.","meta"));
+  if(!data.restaurants.length)list.append(el("p","No restaurants yet. A restaurant appears here the first time its MasalaPOS connects.","meta"));
   shown.forEach(function(r){list.append(card(r))});
 }
 function licenceBadge(l){

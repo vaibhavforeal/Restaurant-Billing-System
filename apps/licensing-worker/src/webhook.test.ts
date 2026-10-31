@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHmac, generateKeyPairSync, randomUUID } from "node:crypto";
-import { verifyLicenseSignature } from "@forkflow/core";
-import { LicenseClaims } from "@forkflow/domain/licensing";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { verifyLicenseSignature } from "@masalapos/core";
+import { LicenseClaims } from "@masalapos/domain/licensing";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate } from "./activate.js";
 import type { D1Like } from "./env.js";
 import type { RazorpayApi } from "./razorpay.js";
@@ -66,7 +66,7 @@ const endOf = (daysFromT0: number) => Math.floor((T0 + daysFromT0 * DAY) / 1000)
 
 const activate = async (currentRevision = 0) => {
   const res = await handleActivate(deps, {
-    format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
+    format: "masalapos-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
     currentRevision, generatedAt: now, verificationKeyFingerprint: signer.fingerprint,
   }, TEST_SECRET);
   return (await res.json() as { license: string | null }).license;
@@ -174,7 +174,7 @@ describe("POST /v1/webhook", () => {
     const other = "66666666-6666-4666-8666-666666666666";
     const otherNotes = { installationId: other, plan: "pro", period: "monthly" };
     await handleActivate(deps, {
-      format: "forkflow-activation-request", version: 1, installationId: other, licenseId: null, organizationId: null, outletId: null,
+      format: "masalapos-activation-request", version: 1, installationId: other, licenseId: null, organizationId: null, outletId: null,
       currentRevision: 0, generatedAt: now, verificationKeyFingerprint: signer.fingerprint,
     }, TEST_SECRET);
     await send(charged({ subId: "sub_other", notes: otherNotes }));

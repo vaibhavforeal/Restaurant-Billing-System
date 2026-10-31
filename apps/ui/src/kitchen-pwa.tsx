@@ -6,7 +6,7 @@ const listeners = new Set<() => void>();
 const publish = () => listeners.forEach(listener => listener());
 export function startKitchenPwa() {
   if (!/^\/kitchen\/?$/.test(location.pathname)) return;
-  document.title = "ForkFlow Kitchen";
+  document.title = "MasalaPOS Kitchen";
   const manifest = document.createElement("link"); manifest.rel = "manifest"; manifest.href = "/kitchen/manifest.webmanifest"; document.head.append(manifest);
   const icon = document.createElement("link"); icon.rel = "apple-touch-icon"; icon.href = "/kitchen/icon-192.png"; document.head.append(icon);
   window.addEventListener("beforeinstallprompt", event => { event.preventDefault(); prompt = event as Prompt; publish(); });

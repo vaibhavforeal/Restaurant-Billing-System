@@ -8,7 +8,7 @@ build/
 *.db-journal
 *.db-wal
 gate-*.png
-.forkflow/
+.masalapos/
 data/
 .e2e-scratch/
 

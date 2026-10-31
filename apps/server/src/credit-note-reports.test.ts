@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { localDateKey, uuidv7, type Bill, type OperationalReport, type PayMode } from "@forkflow/domain";
-import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import { localDateKey, uuidv7, type Bill, type OperationalReport, type PayMode } from "@masalapos/domain";
+import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
 /** Reports with credit notes: issued bills stay on their issue date; voids and refunds subtract on their own date. */

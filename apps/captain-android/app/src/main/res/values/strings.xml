@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ForkFlow Captain</string>
+    <string name="app_name">MasalaPOS Captain</string>
 
     <string name="setup_title">Connect to your POS</string>
     <string name="setup_intro">On the POS PC, open Settings → Backups &amp; connections → Android Captain app. Keep this tablet on the restaurant Wi-Fi.</string>
@@ -14,7 +14,7 @@
     <string name="connect_anyway">Connect anyway</string>
     <string name="pair_link_title">Connect to this POS?</string>
     <string name="pair_link_message">This tablet will use the POS at %1$s for tables, orders and kitchen tickets.</string>
-    <string name="unreachable">Could not reach the POS at %1$s. Check that the POS PC is on, ForkFlow is running and this tablet is on the restaurant Wi-Fi.</string>
+    <string name="unreachable">Could not reach the POS at %1$s. Check that the POS PC is on, MasalaPOS is running and this tablet is on the restaurant Wi-Fi.</string>
     <string name="certificate_mismatch">This POS\'s certificate does not match the pairing code. Scan the code again from POS Settings on the restaurant\'s own PC.</string>
     <string name="certificate_rejected">The POS certificate is not valid for %1$s. On the POS PC, renew Captain HTTPS for its current address and pair again.</string>
     <string name="check_certificate_title">Check the restaurant certificate</string>
@@ -29,12 +29,12 @@
     <string name="try_again">Try again</string>
     <string name="change_server">Change POS server</string>
 
-    <string name="update_title">ForkFlow Captain %1$s is available</string>
+    <string name="update_title">MasalaPOS Captain %1$s is available</string>
     <string name="update_message">Send any open orders to the kitchen first. Your saved drafts stay on this tablet.</string>
     <string name="update_now">Update now</string>
     <string name="later">Later</string>
     <string name="update_downloading">Downloading the update from the POS…</string>
     <string name="update_failed">The update could not be downloaded. Captain will try again later.</string>
-    <string name="update_permission">Allow ForkFlow Captain to install updates, then come back to this app.</string>
+    <string name="update_permission">Allow MasalaPOS Captain to install updates, then come back to this app.</string>
     <string name="open_settings">Open settings</string>
 </resources>

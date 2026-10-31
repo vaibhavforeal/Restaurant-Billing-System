@@ -15,15 +15,15 @@
     for (;;) { const value = await predicate(); if (value) return value; if (Date.now() > until) throw new Error('Timed out: ' + label); await sleep(40); }
   };
   const nativeFetch = window.fetch, nativeConfirm = window.confirm;
-  const device = localStorage.getItem('forkflow.device.v1');
+  const device = localStorage.getItem('masalapos.device.v1');
   const call = async (method, path, token, body) => {
-    const headers = { authorization: 'Bearer ' + token, 'x-forkflow-device': device };
+    const headers = { authorization: 'Bearer ' + token, 'x-masalapos-device': device };
     if (body !== undefined) headers['content-type'] = 'application/json';
     const r = await nativeFetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: r.status, json: await r.json().catch(() => null) };
   };
-  const ownToken = localStorage.getItem('forkflow.token');
-  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forkflow-device': device }, body: JSON.stringify({ pin }) })).json()).token;
+  const ownToken = localStorage.getItem('masalapos.token');
+  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin }) })).json()).token;
   const setValue = (e, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, value); e.dispatchEvent(new Event('input', { bubbles: true })); };
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const goto = async label => { await wait(() => navItem(label) && !navItem(label).disabled, 'nav ' + label); navItem(label).click(); await sleep(80); };

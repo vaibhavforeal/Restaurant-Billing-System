@@ -1,5 +1,5 @@
 
-const CACHE = "forkflow-captain-b27b12a23b2bb67a";
+const CACHE = "masalapos-captain-b27b12a23b2bb67a";
 const SHELL = "/captain/";
 const ASSETS = ["/assets/index--TBobyOL.css","/assets/index-Cb8zr6JT.js","/captain/manifest.webmanifest","/captain/icon-192.png","/captain/icon-512.png"];
 const STATIC = new Set(ASSETS);
@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     for (const name of await caches.keys()) {
-      if (name.startsWith("forkflow-captain-") && name !== CACHE) await caches.delete(name);
+      if (name.startsWith("masalapos-captain-") && name !== CACHE) await caches.delete(name);
     }
     await self.clients.claim();
   })());

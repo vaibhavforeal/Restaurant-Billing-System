@@ -13,7 +13,7 @@ the public internet: its PIN authentication and database are single-outlet.
 | Modules | Takeaway, reservations, inventory, reports, sales dashboard, Zomato, CRM & Loyalty | Every module, adding QR guest ordering, guest assistance, recipes, dish costing and the Kitchen Display |
 | Billing, tables, catalogue, staff, backups | Included | Included |
 
-The modules a licence carries are the plan's defaults with ForkFlow's per-restaurant
+The modules a licence carries are the plan's defaults with MasalaPOS's per-restaurant
 choices applied, set in the owner control panel or with `--allow` / `--deny`. See
 [Feature controls](feature-controls.md).
 
@@ -54,14 +54,14 @@ both, but one build never replaces the other:
 
 | | Demo | Licensed customer app |
 |---|---|---|
-| Windows app | ForkFlow Demo | ForkFlow |
-| App ID | `in.forkflow.demo` | `in.forkflow.pos` |
+| Windows app | MasalaPOS Demo | MasalaPOS |
+| App ID | `in.masalapos.demo` | `in.masalapos.pos` |
 | Build folder | `build/desktop/demo` | `build/desktop/commercial` |
 | Installer folder | `dist/demo` | `dist/commercial` |
-| Default data | `%APPDATA%\forkflow-demo\data` | `%APPDATA%\forkflow-desktop\data` |
+| Default data | `%APPDATA%\masalapos-demo\data` | `%APPDATA%\masalapos-desktop\data` |
 | Default port | 4110 | 4100 |
 | First launch | Sample restaurant and demo PINs | Restaurant/admin setup, then license activation |
-| Workspace launcher | `Start ForkFlow Demo.cmd` | `Start ForkFlow Customer.cmd` |
+| Workspace launcher | `Start MasalaPOS Demo.cmd` | `Start MasalaPOS Customer.cmd` |
 
 Demo has a permanent banner, simulated thermal printing and a reset menu. The
 customer app has ordinary printing and enforces its signed Basic/Pro grant.
@@ -76,7 +76,7 @@ or browser code. Only the public SPKI PEM goes in the desktop build.
 For a commercial build in PowerShell:
 
 ```powershell
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
 npm.cmd run package:commercial
 ```
 
@@ -90,7 +90,7 @@ and key fingerprint, including when invoked directly with electron-builder.
 Do not use old files in `dist/installer` as customer releases; rebuild into
 `dist/commercial` with the public key.
 
-`FORKFLOW_BUILD_STAGE` is reserved for internal development previews. Release
+`MASALAPOS_BUILD_STAGE` is reserved for internal development previews. Release
 builds reject overrides that would change their dedicated folder. The ordinary
 development build in `build/desktop/app` ignores the release key and explicitly
 reports development mode and preserves existing local development behavior.
@@ -199,7 +199,7 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 The activation request is an information handoff, not proof of purchase. The
 provider must authorize the subscription and choose entitlements before signing.
 `tools/issue-license.ts` remains the hand-issuing route. Builds made with
-`FORKFLOW_LICENSE_SERVICE_URL` also fetch trials and Razorpay renewals
+`MASALAPOS_LICENSE_SERVICE_URL` also fetch trials and Razorpay renewals
 automatically; see `apps/licensing-worker/README.md`. Its claims JSON reader also
 accepts UTF-8 BOM files.
 

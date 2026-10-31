@@ -1,4 +1,4 @@
-import type { IntegrationId, IntegrationInfo } from "@forkflow/domain/integrations";
+import type { IntegrationId, IntegrationInfo } from "@masalapos/domain/integrations";
 import type { User } from "./api";
 import type { Page } from "./NavBar";
 
@@ -6,7 +6,7 @@ export function isEnabled(list: IntegrationInfo[], id: IntegrationId): boolean {
   return list.some((info) => info.id === id && info.enabled && info.licensed);
 }
 
-/** `licensed` is whether ForkFlow allows the add-on for this restaurant (from the licence). */
+/** `licensed` is whether MasalaPOS allows the add-on for this restaurant (from the licence). */
 export function statusLabel(info: IntegrationInfo): "Enabled" | "Disabled" | "Coming soon" | "Not included" {
   if (info.status === "coming_soon") return "Coming soon";
   if (!info.licensed) return "Not included";

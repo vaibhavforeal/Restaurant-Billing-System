@@ -6,7 +6,7 @@ import { memoryD1 } from "./testing/d1.js";
 import { TEST_SECRET } from "./testing/secret.js";
 
 describe("installation secret helpers", () => {
-  it("the header name is lowercase", () => { expect(SECRET_HEADER).toBe("x-forkflow-installation-secret"); });
+  it("the header name is lowercase", () => { expect(SECRET_HEADER).toBe("x-masalapos-installation-secret"); });
 
   it("accepts exactly 64 lowercase hex characters", () => {
     expect(isWellFormedSecret("0123456789abcdef".repeat(4))).toBe(true);

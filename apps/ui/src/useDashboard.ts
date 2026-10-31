@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { apiFetch, session } from "./api";
 import type { SalesReport } from "./sales-report";
 import type { Order } from "./types";

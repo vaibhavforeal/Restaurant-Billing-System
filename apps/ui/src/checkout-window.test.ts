@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { isDesktopShell, openInDesktopShell, showPendingMessage, PENDING_MESSAGE } from "./checkout-window";
 
 describe("checkout window helpers", () => {
-  it("recognises the ForkFlow desktop shell by its Electron user agent", () => {
-    expect(isDesktopShell("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) forkflow-desktop/1.0.0 Chrome/130.0.0.0 Electron/33.0.0 Safari/537.36")).toBe(true);
+  it("recognises the MasalaPOS desktop shell by its Electron user agent", () => {
+    expect(isDesktopShell("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) masalapos-desktop/1.0.0 Chrome/130.0.0.0 Electron/33.0.0 Safari/537.36")).toBe(true);
     expect(isDesktopShell("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")).toBe(false);
     expect(isDesktopShell("")).toBe(false);
   });

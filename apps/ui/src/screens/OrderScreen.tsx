@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { priceForTier, PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
+import { priceForTier, PRICE_TIER_LABELS } from "@masalapos/domain/pricing";
 import { ApiError, apiFetch, session, type User } from "../api";
 import { paiseToRupees } from "../money";
 import type { Category, Order, OrderItem, OrderTypeInfo, Product, TableInfo } from "../types";
@@ -49,9 +49,9 @@ interface DraftItem {
 export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling = false, onNextTakeaway, onHold, captain = false }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void; quickBilling?: boolean; onNextTakeaway?: () => void; onHold?: () => void; captain?: boolean }) {
   const crm = useIntegrations().isEnabled("crm");
   const { shortcut, shortcutProps } = useShortcutLabels();
-  const draftKey = `forkflow.draft.${user.id}.${orderId}`;
+  const draftKey = `masalapos.draft.${user.id}.${orderId}`;
   function readDraft(): DraftItem[] {
-    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`forkflow.draft.${orderId}`) ?? "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
   }
   const [order, setOrder] = useState<Order | null>(null);
   const [captains, setCaptains] = useState<Array<{ id: string; name: string }>>([]);
@@ -86,7 +86,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [transferError, setTransferError] = useState("");
   const [transferSignal, setTransferSignal] = useState(0);
   const transferRefs = useRef(new Map<string, string>());
-  useEffect(() => { if (order) savePreference("forkflow.order-type", order.type); }, [order?.type]);
+  useEffect(() => { if (order) savePreference("masalapos.order-type", order.type); }, [order?.type]);
   useEffect(() => {
     if (order?.type !== "parcel" || order.status !== "open") return;
     let active = true;
@@ -108,7 +108,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       const text = lostCart
         ? `This bill was merged into ${label}. Your unsaved items were not added — add them again on the combined bill.`
         : `Merged into ${label}`;
-      if (lostCart) { localStorage.removeItem(draftKey); localStorage.removeItem(`forkflow.draft.${orderId}`); }
+      if (lostCart) { localStorage.removeItem(draftKey); localStorage.removeItem(`masalapos.draft.${orderId}`); }
       setMessage(text);
       carryStatus(mergedInto, text, false);
       onOpenOrder(mergedInto);
@@ -216,7 +216,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
     const unsub = subscribeQueue(refresh);
     const acknowledged = () => { refresh(); void reload().catch(() => {}); };
-    window.addEventListener("forkflow:ack", acknowledged);
+    window.addEventListener("masalapos:ack", acknowledged);
     const dispose = connectWs({
       onEvent: (event, data) => {
         if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
@@ -228,13 +228,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
       onAuthFail: () => session.clear(),
     });
-    return () => { reloadRevision.current++; dispose(); unsub(); window.removeEventListener("forkflow:ack", acknowledged); };
+    return () => { reloadRevision.current++; dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
   }, [orderId, draftKey, captain]);
 
   function saveDraft(next: DraftItem[]): boolean {
     try {
       localStorage.setItem(draftKey, JSON.stringify(next));
-      localStorage.removeItem(`forkflow.draft.${orderId}`);
+      localStorage.removeItem(`masalapos.draft.${orderId}`);
       setDraft(next); return true;
     } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
   }
@@ -513,7 +513,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   function heldCart(id: string) {
     let foldedDraftCount = 0;
     try {
-      const rows: unknown = JSON.parse(localStorage.getItem(`forkflow.draft.${user.id}.${id}`) ?? localStorage.getItem(`forkflow.draft.${id}`) ?? "[]");
+      const rows: unknown = JSON.parse(localStorage.getItem(`masalapos.draft.${user.id}.${id}`) ?? localStorage.getItem(`masalapos.draft.${id}`) ?? "[]");
       foldedDraftCount = Array.isArray(rows) ? rows.length : 0;
     } catch { /* an unreadable draft is shown as empty, so it cannot block either */ }
     const foldedQueuedCount = queuedRequests(user.id).filter((request) => request.lane === id).length;

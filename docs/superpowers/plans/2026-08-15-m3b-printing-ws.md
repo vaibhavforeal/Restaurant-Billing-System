@@ -800,7 +800,7 @@ export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80): Buffer;
 
 **Interfaces:**
 - **Consumes:** Migration pattern from 001–003; zod style from catalog-schemas.ts
-- **Produces:** PrinterCreate, PrinterUpdate, StationCreate, StationUpdate schemas exported from `@forkflow/domain`
+- **Produces:** PrinterCreate, PrinterUpdate, StationCreate, StationUpdate schemas exported from `@masalapos/domain`
 
 **Implementation:**
 
@@ -1165,7 +1165,7 @@ public class RawPrinterHelper {
         }
         try {
             DOCINFO di = new DOCINFO();
-            di.pDocName = "ForkFlow Print Job";
+            di.pDocName = "MasalaPOS Print Job";
             di.pDataType = "RAW";
             if (StartDocPrinter(hPrinter, 1, ref di) == 0) {
                 throw new Exception("StartDocPrinter failed");
@@ -1314,7 +1314,7 @@ Expected: 3 passing tests. **Cumulative: 172 tests** (169 + 3).
 Create `apps/server/src/print/queue.ts`:
 
 ```ts
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 import type { SinkSend, PrinterTarget } from "./sinks.js";
 
 export interface PrintJobJson {
@@ -1628,7 +1628,7 @@ EOF
 Modify `apps/server/src/server.ts`:
 
 ```ts
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";
@@ -1742,7 +1742,7 @@ declare module "fastify" {
 Create `apps/server/src/printers.ts`:
 
 ```ts
-import { PrinterCreate, PrinterUpdate, StationCreate, StationUpdate, uuidv7 } from "@forkflow/domain";
+import { PrinterCreate, PrinterUpdate, StationCreate, StationUpdate, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { EscPos } from "./print/escpos.js";
@@ -1938,7 +1938,7 @@ import {
   VariantCreate, VariantUpdate,
   StationCreate, StationUpdate,
   uuidv7,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 ```
 
 ### Step 4: Wire printing into kots.ts
@@ -2116,7 +2116,7 @@ Modify `apps/server/src/orders.ts` item cancel route. Replace orders.ts lines 21
 Modify `apps/server/src/test-helpers.ts`:
 
 ```ts
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -2961,7 +2961,7 @@ export async function wsAuth(app: FastifyInstance, token: string): Promise<impor
 ```typescript
 // apps/server/src/ws.test.ts (FULL rewrite)
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openDb, MIGRATIONS, migrate } from "@forkflow/domain";
+import { openDb, MIGRATIONS, migrate } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { auth, setupAdmin, wsAuth, createUser } from "./test-helpers.js";
 import type { FastifyInstance } from "fastify";
@@ -3324,7 +3324,7 @@ export function connectWs(handlers: WsHandlers): () => void {
 **Code:**
 ```typescript
 // apps/ui/src/api.ts (lines 3–13)
-const TOKEN_KEY = "forkflow.token";
+const TOKEN_KEY = "masalapos.token";
 
 export const session = {
   onUnauthorized: null as (() => void) | null,
@@ -3566,7 +3566,7 @@ describe("redactUrl", () => {
 **Code:**
 ```typescript
 // apps/server/src/main.ts (lines 1–15)
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -3575,10 +3575,10 @@ import { buildServer } from "./server.js";
 import { redactUrl } from "./log-redact.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
+const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
 mkdirSync(dataDir, { recursive: true });
 
-const db = openDb(join(dataDir, "forkflow.db"));
+const db = openDb(join(dataDir, "masalapos.db"));
 migrate(db, MIGRATIONS);
 
 const app = buildServer({
@@ -4196,7 +4196,7 @@ setStations(s.stations.filter((st) => st.isActive));
 
 - [ ] **Manual smoke test: UI builds and printers/stations/jobs sections render**
   - Run `cd apps/ui && npm run build`
-  - Start server with fresh scratch DB via `FORKFLOW_DATA_DIR`
+  - Start server with fresh scratch DB via `MASALAPOS_DATA_DIR`
   - Navigate to Settings tab
   - Verify three new sections render below profile form
   - Note: printers list empty initially, stations show Kitchen from migration seed, jobs empty
@@ -4384,8 +4384,8 @@ Insert the following after step "Screenshot final state for review" (line ~315),
     - UI built: `cd apps/ui && npm run build`
     - Fresh scratch server: 
       - Kill any process on port 4100: `netstat -ano | findstr :4100` then `powershell Stop-Process -Id <PID>`
-      - Set scratch DB: `$env:FORKFLOW_DATA_DIR="D:/Software Ideas/Restauarant Billing System/.scratch-gate-m3b"` (PowerShell) or `set FORKFLOW_DATA_DIR=D:/Software Ideas/Restauarant Billing System/.scratch-gate-m3b` (cmd)
-      - Start server from repo root with `FORKFLOW_DATA_DIR="<forward-slash scratch path>" npx tsx apps/server/src/main.ts` (wait for `ForkFlow server on http://localhost:4100`)
+      - Set scratch DB: `$env:MASALAPOS_DATA_DIR="D:/Software Ideas/Restauarant Billing System/.scratch-gate-m3b"` (PowerShell) or `set MASALAPOS_DATA_DIR=D:/Software Ideas/Restauarant Billing System/.scratch-gate-m3b` (cmd)
+      - Start server from repo root with `MASALAPOS_DATA_DIR="<forward-slash scratch path>" npx tsx apps/server/src/main.ts` (wait for `MasalaPOS server on http://localhost:4100`)
     - Hermes venv with playwright: activate venv, ensure playwright installed
     - Set encoding: `$env:PYTHONIOENCODING="utf-8"` (PowerShell) or `set PYTHONIOENCODING=utf-8` (cmd)
     - Optional LAN test: `$env:GATE_LAN="http://192.168.x.x:4100"` (skip if not needed)
@@ -4441,8 +4441,8 @@ Insert the following after step "Screenshot final state for review" (line ~315),
 - **Gate run procedure** (for M3b CI/final verification):
   1. Build UI: `cd apps/ui && npm run build`
   2. Kill port 4100: `netstat -ano | findstr :4100` → `powershell Stop-Process -Id <PID>`
-  3. Set scratch DB: `$env:FORKFLOW_DATA_DIR="D:/Software Ideas/Restauarant Billing System/.scratch-gate-m3b"` (PowerShell) or use forward-slash-quoted absolute path
-  4. Start server: `npx tsx apps/server/src/main.ts` from repo root (wait for "ForkFlow server on http://localhost:4100" message)
+  3. Set scratch DB: `$env:MASALAPOS_DATA_DIR="D:/Software Ideas/Restauarant Billing System/.scratch-gate-m3b"` (PowerShell) or use forward-slash-quoted absolute path
+  4. Start server: `npx tsx apps/server/src/main.ts` from repo root (wait for "MasalaPOS server on http://localhost:4100" message)
   5. Activate hermes venv: `path\to\hermes\.venv\Scripts\activate` (or `source` on Linux)
   6. Set encoding: `$env:PYTHONIOENCODING="utf-8"` (critical for ESC/POS byte assertions)
   7. Run gate: `cd tools/e2e && python gate.py`

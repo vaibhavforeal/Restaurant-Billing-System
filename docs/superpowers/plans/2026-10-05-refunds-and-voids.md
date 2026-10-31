@@ -143,7 +143,7 @@
 - Order analytics and Food cost & profit: revenue net of credit-note lines dated in range; costing cost unchanged.
 
 - [ ] **Step 1: Write failing tests:** **void a bill issued yesterday, today → yesterday's day-end/GST/collections unchanged; today's show the credit note and net figures** (Review Focus 2; set bill `created_at` to yesterday via SQL); item report net quantity after a partial refund; cashier report subtracts the requester's refund; credit-notes report lists the note with both names; profit revenue drops by the credit taxable.
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** `npx vitest run` and `npx tsc --noEmit -p .` and `npm run typecheck -w @forkflow/ui` → PASS.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** `npx vitest run` and `npx tsc --noEmit -p .` and `npm run typecheck -w @masalapos/ui` → PASS.
 - [ ] **Step 5: Commit** — `feat(server): reports net of credit notes`.
 
 ---
@@ -177,7 +177,7 @@
 - Sales report screen (`SalesReports.tsx`, `sales-report.ts` CSV) shows per-day Credit notes and Net sales columns, and collections net of refunds.
 
 - [ ] **Step 1: Write failing tests** for `defaultRefundRows` (single method; split proportional; respects refundable caps), `refundRowsError` (exact messages), and `dayEndCsv` credit-note rows.
-- [ ] **Step 2: Run** `npx vitest run apps/ui` → FAIL. **Step 3: Implement.** **Step 4: Run** `npx vitest run apps/ui`, `npm run typecheck -w @forkflow/ui`, `npm run build -w @forkflow/ui` → PASS.
+- [ ] **Step 2: Run** `npx vitest run apps/ui` → FAIL. **Step 3: Implement.** **Step 4: Run** `npx vitest run apps/ui`, `npm run typecheck -w @masalapos/ui`, `npm run build -w @masalapos/ui` → PASS.
 - [ ] **Step 5: Commit** — `feat(ui): void and refund bills with credit notes`.
 
 ---
@@ -188,6 +188,6 @@
 
 - [ ] **Step 1: Write the guide:** when to void vs refund; credit notes and dates (closed days never change); admin PIN approval; choosing refund methods; reading day-end and the Credit notes report; printing credit notes; older bills void-only; no stock change.
 - [ ] **Step 2: Update** overview and rollout checklist.
-- [ ] **Step 3: Full checks:** `npx tsc --noEmit -p .`, `npm run typecheck -w @forkflow/ui`, `npx vitest run`, `npm run build -w @forkflow/ui`, `npm run test:packaging`.
+- [ ] **Step 3: Full checks:** `npx tsc --noEmit -p .`, `npm run typecheck -w @masalapos/ui`, `npx vitest run`, `npm run build -w @masalapos/ui`, `npm run test:packaging`.
 - [ ] **Step 4: Browser check** on `.e2e-scratch/refunds` (server source with tsconfig paths, built UI, port 4100): pay a bill and refund one item in cash as a cashier with admin PIN; void a paid UPI bill; void an unpaid table bill and confirm the table frees; check day-end net figures, the Credit notes report and a printed/viewed credit note. Record results; stop servers; delete the scratch dir.
 - [ ] **Step 5: Commit** — `docs: refunds and voids guide`.

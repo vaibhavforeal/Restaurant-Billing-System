@@ -5,7 +5,7 @@
 
 ## Goal
 
-Pick up the M1 handoff and advance ForkFlow (local-only desktop POS) through its milestones: clear the M1 acceptance gate, then plan and ship M2 (Catalog: categories/products/variants, settings, users admin) and as much of M3 (Tables + KOT) as possible, executing subagent-driven per the established pattern.
+Pick up the M1 handoff and advance MasalaPOS (local-only desktop POS) through its milestones: clear the M1 acceptance gate, then plan and ship M2 (Catalog: categories/products/variants, settings, users admin) and as much of M3 (Tables + KOT) as possible, executing subagent-driven per the established pattern.
 
 ## Current state
 

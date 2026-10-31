@@ -1,5 +1,5 @@
 ﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@forkflow/domain";
+import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@masalapos/domain";
 import { moduleSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
 import { isUnreachable, readLicenseCopy, saveLicenseCopy } from "../offline-cache";
@@ -39,9 +39,9 @@ function useLicenseStatus(): LicenseContextValue {
     let pending: ReturnType<typeof setTimeout> | undefined;
     const changed = () => { clearTimeout(pending); pending = setTimeout(() => { void refresh(); }, 80); };
     const timer = setInterval(() => { void refresh(); }, 30_000);
-    window.addEventListener("forkflow:license-changed", changed); window.addEventListener("focus", changed);
+    window.addEventListener("masalapos:license-changed", changed); window.addEventListener("focus", changed);
     return () => { mounted.current = false; sequence.current++; clearTimeout(pending); clearInterval(timer);
-      window.removeEventListener("forkflow:license-changed", changed); window.removeEventListener("focus", changed); };
+      window.removeEventListener("masalapos:license-changed", changed); window.removeEventListener("focus", changed); };
   }, [refresh]);
   return { status, error, refresh };
 }
@@ -111,7 +111,7 @@ export function LicenseSettings() {
     lock.current = true; setBusy(true); setError(""); setMessage(""); setPaymentUrl("");
     try {
       await action();
-      if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("forkflow:license-changed")); }
+      if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("masalapos:license-changed")); }
     } catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : "Request failed"); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
@@ -174,7 +174,7 @@ export function LicenseSettings() {
         <p className="license-help">Download these details for your license provider when activating or renewing.</p>
         <button disabled={busy} onClick={() => { void run(async () => {
           const request = await apiFetch<ActivationRequest>("/api/license/activation-request");
-          downloadText(JSON.stringify(request, null, 2) + "\n", `forkflow-activation-${request.installationId}.json`, "application/json;charset=utf-8");
+          downloadText(JSON.stringify(request, null, 2) + "\n", `masalapos-activation-${request.installationId}.json`, "application/json;charset=utf-8");
           setMessage("Activation request downloaded.");
         }, false); }}>Download activation request</button>
       </details>

@@ -1,4 +1,4 @@
-import type { OperationalReport, ReportCell, ReportColumn } from "@forkflow/domain";
+import type { OperationalReport, ReportCell, ReportColumn } from "@masalapos/domain";
 import { reportMoney } from "./sales-report";
 
 export function operationalCell(value: ReportCell | undefined, column: ReportColumn, timezone: string, csv = false): string {

@@ -1,4 +1,4 @@
-// Reuse the desktop's original ForkFlow F mark, inside the maskable safe area.
+// Reuse the desktop's original MasalaPOS F mark, inside the maskable safe area.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { fileURLToPath } from "node:url";

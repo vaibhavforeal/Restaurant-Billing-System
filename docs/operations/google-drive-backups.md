@@ -1,6 +1,6 @@
 # Google Drive backup framework
 
-ForkFlow 0.6.4 includes the settings, queue, worker and provider contract. Google
+MasalaPOS 0.6.4 includes the settings, queue, worker and provider contract. Google
 OAuth, Windows credential encryption, Drive networking, and cloud restore are
 deferred. The shipping app supplies no provider and makes no Google requests.
 Adding credentials alone will not activate it; implement the adapter below first.
@@ -54,7 +54,7 @@ No pretend account or success is created. Sign-in routes will be added with OAut
 
 ## Future Google integration
 
-1. Create one ForkFlow Google Cloud project, enable Drive API, and configure an
+1. Create one MasalaPOS Google Cloud project, enable Drive API, and configure an
    external consent screen and **Desktop app** OAuth client. Publish and complete
    applicable verification; Testing-mode Drive refresh tokens expire after seven days.
 2. Implement sign-in on the main POS PC using the default browser, PKCE, random

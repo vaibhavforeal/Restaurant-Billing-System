@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { migrate, MIGRATIONS, openDb } from "@forkflow/domain";
+import { migrate, MIGRATIONS, openDb } from "@masalapos/domain";
 import { Backups } from "./backups.js";
 import { buildServer } from "./server.js";
 import { auth, createUser, setupAdmin } from "./test-helpers.js";
@@ -11,7 +11,7 @@ import { captainPairingUri, edgeShortcut } from "./system.js";
 let app: ReturnType<typeof buildServer>; let folder: string;
 afterEach(async () => { await app?.close(); if (app?.db.open) app.db.close(); if (folder) rmSync(folder, { recursive: true, force: true }); });
 it("restricts backups and network details to admins and downloads only managed snapshots", async () => {
-  folder = mkdtempSync(join(tmpdir(), "forkflow-system-test-")); const db = openDb(join(folder, "forkflow.db")); migrate(db, MIGRATIONS);
+  folder = mkdtempSync(join(tmpdir(), "masalapos-system-test-")); const db = openDb(join(folder, "masalapos.db")); migrate(db, MIGRATIONS);
   app = buildServer({ db, backups: new Backups(db, folder) });
   const admin = await setupAdmin(app); const cashier = await createUser(app, admin.token, { name: "Cashier", pin: "4321", role: "cashier" });
   for (const path of ["/api/system/backups", "/api/system/connections"]) {
@@ -26,7 +26,7 @@ it("restricts backups and network details to admins and downloads only managed s
   expect((await app.inject({ method: "PUT", url: "/api/system/backups", headers: auth(admin.token), payload: { retentionDays: 1 } })).statusCode).toBe(400);
   expect((await app.inject({ url: "/api/system/generation", headers: auth(cashier.token) })).json()).toEqual({ generation: "initial" });
   const { connections, android } = (await app.inject({ url: "/api/system/connections", headers: auth(admin.token) })).json();
-  expect(android.downloads.map((link: { url: string }) => link.url)).toEqual(connections.map((link: { url: string }) => `${link.url}/captain/android/ForkFlow-Captain.apk`));
+  expect(android.downloads.map((link: { url: string }) => link.url)).toEqual(connections.map((link: { url: string }) => `${link.url}/captain/android/MasalaPOS-Captain.apk`));
   expect(android.pairings.every((pairing: { secure: boolean }) => !pairing.secure)).toBe(true);
 });
 it("creates a Windows Edge app-mode shortcut with a fixed server URL", () => {
@@ -36,7 +36,7 @@ it("creates a Windows Edge app-mode shortcut with a fixed server URL", () => {
 });
 it("encodes the Android Captain pairing address with the pinned restaurant CA", () => {
   const uri = new URL(captainPairingUri("https://192.168.1.50:4443", "ab:cd:01"));
-  expect(uri.protocol).toBe("forkflow-captain:");
+  expect(uri.protocol).toBe("masalapos-captain:");
   expect(uri.searchParams.get("server")).toBe("https://192.168.1.50:4443");
   expect(uri.searchParams.get("ca")).toBe("ABCD01");
   expect(new URL(captainPairingUri("http://192.168.1.50:4100")).searchParams.has("ca")).toBe(false);

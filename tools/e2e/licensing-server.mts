@@ -51,7 +51,7 @@ const service: Server = createServer(async (req, res) => {
   const body = await readBody(req);
   if (url.pathname === "/v1/subscriptions") return answer(res, 401, { error: "session_expired" });
   if (url.pathname !== "/v1/activate" && url.pathname !== "/v1/subscribe-sessions") { res.writeHead(404).end(); return; }
-  if (req.headers["x-forkflow-installation-secret"] !== installationSecret) return answer(res, 401, { error: "unauthorized" });
+  if (req.headers["x-masalapos-installation-secret"] !== installationSecret) return answer(res, 401, { error: "unauthorized" });
   let requested: unknown;
   try { requested = (JSON.parse(body) as { installationId?: unknown }).installationId; } catch { /* an unreadable body names no installation */ }
   if (url.pathname === "/v1/activate") { registered ||= requested === installationId; return answer(res, 200, { license: queued.shift() ?? null }); }
@@ -59,7 +59,7 @@ const service: Server = createServer(async (req, res) => {
   answer(res, 200, { session: sessionToken, expiresAt: Date.now() + 30 * 60_000 });
 });
 await new Promise<void>((resolveListen) => service.listen(4129, "127.0.0.1", resolveListen));
-const db = openDb(join(dataDir, "forkflow.db")); migrate(db, MIGRATIONS);
+const db = openDb(join(dataDir, "masalapos.db")); migrate(db, MIGRATIONS);
 const app = buildServer({ db, backups: new Backups(db, dataDir), port: 4128, logger: { level: "warn" }, licensing: {
   publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId, serviceUrl,
   installationSecret,

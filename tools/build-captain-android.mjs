@@ -1,11 +1,11 @@
-// Builds the signed ForkFlow Captain Android app (apps/captain-android).
+// Builds the signed MasalaPOS Captain Android app (apps/captain-android).
 // tools/build-desktop.mjs then ships it inside the POS, which serves it to tablets.
 //
 //   node tools/build-captain-android.mjs                     test and build a signed release APK
 //   node tools/build-captain-android.mjs --create-signing-key  first time only: create the release key
 //
-// The signing key lives outside the repository (FORKFLOW_ANDROID_SIGNING or
-// ~/.forkflow/captain-android/signing.properties). Back it up: installed tablets only
+// The signing key lives outside the repository (MASALAPOS_ANDROID_SIGNING or
+// ~/.masalapos/captain-android/signing.properties). Back it up: installed tablets only
 // accept updates signed with the same key.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -35,17 +35,17 @@ function sdkDir() {
 }
 
 function signingFile(java) {
-  const file = process.env.FORKFLOW_ANDROID_SIGNING ?? join(homedir(), ".forkflow", "captain-android", "signing.properties");
+  const file = process.env.MASALAPOS_ANDROID_SIGNING ?? join(homedir(), ".masalapos", "captain-android", "signing.properties");
   if (existsSync(file)) return file;
   if (!process.argv.includes("--create-signing-key")) {
-    throw new Error(`No release signing key at ${file}. Run once with --create-signing-key, or set FORKFLOW_ANDROID_SIGNING to an existing key's properties file.`);
+    throw new Error(`No release signing key at ${file}. Run once with --create-signing-key, or set MASALAPOS_ANDROID_SIGNING to an existing key's properties file.`);
   }
   mkdirSync(dirname(file), { recursive: true });
   const store = join(dirname(file), "captain-release.jks");
   if (existsSync(store)) throw new Error(`${store} exists without ${file}; restore its properties file instead of replacing the key.`);
   const password = randomBytes(24).toString("base64url");
   run(join(java, "bin", windows ? "keytool.exe" : "keytool"), ["-genkeypair", "-keystore", store, "-storetype", "PKCS12", "-alias", "captain",
-    "-keyalg", "RSA", "-keysize", "3072", "-validity", "10000", "-storepass", password, "-keypass", password, "-dname", "CN=ForkFlow Captain, O=ForkFlow"]);
+    "-keyalg", "RSA", "-keysize", "3072", "-validity", "10000", "-storepass", password, "-keypass", password, "-dname", "CN=MasalaPOS Captain, O=MasalaPOS"]);
   const escape = (value) => value.replaceAll("\\", "\\\\").replaceAll(":", "\\:");
   writeFileSync(file, `storeFile=${escape(store)}\nstorePassword=${password}\nkeyAlias=captain\nkeyPassword=${password}\n`, { mode: 0o600 });
   console.log(`Created the Captain release key at ${store}. Back up this folder: ${dirname(file)}`);
@@ -62,6 +62,6 @@ const localProperties = join(project, "local.properties");
 if (!existsSync(localProperties)) writeFileSync(localProperties, `sdk.dir=${sdkDir().replaceAll("\\", "/")}\n`);
 const signing = signingFile(java);
 // cmd.exe runs the wrapper, so it is called by name from its folder and paths are quoted.
-run(windows ? ".\\gradlew.bat" : "./gradlew", ["--console=plain", "testDebugUnitTest", "assembleRelease", windows ? `"-Pforkflow.signing=${signing}"` : `-Pforkflow.signing=${signing}`],
+run(windows ? ".\\gradlew.bat" : "./gradlew", ["--console=plain", "testDebugUnitTest", "assembleRelease", windows ? `"-Pmasalapos.signing=${signing}"` : `-Pmasalapos.signing=${signing}`],
   { cwd: project, env: { ...process.env, JAVA_HOME: java } });
 console.log(`Captain APK: ${join(project, "app/build/outputs/apk/release/app-release.apk")}`);

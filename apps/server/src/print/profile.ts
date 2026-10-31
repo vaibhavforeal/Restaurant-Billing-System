@@ -1,4 +1,4 @@
-import { PrintProfile, type PrintProfileInput } from "@forkflow/domain";
+import { PrintProfile, type PrintProfileInput } from "@masalapos/domain";
 import { EscPos } from "./escpos.js";
 
 export const DEFAULT_PROFILE: PrintProfileInput = { copies: 1, feedLines: 3, autoCut: true };

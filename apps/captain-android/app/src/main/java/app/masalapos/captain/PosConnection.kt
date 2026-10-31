@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -34,7 +34,7 @@ object PosConnection {
         }
     }
 
-    /** True when a ForkFlow POS answers on this origin with the expected certificate. */
+    /** True when a MasalaPOS POS answers on this origin with the expected certificate. */
     fun isPos(server: PairedServer): Boolean = try {
         String(read(server, "/api/health")).contains("\"ok\":true")
     } catch (_: IOException) {

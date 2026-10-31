@@ -1,4 +1,4 @@
-# ForkFlow licensing service
+# MasalaPOS licensing service
 
 A Cloudflare Worker with a D1 database. It does three jobs:
 
@@ -15,33 +15,33 @@ Nothing under `apps/server`, `apps/ui`, `packages/domain` or `packages/core` imp
 An installation id alone is not proof of who is asking: it appears in activation requests and licence files that get emailed around. So each counter also holds a secret.
 
 - On first start the counter generates 32 random bytes (64 lowercase hex characters) and stores them in `installation.json` next to the installation id, in its data folder. An older `installation.json` without a secret gets one on the next start; the id does not change. Back this file up with the rest of the data folder.
-- The counter sends it in the `X-ForkFlow-Installation-Secret` header on `POST /v1/activate` and `POST /v1/subscribe-sessions`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
+- The counter sends it in the `X-MasalaPOS-Installation-Secret` header on `POST /v1/activate` and `POST /v1/subscribe-sessions`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
 - Trust on first use: the Worker stores only the SHA-256 of the secret (`installations.secret_hash`). The first request for an installation that has no hash yet claims it; every later request must present the same secret, or it gets `401` and changes nothing. The secret is never logged or echoed, and the counter never puts it in the activation-request file or in any response to the browser.
 - **Re-pairing a counter** (the data folder was restored from a copy made before the secret existed, or `installation.json` was replaced, so the counter now holds a different secret for the same installation id): clear the stored hash, and the next request from that counter claims it again:
 
   ```powershell
-  npx wrangler@4 d1 execute forkflow-licensing --remote --command "UPDATE installations SET secret_hash = NULL WHERE installation_id = '<installation id>'"
+  npx wrangler@4 d1 execute masalapos-licensing --remote --command "UPDATE installations SET secret_hash = NULL WHERE installation_id = '<installation id>'"
   ```
 
-  (Use `forkflow-licensing-test --env test` for the test database.) Do this only for an installation you have verified is the customer's; until the counter makes its next request, whoever asks first becomes its owner.
+  (Use `masalapos-licensing-test --env test` for the test database.) Do this only for an installation you have verified is the customer's; until the counter makes its next request, whoever asks first becomes its owner.
 - **If someone else registered this installation id first** (the real counter gets `401` on **Check for renewal** and "The licensing service doesn't recognise this installation", and you have not re-paired it): another caller made first contact and now owns the row, so clearing the hash would only let the next caller take it again. Verify the customer first, then delete the hijacked row so the real counter registers fresh on its next start. Check that nothing was paid on it:
 
   ```powershell
-  npx wrangler@4 d1 execute forkflow-licensing --remote --command "SELECT reason, razorpay_payment_id FROM licenses WHERE installation_id = '<installation id>'; SELECT razorpay_subscription_id, status FROM subscriptions WHERE installation_id = '<installation id>'"
+  npx wrangler@4 d1 execute masalapos-licensing --remote --command "SELECT reason, razorpay_payment_id FROM licenses WHERE installation_id = '<installation id>'; SELECT razorpay_subscription_id, status FROM subscriptions WHERE installation_id = '<installation id>'"
   ```
 
   **Stop if any licence has reason `charge`, or any subscription exists beyond an unpaid attempt.** That installation has paid: contact the customer and Razorpay before touching it. Otherwise delete the dependents first (they reference `installations`), then the row itself:
 
   ```powershell
-  npx wrangler@4 d1 execute forkflow-licensing --remote --command "DELETE FROM subscribe_sessions WHERE installation_id = '<installation id>'; DELETE FROM licenses WHERE installation_id = '<installation id>'; DELETE FROM subscriptions WHERE installation_id = '<installation id>'; DELETE FROM installations WHERE installation_id = '<installation id>'"
+  npx wrangler@4 d1 execute masalapos-licensing --remote --command "DELETE FROM subscribe_sessions WHERE installation_id = '<installation id>'; DELETE FROM licenses WHERE installation_id = '<installation id>'; DELETE FROM subscriptions WHERE installation_id = '<installation id>'; DELETE FROM installations WHERE installation_id = '<installation id>'"
   ```
 
   The installation's trial is deleted with its row, so the real counter gets a fresh 14-day trial when it registers (the trial was spent by the hijacker, not the customer). Then restart the real counter or press **Check for renewal**, and make sure it is the one that registers.
 - **Upgrading an existing deployment:** migration `0002_installation_secret.sql` adds `secret_hash` and the checkout-session table. Apply it **before** deploying the Worker that needs it, test first:
 
   ```powershell
-  npx wrangler@4 d1 migrations apply forkflow-licensing-test --env test --remote
-  npx wrangler@4 d1 migrations apply forkflow-licensing --remote
+  npx wrangler@4 d1 migrations apply masalapos-licensing-test --env test --remote
+  npx wrangler@4 d1 migrations apply masalapos-licensing --remote
   ```
 
   Counters already in the field have no hash on their row, so each one claims it with its first request after it updates. Counters on the previous build send no secret and get `401` from the new Worker until they are updated to a build that does.
@@ -49,11 +49,11 @@ An installation id alone is not proof of who is asking: it appears in activation
   **Rollout check.** After the migration and deploy, every installation that existed before has `secret_hash` NULL, so the first caller to present a well-formed id and secret claims it, and that caller is not necessarily the customer. Once the counters have updated, run:
 
   ```powershell
-  npx wrangler@4 d1 execute forkflow-licensing --remote --command "SELECT installation_id FROM installations WHERE secret_hash IS NULL"
+  npx wrangler@4 d1 execute masalapos-licensing --remote --command "SELECT installation_id FROM installations WHERE secret_hash IS NULL"
   ```
 
   Any installation still listed has not been claimed by its counter. Investigate each one you recognise as a customer (is the counter on the new build and online?) before it is claimed by someone else; if it was already claimed by the wrong party, use the hijacked-installation procedure above.
-- **Checkout sessions:** `POST /v1/subscribe-sessions` (with the secret header and `{ "installationId": "..." }`) returns `{ "session": "<43-character token>", "expiresAt": <ms> }`. The Worker keeps only the token's SHA-256. `GET /subscribe?session=` and `POST /v1/subscriptions` identify the installation from the session; an installation id in the address is ignored, and one in the request body is rejected with `400` (the body schema is strict). An unknown or expired session gets a 404 page (or `401 { "error": "session_expired" }` from the form's POST) saying "This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again."
+- **Checkout sessions:** `POST /v1/subscribe-sessions` (with the secret header and `{ "installationId": "..." }`) returns `{ "session": "<43-character token>", "expiresAt": <ms> }`. The Worker keeps only the token's SHA-256. `GET /subscribe?session=` and `POST /v1/subscriptions` identify the installation from the session; an installation id in the address is ignored, and one in the request body is rejected with `400` (the body schema is strict). An unknown or expired session gets a 404 page (or `401 { "error": "session_expired" }` from the form's POST) saying "This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again."
 
 ## What you need
 
@@ -82,7 +82,7 @@ An installation id alone is not proof of who is asking: it appears in activation
 | | Test | Production |
 | --- | --- | --- |
 | Deploy | `npx wrangler deploy --env test` | `npx wrangler deploy` |
-| Database | `forkflow-licensing-test` | `forkflow-licensing` |
+| Database | `masalapos-licensing-test` | `masalapos-licensing` |
 | Razorpay keys and plans | test mode | live mode |
 | Signing key (`LICENSE_SIGNING_KEY`) | `license-test-private.pem` | `license-private.pem` |
 | Counter builds that use it | test builds (test public key) | production builds (production public key) |
@@ -93,8 +93,8 @@ Wrangler does not inherit `vars` or secrets between environments, so every step 
 
 ```powershell
 cd apps\licensing-worker
-npx wrangler d1 create forkflow-licensing-test
-npx wrangler d1 create forkflow-licensing
+npx wrangler d1 create masalapos-licensing-test
+npx wrangler d1 create masalapos-licensing
 ```
 
 Each command prints a `database_id`. Put it in `wrangler.jsonc` in place of `<set by wrangler d1 create>` (the top-level `d1_databases` entry is production, the one under `env.test` is test). Do not commit a local-run id or one from someone else's account.
@@ -102,8 +102,8 @@ Each command prints a `database_id`. Put it in `wrangler.jsonc` in place of `<se
 ## 2. Apply the migrations
 
 ```powershell
-npx wrangler d1 migrations apply forkflow-licensing-test --env test --remote
-npx wrangler d1 migrations apply forkflow-licensing --remote
+npx wrangler d1 migrations apply masalapos-licensing-test --env test --remote
+npx wrangler d1 migrations apply masalapos-licensing --remote
 ```
 
 Run this again whenever a new file appears under `migrations/`, before deploying the Worker that needs it.
@@ -168,7 +168,7 @@ npx wrangler deploy --env test
 npx wrangler deploy
 ```
 
-Wrangler prints the Worker's URL (`https://forkflow-licensing-test.<account>.workers.dev` for the test environment, or a custom domain you attach). The counter requires HTTPS.
+Wrangler prints the Worker's URL (`https://masalapos-licensing-test.<account>.workers.dev` for the test environment, or a custom domain you attach). The counter requires HTTPS.
 
 The test Worker is only for the test-mode checklist. Once the checklist passes, take it off the internet: delete it (`npx wrangler delete --env test`), or add `"workers_dev": false` to the `env.test` block of `wrangler.jsonc` and deploy it again so it has no public URL. Deploy it again the same way when you next need a test run.
 
@@ -189,30 +189,30 @@ The service URL is baked into commercial builds next to the public key, like the
 Production builds (the ones you ship) embed the production public key and the production Worker's URL:
 
 ```powershell
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
-$env:FORKFLOW_LICENSE_SERVICE_URL = 'https://<production-worker-url>'
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+$env:MASALAPOS_LICENSE_SERVICE_URL = 'https://<production-worker-url>'
 npm.cmd run package:commercial
 ```
 
 Test builds (only for the test-mode checklist, never given to a restaurant) embed the **test** public key and the test Worker's URL:
 
 ```powershell
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-test-public.pem' -Raw
-$env:FORKFLOW_LICENSE_SERVICE_URL = 'https://<test-worker-url>'
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-test-public.pem' -Raw
+$env:MASALAPOS_LICENSE_SERVICE_URL = 'https://<test-worker-url>'
 npm.cmd run package:commercial
 ```
 
 Clear both variables (or open a new terminal) between a test build and a production build.
 
-A build without `FORKFLOW_LICENSE_SERVICE_URL` never contacts the service: no automatic trial, no renewals, and Settings hides Subscribe, Manage plan and Check for renewal. When running the server from source, set the same variable (plain `http://127.0.0.1` is accepted there, never in a packaged build).
+A build without `MASALAPOS_LICENSE_SERVICE_URL` never contacts the service: no automatic trial, no renewals, and Settings hides Subscribe, Manage plan and Check for renewal. When running the server from source, set the same variable (plain `http://127.0.0.1` is accepted there, never in a packaged build).
 
 A counter asks for its licence when the server starts, every hour, and when an admin presses **Check for renewal** in Settings, Plan and devices. Billing never depends on the answer.
 
 ## Owner control panel
 
-`https://<worker-url>/owner` is where ForkFlow decides which modules each restaurant may use: takeaway, reservations, QR guest ordering, guest assistance, inventory, recipes, dish costing, reports, the sales dashboard, Zomato, the Kitchen Display and CRM & Loyalty. Sign in with `OWNER_PASSWORD`; a session lasts 8 hours, and sign-in attempts share the service's rate limit (20 a minute per address).
+`https://<worker-url>/owner` is where MasalaPOS decides which modules each restaurant may use: takeaway, reservations, QR guest ordering, guest assistance, inventory, recipes, dish costing, reports, the sales dashboard, Zomato, the Kitchen Display and CRM & Loyalty. Sign in with `OWNER_PASSWORD`; a session lasts 8 hours, and sign-in attempts share the service's rate limit (20 a minute per address).
 
-Every restaurant appears the first time its ForkFlow contacts the service. For each module choose **Follow the plan** (Basic or Pro defaults), **Allow** or **Block**, and press **Save**. Saving signs the restaurant's current terms (plan, dates, trial, subscription) with the new modules as the next licence revision; renaming a restaurant issues nothing. The card shows "Waiting for the restaurant to check in" until the counter has collected that revision, which happens within an hour, or at once when an admin presses **Check for renewal**. A restaurant whose licence has run out gets no new revision; its next trial or payment carries the change, because every licence the service issues includes the owner's choices.
+Every restaurant appears the first time its MasalaPOS contacts the service. For each module choose **Follow the plan** (Basic or Pro defaults), **Allow** or **Block**, and press **Save**. Saving signs the restaurant's current terms (plan, dates, trial, subscription) with the new modules as the next licence revision; renaming a restaurant issues nothing. The card shows "Waiting for the restaurant to check in" until the counter has collected that revision, which happens within an hour, or at once when an admin presses **Check for renewal**. A restaurant whose licence has run out gets no new revision; its next trial or payment carries the change, because every licence the service issues includes the owner's choices.
 
 Within what you allow, the restaurant's admin can still switch a module off in its Marketplace and back on later. **Change history** on each card lists every change with the licence revision it went into.
 
@@ -220,7 +220,7 @@ Within what you allow, the restaurant's admin can still switch a module off in i
 
 ```powershell
 cd apps\licensing-worker
-npx wrangler d1 migrations apply forkflow-licensing --local
+npx wrangler d1 migrations apply masalapos-licensing --local
 npx wrangler dev
 ```
 

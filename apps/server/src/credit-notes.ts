@@ -1,7 +1,7 @@
-import { verifyPassword } from "@forkflow/core";
+import { verifyPassword } from "@masalapos/core";
 import { reverseLoyalty } from "./customers.js";
 import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
-  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@forkflow/domain";
+  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";

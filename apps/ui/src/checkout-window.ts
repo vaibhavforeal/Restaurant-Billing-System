@@ -2,7 +2,7 @@
 
 export const PENDING_MESSAGE = "Opening payment page…";
 
-/** The ForkFlow desktop app is an Electron shell; its user agent carries "Electron/<version>". Browsers never do. */
+/** The MasalaPOS desktop app is an Electron shell; its user agent carries "Electron/<version>". Browsers never do. */
 export function isDesktopShell(userAgent: string): boolean {
   return userAgent.includes("Electron");
 }
