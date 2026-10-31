@@ -7,6 +7,9 @@ import { startupDocument } from "../../ui/src/startup-screen.js";
 import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
 import { createUpdater, type AutoUpdaterLike } from "./updater.js";
 import { isToDesktop } from "../../../packages/domain/src/updates.js";
+import { isRemoteToDesktop } from "../../../packages/domain/src/remote-support.js";
+import { RemoteSupport } from "./remote/session.js";
+import { windowsInjector } from "./remote/input.js";
 
 declare const __MASALAPOS_DEMO__: boolean;
 declare const __MASALAPOS_COMMERCIAL__: boolean;
@@ -28,6 +31,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let recovering = false;
 let errorShown = false;
 let updates: ReturnType<typeof createUpdater> | null = null;
+let remote: RemoteSupport | null = null;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -91,7 +95,10 @@ else {
     }, 5000);
     // The server relays Settings -> Updates; the shell answers with the updater's status.
     child.on("message", (data: unknown) => {
-      if (!isToDesktop(data) || server !== child) return;
+      if (server !== child) return;
+      // Remote support: the server only sends a start for a session someone at this PC has just allowed.
+      if (isRemoteToDesktop(data)) { remote?.handle(data); return; }
+      if (!isToDesktop(data)) return;
       if (data.type === "restore") {
         // Settings staged and verified this file and the admin confirmed it on this PC; accept only that folder.
         const staged = resolve(data.path), incoming = resolve(dataDir, "restore-incoming") + sep;
@@ -134,6 +141,7 @@ else {
     const child = server;
     if (!child) return;
     stopping = true;
+    remote?.stopAll("MasalaPOS is closing");
     await new Promise<void>((resolve) => {
       const force = setTimeout(() => child.kill(), 10_000);
       child.once("exit", () => { clearTimeout(force); resolve(); });
@@ -176,7 +184,7 @@ else {
   }
   app.on("second-instance", showWindow);
   app.whenReady().then(async () => {
-    window = new BrowserWindow({ width: 1280, height: 800, show: false, backgroundColor: "#f6f7f9", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+    window = new BrowserWindow({ width: 1280, height: 800, show: false, backgroundColor: "#f6f7f9", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: join(here, "preload.cjs") } });
     if (demo) {
       window.setAutoHideMenuBar(false);
       Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Demo", submenu: [
@@ -213,6 +221,11 @@ else {
         await stopServer();
         tray?.destroy();
       },
+    });
+    remote = new RemoteSupport({
+      here, log: writeLog, injector: windowsInjector,
+      toServer: (message) => server?.postMessage(message),
+      onActive: (active, agentName) => tray?.setToolTip(active ? `MasalaPOS — ${agentName} from MasalaPOS support is connected` : "MasalaPOS — restaurant POS server"),
     });
     startServer();
     writeLog("Creating tray menu\n");
