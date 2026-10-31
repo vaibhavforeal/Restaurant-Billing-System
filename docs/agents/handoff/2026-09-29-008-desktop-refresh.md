@@ -12,7 +12,7 @@ and restarted MasalaPOS on port 4100 using its existing data folder:
 - Startup migrated the database from schema 7 to 9. SQLite integrity and foreign
   key checks passed. Counts of users, products, orders, order items, bills,
   stock items and stock movements match the pre-restart baseline.
-- Health endpoint passed, and the native `MasalaPOS POS` window is open.
+- Health endpoint passed, and the native `MasalaPOS` window is open.
   Browser verification confirmed the sign-in screen and guest menu route load
   without runtime errors. QR administration requires staff authentication.
 - Recipe and guest-ordering flows had already passed the isolated integration

@@ -25,7 +25,7 @@ async function showConnection(error = "") {
 async function connect(address: string) {
   const url = kitchenAddress(address);
   const response = await fetch(new URL("/api/health", url), { signal: AbortSignal.timeout(5000), redirect: "error" });
-  if (!response.ok || (await response.json() as { ok?: boolean }).ok !== true) throw new Error("The address did not respond as a MasalaPOS POS server.");
+  if (!response.ok || (await response.json() as { ok?: boolean }).ok !== true) throw new Error("The address did not respond as a MasalaPOS server.");
   target = url;
   await window.loadURL(url);
   saveAddress(url);

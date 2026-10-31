@@ -72,7 +72,7 @@ bills 0, stock_items 0, stock_moves 0. No QA catalog entries, guests, service
 requests, or payments were added to the user's desktop data.
 
 The standard Electron launcher is running in exec session **78996**, with the
-native MasalaPOS POS window open. Browser verification at port 4100 confirmed
+native MasalaPOS window open. Browser verification at port 4100 confirmed
 the sign-in screen, current UI assets, no page errors, and authenticated staff
 routes. This is the refreshed development app; no installer was produced.
 

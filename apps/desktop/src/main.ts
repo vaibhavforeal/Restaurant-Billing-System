@@ -71,7 +71,7 @@ else {
     writeLog("Starting server utility process\n");
     const instanceId = randomUUID();
     const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
-      cwd: dataDir, stdio: "pipe", serviceName: "MasalaPOS POS server",
+      cwd: dataDir, stdio: "pipe", serviceName: "MasalaPOS server",
       env: { ...process.env, MASALAPOS_DATA_DIR: dataDir, MASALAPOS_UI_DIR: join(here, "ui"), MASALAPOS_PORT: port,
         MASALAPOS_APP_VERSION: app.getVersion(), MASALAPOS_INSTANCE_ID: instanceId, ...(restorePath ? { MASALAPOS_RESTORE: restorePath } : {}),
         ...(cloudSecretKey() ? { MASALAPOS_SECRET_KEY: cloudSecretKey() } : {}) },
