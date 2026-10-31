@@ -337,6 +337,8 @@ export class Licensing {
     const path = req.routeOptions.url;
     // Authentication and license recovery are available from unregistered devices.
     if (path === "/api/me" || path === "/api/logout" || path?.startsWith("/api/license")) return;
+    // Support must be reachable exactly when a licence problem stops billing.
+    if (path?.startsWith("/api/support/")) return;
     // Never charge for access to backups, even after a subscription expires.
     if (path?.startsWith("/api/system/backups")) return;
     const status = this.status(req.headers["x-masalapos-device"]);

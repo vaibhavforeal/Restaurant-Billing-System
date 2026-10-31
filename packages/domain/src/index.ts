@@ -61,4 +61,5 @@ export { ShiftOpen, CashMovementCreate, ShiftClose, DayClose } from "./shift-sch
 export { normalizePhone, CustomerCreate, CustomerUpdate, CustomerSlab, CustomerTypeCreate, CustomerTypeUpdate, LoyaltySettingsUpdate, LoyaltyTierCreate, LoyaltyTierUpdate, LoyaltyAdjust, OrderCustomerSet, FeedbackSubmit, bestSlabPercent, percentOf, pointsEarned, tierFor, daysUntilOccasion, addMonths, type SlabRule, type TierRule } from "./customers.js";
 export { openLots, expiryDue, expiringSoon, expireRef, type LedgerEntry, type PointsLot } from "./loyalty-expiry.js";
 export { SegmentFilter, SegmentSave, matchesSegment, SEGMENT_PRESETS, SEGMENT_CSV_COLUMNS, type SegmentFilterInput, type SegmentFilterValue, type SegmentCustomer, type SavedSegment } from "./customer-segments.js";
+export { isRemoteToDesktop, isRemoteToServer, type RemoteToDesktop, type RemoteToServer, type RemoteMode, type IceServer } from "./remote-support.js";
 export { UPDATE_CHANNELS, isToServer, isToDesktop, type UpdateChannel, type UpdateState, type UpdateStatus, type ToDesktop, type ToServer } from "./updates.js";
