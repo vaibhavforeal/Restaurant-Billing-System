@@ -11,7 +11,7 @@ export const KIND_NAMES: Record<FollowUpKind, string> = { call: "Call", visit: "
 export function Due({ at, open = true }: { at: number; open?: boolean }) {
   const late = open && at < Date.now();
   const text = `${relativeDay(at)}${daysFromToday(at) === 0 || Math.abs(daysFromToday(at)) <= 1 ? `, ${timeOfDay(at)}` : ""}`;
-  return late ? <Pill tone="negative">{daysFromToday(at) < 0 ? `Overdue: ${text}` : `Late: ${text}`}</Pill> : <>{text}</>;
+  return late ? <Pill tone="negative">{daysFromToday(at) < 0 ? `Overdue · ${text}` : `Late · ${text}`}</Pill> : <>{text}</>;
 }
 
 /** Follow-ups as rows: what, about whom, when; done or moved from the row. */
@@ -23,7 +23,7 @@ export function FollowUpRows({ items, showAbout = true, onChanged, loaded = true
       <thead><tr><th>To do</th>{showAbout && <th>About</th>}<th className="num">Due</th><th className="num phone-hide"></th></tr></thead>
       <tbody>
         {items.map((f) => <tr key={f.id}>
-          <td><span className="name">{f.note}</span><span className="sub record-meta"><span>{KIND_NAMES[f.kind]}</span>{f.status === "done" ? <span>done{f.outcome ? `: ${f.outcome}` : ""}</span> : f.status === "cancelled" ? <span>dropped</span> : null}{showAbout && <span>{f.owner.name}</span>}</span></td>
+          <td>{f.note}<span className="sub">{KIND_NAMES[f.kind]}{f.status === "done" ? ` · done${f.outcome ? `: ${f.outcome}` : ""}` : f.status === "cancelled" ? " · dropped" : ""}{!showAbout ? "" : ` · ${f.owner.name}`}</span></td>
           {showAbout && <td>{f.lead ? <Link to={`/leads/${f.lead.id}`}>{f.lead.name}</Link> : f.customer ? <Link to={`/customers/${f.customer.id}`}>{f.customer.name}</Link> : "—"}
             {f.phone && <span className="sub"><a href={`tel:${f.phone.replace(/\s/g, "")}`}>{f.phone}</a></span>}</td>}
           <td className="num">{f.status === "open" ? <Due at={f.dueAt} /> : <span className="muted">{relativeDay(f.doneAt ?? f.dueAt)}</span>}</td>
@@ -95,11 +95,9 @@ export function FollowUps({ me }: { me: StaffUser }) {
   const overdue = items.filter((f) => f.status === "open" && f.dueAt < Date.now()).length;
   return <>
     <PageHead title="Follow-ups" sub={tab === "open" && data ? (overdue ? `${overdue} overdue, ${items.length - overdue} coming up` : `${items.length} coming up, none overdue`) : "Calls, visits and demos you've noted for later."} />
-    <div className="record-controls">
-      <Tabs label="Follow-ups" value={tab} onChange={setTab} tabs={[{ id: "open", label: "To do" }, { id: "done", label: "Done" }]} />
-      {me.role === "admin" && <label className="filter-field"><span>Whose</span><select aria-label="Whose" value={owner} onChange={(e) => setOwner(e.target.value)}>
-        <option value="">Mine</option><option value="all">Everyone's</option>{staff.data?.staff.filter((s) => s.id !== me.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
-    </div>
+    <Tabs label="Follow-ups" value={tab} onChange={setTab} tabs={[{ id: "open", label: "To do" }, { id: "done", label: "Done" }]} />
+    {me.role === "admin" && <div className="toolbar"><select aria-label="Whose" value={owner} onChange={(e) => setOwner(e.target.value)} style={{ width: 220 }}>
+      <option value="">Mine</option><option value="all">Everyone's</option>{staff.data?.staff.filter((s) => s.id !== me.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
     {error && <LoadError message={error} retry={reload} />}
     <FollowUpRows items={items} loaded={!!data} onChanged={() => void reload()} />
     {owner && <p className="muted small" style={{ marginTop: 8 }}>{owner === "all" ? "Everyone's follow-ups" : <>Follow-ups of <Person name={staff.data?.staff.find((s) => s.id === owner)?.name ?? ""} /></>}</p>}

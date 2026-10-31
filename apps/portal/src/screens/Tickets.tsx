@@ -25,7 +25,7 @@ export function Tickets({ me, customerId }: { me: StaffUser; customerId?: string
   const active = data ? (data.counts["open"] ?? 0) + (data.counts["in_progress"] ?? 0) + (data.counts["waiting"] ?? 0) : 0;
   const canWrite = roleCan(me.role, "tickets.write");
   const list = <>
-    <div className="toolbar record-toolbar"><input type="search" className="search-box" aria-label="Search tickets" placeholder="T-1001, subject or customer" value={text} onChange={(e) => setText(e.target.value)} />
+    <div className="toolbar"><input type="search" className="search-box" aria-label="Search tickets" placeholder="T-1001, subject or customer" value={text} onChange={(e) => setText(e.target.value)} />
       {customerId && canWrite && <><span className="spacer" /><button className="secondary" onClick={() => setOpening(true)}>New ticket</button></>}</div>
     {error && <LoadError message={error} retry={reload} />}
     <TicketRows tickets={data?.tickets ?? []} loaded={!!data} hideCustomer={!!customerId} />
@@ -48,7 +48,7 @@ export function TicketRows({ tickets, loaded, hideCustomer }: { tickets: TicketS
     <thead><tr><th>Ticket</th>{!hideCustomer && <th>Customer</th>}<th className="phone-hide">Priority</th><th className="phone-hide">Status</th><th className="phone-hide">With</th><th className="num">Opened</th></tr></thead>
     <tbody>
       {tickets.map((t) => <tr key={t.id} className="clickable" onClick={() => navigate(`/tickets/${t.id}`)}>
-        <td><Link className="name" to={`/tickets/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.subject}</Link><span className="sub record-meta"><span className="mono">T-{t.number}</span><span>{CATEGORY_NAMES[t.category]}</span>{t.status === "closed" && <Pill>Closed</Pill>}</span></td>
+        <td><Link className="name" to={`/tickets/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.subject}</Link><span className="sub">T-{t.number} · {CATEGORY_NAMES[t.category]}{t.status === "closed" && <> · <Pill>Closed</Pill></>}</span></td>
         {!hideCustomer && <td>{t.customer.name}</td>}
         <td className="phone-hide"><PriorityMark priority={t.priority} /></td>
         <td className="phone-hide">{STATUS_NAMES[t.status]}</td>
@@ -73,18 +73,18 @@ export function Ticket({ id, me }: { id: string; me: StaffUser }) {
     run(async () => setData(await patch<{ ticket: TicketDetail }>(`/tickets/${t.id}`, body)), done);
   return <>
     <PageHead back={<><Link to="/tickets">Support</Link> / <Link to={`/customers/${t.customer.id}`}>{t.customer.name}</Link></>} title={t.subject}
-      sub={<span className="record-meta"><span className="mono">T-{t.number}</span><span>{CATEGORY_NAMES[t.category]}</span><span>opened {dateTime(t.createdAt)}{t.createdBy ? ` by ${t.createdBy.name}` : ""}</span></span>}
+      sub={<>T-{t.number} · {CATEGORY_NAMES[t.category]} · opened {dateTime(t.createdAt)}{t.createdBy ? ` by ${t.createdBy.name}` : ""}</>}
       actions={canWrite && <>{t.status !== "resolved" && t.status !== "closed" ? <button className="primary" disabled={busy} onClick={() => void change({ status: "resolved" }, "Resolved.")}>Resolve</button>
         : <button className="secondary" disabled={busy} onClick={() => void change({ status: "open" }, "Reopened.")}>Reopen</button>}</>} />
     {status}
-    <div className="grid-main ticket-workspace">
+    <div className="grid-main">
       <div className="stack">
-        {t.description && <p className="record-summary" style={{ whiteSpace: "pre-wrap" }}>{t.description}</p>}
-        <section className="notes-section"><h2 className="section-title">Notes</h2>
+        {t.description && <p style={{ whiteSpace: "pre-wrap" }}>{t.description}</p>}
+        <section><h2 className="section-title" style={{ marginBottom: 8 }}>Notes</h2>
           {t.comments.length === 0 ? <p className="empty-block">No notes yet. Write down what you checked and what you told the customer.</p>
-            : <ol className="note-list">{t.comments.map((c) => <li key={c.id} className="note-entry">
-              <div className="note-meta"><span>{c.author?.name ?? "Former staff"}</span><span className="muted small">{dateTime(c.createdAt)}</span></div><p style={{ whiteSpace: "pre-wrap" }}>{c.body}</p></li>)}</ol>}
-          {canWrite && <form className="stack note-composer" onSubmit={(e) => { e.preventDefault(); void run(async () => { setData(await post<{ ticket: TicketDetail }>(`/tickets/${t.id}/comments`, { body: note })); setNote(""); }); }}>
+            : <ol className="stack" style={{ listStyle: "none", padding: 0 }}>{t.comments.map((c) => <li key={c.id} className="panel" style={{ padding: 14 }}>
+              <div className="muted small" style={{ marginBottom: 4 }}>{c.author?.name ?? "Former staff"} · {dateTime(c.createdAt)}</div><p style={{ whiteSpace: "pre-wrap" }}>{c.body}</p></li>)}</ol>}
+          {canWrite && <form className="stack" style={{ marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); void run(async () => { setData(await post<{ ticket: TicketDetail }>(`/tickets/${t.id}/comments`, { body: note })); setNote(""); }); }}>
             <Field label="Add a note"><textarea rows={3} maxLength={4000} required value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} /></Field>
             <div><button className="secondary" disabled={busy || !note.trim()}>Add note</button></div></form>}
         </section>
@@ -123,7 +123,7 @@ export function NewTicket({ me, customerId, onClose, onSaved }: { me: StaffUser;
       {!customerId && <Field label="Customer" wide>
         <input type="search" placeholder="Find by name, phone or Customer ID" value={find} onChange={(e) => { setFind(e.target.value); setForm({ ...form, customerId: "", installationId: "" }); }} disabled={busy} />
         <select aria-label="Customer" required value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value, installationId: "" })} disabled={busy}>
-          <option value="">Choose the customer</option>{customers.data?.customers.slice(0, 20).map((c) => <option key={c.id} value={c.id}>{c.businessName} ({c.code})</option>)}</select></Field>}
+          <option value="">Choose the customer</option>{customers.data?.customers.slice(0, 20).map((c) => <option key={c.id} value={c.id}>{c.businessName} · {c.code}</option>)}</select></Field>}
       <Field label="What's wrong" wide><input required autoFocus maxLength={160} value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="e.g. KOT printer prints blank slips" disabled={busy} /></Field>
       <Field label="Details" wide><textarea rows={4} maxLength={4000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={busy} /></Field>
       <Field label="Kind"><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as TicketCategory })} disabled={busy}>

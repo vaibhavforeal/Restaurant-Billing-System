@@ -33,7 +33,7 @@ export function SeatStrip({ counters, onOpen }: { counters: InstallationSummary[
       const l = c.licence!, from = c.activatedAt ?? c.createdAt;
       return <div className="seat" key={c.id}>
         <button type="button" className="link" style={{ textAlign: "left", textDecoration: "none" }} onClick={() => onOpen(c)}>{counterName(c)}
-          <span className="sub muted small" style={{ display: "block", fontWeight: 400 }}>{PLAN_NAMES[l.plan]}{l.trial ? " trial" : ""}, {c.order?.code ?? "No seat"}</span></button>
+          <span className="sub muted small" style={{ display: "block", fontWeight: 400 }}>{PLAN_NAMES[l.plan]}{l.trial ? " trial" : ""} · {c.order?.code ?? "No seat"}</span></button>
         <div className="seat-track" title={`${date(from)} to ${date(l.expiresAt)}`}>
           <div className={`seat-fill${l.trial ? " trial" : ""}`} style={{ left: x(from), width: width(from, l.expiresAt) }} />
           {l.graceUntil > l.expiresAt && <div className="seat-fill grace" style={{ left: x(l.expiresAt), width: width(l.expiresAt, l.graceUntil) }} />}
@@ -57,19 +57,15 @@ export function CounterDialog({ id, me, onClose, onChanged }: { id: string; me: 
   return <Dialog title={c ? counterName(c) : "Counter"} onClose={onClose} wide>
     {error && <p className="notice negative">{error}</p>}
     {c && <div className="stack">
-      <div className="counter-facts">
       <dl className="kv">
-        <dt>Licence</dt><dd>{c.licence ? <>{PLAN_NAMES[c.licence.plan]}{c.licence.trial ? " trial" : ""}, {c.licence.maxDevices} devices, <LicenceState counter={c} /></> : "None yet"}</dd>
-        <dt>Revision</dt><dd>{c.licence ? <>{c.licence.revision} {c.licence.delivered ? <span className="muted">on the counter</span> : <Pill tone="warning">Waiting for its next check-in</Pill>}</> : "—"}</dd>
-        <dt>Order</dt><dd>{c.order ? <span className="mono">{c.order.code}</span> : <span className="muted">No seat (released)</span>}{c.licence?.orderCode && c.licence.orderCode !== c.order?.code && <span className="muted">, licence from {c.licence.orderCode}</span>}</dd>
-      </dl>
-      <dl className="kv">
-        <dt>Last seen</dt><dd>{c.lastSeenAt ? `${dateTime(c.lastSeenAt)}${c.appVersion ? `, ForkFlow ${c.appVersion}` : ""}` : "Never online"}</dd>
+        <dt>Licence</dt><dd>{c.licence ? <>{PLAN_NAMES[c.licence.plan]}{c.licence.trial ? " trial" : ""}, {c.licence.maxDevices} devices · <LicenceState counter={c} /></> : "None yet"}</dd>
+        <dt>Revision</dt><dd>{c.licence ? <>{c.licence.revision} {c.licence.delivered ? <span className="muted">· on the counter</span> : <Pill tone="warning">Waiting for its next check-in</Pill>}</> : "—"}</dd>
+        <dt>Order</dt><dd>{c.order ? <span className="mono">{c.order.code}</span> : <span className="muted">No seat (released)</span>}{c.licence?.orderCode && c.licence.orderCode !== c.order?.code && <span className="muted"> · licence from {c.licence.orderCode}</span>}</dd>
+        <dt>Last seen</dt><dd>{c.lastSeenAt ? `${dateTime(c.lastSeenAt)}${c.appVersion ? ` · ForkFlow ${c.appVersion}` : ""}` : "Never online"}</dd>
         <dt>Activated</dt><dd>{dateTime(c.activatedAt)}</dd>
         <dt>Installation ID</dt><dd className="code-row"><span className="mono">{c.id}</span><CopyButton text={c.id} /></dd>
         <dt>Pairing</dt><dd>{c.paired ? "Paired with its computer" : <Pill tone="warning">Waiting for the computer to claim it</Pill>}</dd>
       </dl>
-      </div>
       {status}
       {(admin || support) && <div className="actions">
         {support && <button className="secondary" disabled={busy} onClick={() => void run(async () => {
@@ -94,7 +90,7 @@ function Modules({ counter, editable, onSaved }: { counter: InstallationDetail; 
   const [choices, setChoices] = useState<Record<string, boolean | null>>(() => Object.fromEntries(counter.modules.map((m) => [m.id, m.override])));
   const { busy, run, status } = useRun();
   const changed = counter.modules.filter((m) => (choices[m.id] ?? null) !== m.override);
-  return <section className="record-section">
+  return <section>
     <div className="panel-head"><h2>Modules</h2>{editable && <button className="primary small" disabled={busy || !changed.length} onClick={() => void run(async () => {
       const res = await patch<{ installation: InstallationDetail; issuedRevision: number | null }>(`/installations/${counter.id}/modules`, {
         modules: Object.fromEntries(changed.map((m) => [m.id, choices[m.id] ?? null])), expectedUpdatedAt: counter.modulesUpdatedAt,
@@ -111,7 +107,7 @@ function Modules({ counter, editable, onSaved }: { counter: InstallationDetail; 
     </tbody></table></div>
     {counter.moduleEvents.length > 0 && <details style={{ marginTop: 12 }}><summary>Module changes</summary><ul className="stack" style={{ marginTop: 8 }}>
       {counter.moduleEvents.map((e) => <li key={e.id}>{counter.modules.find((m) => m.id === e.moduleId)?.name ?? e.moduleId}: {e.allowed === null ? "follows the plan" : e.allowed ? "allowed" : "blocked"}
-        <span className="muted">, {dateTime(e.at)}{e.actorName ? `, ${e.actorName}` : ""}{e.revision ? `, revision ${e.revision}` : ""}</span></li>)}</ul></details>}
+        <span className="muted"> · {dateTime(e.at)}{e.actorName ? ` · ${e.actorName}` : ""}{e.revision ? ` · revision ${e.revision}` : ""}</span></li>)}</ul></details>}
   </section>;
 }
 
@@ -122,7 +118,7 @@ function LicenceForm({ counter, onSaved }: { counter: InstallationDetail; onSave
   const [devices, setDevices] = useState(String(l.maxDevices));
   const [note, setNote] = useState("");
   const { busy, run, status } = useRun();
-  return <details className="record-section"><summary><strong>Change this licence</strong> <span className="muted">plan, end date or devices, for a goodwill extension or a correction</span></summary>
+  return <details className="panel"><summary><strong>Change this licence</strong> <span className="muted">plan, end date or devices, for a goodwill extension or a correction</span></summary>
     <form className="form-grid" style={{ marginTop: 16 }} onSubmit={(e) => { e.preventDefault(); void run(async () => {
       const body: Record<string, unknown> = { note };
       if (plan !== l.plan) body["plan"] = plan;
@@ -147,11 +143,11 @@ function MoveCounter({ counter, onMoved }: { counter: InstallationDetail; onMove
   const [orderId, setOrderId] = useState("");
   const { busy, run, status } = useRun();
   if (!options.length) return null;
-  return <form className="record-section" onSubmit={(e) => { e.preventDefault(); void run(async () => onMoved((await post<{ installation: InstallationDetail }>(`/installations/${counter.id}/move`, { orderId })).installation), "Moved."); }}>
+  return <form className="panel" onSubmit={(e) => { e.preventDefault(); void run(async () => onMoved((await post<{ installation: InstallationDetail }>(`/installations/${counter.id}/move`, { orderId })).installation), "Moved."); }}>
     <div className="panel-head"><h2>Move to another order</h2></div>
     <p className="muted" style={{ marginBottom: 12 }}>For example when this trial becomes the paid order. The counter takes a seat there and its term starts today.</p>
     <div className="toolbar"><select aria-label="Order" required value={orderId} onChange={(e) => setOrderId(e.target.value)} style={{ width: 320 }} disabled={busy}>
-      <option value="">Choose an order</option>{options.map((o) => <option key={o.id} value={o.id}>{o.code}, {PLAN_NAMES[o.plan]}, {o.outlets - o.seatsUsed} of {o.outlets} free</option>)}</select>
+      <option value="">Choose an order</option>{options.map((o) => <option key={o.id} value={o.id}>{o.code} · {PLAN_NAMES[o.plan]} · {o.outlets - o.seatsUsed} of {o.outlets} free</option>)}</select>
       <button className="secondary" disabled={busy || !orderId}>Move counter</button></div>
     {status}
   </form>;

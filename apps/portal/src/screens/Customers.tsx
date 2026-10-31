@@ -42,7 +42,7 @@ export function Customers({ me }: { me: StaffUser }) {
         {data && data.customers.length === 0 && <EmptyRow columns={own ? 4 : 5}>{text ? `No customer matches “${text}”.` : "No customers yet. Add one, or convert a lead."}</EmptyRow>}
       </tbody>
     </table></div>
-    {data && data.total > data.pageSize && <div className="more"><span className="muted">{offset + 1}to{Math.min(offset + data.pageSize, data.total)} of {data.total}</span>
+    {data && data.total > data.pageSize && <div className="more"><span className="muted">{offset + 1}–{Math.min(offset + data.pageSize, data.total)} of {data.total}</span>
       <button className="secondary small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - data.pageSize))}>Previous</button>
       <button className="secondary small" disabled={offset + data.pageSize >= data.total} onClick={() => setOffset(offset + data.pageSize)}>Next</button></div>}
     {adding && <CustomerDialog me={me} staff={staff.data?.staff ?? []} onClose={() => setAdding(false)} onSaved={(c) => navigate(`/customers/${c.id}`)} />}
@@ -51,7 +51,7 @@ export function Customers({ me }: { me: StaffUser }) {
 
 /** The licence end date that matters, coloured only when it needs attention. */
 export function Renewal({ at }: { at: number | null }) {
-  if (at === null) return <span className="muted">Not set</span>;
+  if (at === null) return <span className="muted">—</span>;
   const days = daysFromToday(at);
   return days < 0 ? <Pill tone="negative">Ended {relativeDay(at).toLowerCase()}</Pill> : days <= 30 ? <Pill tone="warning">{relativeDay(at)}</Pill> : <>{relativeDay(at)}</>;
 }

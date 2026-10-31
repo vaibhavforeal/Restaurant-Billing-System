@@ -55,10 +55,10 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
       setS(settings); setPrices(priceTable(settings.prices)); setExtraDevice(rupees(settings.extraDevicePaise)); setSaved(JSON.stringify(settings));
     }, "Settings saved.");
   };
-  return <form className="settings-form" onSubmit={submit}>
+  return <form onSubmit={submit}>
     <section className="settings-section">
       <div><h2>Seller on invoices</h2><p>ForkFlow's legal name, GSTIN and address as printed on every tax invoice. The state decides CGST and SGST or IGST.</p></div>
-      <div className="settings-fields form-grid">
+      <div className="settings-panel form-grid">
         <Field label="Legal name" wide><input maxLength={120} value={s.seller.legalName} onChange={seller("legalName")} /></Field>
         <Field label="GSTIN"><input maxLength={15} value={s.seller.gstin} onChange={seller("gstin")} placeholder="27AAAAA0000A1Z5" /></Field>
         <Field label="State"><select value={s.seller.stateCode} onChange={seller("stateCode")}><option value="">Choose a state</option>
@@ -72,7 +72,7 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
     </section>
     <section className="settings-section">
       <div><h2>Invoice wording</h2><p>Numbers read {s.invoice.prefix || "FF"}/26-27/000001 and restart each financial year. The SAC and rate apply to licence lines.</p></div>
-      <div className="settings-fields form-grid">
+      <div className="settings-panel form-grid">
         <Field label="Number prefix" hint="1 to 4 letters or digits"><input maxLength={4} value={s.invoice.prefix} onChange={invoice("prefix")} /></Field>
         <Field label="SAC for licences" hint="997331: licensing the right to use software"><input maxLength={8} inputMode="numeric" value={s.invoice.sac} onChange={invoice("sac")} /></Field>
         <Field label="GST rate"><select value={s.invoice.gstRateBp} onChange={(e) => setS({ ...s, invoice: { ...s.invoice, gstRateBp: Number(e.target.value) } })}>
@@ -83,7 +83,7 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
     </section>
     <section className="settings-section">
       <div><h2>Price list</h2><p>Price per outlet before GST. New orders start from these; staff can change the price on an order. Leave a term blank if it isn't sold.</p></div>
-      <div className="settings-fields">
+      <div className="settings-panel">
         <table className="data"><thead><tr><th>Term</th><th className="num">Basic (Rs.)</th><th className="num">Pro (Rs.)</th></tr></thead>
           <tbody>{TERMS.map((months) => <tr key={months}><td>{months === 1 ? "1 month" : `${months} months`}</td>
             {(["basic", "pro"] as const).map((plan) => <td key={plan} className="num"><input aria-label={`${plan === "pro" ? "Pro" : "Basic"}, ${months} months`} inputMode="decimal" style={{ maxWidth: 140, textAlign: "right" }}
@@ -95,7 +95,7 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
         </div>
       </div>
     </section>
-    <div className="form-actions save-bar">
+    <div className="form-actions" style={{ justifyContent: "flex-start", alignItems: "center" }}>
       <button className="primary" disabled={busy || !dirty}>{busy ? "Saving…" : "Save settings"}</button>
       {!dirty && !status && <span className="muted">All changes saved.</span>}
     </div>

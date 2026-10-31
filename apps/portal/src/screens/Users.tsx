@@ -22,7 +22,7 @@ export function Users({ me }: { me: StaffUser }) {
     <PageHead title="Staff" sub={data ? `${plural(active, "active account")}${users.length > active ? `, ${users.length - active} deactivated` : ""}` : "Loading staff…"}
       actions={<button className="primary" onClick={() => setAdding(true)}>Add staff</button>} />
     {error && <LoadError message={error} retry={reload} />}
-    <div className="table-wrap"><table className="data stack-phone">
+    <div className="grid-main"><div className="table-wrap"><table className="data stack-phone">
       <thead><tr><th>Name</th><th>Role</th><th className="phone-hide">Email</th><th>Status</th><th className="num">Last sign-in</th></tr></thead>
       <tbody>
         {users.map((u) => <tr key={u.id} className="clickable" onClick={() => setEditing(u)}>
@@ -35,7 +35,7 @@ export function Users({ me }: { me: StaffUser }) {
         {data && users.length === 0 && <EmptyRow columns={5}>No staff yet.</EmptyRow>}
       </tbody>
     </table></div>
-    <aside className="staff-role-guide"><h2 className="section-title">What each role can do</h2><dl>{ROLES.map((r) => <div key={r}><dt>{ROLE_NAMES[r]}</dt><dd>{ROLE_JOBS[r]}</dd></div>)}</dl></aside>
+    <aside className="rail"><h2>What each role can do</h2><dl>{ROLES.map((r) => <div key={r}><dt>{ROLE_NAMES[r]}</dt><dd>{ROLE_JOBS[r]}</dd></div>)}</dl></aside></div>
     {adding && <AddStaff onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload(); }} />}
     {editing && <EditStaff user={editing} me={me} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload(); }} />}
   </>;

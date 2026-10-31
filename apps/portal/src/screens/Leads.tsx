@@ -26,20 +26,18 @@ export function Leads({ me }: { me: StaffUser }) {
   return <>
     <PageHead title="Leads" sub={data ? `${plural(open, "open lead")}${me.role === "sales" ? " of yours" : ""}${filter === "open" && pipeline ? `, worth about ${money(pipeline)}` : ""}` : "Loading leads…"}
       actions={<button className="primary" onClick={() => setAdding(true)}>Add lead</button>} />
-    <div className="list-controls">
     <Tabs label="Pipeline stage" value={filter} onChange={setFilter} tabs={[
       { id: "open", label: <>Open<span className="count">{open}</span></> },
       ...OPEN_STAGES.map((s) => ({ id: s, label: <>{STAGE_NAMES[s]}<span className="count">{count(s)}</span></> })),
       { id: "won", label: <>Won<span className="count">{count("won")}</span></> }, { id: "lost", label: <>Lost<span className="count">{count("lost")}</span></> },
     ]} />
     <div className="toolbar"><input type="search" className="search-box" aria-label="Search leads" placeholder="Name, contact, phone or city" value={text} onChange={(e) => setText(e.target.value)} /></div>
-    </div>
     {error && <LoadError message={error} retry={reload} />}
     <div className="table-wrap"><table className="data stack-phone">
       <thead><tr><th>Lead</th><th className="phone-hide">Stage</th><th className="phone-hide">Source</th><th className="num phone-hide">Worth</th><th className="num">Next follow-up</th>{me.role !== "sales" && <th className="phone-hide">Rep</th>}</tr></thead>
       <tbody>
         {data?.leads.map((l) => <tr key={l.id} className="clickable" onClick={() => navigate(`/leads/${l.id}`)}>
-          <td><Link className="name" to={`/leads/${l.id}`} onClick={(e) => e.stopPropagation()}>{l.businessName}</Link><span className="sub">{[l.contactName, l.city].filter(Boolean).join(", ") || "—"}</span></td>
+          <td><Link className="name" to={`/leads/${l.id}`} onClick={(e) => e.stopPropagation()}>{l.businessName}</Link><span className="sub">{[l.contactName, l.city].filter(Boolean).join(" · ") || "—"}</span></td>
           <td className="phone-hide">{l.stage === "won" ? <Pill tone="positive">Won</Pill> : l.stage === "lost" ? <Pill>Lost</Pill> : STAGE_NAMES[l.stage]}<span className="sub">since {date(l.stageChangedAt)}</span></td>
           <td className="phone-hide muted">{SOURCE_NAMES[l.source]}</td>
           <td className="num phone-hide">{l.estimatedValuePaise ? money(l.estimatedValuePaise) : "—"}{l.expectedOutlets && <span className="sub">{plural(l.expectedOutlets, "outlet")}{l.expectedPlan ? `, ${PLAN_NAMES[l.expectedPlan]}` : ""}</span>}</td>
@@ -65,7 +63,7 @@ export function Lead({ id, me }: { id: string; me: StaffUser }) {
   const moveTo = (stage: LeadStage) => run(async () => setData(await post<{ lead: LeadDetail }>(`/leads/${l.id}/stage`, { stage })));
   return <>
     <PageHead back={<Link to="/leads">Leads</Link>} title={l.businessName}
-      sub={<>{l.stage === "won" ? <>Won, now customer <Link to={`/customers/${l.customerId}`}>{l.businessName}</Link></> : l.stage === "lost" ? `Lost: ${l.lostReason}` : `${STAGE_NAMES[l.stage]} since ${date(l.stageChangedAt)}`}. {SOURCE_NAMES[l.source]}</>}
+      sub={<>{l.stage === "won" ? <>Won · now customer <Link to={`/customers/${l.customerId}`}>{l.businessName}</Link></> : l.stage === "lost" ? `Lost: ${l.lostReason}` : `${STAGE_NAMES[l.stage]} since ${date(l.stageChangedAt)}`} · {SOURCE_NAMES[l.source]}</>}
       actions={<><button className="secondary" onClick={() => setDialog("edit")}>Edit</button>
         {!closed && <button className="secondary" onClick={() => setDialog("followup")}>Add follow-up</button>}
         {!closed && <button className="primary" disabled={busy} onClick={() => void run(async () => {
@@ -73,25 +71,23 @@ export function Lead({ id, me }: { id: string; me: StaffUser }) {
           navigate(`/customers/${customerId}`);
         })}>Convert to customer</button>}</>} />
     {status}
-    <div className="grid-main record-workspace">
-      <div className="stack">
-    {!closed && <div className="toolbar stage-controls" role="group" aria-label="Stage">
+    {!closed && <div className="toolbar" role="group" aria-label="Stage">
       {OPEN_STAGES.map((s) => <button key={s} type="button" className={s === l.stage ? "primary small" : "secondary small"} aria-pressed={s === l.stage} disabled={busy || s === l.stage} onClick={() => void moveTo(s)}>{STAGE_NAMES[s]}</button>)}
       <button type="button" className="ghost small" disabled={busy} onClick={() => setDialog("lost")}>Mark lost…</button>
     </div>}
+    <div className="grid-main" style={{ marginTop: 16 }}>
       <section><div className="panel-head"><h2>Follow-ups</h2></div>
         <FollowUpRows items={l.followUps} showAbout={false} onChanged={() => void reload()} /></section>
-      </div>
       <aside className="rail"><h2>Details</h2><dl className="kv">
         <dt>Contact</dt><dd>{l.contactName ?? "—"}</dd>
-        <dt>Phone</dt><dd>{l.phone ? <span className="link-cluster"><a href={`tel:${l.phone.replace(/\s/g, "")}`}>{l.phone}</a><a href={`https://wa.me/${whatsapp(l.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></span> : "—"}</dd>
+        <dt>Phone</dt><dd>{l.phone ? <><a href={`tel:${l.phone.replace(/\s/g, "")}`}>{l.phone}</a> · <a href={`https://wa.me/${whatsapp(l.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></> : "—"}</dd>
         <dt>Email</dt><dd>{l.email ? <a href={`mailto:${l.email}`}>{l.email}</a> : "—"}</dd>
         <dt>Place</dt><dd>{[l.city, l.stateCode && GST_STATES[l.stateCode]].filter(Boolean).join(", ") || "—"}</dd>
         <dt>Interested in</dt><dd>{[l.expectedPlan && PLAN_NAMES[l.expectedPlan], l.expectedOutlets && plural(l.expectedOutlets, "outlet")].filter(Boolean).join(", ") || "—"}</dd>
         <dt>Worth about</dt><dd>{l.estimatedValuePaise ? money(l.estimatedValuePaise) : "—"}</dd>
         <dt>Sales rep</dt><dd>{l.owner ? <Person name={l.owner.name} id={l.owner.id} /> : "Not assigned"}</dd>
         <dt>Added</dt><dd>{date(l.createdAt)}</dd>
-      </dl>{l.notes && <div className="record-notes"><h2>Notes</h2><p>{l.notes}</p></div>}</aside>
+      </dl>{l.notes && <><h2 style={{ marginTop: 20 }}>Notes</h2><p style={{ whiteSpace: "pre-wrap" }}>{l.notes}</p></>}</aside>
     </div>
     {dialog === "edit" && <LeadDialog me={me} staff={staff.data?.staff ?? []} lead={l} onClose={() => setDialog(null)} onSaved={(next) => { setDialog(null); setData({ lead: next }); }} />}
     {dialog === "followup" && <AddFollowUp about={{ leadId: l.id }} me={me} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); void reload(); }} />}

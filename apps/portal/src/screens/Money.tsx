@@ -17,13 +17,13 @@ export function OrderMoney({ order, me, onChanged }: { order: OrderDetail; me: S
   const can = (p: Parameters<typeof roleCan>[1]) => roleCan(me.role, p);
   const live = order.invoices.find((i) => !i.cancelledAt);
   const act = (path: string, body: unknown, done: string) => run(async () => onChanged((await post<{ order: OrderDetail }>(path, body)).order), done);
-  return <section className="stack money-ledger">
-    <div className="payment-summary"><h2>Payment</h2>
-      <dl className="kv payment-totals">
+  return <section className="stack">
+    <div><h2>Payment</h2>
+      <dl className="kv" style={{ marginTop: 8 }}>
         <dt>Total</dt><dd>{money(order.totalPaise)}</dd>
-        <dt>Received</dt><dd>{money(order.paidPaise)}{order.paidPaise > order.totalPaise && <span className="muted">, {money(order.paidPaise - order.totalPaise)} over</span>}</dd>
-        {payable && <><dt className="balance-label">Still to pay</dt><dd className="balance-value"><strong>{money(owing)}</strong></dd></>}
-        {order.creditUntil && order.status === "confirmed" && <><dt>On credit until</dt><dd>{date(order.creditUntil)}{order.creditApprovedBy && <span className="muted">, {order.creditApprovedBy.name}</span>}</dd></>}
+        <dt>Received</dt><dd>{money(order.paidPaise)}{order.paidPaise > order.totalPaise && <span className="muted"> · {money(order.paidPaise - order.totalPaise)} over</span>}</dd>
+        {payable && <><dt>Still to pay</dt><dd><strong>{money(owing)}</strong></dd></>}
+        {order.creditUntil && order.status === "confirmed" && <><dt>On credit until</dt><dd>{date(order.creditUntil)}{order.creditApprovedBy && <span className="muted"> · {order.creditApprovedBy.name}</span>}</dd></>}
         {order.paidAt && <><dt>Paid</dt><dd>{date(order.paidAt)}</dd></>}
       </dl></div>
     {payable && <div className="actions">
@@ -34,22 +34,22 @@ export function OrderMoney({ order, me, onChanged }: { order: OrderDetail; me: S
       }, "Payment link sent. Razorpay texts and emails it to the customer.")}>Send payment link</button>}
     </div>}
     {status}
-    {order.payments.length > 0 && <ul className="stack ledger-list">{order.payments.map((p) => <li key={p.id}>
+    {order.payments.length > 0 && <ul className="stack" style={{ gap: 8 }}>{order.payments.map((p) => <li key={p.id}>
       <div><strong>{money(p.amountPaise)}</strong> by {METHODS[p.method]} {p.status === "pending" ? <Pill tone="warning">Not cleared</Pill> : p.status === "bounced" ? <Pill tone="negative">Bounced</Pill> : null}</div>
-      <div className="muted small">{date(p.receivedAt)}{p.reference ? `, ${p.reference}` : ""}{p.recordedBy ? `, ${p.recordedBy.name}` : ""}{p.note ? `, ${p.note}` : ""}</div>
+      <div className="muted small">{date(p.receivedAt)}{p.reference ? ` · ${p.reference}` : ""}{p.recordedBy ? ` · ${p.recordedBy.name}` : ""}{p.note ? ` · ${p.note}` : ""}</div>
       {p.status === "pending" && can("payments.record") && <div className="actions" style={{ marginTop: 4 }}>
         <button className="secondary small" disabled={busy} onClick={() => void act(`/payments/${p.id}/status`, { status: "cleared" }, "Cheque cleared.")}>Cleared</button>
         <button className="ghost small" disabled={busy} onClick={() => { if (window.confirm("Mark this cheque as bounced?")) void act(`/payments/${p.id}/status`, { status: "bounced" }, "Marked as bounced."); }}>Bounced</button></div>}
     </li>)}</ul>}
-    {order.links.length > 0 && <div className="record-section"><h2>Payment links</h2><ul className="stack ledger-list">{order.links.map((l) => <li key={l.id} className="code-row" style={{ flexWrap: "wrap" }}>
+    {order.links.length > 0 && <div><h2 style={{ fontSize: 14 }}>Payment links</h2><ul className="stack" style={{ gap: 6, marginTop: 6 }}>{order.links.map((l) => <li key={l.id} className="code-row" style={{ flexWrap: "wrap" }}>
       <span>{money(l.amountPaise)}</span>
       {l.status === "created" ? <><a href={l.shortUrl} target="_blank" rel="noopener noreferrer">{l.shortUrl.replace(/^https?:\/\//, "")}</a><CopyButton text={l.shortUrl} />
         {can("orders.write") && <button className="ghost small" disabled={busy} onClick={() => void act(`/payment-links/${l.id}/cancel`, undefined, "Link cancelled.")}>Cancel</button>}</>
         : <Pill tone={l.status === "paid" ? "positive" : "neutral"}>{l.status === "paid" ? "Paid" : l.status === "expired" ? "Expired" : l.status === "cancelled" ? "Cancelled" : l.status}</Pill>}
       <span className="muted small">sent {date(l.createdAt)}</span></li>)}</ul></div>}
-    {(order.invoices.length > 0 || (order.totalPaise > 0 && order.status !== "draft" && order.status !== "cancelled")) && <div className="record-section">
-      <h2>Tax invoice</h2>
-      <ul className="stack ledger-list">{order.invoices.map((i) => <li key={i.id} className="code-row" style={{ flexWrap: "wrap" }}>
+    {(order.invoices.length > 0 || (order.totalPaise > 0 && order.status !== "draft" && order.status !== "cancelled")) && <div>
+      <h2 style={{ fontSize: 14 }}>Tax invoice</h2>
+      <ul className="stack" style={{ gap: 6, marginTop: 6 }}>{order.invoices.map((i) => <li key={i.id} className="code-row" style={{ flexWrap: "wrap" }}>
         <a className="mono" href={`/portal/api/invoices/${i.id}/pdf`}>{i.number}</a>{i.cancelledAt ? <Pill>Cancelled</Pill> : <span className="muted small">{date(i.issuedAt)}</span>}
         {!i.cancelledAt && can("invoices.cancel") && <CancelInvoice invoice={i} onDone={() => void api<{ order: OrderDetail }>(`/orders/${order.id}`).then((r) => onChanged(r.order))} />}
       </li>)}</ul>
@@ -118,10 +118,10 @@ export function Invoices() {
   const { data, error, reload } = useData(() => api<{ invoices: InvoiceSummary[]; total: number; valuePaise: number }>(`/invoices${key}`), key);
   return <>
     <PageHead title="Invoices" sub={data ? `${plural(data.total, "invoice")}${month ? ` in ${monthName(month)}` : ""}, ${money(data.valuePaise)} not counting cancelled ones` : "Loading invoices…"} />
-    <div className="list-controls"><div className="toolbar">
+    <div className="toolbar">
       <input type="search" className="search-box" aria-label="Search invoices" placeholder="Invoice number or customer" value={text} onChange={(e) => setText(e.target.value)} />
       <input type="month" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 180 }} />
-    </div></div>
+    </div>
     {error && <LoadError message={error} retry={reload} />}
     <div className="table-wrap"><table className="data stack-phone">
       <thead><tr><th>Invoice</th><th>Customer</th><th className="phone-hide">Order</th><th className="num phone-hide">Date</th><th className="num">Total</th></tr></thead>
