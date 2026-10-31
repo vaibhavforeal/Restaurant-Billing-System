@@ -86,7 +86,7 @@ guest paid (split payments are shared in proportion). You can change it:
 - A method can never be refunded more than was paid by that method, less what has
   already been refunded by it. The list shows "up to ₹..." for each method.
 
-ForkFlow records the refund; it does not move money. Hand back the cash, or send
+MasalaPOS records the refund; it does not move money. Hand back the cash, or send
 the UPI or card refund in your payment app, at the same time.
 
 ## What changes in the reports

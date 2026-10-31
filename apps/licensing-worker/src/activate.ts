@@ -1,16 +1,20 @@
-import { ActivationRequest, readClaims } from "@forkflow/license-issuer";
-import { issueLicense, type Deps } from "./issue.js";
-import { isWellFormedSecret, sha256Hex, verifyInstallationSecret } from "./secret.js";
-import { createInstallation, getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement } from "./store.js";
+import { ActivationRequest, readClaims } from "@masalapos/license-issuer";
+import { reissueLicense, type Deps } from "./issue.js";
+import { isWellFormedSecret, verifyInstallationSecret } from "./secret.js";
+import { getInstallation, insertLicenseIfAbsentStatement, latestLicense, raiseRevisionFloorStatement, touchInstallationStatement } from "./store.js";
 
 export type { Deps } from "./issue.js";
 export type ActivateDeps = Deps & { log: (msg: string) => void };
 
-const TRIAL_MS = 14 * 86_400_000;
 // A client-reported revision can become the floor, so it is capped far below Number.MAX_SAFE_INTEGER.
 const MAX_REPORTED_REVISION = 1_000_000;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+/**
+ * POST /v1/activate: a counter's hourly check. It hands back a newer licence when there is one (a renewal, a module change, a staff
+ * adjustment). Counters are only created by enrolling with a Customer ID and Order ID, so an unknown one gets nothing and nothing is
+ * written; `enrolled` tells the counter whether it holds a seat on an order.
+ */
 export async function handleActivate(deps: ActivateDeps, body: unknown, secret: string | null): Promise<Response> {
   const parsed = ActivationRequest.safeParse(body);
   if (!parsed.success || parsed.data.currentRevision > MAX_REPORTED_REVISION) return json({ error: "bad_request" }, 400);
@@ -18,60 +22,38 @@ export async function handleActivate(deps: ActivateDeps, body: unknown, secret: 
   if (request.verificationKeyFingerprint !== deps.signer.fingerprint) return json({ error: "wrong_key" }, 409);
   if (!isWellFormedSecret(secret)) return json({ error: "unauthorized" }, 401);
   const { db } = deps;
-  const held = request.licenseId !== null && request.organizationId !== null && request.outletId !== null;
-  const secretHash = await sha256Hex(secret);
 
-  let installation = await getInstallation(db, request.installationId);
-  const known = installation !== null;
-  if (!installation) {
-    // A counter that already holds a hand-issued licence is adopted as it is (its reported revision becomes the floor); anything else is a first contact.
-    await createInstallation(db, {
-      installationId: request.installationId,
-      licenseId: held ? request.licenseId! : deps.uuid(), organizationId: held ? request.organizationId! : deps.uuid(), outletId: held ? request.outletId! : deps.uuid(),
-      trialStartedAt: held ? null : deps.now(), revisionFloor: held ? request.currentRevision : 0, createdAt: deps.now(), secretHash,
-    });
-    installation = await getInstallation(db, request.installationId);
-  }
-  if (!installation) return json({ error: "unavailable" }, 500);
-  // Trust on first use for a row without a secret (the operator's reset path); the re-read also settles two first contacts that raced.
-  // Nothing is written past this point for a caller that does not hold the secret.
-  const verified = await verifyInstallationSecret(db, installation, secret);
-  if (!verified) return json({ error: "unauthorized" }, 401);
-  installation = verified;
+  const found = await getInstallation(db, request.installationId);
+  if (!found) return json({ license: null, enrolled: false });
+  // Trust on first use for a row without a secret (support's "reset pairing"); nothing is written for a caller that does not hold it.
+  const installation = await verifyInstallationSecret(db, found, secret);
+  if (!installation) return json({ error: "unauthorized" }, 401);
   const { installationId } = installation;
+  await touchInstallationStatement(db, installationId, deps.now(), request.appVersion ?? null, request.outletName ?? null).run();
+  const held = request.licenseId !== null && request.organizationId !== null && request.outletId !== null;
   const mismatched = held && (request.licenseId !== installation.licenseId || request.organizationId !== installation.organizationId || request.outletId !== installation.outletId);
 
-  // A known counter reporting a revision above the floor holds a licence the service never issued or handed out: a hand-issued one.
+  // A counter reporting a revision above the floor holds a licence the service never issued or handed out: a hand-issued one.
   let handIssued = false;
-  if (known && mismatched) deps.log(`activate: installation ${installationId} reported identifiers that differ from the stored ones; nothing issued`);
-  else if (known && held && request.currentRevision > installation.revisionFloor) {
+  if (mismatched) deps.log(`activate: installation ${installationId} reported identifiers that differ from the stored ones; nothing issued`);
+  else if (held && request.currentRevision > installation.revisionFloor) {
     await raiseRevisionFloorStatement(db, installationId, request.currentRevision).run();
     handIssued = true;
   }
 
   let latest = await latestLicense(db, installationId);
-  // The trial is the first licence of an installation created for it; racing callers (or a crash after the row was created) converge on one row.
-  if (!latest && installation.trialStartedAt !== null) {
-    const now = deps.now(), expiresAt = now + TRIAL_MS;
-    const { row } = await issueLicense({ ...deps, now: () => now }, { installation, plan: "pro", expiresAt, graceUntil: expiresAt, trial: true, reason: "trial", subscriptionId: null, paymentId: null });
-    await insertLicenseIfAbsentStatement(db, row).run();
-    latest = await latestLicense(db, installationId);
-  }
   // A current paid licence at or below the hand-issued revision would never reach the counter, so its terms are re-signed above it.
-  // Never a trial or an expired licence; the payment id stays on the original row only (it is UNIQUE).
-  // A paid licence re-issued for an owner change counts as paid here too; a re-issued trial still does not.
-  const paid = latest !== null && (latest.reason === "charge" || (latest.reason === "owner" && readClaims(latest.envelope).trial !== true));
-  if (handIssued && latest && paid && latest.revision <= request.currentRevision && latest.expiresAt > deps.now()) {
-    const { row } = await issueLicense(deps, {
-      installation, plan: latest.plan, expiresAt: latest.expiresAt, graceUntil: latest.graceUntil, trial: false, reason: latest.reason,
-      subscriptionId: latest.razorpaySubscriptionId, paymentId: null,
-    });
-    await insertLicenseIfAbsentStatement(db, row).run();
-    latest = await latestLicense(db, installationId);
+  // Never a trial or an expired licence.
+  if (handIssued && latest && latest.revision <= request.currentRevision && latest.expiresAt > deps.now() && readClaims(latest.envelope).trial !== true) {
+    const reissued = await reissueLicense(deps, installation, latest.reason === "order" ? "manual" : latest.reason);
+    if (reissued) {
+      await insertLicenseIfAbsentStatement(db, reissued.row).run();
+      latest = await latestLicense(db, installationId);
+    }
   }
 
   const license = latest && latest.revision > request.currentRevision ? latest : null;
   // Handing a licence out raises the floor as well, so a counter that later reports this revision is known to hold it and is not re-signed.
   if (license && !mismatched) await raiseRevisionFloorStatement(db, installationId, license.revision).run();
-  return json({ license: license?.envelope ?? null });
+  return json({ license: license?.envelope ?? null, enrolled: installation.orderId !== null });
 }

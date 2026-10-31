@@ -1,4 +1,4 @@
--- Owner control panel: per-restaurant module allowances decided by ForkFlow, their history, and owner login sessions.
+-- Owner control panel: per-restaurant module allowances decided by MasalaPOS, their history, and owner login sessions.
 -- `overrides` holds only the owner's choices ({"kds": true, "reservations": false}); a module left out follows the plan.
 CREATE TABLE owner_settings (
   installation_id TEXT PRIMARY KEY REFERENCES installations(installation_id),

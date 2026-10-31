@@ -15,7 +15,7 @@ import { loadCaptainHttps, startCaptainHttps } from "./captain-https.js";
 const WebSocket = createRequire(import.meta.url)("ws") as new (url: string, options: ConnectionOptions) => EventEmitter & { send(data: string): void; terminate(): void };
 
 describe.skipIf(process.platform !== "win32")("Captain local HTTPS", () => {
-  const directory = mkdtempSync(join(tmpdir(), "forkflow-captain-test-"));
+  const directory = mkdtempSync(join(tmpdir(), "masalapos-captain-test-"));
   let generated = false;
   function configuration() {
     if (!generated) {
@@ -35,7 +35,7 @@ describe.skipIf(process.platform !== "win32")("Captain local HTTPS", () => {
     }
   });
   it("is optional and validates certificate address coverage", () => {
-    expect(loadCaptainHttps(mkdtempSync(join(tmpdir(), "forkflow-no-tls-")))).toBeNull();
+    expect(loadCaptainHttps(mkdtempSync(join(tmpdir(), "masalapos-no-tls-")))).toBeNull();
     const config = configuration(); expect(config.info.addresses).toEqual(["127.0.0.1"]);
     expect(config.info.fingerprint).toMatch(/^[A-F0-9:]+$/);
     const file = join(directory, "captain-https.json"), original = readFileSync(file, "utf8");

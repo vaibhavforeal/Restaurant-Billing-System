@@ -1,10 +1,10 @@
-# ForkFlow — Application Overview
+# MasalaPOS — Application Overview
 
 **Application version:** 0.7.0  
 **Documented:** 5 October 2026  
 **Scope:** The current source tree, including changes present in the workspace. This describes the implementation, not a certification of an installed executable or a new test run.
 
-ForkFlow is a restaurant point-of-sale (POS) application for Windows. It manages menu items, tables, takeaway orders, kitchen order tickets (KOTs), GST billing, payments, inventory, reports, and local backups. One restaurant PC hosts the application server and database. Other counters, captains/waiters, kitchen displays, and guest phones connect to that PC over the restaurant network.
+MasalaPOS is a restaurant point-of-sale (POS) application for Windows. It manages menu items, tables, takeaway orders, kitchen order tickets (KOTs), GST billing, payments, inventory, reports, and local backups. One restaurant PC hosts the application server and database. Other counters, captains/waiters, kitchen displays, and guest phones connect to that PC over the restaurant network.
 
 Ordinary restaurant operations work without internet while the main PC, local network, and applicable license remain operational. The current system is a single-outlet application. Hosted accounts, restaurant-data synchronization, and public online ordering are future work.
 
@@ -31,9 +31,9 @@ The main evidence for this guide is [package.json](package.json), the workspace 
 
 | App or interface | Purpose | Runtime and connection |
 | --- | --- | --- |
-| **ForkFlow** | Licensed customer POS with fresh restaurant setup and Basic/Pro activation | Electron desktop app hosting Fastify, SQLite, and the built React UI; default HTTP port **4100** |
-| **ForkFlow Demo** | Demonstrations with persistent, resettable sample restaurant data | Separate Electron app identity and data directory; default HTTP port **4110**; simulated thermal printing |
-| **ForkFlow Kitchen** | Dedicated Windows kitchen display | Thin Electron client connecting to a main POS or Demo server; no independent POS database or server |
+| **MasalaPOS** | Licensed customer POS with fresh restaurant setup and Basic/Pro activation | Electron desktop app hosting Fastify, SQLite, and the built React UI; default HTTP port **4100** |
+| **MasalaPOS Demo** | Demonstrations with persistent, resettable sample restaurant data | Separate Electron app identity and data directory; default HTTP port **4110**; simulated thermal printing |
+| **MasalaPOS Kitchen** | Dedicated Windows kitchen display | Thin Electron client connecting to a main POS or Demo server; no independent POS database or server |
 | **Counter browser** | Additional billing counter | Opens the main PC's address and uses the same API and database |
 | **Captain App** | Phone/tablet interface for waiters and captains | React interface at `/captain/`; installable PWA with trusted HTTPS |
 | **Kitchen browser/PWA** | Kitchen display on a tablet or browser | `/kitchen/`; installable with trusted HTTPS |
@@ -132,7 +132,7 @@ Restaurant Billing Software/
 ├── output/                      Verification output and screenshots
 ├── .e2e-scratch/                Disposable verification data
 ├── electron-builder*.yml        Windows distribution configuration
-├── Start ForkFlow*.cmd          Workspace launchers for staged Electron apps
+├── Start MasalaPOS*.cmd          Workspace launchers for staged Electron apps
 ├── package.json                 Root scripts and workspace configuration
 ├── package-lock.json            Resolved dependency lockfile
 ├── tsconfig*.json               Shared/root TypeScript configuration
@@ -145,12 +145,12 @@ Restaurant Billing Software/
 
 | Workspace | Package name | Responsibility |
 | --- | --- | --- |
-| `apps/desktop` | `@forkflow/desktop` | Main Windows lifecycle, server process, tray, recovery, Demo behavior |
-| `apps/kitchen-desktop` | `@forkflow/kitchen-desktop` | Connect a dedicated kitchen window to an existing restaurant server |
-| `apps/server` | `@forkflow/server` | REST API, authentication, live events, printing, backups, and integration adapters |
-| `apps/ui` | `@forkflow/ui` | Staff POS, Captain, Kitchen, guest menu, reports, and settings |
-| `packages/core` | `@forkflow/core` | Reusable authentication, RBAC, and Ed25519 verification primitives |
-| `packages/domain` | `@forkflow/domain` | SQLite schema/migrations, validation, billing, inventory, reporting, and licensing rules |
+| `apps/desktop` | `@masalapos/desktop` | Main Windows lifecycle, server process, tray, recovery, Demo behavior |
+| `apps/kitchen-desktop` | `@masalapos/kitchen-desktop` | Connect a dedicated kitchen window to an existing restaurant server |
+| `apps/server` | `@masalapos/server` | REST API, authentication, live events, printing, backups, and integration adapters |
+| `apps/ui` | `@masalapos/ui` | Staff POS, Captain, Kitchen, guest menu, reports, and settings |
+| `packages/core` | `@masalapos/core` | Reusable authentication, RBAC, and Ed25519 verification primitives |
+| `packages/domain` | `@masalapos/domain` | SQLite schema/migrations, validation, billing, inventory, reporting, and licensing rules |
 
 ## 4. Frameworks and dependencies
 
@@ -196,7 +196,7 @@ Shared TypeScript options include strict checking, `noUncheckedIndexedAccess`, `
 | `@types/react` | `^19.2.18` | React type definitions |
 | `@types/react-dom` | `^19.2.4` | React DOM type definitions |
 
-The server also declares local `@forkflow/core` and `@forkflow/domain` workspace dependencies using `*`.
+The server also declares local `@masalapos/core` and `@masalapos/domain` workspace dependencies using `*`.
 
 ### Experimental dependency
 
@@ -240,10 +240,10 @@ Orders connect to tables where applicable, and contain order items and KOTs. Bil
 
 | Execution mode / item | Default location |
 | --- | --- |
-| Source server (`npm run dev:server`) | `<repository>/data/forkflow.db`, unless `FORKFLOW_DATA_DIR` is set |
-| Main desktop/customer app | Electron `userData/data`; normally `%APPDATA%\forkflow-desktop\data` |
-| Demo | `%APPDATA%\forkflow-demo\data` |
-| Kitchen client connection | `%APPDATA%\forkflow-kitchen\connection.json` |
+| Source server (`npm run dev:server`) | `<repository>/data/masalapos.db`, unless `MASALAPOS_DATA_DIR` is set |
+| Main desktop/customer app | Electron `userData/data`; normally `%APPDATA%\masalapos-desktop\data` |
+| Demo | `%APPDATA%\masalapos-demo\data` |
+| Kitchen client connection | `%APPDATA%\masalapos-kitchen\connection.json` |
 | Local backups | `backups/` within the active server data directory |
 | Recovery archives | `recovery/` within the active data directory |
 | Desktop server logs | `server.log` and rotated `server.log.previous` in the data directory |
@@ -338,7 +338,7 @@ Printer submission success means the transport/spooler accepted the bytes; it do
 
 ### Zomato setup and reconciliation
 
-- Save restaurant connection metadata and import order history/settlement CSVs using ForkFlow templates.
+- Save restaurant connection metadata and import order history/settlement CSVs using MasalaPOS templates.
 - Preview and atomic import, duplicate detection, immutable conflicting-ID handling, and import history.
 - Separate ledger with missing-order, awaiting-statement, matched, amount-mismatch, and cancellation-review outcomes.
 - Search/date/status review and CSV exports.
@@ -424,13 +424,13 @@ npm run typecheck
 npm test
 
 # Choose a separate development database before starting the source server.
-$env:FORKFLOW_DATA_DIR = Join-Path $PWD '.e2e-scratch\development'
+$env:MASALAPOS_DATA_DIR = Join-Path $PWD '.e2e-scratch\development'
 npm run dev
 ```
 
 `npm run dev` starts Fastify on **4100** and Vite on **5173**. Open `http://localhost:5173`. The Vite proxy currently targets `http://localhost:4100`; changing only the server port does not update that proxy. Ensure the port is free or deliberately configure a separate development setup before starting alongside an installed POS.
 
-For the Electron development workflow, run `npm run dev:desktop`. It builds the UI and desktop stage, then opens `build/desktop/app` with Electron. The environment's `FORKFLOW_DATA_DIR` override also applies to this non-Demo desktop launch.
+For the Electron development workflow, run `npm run dev:desktop`. It builds the UI and desktop stage, then opens `build/desktop/app` with Electron. The environment's `MASALAPOS_DATA_DIR` override also applies to this non-Demo desktop launch.
 
 The repository documents a Windows/npm installation fallback when SQLite installation scripts fail despite a usable bundled native binary:
 
@@ -445,15 +445,15 @@ This is a troubleshooting fallback: skipping scripts also skips Electron's norma
 
 | Setting | Purpose / default |
 | --- | --- |
-| `FORKFLOW_DATA_DIR` | Override the source server/non-Demo desktop data directory |
-| `FORKFLOW_PORT` | HTTP port, default 4100; Demo desktop explicitly uses 4110 |
-| `FORKFLOW_UI_DIR` | Built UI directory served by the backend; desktop supplies its staged `ui` directory |
-| `FORKFLOW_LICENSE_PUBLIC_KEY` | Ed25519 public SPKI PEM for commercial builds; also enables enforcement when running unbundled server source |
-| `FORKFLOW_BUILD_STAGE` | Optional internal development stage under `build/desktop`; commercial/Demo builds enforce their dedicated stage names |
-| `FORKFLOW_DISABLE_AUTOSTART=1` | Suppress automatic first-launch Windows login registration in the packaged main app |
-| `FORKFLOW_RESTORE` | One-launch source recovery snapshot path; remove after the recovery launch |
-| `FORKFLOW_APP_VERSION` | Server version metadata for startup/backup handling; supplied by desktop |
-| `FORKFLOW_INSTANCE_ID` | Health identity used by desktop supervision; supplied by desktop |
+| `MASALAPOS_DATA_DIR` | Override the source server/non-Demo desktop data directory |
+| `MASALAPOS_PORT` | HTTP port, default 4100; Demo desktop explicitly uses 4110 |
+| `MASALAPOS_UI_DIR` | Built UI directory served by the backend; desktop supplies its staged `ui` directory |
+| `MASALAPOS_LICENSE_PUBLIC_KEY` | Ed25519 public SPKI PEM for commercial builds; also enables enforcement when running unbundled server source |
+| `MASALAPOS_BUILD_STAGE` | Optional internal development stage under `build/desktop`; commercial/Demo builds enforce their dedicated stage names |
+| `MASALAPOS_DISABLE_AUTOSTART=1` | Suppress automatic first-launch Windows login registration in the packaged main app |
+| `MASALAPOS_RESTORE` | One-launch source recovery snapshot path; remove after the recovery launch |
+| `MASALAPOS_APP_VERSION` | Server version metadata for startup/backup handling; supplied by desktop |
+| `MASALAPOS_INSTANCE_ID` | Health identity used by desktop supervision; supplied by desktop |
 | `captain-https.json` | Optional HTTPS settings inside the active data directory, referencing local certificate/passphrase files |
 
 The shown server entry point reads process environment variables directly; it does not automatically load a `.env` file. Packaged commercial licensing uses the embedded key, so removing an environment variable does not disable it. Ordinary bundled development and Demo builds do not become commercial builds from an ambient release key.
@@ -464,7 +464,7 @@ The shown server entry point reads process environment variables directly; it do
 
 | Command | Result |
 | --- | --- |
-| `npm run build -w @forkflow/ui` | Build browser assets into `apps/ui/dist` |
+| `npm run build -w @masalapos/ui` | Build browser assets into `apps/ui/dist` |
 | `npm run build:desktop` | Build UI and stage internal development app at `build/desktop/app` |
 | `npm run build:demo` | Validate Demo configuration, build UI, stage `build/desktop/demo` |
 | `npm run build:commercial` | Validate public key, build UI, stage licensed `build/desktop/commercial` |
@@ -483,7 +483,7 @@ Kitchen packaging references `build/desktop/icon.ico`, which is generated by the
 
 ```powershell
 # Use the public verification key from the license operator.
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
 npm run package:commercial
 ```
 
@@ -493,23 +493,23 @@ The path above is an example and must point to the operator's actual public key.
 
 | Edition | App ID | Installer |
 | --- | --- | --- |
-| Customer | `in.forkflow.pos` | `dist/commercial/ForkFlow-Setup-0.7.0.exe` |
-| Demo | `in.forkflow.demo` | `dist/demo/ForkFlow-Demo-Setup-0.7.0.exe` |
-| Kitchen | `in.forkflow.kitchen` | `dist/kitchen/ForkFlow-Kitchen-Setup-0.7.0.exe` |
+| Customer | `in.masalapos.pos` | `dist/commercial/MasalaPOS-Setup-0.7.0.exe` |
+| Demo | `in.masalapos.demo` | `dist/demo/MasalaPOS-Demo-Setup-0.7.0.exe` |
+| Kitchen | `in.masalapos.kitchen` | `dist/kitchen/MasalaPOS-Kitchen-Setup-0.7.0.exe` |
 
 Customer and Demo installers use per-machine installation with a selectable directory. Kitchen is per-user. Installers create desktop shortcuts and retain application data on uninstall. Main/Demo packages include the UI, server, Electron runtime, and SQLite driver; they do not include the restaurant's live database.
 
 ### Restaurant installation sequence
 
 1. Install the customer app on the designated Windows main PC. First-run packaging tools need internet on the build PC; ordinary installed POS operation is local.
-2. Open ForkFlow, create the restaurant/admin, import the signed license, and register the device.
+2. Open MasalaPOS, create the restaurant/admin, import the signed license, and register the device.
 3. Configure staff, menu, prices/taxes, tables, kitchen stations, printers, and stock links/recipes.
 4. Reserve the main PC's LAN address in the router. The customer installer adds a TCP **4100** firewall rule scoped to a private network and local subnet; Demo uses **4110**. Port overrides require corresponding network configuration.
-5. Connect counters through the main PC's LAN URL. Use `/captain/` for staff tablets and `/kitchen/` for kitchen browsers, or enter the server URL in ForkFlow Kitchen.
+5. Connect counters through the main PC's LAN URL. Use `/captain/` for staff tablets and `/kitchen/` for kitchen browsers, or enter the server URL in MasalaPOS Kitchen.
 6. Test the complete order → KOT → acceptance → bill → payment → receipt workflow on the intended devices and printers.
 7. Configure backup retention and a second backup folder, then verify a restore procedure before relying on the installation operationally.
 
-Closing the main window leaves ForkFlow in the tray. The customer desktop enables Windows login autostart on first packaged launch unless suppressed; the tray can toggle it. The primary PC must remain running for other devices to work.
+Closing the main window leaves MasalaPOS in the tray. The customer desktop enables Windows login autostart on first packaged launch unless suppressed; the tray can toggle it. The primary PC must remain running for other devices to work.
 
 ### Optional local HTTPS and PWA installation
 
@@ -538,7 +538,7 @@ The repository contains Windows installer workflows and manual build/verificatio
 - Optional second-folder copy, such as a removable disk or configured local/synced folder.
 - SQLite `VACUUM INTO`, integrity/reference validation, disk flush, and rename from a partial file to a completed snapshot.
 
-Use the app's backup operation instead of copying only the live `forkflow.db`; committed data may also be in WAL. Backup creation can briefly pause requests. A failed secondary copy does not invalidate a successful local snapshot.
+Use the app's backup operation instead of copying only the live `masalapos.db`; committed data may also be in WAL. Backup creation can briefly pause requests. A failed secondary copy does not invalidate a successful local snapshot.
 
 ### Restore and reconnection
 
@@ -563,7 +563,7 @@ npm test
 npm run test:watch
 npm run typecheck
 npm run test:packaging
-npm run build -w @forkflow/ui
+npm run build -w @masalapos/ui
 ```
 
 - **Vitest:** Colocated `*.test.ts` files in application and package source directories. Coverage includes domain calculations, migrations, API behavior, role enforcement, billing, KOTs, stock, printing, recovery, licensing, guest interactions, reporting, and integration frameworks.

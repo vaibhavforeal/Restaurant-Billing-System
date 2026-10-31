@@ -138,7 +138,7 @@ All sequences (bill no., per-day KOT no.) are plain server transactions — sing
 
 ## 8. Distribution
 
-One installer: **`ForkFlow-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine — no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
+One installer: **`MasalaPOS-Setup-x.x.x.exe`** (electron-builder/NSIS, ~100MB) bundling shell, server, UI, and SQLite engine — no prerequisites on the customer machine. First run creates the DB file and shows a setup screen (restaurant profile, admin PIN). The installer sets the firewall rule and autostart. Client devices install nothing (browser + QR). Updates = run the newer installer; backup + migrate on next boot.
 
 Known platform limits accepted for v1: LAN clients run over plain `http://` (service workers/PWA install unavailable — "Add to Home Screen" shortcut works); a true PWA later requires a small vendor-hosted DNS+cert service (Plex pattern), deferred.
 

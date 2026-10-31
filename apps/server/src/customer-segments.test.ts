@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, localDateKey } from "@forkflow/domain";
+import { uuidv7, localDateKey } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("customer segments and CRM insights", () => {

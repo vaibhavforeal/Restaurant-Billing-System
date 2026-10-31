@@ -1,17 +1,34 @@
 import DatabaseCtor from "better-sqlite3";
-import { MIGRATIONS, localDateKey, type Database } from "@forkflow/domain";
+import { MIGRATIONS, localDateKey, type Database } from "@masalapos/domain";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, openSync, fsyncSync, closeSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-const managedName = /^forkflow-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
+export const managedName = /^masalapos-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
+export type BackupKind = "daily" | "manual" | "pre-update";
+/** Kind and creation time from a managed snapshot name, or null for any other file. */
+export function parseBackupName(name: string): { kind: BackupKind; createdAt: number } | null {
+  if (!managedName.test(name)) return null;
+  return { kind: name.split("-")[1] === "pre" ? "pre-update" : name.split("-")[1] as BackupKind, createdAt: Number(name.match(/-(\d{13})-/)![1]) };
+}
+/** Retention shared by local, second-folder and cloud copies. The newest daily backup is always kept,
+ * older dailies for `retentionDays`; the latest 10 manual and 10 pre-update points are kept independently. */
+export function expiredBackups<T extends { name: string }>(entries: readonly T[], retentionDays: number, now: number): T[] {
+  const parsed = entries.flatMap((entry) => { const info = parseBackupName(entry.name); return info ? [{ entry, ...info }] : []; })
+    .sort((a, b) => b.createdAt - a.createdAt || b.entry.name.localeCompare(a.entry.name));
+  const counts = new Map<string, number>();
+  return parsed.filter(({ kind, createdAt }) => {
+    const count = (counts.get(kind) ?? 0) + 1; counts.set(kind, count);
+    return kind === "daily" ? createdAt < now - retentionDays * 86400000 && count > 1 : count > 10;
+  }).map(({ entry }) => entry);
+}
 export const BackupConfig = z.object({
   retentionDays: z.number().int().min(7).max(365).default(30),
   secondLocation: z.string().trim().max(1024).default("").refine((p) => !p || isAbsolute(p), "Use an absolute folder path on the server PC"),
 });
 type Config = z.infer<typeof BackupConfig>;
-type Kind = "daily" | "manual" | "pre-update";
+type Kind = BackupKind;
 
 export function atomicJson(path: string, value: unknown): void {
   const temp = `${path}.${randomUUID()}.tmp`;
@@ -24,7 +41,7 @@ export function syncFile(path: string): void {
   try { fsyncSync(fd); } finally { closeSync(fd); }
 }
 
-/** Read-only validation: a snapshot must be a complete, supported ForkFlow database. */
+/** Read-only validation: a snapshot must be a complete, supported MasalaPOS database. */
 export function verifyBackup(path: string): number {
   const check = new DatabaseCtor(path, { readonly: true, fileMustExist: true });
   try {
@@ -50,10 +67,10 @@ export class Backups {
     this.config = BackupConfig.parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {});
   }
   list(folder = this.folder) {
-    return readdirSync(folder).filter((name) => managedName.test(name)).map((name) => ({
-      name, kind: name.split("-")[1] === "pre" ? "pre-update" : name.split("-")[1]!,
-      createdAt: Number(name.match(/-(\d{13})-/)![1]), bytes: statSync(join(folder, name)).size,
-    })).sort((a, b) => b.createdAt - a.createdAt || b.name.localeCompare(a.name));
+    return readdirSync(folder).flatMap((name) => {
+      const info = parseBackupName(name);
+      return info ? [{ name, ...info, bytes: statSync(join(folder, name)).size }] : [];
+    }).sort((a, b) => b.createdAt - a.createdAt || b.name.localeCompare(a.name));
   }
   status() { return { ...this.config, folder: this.folder, backups: this.list(), lastError: this.lastError, secondError: this.secondError }; }
   subscribe(consumer: { created: (name: string) => void; protectedNames: () => ReadonlySet<string> }): () => void {
@@ -68,7 +85,7 @@ export class Backups {
     return this.status();
   }
   create(kind: Kind) {
-    const name = `forkflow-${kind}-${this.now()}-${randomUUID()}.db`;
+    const name = `masalapos-${kind}-${this.now()}-${randomUUID()}.db`;
     const target = join(this.folder, name);
     const temp = `${target}.partial`;
     try {
@@ -109,12 +126,9 @@ export class Backups {
     }
   }
   private prune(folder: string) {
-    const counts = new Map<string, number>();
     const protectedNames = folder === this.folder ? new Set([...this.consumers].flatMap((consumer) => [...consumer.protectedNames()])) : new Set<string>();
-    for (const entry of this.list(folder)) {
-      const count = (counts.get(entry.kind) ?? 0) + 1; counts.set(entry.kind, count);
-      const expired = entry.kind === "daily" ? entry.createdAt < this.now() - this.config.retentionDays * 86400000 && count > 1 : count > 10;
-      if (expired && !protectedNames.has(entry.name)) unlinkSync(join(folder, entry.name));
+    for (const entry of expiredBackups(this.list(folder), this.config.retentionDays, this.now())) {
+      if (!protectedNames.has(entry.name)) unlinkSync(join(folder, entry.name));
     }
   }
   daily() {

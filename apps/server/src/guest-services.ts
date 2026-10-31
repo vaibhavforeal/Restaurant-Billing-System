@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ServiceSubmission, uuidv7, type ServiceReceipt, type ServiceRequest } from "@forkflow/domain";
+import { ServiceSubmission, uuidv7, type ServiceReceipt, type ServiceRequest } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";

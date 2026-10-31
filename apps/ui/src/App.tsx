@@ -7,7 +7,7 @@ import { Kitchen } from "./screens/Kitchen";
 import { Login } from "./screens/Login";
 import { OrderScreen } from "./screens/OrderScreen";
 import { Settings } from "./screens/Settings";
-import { Setup } from "./screens/Setup";
+import { Setup, type SetupActivation } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
 import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
@@ -16,7 +16,7 @@ import { Inventory } from "./screens/Inventory";
 import { IntegrationOff, Marketplace, ModuleOff } from "./screens/Marketplace";
 import { IntegrationsProvider, useIntegrations } from "./integrations";
 import { ModulesProvider, useModules } from "./modules";
-import type { ModuleId } from "@forkflow/domain/modules";
+import type { ModuleId } from "@masalapos/domain/modules";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";
@@ -40,7 +40,7 @@ import { isUnreachable, readSignedIn, saveSignedIn } from "./offline-cache";
 
 type State =
   | { kind: "loading" }
-  | { kind: "setup" }
+  | { kind: "setup"; activation: SetupActivation; licensed: boolean }
   | { kind: "login" }
   | { kind: "offline" }
   | { kind: "in"; user: User; page: Page };
@@ -125,9 +125,9 @@ function StaffApp() {
 
     void (async () => {
       try {
-        const { needsSetup, demo } = await apiFetch<{ needsSetup: boolean; demo?: boolean }>("/api/needs-setup");
+        const { needsSetup, demo, activation = "none", licensed = true } = await apiFetch<{ needsSetup: boolean; demo?: boolean; activation?: SetupActivation; licensed?: boolean }>("/api/needs-setup");
         setDemo(!!demo);
-        if (needsSetup) return setState({ kind: "setup" });
+        if (needsSetup) return setState({ kind: "setup", activation, licensed });
         if (session.token) {
           try {
             const { user } = await apiFetch<{ user: User }>("/api/me");
@@ -158,7 +158,7 @@ function StaffApp() {
     case "loading":
       return <StartupScreen />;
     case "setup":
-      return <Setup onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
+      return <Setup activation={state.activation} licensed={state.licensed} onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
     case "login":
       return <><DemoBanner demo={demo} login /><Login captain={captainEntry} onLogin={enter} /></>;
     case "offline":

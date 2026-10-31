@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Bill } from "@forkflow/domain";
+import type { Bill } from "@masalapos/domain";
 import { apiFetch, session } from "../api";
 import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees } from "../money";

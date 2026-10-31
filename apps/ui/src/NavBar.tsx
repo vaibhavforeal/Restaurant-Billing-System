@@ -71,7 +71,7 @@ export function NavBar({
   return (
     <nav className="sidebar" aria-label="Main navigation">
       <Brand />
-      {user.role !== "kitchen" && <button className="pos-new-order" {...shortcutProps("new_order")} title={shortcut("new_order", "New order")} onClick={() => onNavigate({ name: user.role !== "waiter" && readPreference("forkflow.order-type") === "parcel" ? "takeaway" : "tables" })}><Icon name="plus" size={16} /><span>New</span></button>}
+      {user.role !== "kitchen" && <button className="pos-new-order" {...shortcutProps("new_order")} title={shortcut("new_order", "New order")} onClick={() => onNavigate({ name: user.role !== "waiter" && readPreference("masalapos.order-type") === "parcel" ? "takeaway" : "tables" })}><Icon name="plus" size={16} /><span>New</span></button>}
       <div className="nav-items">
       {tabs.map((t) => (
         <button

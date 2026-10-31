@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ZomatoSettings } from "@forkflow/domain/zomato";
+import type { ZomatoSettings } from "@masalapos/domain/zomato";
 import { apiFetch } from "../api";
 import { dateTime, errorMessage } from "../zomato-format";
 import { WorkspaceDialog } from "../WorkspaceDialog";

@@ -8,7 +8,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const ids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"];
 const fakeUuid = () => { let i = 0; return () => ids[i++]!; };
 const installationId = "44444444-4444-4444-8444-444444444444";
-const firstRequest = { format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
+const firstRequest = { format: "masalapos-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
   currentRevision: 0, generatedAt: now, verificationKeyFingerprint: "a".repeat(64) };
 
 describe("activation request", () => {
@@ -90,8 +90,8 @@ describe("with the real app", () => {
     const app = buildServer({ db, licensing: { publicKey: pair.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId } });
     try {
       const device = "b".repeat(64);
-      const setup = await app.inject({ method: "POST", url: "/api/setup", headers: { "x-forkflow-device": device }, payload: { restaurantName: "Cafe", adminName: "Asha", pin: "1234" } });
-      const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+      const setup = await app.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": device }, payload: { restaurantName: "Cafe", adminName: "Asha", pin: "1234" } });
+      const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
       const requestText = (await app.inject({ url: "/api/license/activation-request", headers })).body;
       const request = parseActivationRequest(requestText);
       expect(keyFingerprint(privatePem)).toBe(request.verificationKeyFingerprint);

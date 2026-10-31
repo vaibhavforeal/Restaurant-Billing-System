@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBill, RECEIPT_STYLES, type Bill } from "@forkflow/domain";
+import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
 import { money, receiptHtml, receiptSlip } from "./receipt.js";
 import { renderBytes } from "./render-bytes.js";
 
@@ -7,7 +7,7 @@ const bill: Bill = {
   ...calculateBill([{ pricePaise: 10500, qty: 2, gstRate: 5 }]),
   id: "bill-1", billNo: 42, orderId: "order-1", status: "paid", discountNote: null,
   createdAt: new Date(2026, 8, 28, 13, 30).getTime(),
-  receipt: { restaurantName: "ForkFlow Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", gstMode: "included",
+  receipt: { restaurantName: "MasalaPOS Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", gstMode: "included",
     orderType: "dine_in", tableName: "T1", splitLabel: "B", items: [{ name: "Meal", pricePaise: 10500, qty: 2, gstRate: 5 }] },
   payments: [{ mode: "cash", amountPaise: 10000, refNote: null, createdAt: 1 }, { mode: "upi", amountPaise: 11000, refNote: null, createdAt: 1 }],
   refundState: "none", creditNotes: [], refundedQty: {},

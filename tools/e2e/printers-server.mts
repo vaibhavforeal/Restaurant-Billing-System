@@ -1,7 +1,7 @@
 // Disposable browser fixture: real host discovery, captured print output, no physical printing.
 import { resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { buildServer } from "../../apps/server/src/server.js";
 import { makeFakeSink } from "../../apps/server/src/print/sinks.js";
 const db = openDb(":memory:"); migrate(db, MIGRATIONS);

@@ -1,6 +1,6 @@
-# Exact ForkFlow Dev UI
+# Exact MasalaPOS Dev UI
 
-This snapshot contains the 11 compiled UI files from ForkFlow Dev 0.7.0,
+This snapshot contains the 11 compiled UI files from MasalaPOS Dev 0.7.0,
 copied unchanged from its `resources/app.asar`. `manifest.json` records
 SHA-256 checksums. It does not contain restaurant data or the backend.
 

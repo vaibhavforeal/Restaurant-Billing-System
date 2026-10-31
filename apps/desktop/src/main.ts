@@ -1,23 +1,23 @@
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { appendFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
+import { appendFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes, randomUUID } from "node:crypto";
+import { app, BrowserWindow, dialog, Menu, nativeImage, safeStorage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
 import { startupDocument } from "../../ui/src/startup-screen.js";
 import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
 import { createUpdater, type AutoUpdaterLike } from "./updater.js";
 import { isToDesktop } from "../../../packages/domain/src/updates.js";
 
-declare const __FORKFLOW_DEMO__: boolean;
-declare const __FORKFLOW_COMMERCIAL__: boolean;
-const demo = typeof __FORKFLOW_DEMO__ !== "undefined" && __FORKFLOW_DEMO__;
-const commercial = typeof __FORKFLOW_COMMERCIAL__ !== "undefined" && __FORKFLOW_COMMERCIAL__;
-if (demo) { app.setName("ForkFlow Demo"); app.setPath("userData", join(app.getPath("appData"), "forkflow-demo")); }
+declare const __MASALAPOS_DEMO__: boolean;
+declare const __MASALAPOS_COMMERCIAL__: boolean;
+const demo = typeof __MASALAPOS_DEMO__ !== "undefined" && __MASALAPOS_DEMO__;
+const commercial = typeof __MASALAPOS_COMMERCIAL__ !== "undefined" && __MASALAPOS_COMMERCIAL__;
+if (demo) { app.setName("MasalaPOS Demo"); app.setPath("userData", join(app.getPath("appData"), "masalapos-demo")); }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const port = demo ? "4110" : process.env["FORKFLOW_PORT"] ?? "4100";
+const port = demo ? "4110" : process.env["MASALAPOS_PORT"] ?? "4100";
 const url = `http://127.0.0.1:${port}`;
-const dataDir = demo ? prepareDemoDirectory(join(app.getPath("userData"), "data")) : process.env["FORKFLOW_DATA_DIR"] ?? join(app.getPath("userData"), "data");
+const dataDir = demo ? prepareDemoDirectory(join(app.getPath("userData"), "data")) : process.env["MASALAPOS_DATA_DIR"] ?? join(app.getPath("userData"), "data");
 let server: UtilityProcess | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -41,10 +41,24 @@ else {
   };
   writeLog(`Desktop ${app.getVersion()} starting at ${new Date().toISOString()}\n`);
   function showWindow() { window?.show(); window?.focus(); }
+  /** Key that seals cloud-backup credentials, protected by Windows for this user and PC. Kept outside the data folder. */
+  let secretKey: string | undefined;
+  function cloudSecretKey(): string | undefined {
+    if (secretKey !== undefined || demo) return secretKey || undefined;
+    secretKey = "";
+    try {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows credential protection is unavailable");
+      const path = join(app.getPath("userData"), "cloud-secret.bin");
+      if (existsSync(path)) secretKey = safeStorage.decryptString(readFileSync(path));
+      else { secretKey = randomBytes(32).toString("base64"); writeFileSync(path, safeStorage.encryptString(secretKey)); }
+    } catch (error) { writeLog(`Cloud backup key unavailable: ${String(error)}
+`); secretKey = ""; }
+    return secretKey || undefined;
+  }
   async function failure(message: string) {
     if (errorShown || quitting || recovering) return;
     errorShown = true;
-    const { response } = await dialog.showMessageBox({ type: "error", title: "ForkFlow needs attention", message,
+    const { response } = await dialog.showMessageBox({ type: "error", title: "MasalaPOS needs attention", message,
       detail: `Your data is in ${dataDir}. See server.log for details.`, buttons: ["Retry", "Open data folder", "Restore backup", "Quit"], cancelId: 3 });
     errorShown = false;
     if (response === 0) { restarts = 0; startServer(); }
@@ -57,9 +71,10 @@ else {
     writeLog("Starting server utility process\n");
     const instanceId = randomUUID();
     const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
-      cwd: dataDir, stdio: "pipe", serviceName: "ForkFlow POS server",
-      env: { ...process.env, FORKFLOW_DATA_DIR: dataDir, FORKFLOW_UI_DIR: join(here, "ui"), FORKFLOW_PORT: port,
-        FORKFLOW_APP_VERSION: app.getVersion(), FORKFLOW_INSTANCE_ID: instanceId, ...(restorePath ? { FORKFLOW_RESTORE: restorePath } : {}) },
+      cwd: dataDir, stdio: "pipe", serviceName: "MasalaPOS server",
+      env: { ...process.env, MASALAPOS_DATA_DIR: dataDir, MASALAPOS_UI_DIR: join(here, "ui"), MASALAPOS_PORT: port,
+        MASALAPOS_APP_VERSION: app.getVersion(), MASALAPOS_INSTANCE_ID: instanceId, ...(restorePath ? { MASALAPOS_RESTORE: restorePath } : {}),
+        ...(cloudSecretKey() ? { MASALAPOS_SECRET_KEY: cloudSecretKey() } : {}) },
     });
     server = child;
     child.on("spawn", () => writeLog(`Server spawned (${child.pid})\n`));
@@ -77,7 +92,13 @@ else {
     // The server relays Settings -> Updates; the shell answers with the updater's status.
     child.on("message", (data: unknown) => {
       if (!isToDesktop(data) || server !== child) return;
-      if (data.type === "update-config") updates?.configure(data.channel);
+      if (data.type === "restore") {
+        // Settings staged and verified this file and the admin confirmed it on this PC; accept only that folder.
+        const staged = resolve(data.path), incoming = resolve(dataDir, "restore-incoming") + sep;
+        if (staged.startsWith(incoming) && existsSync(staged)) void runRestore(staged);
+        else writeLog(`Ignored restore request outside ${incoming}
+`);
+      } else if (data.type === "update-config") updates?.configure(data.channel);
       else if (data.type === "update-check") updates?.check();
       else void updates?.install();
     });
@@ -121,21 +142,28 @@ else {
     stopping = false;
   }
   async function restore() {
-    const selection = await dialog.showOpenDialog({ title: "Choose a ForkFlow backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
+    const selection = await dialog.showOpenDialog({ title: "Choose a MasalaPOS backup", defaultPath: join(dataDir, "backups"), filters: [{ name: "SQLite backup", extensions: ["db"] }], properties: ["openFile"] });
     if (selection.canceled || !selection.filePaths[0]) return;
     const { response } = await dialog.showMessageBox({ type: "warning", title: "Restore backup", message: "Stop work on all counters before restoring.",
       detail: `Restore ${selection.filePaths[0]}? Current data will be archived; all changes since this snapshot will leave the live database. Staff must sign in again and review open orders.`, buttons: ["Cancel", "Restore this backup"], defaultId: 0, cancelId: 0 });
     if (response !== 1) return;
+    await runRestore(selection.filePaths[0]);
+  }
+  async function runRestore(path: string) {
+    if (recovering) return;
     recovering = true;
+    writeLog(`Restoring backup ${path}
+`);
     await stopServer();
     await window?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument("restoring"))}`);
+    showWindow();
     restarts = 5; // invalid backups produce a reviewable error, never silently fall back
-    startServer(selection.filePaths[0]);
+    startServer(path);
     recovering = false;
   }
   async function resetDemo() {
     if (!demo || recovering) return;
-    const { response } = await dialog.showMessageBox({ type: "question", title: "Reset ForkFlow Demo", message: "Start a fresh customer demo?", detail: "Demo orders and edits will be archived, then replaced with the sample restaurant. Connected demo kitchen displays will need to sign in again.", buttons: ["Cancel", "Reset sample data"], defaultId: 0, cancelId: 0 });
+    const { response } = await dialog.showMessageBox({ type: "question", title: "Reset MasalaPOS Demo", message: "Start a fresh customer demo?", detail: "Demo orders and edits will be archived, then replaced with the sample restaurant. Connected demo kitchen displays will need to sign in again.", buttons: ["Cancel", "Reset sample data"], defaultId: 0, cancelId: 0 });
     if (response !== 1) return;
     recovering = true;
     try {
@@ -163,13 +191,13 @@ else {
     window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
     // Paint the self-contained splash before starting the server; no blank window or CDN dependency.
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument())}`);
-    if (!demo && app.isPackaged && process.env["FORKFLOW_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+    if (!demo && app.isPackaged && process.env["MASALAPOS_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
       app.setLoginItemSettings({ openAtLogin: true });
       appendFileSync(join(dataDir, "desktop-initialized"), "1");
     }
     // Only the installed customer edition updates itself; Demo and development builds report why not.
-    const unsupportedReason = !commercial ? "This is not the customer edition of ForkFlow, so it does not update automatically."
-      : !app.isPackaged ? "Updates install only into an installed copy of ForkFlow." : null;
+    const unsupportedReason = !commercial ? "This is not the customer edition of MasalaPOS, so it does not update automatically."
+      : !app.isPackaged ? "Updates install only into an installed copy of MasalaPOS." : null;
     let autoUpdater: AutoUpdaterLike | null = null;
     if (!unsupportedReason) {
       try { autoUpdater = (await import("electron-updater")).default.autoUpdater as unknown as AutoUpdaterLike; }
@@ -189,19 +217,19 @@ else {
     startServer();
     writeLog("Creating tray menu\n");
     tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
-    tray.setToolTip("ForkFlow — restaurant POS server");
+    tray.setToolTip("MasalaPOS — restaurant POS server");
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: "Open ForkFlow", click: showWindow },
+      { label: "Open MasalaPOS", click: showWindow },
       { label: "Open data and backups", click: () => { void shell.openPath(dataDir); } },
       ...(demo ? [{ label: "Reset sample data", click: () => { void resetDemo(); } }] : [
         { label: "Restore backup…", click: () => { void restore(); } },
         { label: "Start with Windows", type: "checkbox" as const, checked: app.getLoginItemSettings().openAtLogin, click: (item: Electron.MenuItem) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
       ]),
-      { type: "separator" }, { label: "Quit ForkFlow (stops all counters)", click: () => app.quit() },
+      { type: "separator" }, { label: "Quit MasalaPOS (stops all counters)", click: () => app.quit() },
     ]));
     tray.on("double-click", showWindow);
     writeLog("Tray menu ready\n");
-  }).catch((error: unknown) => { writeLog(String(error)); void failure("ForkFlow startup failed."); });
+  }).catch((error: unknown) => { writeLog(String(error)); void failure("MasalaPOS startup failed."); });
   app.on("before-quit", (event) => {
     if (quitting) return;
     event.preventDefault(); quitting = true;

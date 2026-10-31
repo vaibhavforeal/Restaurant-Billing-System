@@ -14,9 +14,9 @@ export type QueuedRequest = QueueEntry & {
   error?: string;
 };
 
-const V1_PREFIX = "forkflow.queue.v1.";
-const GENERATION = "forkflow.generation";
-const LEASE = "forkflow.queue-lease";
+const V1_PREFIX = "masalapos.queue.v1.";
+const GENERATION = "masalapos.generation";
+const LEASE = "masalapos.queue-lease";
 /** How often the queue checks in with the hub even with nothing to send, which also keeps the connection status honest. */
 const CHECK_MS = 5000;
 
@@ -127,7 +127,7 @@ export function startQueue(userId: string) {
   }
   // Another window saved, sent or finished something: refresh, hear outcomes, and help send if it is now due.
   const onStorage = (event: StorageEvent) => {
-    if (event.key && !event.key.startsWith("forkflow.")) return;
+    if (event.key && !event.key.startsWith("masalapos.")) return;
     settleWaiters(); notifyQueue();
     if (actor && dueEntries(store, actor, Date.now()).length) void pump();
   };
@@ -225,7 +225,7 @@ export function outcomeOrSaved<T>(handle: { id: string; done: Promise<T> }, pati
 async function exclusively(fn: () => Promise<void>): Promise<void> {
   const locks = (globalThis.navigator as Navigator | undefined)?.locks;
   if (locks?.request) {
-    await locks.request("forkflow-queue", { ifAvailable: true }, async (lock) => { if (lock) await fn(); });
+    await locks.request("masalapos-queue", { ifAvailable: true }, async (lock) => { if (lock) await fn(); });
     return;
   }
   const now = Date.now();
@@ -250,8 +250,8 @@ async function pump() {
       if (previous && previous !== generation) {
         // Keep a readable archive, but never replay drafts or actions from before a restore point.
         const saved: Record<string, string> = {};
-        for (const key of store.keys()) if (key.startsWith("forkflow.draft.") || key.startsWith(ENTRY_PREFIX)) saved[key] = store.get(key)!;
-        localStorage.setItem(`forkflow.recovery-archive.${Date.now()}`, JSON.stringify(saved));
+        for (const key of store.keys()) if (key.startsWith("masalapos.draft.") || key.startsWith(ENTRY_PREFIX)) saved[key] = store.get(key)!;
+        localStorage.setItem(`masalapos.recovery-archive.${Date.now()}`, JSON.stringify(saved));
         Object.keys(saved).forEach((key) => store.remove(key));
         localStorage.setItem(GENERATION, generation);
         window.alert("The server was restored from backup. Saved drafts and queued actions were archived for review. Sign in again and check your open orders.");
@@ -265,7 +265,7 @@ async function pump() {
       }, userId, generation);
       pruneResults(store, Date.now());
       for (const entry of before) {
-        if (readResult(store, entry.id)?.status === "done") window.dispatchEvent(new CustomEvent("forkflow:ack", { detail: entry }));
+        if (readResult(store, entry.id)?.status === "done") window.dispatchEvent(new CustomEvent("masalapos:ack", { detail: entry }));
       }
     });
   } catch (error) {

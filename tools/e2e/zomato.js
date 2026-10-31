@@ -15,7 +15,7 @@
     element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
   };
   const api = async path => {
-    const response = await fetch(path, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}`, "x-forkflow-device": localStorage.getItem("forkflow.device.v1") } });
+    const response = await fetch(path, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}`, "x-masalapos-device": localStorage.getItem("masalapos.device.v1") } });
     if (!response.ok) throw new Error(`API ${response.status}`);
     return response.json();
   };

@@ -3,7 +3,7 @@ import { freshAppWithFakeSink, setupAdmin, createUser, auth } from "../../apps/s
 import fastifyStatic from "@fastify/static";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { uuidv7, localDateKey } from "@forkflow/domain";
+import { uuidv7, localDateKey } from "@masalapos/domain";
 
 const { app } = freshAppWithFakeSink();
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist") });

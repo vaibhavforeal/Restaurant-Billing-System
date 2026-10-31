@@ -1,0 +1,14 @@
+{
+  "name": "@masalapos/licensing-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs the licensing Worker and the MasalaPOS Portal on a plain Node server (SQLite file, behind Caddy) instead of Cloudflare. The Worker source is imported unchanged.",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node dist/main.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  }
+}

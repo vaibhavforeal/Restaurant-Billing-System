@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, migrate, openDb, uuidv7, type ToDesktop, type UpdateStatus } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, uuidv7, type ToDesktop, type UpdateStatus } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 

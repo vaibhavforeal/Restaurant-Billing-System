@@ -1,18 +1,18 @@
 # Desktop refreshed with recipes and table QR ordering
 
 After the user's acknowledgement, rebuilt the development desktop staging app
-and restarted ForkFlow on port 4100 using its existing data folder:
-`C:\Users\AR\AppData\Roaming\forkflow-desktop\data`.
+and restarted MasalaPOS on port 4100 using its existing data folder:
+`C:\Users\AR\AppData\Roaming\masalapos-desktop\data`.
 
 - Created and verified an online SQLite backup before stopping the old process:
-  `backups/forkflow-pre-update-1790659363817-fc37fc7f-0b51-465d-8632-75d7a5886aa1.db`.
+  `backups/masalapos-pre-update-1790659363817-fc37fc7f-0b51-465d-8632-75d7a5886aa1.db`.
 - `npm run build:desktop` passed. Launched the result through the standard
   Electron launcher. The running desktop is a development build, not a newly
   packaged commercial installer.
 - Startup migrated the database from schema 7 to 9. SQLite integrity and foreign
   key checks passed. Counts of users, products, orders, order items, bills,
   stock items and stock movements match the pre-restart baseline.
-- Health endpoint passed, and the native `ForkFlow POS` window is open.
+- Health endpoint passed, and the native `MasalaPOS` window is open.
   Browser verification confirmed the sign-in screen and guest menu route load
   without runtime errors. QR administration requires staff authentication.
 - Recipe and guest-ordering flows had already passed the isolated integration

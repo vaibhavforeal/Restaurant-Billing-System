@@ -1,4 +1,4 @@
-import { receiptGstMode, type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@forkflow/domain";
+import { receiptGstMode, type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { RECEIPT_CSS } from "./receipt-style.js";

@@ -12,8 +12,8 @@
   const click = async (name) => { await wait(() => button(name) && !button(name).disabled); button(name).click(); };
   const api = async (path, method = 'GET', body) => {
     const response = await fetch('/api' + path, { method, headers: {
-      authorization: 'Bearer ' + localStorage.getItem('forkflow.token'),
-      'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json',
+      authorization: 'Bearer ' + localStorage.getItem('masalapos.token'),
+      'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json',
     }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const result = await response.json(); if (!response.ok) throw new Error(JSON.stringify(result)); return result;
   };

@@ -1,8 +1,8 @@
 # Feature controls
 
-ForkFlow (the vendor) decides which parts of the POS each restaurant may use. Within
+MasalaPOS (the vendor) decides which parts of the POS each restaurant may use. Within
 that, the restaurant's administrator can switch a module off in the **Marketplace** and
-back on later. A restaurant can never switch on a module ForkFlow has not included.
+back on later. A restaurant can never switch on a module MasalaPOS has not included.
 
 ## The modules
 
@@ -21,45 +21,32 @@ back on later. A restaurant can never switch on a module ForkFlow has not includ
 | Kitchen Display (KDS) | Add-on | — | — | Included |
 | CRM & Loyalty | Add-on | — | Included | Included |
 
-The plan columns are the starting point for a new restaurant. ForkFlow can allow or
+The plan columns are the starting point for a new restaurant. MasalaPOS can allow or
 block any module for any restaurant on top of its plan.
 
 Billing, tables, the menu catalogue, staff and settings are core: they are always on.
 
 A module works when all three hold:
 
-1. ForkFlow allows it (from the restaurant's licence).
+1. MasalaPOS allows it (from the restaurant's licence).
 2. The restaurant has not switched it off. Service and back-office modules are on as soon
    as they are allowed. Add-ons stay off until an admin switches them on, because each
    needs setting up first.
 3. Every module it needs is working, for example Dish costing needs Recipes, which needs
    Inventory.
 
-## For ForkFlow: the owner control panel
+## For MasalaPOS: the portal
 
-The panel is part of the licensing service at `https://<licensing-service>/owner`. Sign in
-with the owner password (the `OWNER_PASSWORD` secret). A session lasts 8 hours.
+In the [MasalaPOS Portal](vendor-portal.md), open the customer, then **Counters**, then the counter. Its **Modules** table shows each module, whether the plan includes it, and MasalaPOS's choice for this counter: **Follow the plan**, **Allow** or **Block**. Only admins change it; everyone else sees it.
 
-- Every restaurant appears the first time its ForkFlow contacts the service. Give it a
-  name so it is easy to find; search by name, email or installation id.
-- Each restaurant shows its plan, whether its licence is active, in grace or expired, and
-  whether it has collected the latest settings.
-- For each module choose **Follow the plan**, **Allow** or **Block**, then **Save**.
+- Saving signs the counter's current licence terms with the new modules as the next licence revision.
+  - The restaurant's MasalaPOS collects it within an hour, or at once when an admin presses **Check for renewal** in **Settings → Plan and devices**.
+  - Until then the counter shows "Waiting for its next check-in".
+- An order can set modules too (**Modules** on the order). They become the counter's choices when it activates with that order, or when a renewal order is paid.
+- A counter whose licence has run out gets no new revision. Its next order carries the change, because every licence the service issues includes MasalaPOS's choices.
+- **Module changes** on the counter lists every change, who made it, and the licence revision it went into. The customer's activity log records it too.
 
-Saving signs the restaurant's current licence terms (plan, dates, trial, subscription) with
-the new modules as the next licence revision. The restaurant's ForkFlow collects it within
-an hour, or at once when an admin presses **Check for renewal** in **Settings → Plan and
-devices**. Until then the card says "Waiting for the restaurant to check in". Renaming a
-restaurant issues nothing.
-
-A restaurant whose licence has run out gets no new revision. Its next trial or payment
-includes the change, because every licence the service issues carries ForkFlow's choices.
-**Change history** lists every change and the licence revision it went into.
-
-Setting the panel up (the secret, deploying) is in the
-[licensing worker README](../../apps/licensing-worker/README.md). Licences issued by hand with
-`tools/prepare-license.ts` take the same choices with `--allow kds,qrOrdering` and
-`--deny reservations`.
+Licences issued by hand with `tools/prepare-license.ts` take the same choices with `--allow kds,qrOrdering` and `--deny reservations`.
 
 ## For the restaurant: the Marketplace
 
@@ -69,7 +56,7 @@ modules. Each card shows its state:
 - **On** / **Enabled**: working.
 - **Off** / **Disabled**: switched off here.
 - **Waiting**: switched on, but a module it needs is off. The card says which.
-- **Not included**: ForkFlow has not included it. Contact ForkFlow to add it.
+- **Not included**: MasalaPOS has not included it. Contact MasalaPOS to add it.
 
 Administrators use the switches; cashiers see the same cards read-only. A change applies to
 every counter at once.
@@ -101,9 +88,9 @@ module.
 - `GET /api/modules` (any signed-in user) lists every module with `allowed`, `enabled`,
   `active` and `reason`.
 - `PATCH /api/modules/:id` with `{ "enabled": true | false }` (administrators). Switching
-  off is always allowed. Switching on a module ForkFlow has not included returns 403.
+  off is always allowed. Switching on a module MasalaPOS has not included returns 403.
   A change broadcasts `modules.changed`.
-- A request to a module that is not working returns `code: "module_off"`: 403 when ForkFlow
+- A request to a module that is not working returns `code: "module_off"`: 403 when MasalaPOS
   has not included it, 409 when it is switched off or waiting on another module.
 - The restaurant's switches are stored in `integration_state`, keyed by module id.
 - Development builds (no licence) allow every module.

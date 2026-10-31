@@ -1,5 +1,5 @@
-import type { DishCost, DishPrice } from "@forkflow/domain";
-import type { GstMode } from "@forkflow/domain/gst";
+import type { DishCost, DishPrice } from "@masalapos/domain";
+import type { GstMode } from "@masalapos/domain/gst";
 import { formatMovementCost } from "./stock-costs";
 
 /** Upgrade note shown wherever costing is unavailable on Basic. All costing, whatever the recipe size, is Pro. */

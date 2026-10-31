@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The parts of the POS that ForkFlow (the vendor) can allow or withhold per restaurant. The owner's choices travel in the
+ * The parts of the POS that MasalaPOS (the vendor) can allow or withhold per restaurant. The owner's choices travel in the
  * signed licence as a complete `modules` map; within that, the restaurant's admin can switch an allowed module off and on
  * again. Billing, tables, the catalogue, staff and settings are core and always on, so they are not listed here.
  */

@@ -5,7 +5,7 @@
 
 ## 1. Goal
 
-Restaurants pay for their ForkFlow licence through Razorpay and receive it automatically. A small licensing service on Cloudflare takes Razorpay subscription payments, signs licences in the existing offline format, and hands them to the counter server when it asks. The counter app keeps verifying licences offline exactly as today.
+Restaurants pay for their MasalaPOS licence through Razorpay and receive it automatically. A small licensing service on Cloudflare takes Razorpay subscription payments, signs licences in the existing offline format, and hands them to the counter server when it asks. The counter app keeps verifying licences offline exactly as today.
 
 Success means:
 
@@ -20,7 +20,7 @@ Success means:
 
 | Topic | Decision |
 | --- | --- |
-| Who pays | Restaurants pay ForkFlow for their licence. Razorpay is not used for diners' bills |
+| Who pays | Restaurants pay MasalaPOS for their licence. Razorpay is not used for diners' bills |
 | Host | One Cloudflare Worker, `apps/licensing-worker`, with one D1 database |
 | Delivery | The counter server fetches its licence (outbound HTTPS only). No email delivery in v1 |
 | Onboarding | Self-serve checkout page served by the Worker |
@@ -99,10 +99,10 @@ Client-reported revisions only ever raise the floor (adoption in step 4, hand-is
 
 ### 3.5 Checkout
 
-1. `/subscribe` requires a known installation; otherwise it says "Open ForkFlow while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again."
+1. `/subscribe` requires a known installation; otherwise it says "Open MasalaPOS while connected to the internet, press Check for renewal in Settings > Plan and devices, then try again."
 2. The page posts to `/v1/subscriptions`, which creates the subscription with the plan id for the chosen plan and period, and opens Razorpay Checkout with the subscription id.
 3. Choosing a plan when an active subscription already exists creates the new one; the old one is cancelled once the new one's first charge succeeds (§3.4 step 4), so the restaurant is never left without a paid subscription.
-4. The success screen tells the admin to return to ForkFlow and press **Check for renewal**. The browser success callback never issues a licence; only the verified webhook does.
+4. The success screen tells the admin to return to MasalaPOS and press **Check for renewal**. The browser success callback never issues a licence; only the verified webhook does.
 
 ### 3.6 Configuration
 
@@ -125,7 +125,7 @@ The verifier in `packages/core/src/signed-license.ts` does not change.
 
 ### 5.1 Server — `apps/server/src/licensing.ts`, `license-config.ts`
 
-- `LicensingOptions` gains `serviceUrl?: string`. Commercial builds bake it in through an esbuild define (`__FORKFLOW_LICENSE_SERVICE_URL__`), like the public key; development uses the `FORKFLOW_LICENSE_SERVICE_URL` environment variable. With no URL, nothing is ever fetched.
+- `LicensingOptions` gains `serviceUrl?: string`. Commercial builds bake it in through an esbuild define (`__MASALAPOS_LICENSE_SERVICE_URL__`), like the public key; development uses the `MASALAPOS_LICENSE_SERVICE_URL` environment variable. With no URL, nothing is ever fetched.
 - New `Licensing.fetchLatest()`: posts `activationRequest()` to `${serviceUrl}/v1/activate` with a 10-second timeout. A returned envelope goes through the existing `activate()`, so revision, identity and clock checks still apply. The audit actor is "Automatic renewal". Returns `{ outcome: "installed" | "up_to_date" | "unreachable" | "rejected", message }`.
 - Runs on server start, every 6 hours, and from a new `POST /api/license/check` (permission `settings.manage`), which also broadcasts `license.changed` when something was installed.
 - Failures are logged and never thrown into request handling; `canOperate` keeps coming from the saved licence.

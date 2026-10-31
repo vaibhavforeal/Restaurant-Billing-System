@@ -1,4 +1,4 @@
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "./server.js";
 
@@ -23,7 +23,7 @@ async function setup(a: typeof app) {
 describe("first-run setup", () => {
   it("needs-setup flips after setup creates the admin", async () => {
     app = freshApp();
-    expect((await app.inject({ method: "GET", url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true });
+    expect((await app.inject({ method: "GET", url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "none", licensed: true });
 
     const res = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP });
     expect(res.statusCode).toBe(201);
@@ -145,8 +145,8 @@ describe("requirePermission", () => {
     const admin = await setup(app);
 
     // create a waiter directly in the DB (user CRUD endpoints arrive in Milestone 2)
-    const { hashPassword } = await import("@forkflow/core");
-    const { uuidv7 } = await import("@forkflow/domain");
+    const { hashPassword } = await import("@masalapos/core");
+    const { uuidv7 } = await import("@masalapos/domain");
     app.db
       .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, 'Wren', ?, 'waiter', ?)")
       .run(uuidv7(), await hashPassword("5678"), Date.now());

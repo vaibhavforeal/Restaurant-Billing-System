@@ -1,9 +1,9 @@
 # Commercial licensing
 
-This is the local enforcement layer for the cloud plus offline product. It does
-not yet include a hosted account service, payments, automatic license renewal,
-or restaurant-data synchronization. Do not expose the existing local POS API to
-the public internet: its PIN authentication and database are single-outlet.
+This is the local enforcement layer for the cloud plus offline product.
+- Licences come from orders in the [MasalaPOS Portal](vendor-portal.md). A counter activates at setup with the **Customer ID** and **Order ID** from its setup card, and renewals arrive on their own. The portal also handles payments and GST invoices.
+- Restaurant-data synchronization is not built yet.
+- Do not expose the existing local POS API to the public internet: its PIN authentication and database are single-outlet.
 
 ## Plans
 
@@ -13,8 +13,8 @@ the public internet: its PIN authentication and database are single-outlet.
 | Modules | Takeaway, reservations, inventory, reports, sales dashboard, Zomato, CRM & Loyalty | Every module, adding QR guest ordering, guest assistance, recipes, dish costing and the Kitchen Display |
 | Billing, tables, catalogue, staff, backups | Included | Included |
 
-The modules a licence carries are the plan's defaults with ForkFlow's per-restaurant
-choices applied, set in the owner control panel or with `--allow` / `--deny`. See
+The modules a licence carries are the plan's defaults with MasalaPOS's per-restaurant
+choices applied, set on the counter's page in the MasalaPOS Portal or with `--allow` / `--deny`. See
 [Feature controls](feature-controls.md).
 
 The main PC's browser/Electron profile uses one slot. Other counter browsers,
@@ -54,14 +54,14 @@ both, but one build never replaces the other:
 
 | | Demo | Licensed customer app |
 |---|---|---|
-| Windows app | ForkFlow Demo | ForkFlow |
-| App ID | `in.forkflow.demo` | `in.forkflow.pos` |
+| Windows app | MasalaPOS Demo | MasalaPOS |
+| App ID | `in.masalapos.demo` | `in.masalapos.pos` |
 | Build folder | `build/desktop/demo` | `build/desktop/commercial` |
 | Installer folder | `dist/demo` | `dist/commercial` |
-| Default data | `%APPDATA%\forkflow-demo\data` | `%APPDATA%\forkflow-desktop\data` |
+| Default data | `%APPDATA%\masalapos-demo\data` | `%APPDATA%\masalapos-desktop\data` |
 | Default port | 4110 | 4100 |
 | First launch | Sample restaurant and demo PINs | Restaurant/admin setup, then license activation |
-| Workspace launcher | `Start ForkFlow Demo.cmd` | `Start ForkFlow Customer.cmd` |
+| Workspace launcher | `Start MasalaPOS Demo.cmd` | `Start MasalaPOS Customer.cmd` |
 
 Demo has a permanent banner, simulated thermal printing and a reset menu. The
 customer app has ordinary printing and enforces its signed Basic/Pro grant.
@@ -76,7 +76,7 @@ or browser code. Only the public SPKI PEM goes in the desktop build.
 For a commercial build in PowerShell:
 
 ```powershell
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
 npm.cmd run package:commercial
 ```
 
@@ -90,7 +90,7 @@ and key fingerprint, including when invoked directly with electron-builder.
 Do not use old files in `dist/installer` as customer releases; rebuild into
 `dist/commercial` with the public key.
 
-`FORKFLOW_BUILD_STAGE` is reserved for internal development previews. Release
+`MASALAPOS_BUILD_STAGE` is reserved for internal development previews. Release
 builds reject overrides that would change their dedicated folder. The ordinary
 development build in `build/desktop/app` ignores the release key and explicitly
 reports development mode and preserves existing local development behavior.
@@ -177,6 +177,16 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 
 ## Activation and renewal workflow
 
+**The normal way: online, with the setup card.**
+- On a commercial build with the licensing service, setup starts by asking for the Customer ID and Order ID from MasalaPOS's setup card.
+- The counter checks a typo locally (each ID has a check character), then enrols with the service. It installs the order's licence, pre-fills the restaurant name, and registers the browser that set it up.
+- **No internet? Set up now and activate later** finishes setup without a licence. Plan and devices then shows an **Activate this counter** form for the same two IDs.
+- After setup, an admin can move the counter to another order of the same customer (a trial becoming paid) from **Activation details > Use a different Order ID**. Plan and devices shows both IDs for support calls.
+- Renewals, module changes and staff adjustments made in the portal arrive with the hourly check, or at once with **Check for renewal**.
+- Setup activation is open only until the first user exists, and is throttled like wrong PINs.
+
+**Without internet: a licence file.**
+
 1. Open **Settings > Plan and devices**. Commercial builds show this screen
    automatically until the installation is activated and the current browser is
    registered. **Activation details > Download activation request** creates a
@@ -196,12 +206,7 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 5. For initial activation, enter a **Device name** and **Register this device**.
    Existing registrations survive renewals, so no new registration is required.
 
-The activation request is an information handoff, not proof of purchase. The
-provider must authorize the subscription and choose entitlements before signing.
-`tools/issue-license.ts` remains the hand-issuing route. Builds made with
-`FORKFLOW_LICENSE_SERVICE_URL` also fetch trials and Razorpay renewals
-automatically; see `apps/licensing-worker/README.md`. Its claims JSON reader also
-accepts UTF-8 BOM files.
+The activation request is an information handoff, not proof of purchase. In the portal, an order's **Activate a counter without internet** takes the file. That uses one of the order's seats and gives back the licence file. `tools/issue-license.ts` remains the emergency hand-issuing route; its claims JSON reader also accepts UTF-8 BOM files. There are no automatic trials: a trial is a 7-day trial order from the portal, entered at setup like any other. Builds made without `MASALAPOS_LICENSE_SERVICE_URL` never contact the service; see `apps/licensing-worker/README.md`.
 
 Plan dates use the restaurant server's timezone. Device counts come from the
 server, including blocked registrations after a downgrade. License status is
@@ -265,11 +270,9 @@ storage hardening also remain before broad commercial rollout.
 
 ## Next delivery steps
 
-1. Hosted tenant accounts, outlet enrollment, subscription records, and authenticated
-   entitlement issuance/renewal with server-side device allocation and an audit log.
+1. Done: the MasalaPOS Portal (customers, orders, enrolment with a Customer ID and Order ID, payments, GST invoices, renewals and an activity log). Still to do: restaurant-facing accounts.
 2. Transactional hub outbox and cloud ingestion with duplicate/reordered delivery,
    tenant-isolation, backup-restore, and prolonged-disconnection tests.
 3. Cloud dashboard/read models, remote configuration commands acknowledged by the
    hub, and clear sync status in both applications.
-4. Payment-provider integration, provisioning/support tools, key rotation,
-   installation replacement, signed releases, and clean-PC/hardware rollout tests.
+4. Key rotation, signed releases, and clean-PC/hardware rollout tests. Payments (Razorpay payment links and recorded offline payments) and support tools (release a seat, reset pairing, offline licences) are in the portal.

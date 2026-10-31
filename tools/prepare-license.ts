@@ -32,7 +32,7 @@ let written: string;
 if (values.sign) {
   const privatePem = readFileSync(values.sign, "utf8");
   if (keyFingerprint(privatePem) !== request.verificationKeyFingerprint) {
-    throw new Error("This private key does not match the public key built into this restaurant's ForkFlow. The license would be refused. Use the key pair that the installer was built with.");
+    throw new Error("This private key does not match the public key built into this restaurant's MasalaPOS. The license would be refused. Use the key pair that the installer was built with.");
   }
   written = join(folder, `license-${name}.txt`);
   writeFileSync(written, await signClaims(claims, privatePem),{ flag: "wx" });

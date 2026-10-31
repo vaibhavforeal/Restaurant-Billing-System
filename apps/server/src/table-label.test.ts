@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { localDateKey, uuidv7, type Bill } from "@forkflow/domain";
+import { localDateKey, uuidv7, type Bill } from "@masalapos/domain";
 import { auth, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 import { activeLinkedTableNames, activeLinkForTable, orderTableLabel } from "./table-label.js";
 

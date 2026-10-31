@@ -4,12 +4,14 @@ import {
   VariantCreate, VariantUpdate,
   StationCreate, StationUpdate,
   uuidv7,
-} from "@forkflow/domain";
+  type ComboGroup,
+} from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { menuPhotoUrl, validateMenuPhoto } from "./menu-photo.js";
 import { z } from "zod";
 import { registerCatalogTransfer } from "./catalog-transfer.js";
+import { comboGroups, comboGroupsByCombo, saveComboGroups } from "./combos.js";
 
 interface CategoryRow {
   id: string;
@@ -33,6 +35,7 @@ interface ProductRow {
   description: string;
   is_sold_out: number;
   photo_hash: string | null;
+  kind: "item" | "combo";
 }
 
 interface VariantRow {
@@ -63,8 +66,10 @@ const toVariant = (r: VariantRow) => ({
   isActive: r.is_active === 1,
 });
 
-const toProduct = (r: ProductRow, variants: VariantRow[]) => ({
+const toProduct = (r: ProductRow, variants: VariantRow[], combo: ComboGroup[] = []) => ({
   id: r.id,
+  kind: r.kind,
+  ...(r.kind === "combo" ? { combo } : {}),
   categoryId: r.category_id,
   name: r.name,
   pricePaise: r.price_paise,
@@ -116,7 +121,7 @@ export function registerCatalog(app: FastifyInstance): void {
     return { category: toCategory(getCategory(id)!) };
   });
 
-  const productColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash";
+  const productColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash, kind";
   const getProduct = (id: string) =>
     app.db.prepare(`SELECT ${productColumns} FROM products WHERE id = ?`).get(id) as ProductRow | undefined;
   const getVariant = (id: string) =>
@@ -141,8 +146,9 @@ export function registerCatalog(app: FastifyInstance): void {
       list.push(v);
       byProduct.set(v.product_id, list);
     }
+    const combos = comboGroupsByCombo(app.db);
     const { gst_rate: defaultGstRate } = app.db.prepare("SELECT gst_rate FROM settings WHERE id = 1").get() as { gst_rate: number };
-    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [])), defaultGstRate };
+    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [], combos.get(p.id))), defaultGstRate };
   });
 
   app.post("/api/products", { preHandler: manage }, async (req, reply) => {
@@ -153,9 +159,10 @@ export function registerCatalog(app: FastifyInstance): void {
     const write = app.db.transaction(() => {
       app.db
         .prepare(
-          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise, zomato_price_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise, zomato_price_paise, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null);
+        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null, body.kind);
+      if (body.combo) saveComboGroups(app.db, id, body.combo);
       for (const v of body.variants) {
         app.db
           .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -164,7 +171,7 @@ export function registerCatalog(app: FastifyInstance): void {
     });
     write();
     changed();
-    return reply.status(201).send({ product: toProduct(getProduct(id)!, variantsFor(id)) });
+    return reply.status(201).send({ product: toProduct(getProduct(id)!, variantsFor(id), comboGroups(app.db, id)) });
   });
 
   app.patch("/api/products/:id", { preHandler: manage }, async (req) => {
@@ -174,33 +181,38 @@ export function registerCatalog(app: FastifyInstance): void {
     const row = getProduct(id);
     if (!row) throw httpError(404, "product not found");
     checkRefs(body.categoryId, body.kotStationId);
+    if (row.kind === "combo" && body.kotStationId) throw httpError(400, "A combo's items go to their own kitchen stations");
+    if (row.kind === "item" && body.combo) throw httpError(400, "Only a combo has slots");
     // undefined = unchanged, null = clear the station
     const station = body.kotStationId === undefined ? row.kot_station_id : body.kotStationId;
-    app.db
-      .prepare(
-        `UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ?,
-          description = ?, is_sold_out = ?, photo_data = CASE WHEN ? THEN ? ELSE photo_data END,
-          photo_hash = CASE WHEN ? THEN ? ELSE photo_hash END, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ? WHERE id = ?`,
-      )
-      .run(
-        body.categoryId ?? row.category_id,
-        body.name ?? row.name,
-        body.pricePaise ?? row.price_paise,
-        body.gstRate === undefined ? row.gst_rate : body.gstRate,
-        (body.isVeg ?? row.is_veg === 1) ? 1 : 0,
-        station,
-        (body.isActive ?? row.is_active === 1) ? 1 : 0,
-        body.description ?? row.description,
-        (body.isSoldOut ?? row.is_sold_out === 1) ? 1 : 0,
-        photo === undefined ? 0 : 1, photo?.data ?? null,
-        photo === undefined ? 0 : 1, photo?.hash ?? null,
-        body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise,
-        body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise,
-        body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise,
-        id,
-      );
+    app.db.transaction(() => {
+      if (body.combo) saveComboGroups(app.db, id, body.combo);
+      app.db
+        .prepare(
+          `UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ?,
+            description = ?, is_sold_out = ?, photo_data = CASE WHEN ? THEN ? ELSE photo_data END,
+            photo_hash = CASE WHEN ? THEN ? ELSE photo_hash END, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ? WHERE id = ?`,
+        )
+        .run(
+          body.categoryId ?? row.category_id,
+          body.name ?? row.name,
+          body.pricePaise ?? row.price_paise,
+          body.gstRate === undefined ? row.gst_rate : body.gstRate,
+          (body.isVeg ?? row.is_veg === 1) ? 1 : 0,
+          station,
+          (body.isActive ?? row.is_active === 1) ? 1 : 0,
+          body.description ?? row.description,
+          (body.isSoldOut ?? row.is_sold_out === 1) ? 1 : 0,
+          photo === undefined ? 0 : 1, photo?.data ?? null,
+          photo === undefined ? 0 : 1, photo?.hash ?? null,
+          body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise,
+          body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise,
+          body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise,
+          id,
+        );
+    })();
     changed();
-    return { product: toProduct(getProduct(id)!, variantsFor(id)) };
+    return { product: toProduct(getProduct(id)!, variantsFor(id), comboGroups(app.db, id)) };
   });
 
   app.get("/api/products/:id/photo", { preHandler: read }, async (req, reply) => {
@@ -226,7 +238,9 @@ export function registerCatalog(app: FastifyInstance): void {
 
   app.post("/api/products/:id/variants", { preHandler: manage }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    if (!getProduct(id)) throw httpError(404, "product not found");
+    const product = getProduct(id);
+    if (!product) throw httpError(404, "product not found");
+    if (product.kind === "combo") throw httpError(400, "A combo has no variants; give it slots instead");
     const body = VariantCreate.parse(req.body);
     const vid = uuidv7();
     app.db

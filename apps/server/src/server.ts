@@ -1,4 +1,4 @@
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";
@@ -37,6 +37,7 @@ import { registerGuestServices } from "./guest-services.js";
 import { registerSystem } from "./system.js";
 import type { Backups } from "./backups.js";
 import { CloudBackups, type CloudBackupProvider } from "./cloud-backups.js";
+import { RestoreStaging } from "./restore-staging.js";
 import { realSend, type SinkSend } from "./print/sinks.js";
 import { PrintQueue } from "./print/queue.js";
 import { readProfile } from "./print/profile.js";
@@ -132,11 +133,11 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       app.log.error(err);
       return reply.status(status).send({ error: "internal error" });
     }
-    const code = typeof err === "object" && err !== null && "code" in err && (err.code === "menu_changed" || err.code === "kds_off" || err.code === "integration_off" || err.code === "module_off" || err.code === "zomato_duplicate" || err.code === "zomato_status" || err.code === "zomato_order" || err.code === "discount_cap" || err.code === "day_open" || err.code === "orders_open") ? err.code : undefined;
+    const code = typeof err === "object" && err !== null && "code" in err && (err.code === "menu_changed" || err.code === "kds_off" || err.code === "integration_off" || err.code === "module_off" || err.code === "zomato_duplicate" || err.code === "zomato_status" || err.code === "zomato_order" || err.code === "discount_cap" || err.code === "day_open" || err.code === "orders_open" || err.code === "combo_picks" || err.code === "combo_item") ? err.code : undefined;
     return reply.status(status).send({ error: message, ...(code ? { code } : {}) });
   });
 
-  configureLicensing(app, opts.licensing);
+  configureLicensing(app, opts.licensing, opts.appVersion);
   provideModuleAllowances(app.db, () => app.licensing.status().modules);
   registerAuth(app, opts.demo ?? false);
   registerWs(app, opts.authTimeoutMs);
@@ -180,7 +181,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     app.addHook("onReady", async () => { cloudBackups.start(); });
     app.addHook("preClose", async () => { await cloudBackups.close(); });
   }
-  registerSystem(app, opts.backups, opts.port, opts.generation, opts.captainHttps, cloudBackups);
+  const staging = opts.backups && opts.updateBridge ? new RestoreStaging(opts.backups.dataDir) : undefined;
+  registerSystem(app, opts.backups, opts.port, opts.generation, opts.captainHttps, cloudBackups, { ...(staging ? { staging } : {}), ...(opts.updateBridge ? { desktop: opts.updateBridge } : {}) });
 
   app.get("/api/health", async () => ({ ok: true, ...(opts.instanceId ? { instanceId: opts.instanceId } : {}) }));
 

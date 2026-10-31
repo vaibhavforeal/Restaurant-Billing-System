@@ -1,4 +1,4 @@
-import { openDb } from "@forkflow/domain";
+import { openDb } from "@masalapos/domain";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -14,24 +14,28 @@ import { licenseConfig } from "./license-config.js";
 import { loadCaptainHttps, startCaptainHttps, type CaptainHttpsInfo } from "./captain-https.js";
 import { seedDemo } from "./demo-seed.js";
 import { makeFakeSink } from "./print/sinks.js";
+import { driveProvider } from "./drive-config.js";
 
-declare const __FORKFLOW_DEMO__: boolean;
-const demo = typeof __FORKFLOW_DEMO__ !== "undefined" && __FORKFLOW_DEMO__;
+declare const __MASALAPOS_DEMO__: boolean;
+const demo = typeof __MASALAPOS_DEMO__ !== "undefined" && __MASALAPOS_DEMO__;
+// Handed over by the desktop shell (Windows-protected at rest); keep it out of anything this process spawns.
+const secretKey = process.env["MASALAPOS_SECRET_KEY"];
+delete process.env["MASALAPOS_SECRET_KEY"];
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
-const port = Number(process.env["FORKFLOW_PORT"] ?? 4100);
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid FORKFLOW_PORT");
+const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
+const port = Number(process.env["MASALAPOS_PORT"] ?? 4100);
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid MASALAPOS_PORT");
 mkdirSync(dataDir, { recursive: true });
 const release = await lockDataDirectory(dataDir);
 let db: ReturnType<typeof openDb> | undefined;
 let closing = false;
 try {
   restoreDatabase(dataDir);
-  if (process.env["FORKFLOW_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["FORKFLOW_RESTORE"]));
-  db = openDb(join(dataDir, "forkflow.db"));
+  if (process.env["MASALAPOS_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["MASALAPOS_RESTORE"]));
+  db = openDb(join(dataDir, "masalapos.db"));
   const backups = new Backups(db, dataDir);
-  const version = process.env["FORKFLOW_APP_VERSION"] ?? "development";
+  const version = process.env["MASALAPOS_APP_VERSION"] ?? "development";
   prepareDatabase(db, backups, version);
   const generationPath = join(dataDir, "recovery-generation.json");
   const generation = existsSync(generationPath) ? JSON.parse(readFileSync(generationPath, "utf8")).generation as string : "initial";
@@ -43,7 +47,11 @@ try {
   // The desktop shell's message port: shutdown requests and the auto-updater's status arrive here.
   const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void; postMessage(message: unknown): void } }).parentPort;
   const updateBridge = parent ? { send: (message: unknown) => parent.postMessage(message), onMessage: (listener: (message: unknown) => void) => parent.on("message", ({ data }) => listener(data)) } : undefined;
-  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
+  const liveDb = db;
+  const cloudBackupProvider = demo ? undefined : driveProvider({ dataDir, secretKey,
+    restaurantName: () => (liveDb.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name?: string } | undefined)?.restaurant_name ?? "",
+    warn: (message) => console.warn(message) });
+  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
     serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
   } });
   const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };
@@ -54,7 +62,7 @@ try {
   scheduleExpirySweeps(app);
   let stopRenewals: (() => void) | undefined;
   app.addHook("onClose", async () => { clearInterval(timer); stopRenewals?.(); db?.close(); await release(); });
-  const uiDist = process.env["FORKFLOW_UI_DIR"] ?? resolve(here, "../../ui/dist");
+  const uiDist = process.env["MASALAPOS_UI_DIR"] ?? resolve(here, "../../ui/dist");
   if (existsSync(uiDist)) {
     await app.register(fastifyStatic, { root: uiDist, wildcard: true, setHeaders: (response, filePath) => {
       if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.webmanifest") || filePath.endsWith("version.json")) response.header("Cache-Control", "no-cache");
@@ -80,7 +88,7 @@ try {
       app.log.info(`Captain HTTPS ready on port ${captainTls.port}`);
     } catch (error) { captainInfo.error = error instanceof Error ? error.message : "Captain HTTPS could not start"; app.log.error(captainInfo.error); }
   }
-  console.log(`ForkFlow server on http://localhost:${port} (db: ${join(dataDir, "forkflow.db")})`);
+  console.log(`MasalaPOS server on http://localhost:${port} (db: ${join(dataDir, "masalapos.db")})`);
 } catch (error) {
   if (db?.open) db.close();
   await release().catch(() => {});

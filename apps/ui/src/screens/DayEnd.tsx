@@ -21,7 +21,7 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
   function exportReport() {
     if (!report || report.date !== date) return;
     try {
-      downloadText(dayEndCsv(report), `forkflow-day-end-${report.date}.csv`, "text/csv;charset=utf-8");
+      downloadText(dayEndCsv(report), `masalapos-day-end-${report.date}.csv`, "text/csv;charset=utf-8");
       setError(""); setMessage(`CSV download started for ${report.date}. Open it in Excel or another spreadsheet.`);
     } catch (e) {
       setMessage(""); setError(e instanceof Error ? e.message : "Could not export report");

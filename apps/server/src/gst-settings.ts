@@ -1,4 +1,4 @@
-import type { Database, GstMode } from "@forkflow/domain";
+import type { Database, GstMode } from "@masalapos/domain";
 
 export interface GstSettings {
   gstMode: GstMode;

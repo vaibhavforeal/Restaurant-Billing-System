@@ -1,11 +1,11 @@
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, nextSplitLabel } from "@forkflow/domain";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, nextSplitLabel } from "@masalapos/domain";
 import { z } from "zod";
-import { rowPrice, tablePriceTier, type PriceRow } from "./pricing.js";
-import { readGstSettings } from "./gst-settings.js";
+import { tablePriceTier } from "./pricing.js";
+import { priceOrderItem, insertOrderItem } from "./order-items.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
-import { effectiveGstRate, reverseStock } from "@forkflow/domain";
+import { reverseStock } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { cancelSlip } from "./print/templates.js";
 import { readProfile } from "./print/profile.js";
@@ -172,89 +172,9 @@ export function registerOrders(app: FastifyInstance): void {
       throw httpError(409, "order is not open");
     }
 
-    interface ProductRow extends PriceRow {
-      id: string;
-      name: string;
-      price_paise: number;
-      gst_rate: number | null;
-      is_active: number;
-      is_sold_out: number;
-    }
-    interface VariantRow extends PriceRow {
-      id: string;
-      product_id: string;
-      name: string;
-      price_paise: number;
-      is_active: number;
-    }
-
-    const defaultGstRate = readGstSettings(app.db).gstRate;
-    const itemsToInsert: Array<{
-      clientRef: string | null;
-      productId: string;
-      variantId: string | null;
-      name: string;
-      pricePaise: number;
-      gstRate: number;
-      qty: number;
-      note: string | undefined;
-    }> = [];
-
-    for (const item of body.items) {
-      if (item.clientRef && existingRefs.has(item.clientRef)) continue;
-
-      const product = app.db.prepare("SELECT * FROM products WHERE id = ?").get(item.productId) as ProductRow | undefined;
-      if (!product) throw httpError(400, "unknown product");
-
-      let variant: VariantRow | undefined;
-      if (item.variantId) {
-        variant = app.db.prepare("SELECT * FROM variants WHERE id = ?").get(item.variantId) as VariantRow | undefined;
-        if (!variant) throw httpError(400, "unknown variant");
-        if (variant.is_active !== 1) throw httpError(400, "variant is not active");
-        if (variant.product_id !== item.productId) throw httpError(400, "variant does not belong to product");
-      }
-
-      if (product.is_active !== 1) throw httpError(400, "product is not active");
-      if (product.is_sold_out === 1) throw httpError(409, `${product.name} is sold out. Review the order before adding it.`);
-
-      const name = variant ? `${product.name} (${variant.name})` : product.name;
-      const pricePaise = rowPrice(variant ?? product, order.price_tier);
-
-      itemsToInsert.push({
-        clientRef: item.clientRef ?? null,
-        productId: item.productId,
-        variantId: item.variantId,
-        name,
-        pricePaise,
-        gstRate: effectiveGstRate(product.gst_rate, defaultGstRate),
-        qty: item.qty,
-        note: item.note,
-      });
-    }
-
-    if (itemsToInsert.length > 0) {
-      const write = app.db.transaction(() => {
-        for (const item of itemsToInsert) {
-          app.db
-            .prepare(
-              "INSERT INTO order_items (id, order_id, client_ref, product_id, variant_id, name_snapshot, price_paise_snapshot, gst_rate_snapshot, qty, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .run(
-              uuidv7(),
-              id,
-              item.clientRef,
-              item.productId,
-              item.variantId,
-              item.name,
-              item.pricePaise,
-              item.gstRate,
-              item.qty,
-              item.note ?? null,
-            );
-        }
-      });
-      write();
-    }
+    const toAdd = body.items.filter((item) => !(item.clientRef && existingRefs.has(item.clientRef)))
+      .map((item) => ({ clientRef: item.clientRef ?? null, priced: priceOrderItem(app.db, order.price_tier, item) }));
+    if (toAdd.length > 0) app.db.transaction(() => { for (const item of toAdd) insertOrderItem(app.db, id, item.priced, { clientRef: item.clientRef }); })();
 
     const result = orderWithDetails(id)!;
     app.broadcast("order.updated", { order: result });
@@ -269,12 +189,17 @@ export function registerOrders(app: FastifyInstance): void {
     const order = getOrder(item.order_id);
     if (!order) throw httpError(404, "order not found");
     if (order.status !== "open") throw httpError(409, "order is not open");
+    if (item.parent_item_id) throw httpError(409, "Change the combo, not the items in it", "combo_item");
     if (item.status !== "pending") throw httpError(409, "item is not pending");
 
     const qty = body.qty ?? item.qty;
     const note = body.note === undefined ? item.note : body.note;
 
-    app.db.prepare("UPDATE order_items SET qty = ?, note = ? WHERE id = ?").run(qty, note, id);
+    app.db.transaction(() => {
+      app.db.prepare("UPDATE order_items SET qty = ?, note = ? WHERE id = ?").run(qty, note, id);
+      // A combo's items follow its quantity and cooking note; each holds a whole number of units per combo.
+      app.db.prepare("UPDATE order_items SET qty = qty / ? * ?, note = ? WHERE parent_item_id = ? AND status != 'cancelled'").run(item.qty, qty, note, id);
+    })();
 
     const result = orderWithDetails(item.order_id)!;
     app.broadcast("order.updated", { order: result });
@@ -291,8 +216,11 @@ export function registerOrders(app: FastifyInstance): void {
     // Repeating a cancel (for example a saved action replayed after a lost reply) changes nothing and succeeds.
     if (item.status === "cancelled") return reply.status(200).send({ order: orderWithDetails(item.order_id)!, printError: null });
     if (order.status !== "open") throw httpError(409, "order is not open");
+    if (item.parent_item_id) throw httpError(409, "Cancel the whole combo, not one item in it", "combo_item");
 
-    if (item.status === "sent") {
+    // A combo is cancelled with the items in it; it counts as sent once any of them reached the kitchen.
+    const rows = [item, ...app.db.prepare("SELECT * FROM order_items WHERE parent_item_id = ? AND status != 'cancelled' ORDER BY id").all(id) as OrderItemRow[]];
+    if (rows.some((row) => row.status === "sent")) {
       if (!userCan(req.user, "orders.cancel_sent")) {
         return reply.status(403).send({ error: "forbidden", permission: "orders.cancel_sent" });
       }
@@ -300,81 +228,90 @@ export function registerOrders(app: FastifyInstance): void {
     }
 
     let printError: string | null = null;
-    const changedStockIds = app.db.transaction(() => {
-      const ids = item.status === "sent" ? reverseStock(app.db, id, req.user.id, body.reason!) : [];
-      app.db.prepare("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_by = ?, cancelled_at = ? WHERE id = ?")
-        .run(body.reason ?? null, req.user.id, Date.now(), id);
-      if (item.status === "sent" && item.kot_id) {
-        const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(item.kot_id) as KotRow;
-        const kotItems = app.db
-          .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
-          .all(item.kot_id) as OrderItemRow[];
-        const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
-        // The combined label (e.g. "T3, T4") so the kitchen matches the slip to the tickets on screen.
-        const tableName = orderTableLabel(app.db, order.id);
-
-        // Print cancel slip
-        const stationRow = app.db
-          .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
-          .get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
-
-        if (stationRow) {
-          const printerRow = stationRow.printer_id
-            ? (app.db
-                .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
-                .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
-            : undefined;
-
-          if (printerRow) {
-            // Build context line using kitchen-board rule
-            let contextLine: string;
-            if (order.type === "parcel") {
-              contextLine = order.order_type_name ?? "Parcel";
-            } else if (order.type === "zomato") {
-              contextLine = `Zomato #${order.zomato_order_id}`;
-            } else if (tableName) {
-              if (order.split_label === null || order.split_label === "A") {
-                contextLine = tableName;
-              } else {
-                contextLine = `${tableName} / ${order.split_label}`;
-              }
-            } else {
-              contextLine = "Table";
-            }
-
-            const label = `Cancel — KOT #${kot.kot_no} — ${contextLine}`;
-
-            const rendered = bestEffortPrint(app.log, `Cancel slip for KOT #${kot.kot_no}`, () => cancelSlip(
-              {
-                kotNo: kot.kot_no,
-                stationName: stationRow.name,
-                orderType: order.type,
-                orderTypeName: order.order_type_name ?? null,
-                zomatoOrderId: order.zomato_order_id ?? null,
-                tableName,
-                splitLabel: order.split_label,
-                item: { qty: item.qty, name: item.name_snapshot },
-                reason: body.reason ?? "No reason provided",
-                atMs: Date.now(),
-              },
-              printerRow.paper_width as 58 | 80,
-              readProfile(printerRow.kot_profile),
-            ));
-            if (rendered.error) printError = rendered.error;
-            else app.enqueuePrint(kot.station_id, "cancel", label, rendered.value!);
-          }
+    const changed = app.db.transaction(() => {
+      const ids: string[] = [];
+      const kotIds = new Set<string>();
+      const now = Date.now();
+      for (const row of rows) {
+        if (row.status === "sent") ids.push(...reverseStock(app.db, row.id, req.user.id, body.reason!));
+        app.db.prepare("UPDATE order_items SET status = 'cancelled', cancel_reason = ?, cancelled_by = ?, cancelled_at = ? WHERE id = ?")
+          .run(body.reason ?? null, req.user.id, now, row.id);
+        if (row.status === "sent" && row.kot_id) {
+          const error = printCancelSlip(row, body.reason ?? "No reason provided");
+          if (error) printError = error;
+          kotIds.add(row.kot_id);
         }
-
-        return { ids, kot: kotWithContextJson(kot, order, tableName, kotItems) };
       }
-      return { ids, kot: null };
+      const kots = [...kotIds].map((kotId) => {
+        const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(kotId) as KotRow;
+        const kotItems = app.db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(kotId) as OrderItemRow[];
+        const kotOrder = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
+        return kotWithContextJson(kot, kotOrder, orderTableLabel(app.db, kotOrder.id), kotItems);
+      });
+      return { ids, kots };
     })();
-    publishStock(app, changedStockIds.ids);
+    publishStock(app, changed.ids);
     const result = orderWithDetails(item.order_id)!;
     app.broadcast("order.updated", { order: result });
-    if (changedStockIds.kot) app.broadcast("kot.updated", { kot: changedStockIds.kot });
+    for (const kot of changed.kots) app.broadcast("kot.updated", { kot });
     return { order: result, printError };
   });
+
+  /** Prints a cancel slip for a sent item at its KOT's station. Returns the print error, if any. */
+  function printCancelSlip(item: OrderItemRow, reason: string): string | null {
+    const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(item.kot_id) as KotRow;
+    const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
+    // The combined label (e.g. "T3, T4") so the kitchen matches the slip to the tickets on screen.
+    const tableName = orderTableLabel(app.db, order.id);
+    const stationRow = app.db
+      .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
+      .get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
+    if (!stationRow) return null;
+    const printerRow = stationRow.printer_id
+      ? (app.db
+          .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
+          .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
+      : undefined;
+    if (!printerRow) return null;
+
+    // Build context line using kitchen-board rule
+    let contextLine: string;
+    if (order.type === "parcel") {
+      contextLine = order.order_type_name ?? "Parcel";
+    } else if (order.type === "zomato") {
+      contextLine = `Zomato #${order.zomato_order_id}`;
+    } else if (tableName) {
+      if (order.split_label === null || order.split_label === "A") {
+        contextLine = tableName;
+      } else {
+        contextLine = `${tableName} / ${order.split_label}`;
+      }
+    } else {
+      contextLine = "Table";
+    }
+
+    const label = `Cancel — KOT #${kot.kot_no} — ${contextLine}`;
+
+    const rendered = bestEffortPrint(app.log, `Cancel slip for KOT #${kot.kot_no}`, () => cancelSlip(
+      {
+        kotNo: kot.kot_no,
+        stationName: stationRow.name,
+        orderType: order.type,
+        orderTypeName: order.order_type_name ?? null,
+        zomatoOrderId: order.zomato_order_id ?? null,
+        tableName,
+        splitLabel: order.split_label,
+        item: { qty: item.qty, name: item.name_snapshot },
+        reason,
+        atMs: Date.now(),
+      },
+      printerRow.paper_width as 58 | 80,
+      readProfile(printerRow.kot_profile),
+    ));
+    if (rendered.error) return rendered.error;
+    app.enqueuePrint(kot.station_id, "cancel", label, rendered.value!);
+    return null;
+  }
 
   app.post("/api/orders/:id/cancel", { preHandler: update }, async (req) => {
     const { id } = req.params as { id: string };

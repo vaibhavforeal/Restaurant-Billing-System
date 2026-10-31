@@ -63,7 +63,8 @@ export interface ReceiptSnapshot {
   gstPaidBy?: "zomato";
   /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
   gstScheme?: "composition";
-  items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number }>;
+  /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
+  items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;
 }
 export interface ReceiptCustomer {
   name: string;

@@ -1,7 +1,7 @@
-# ForkFlow
+# MasalaPOS
 
-**Two distribution apps:** **ForkFlow Demo** contains resettable sample data;
-**ForkFlow** is the licensed customer app with a fresh restaurant setup and
+**Two distribution apps:** **MasalaPOS Demo** contains resettable sample data;
+**MasalaPOS** is the licensed customer app with a fresh restaurant setup and
 Basic/Pro activation. They have separate installers, app identities and data.
 Use `npm run package:demo` or `npm run package:commercial` (requires your public
 license verification key). Customer builds go to `dist/commercial`; demo builds
@@ -13,8 +13,8 @@ missing or mismatched amounts in a separate ledger. Live activation requires app
 Zomato POS access and a verified provider integration; it is not active in this build.
 See [Zomato setup, CSV templates and activation requirements](docs/operations/zomato.md).
 
-**Customer demo and Kitchen display:** Use **Start ForkFlow Demo.cmd** for an
-isolated sample restaurant with reset, and **Start ForkFlow Kitchen.cmd** for
+**Customer demo and Kitchen display:** Use **Start MasalaPOS Demo.cmd** for an
+isolated sample restaurant with reset, and **Start MasalaPOS Kitchen.cmd** for
 the separate Windows kitchen client. Tablets and browsers use the main server's
 `/kitchen/` address. See [setup, demo PINs, installers and reset instructions](docs/operations/demo-and-kitchen.md).
 
@@ -29,10 +29,13 @@ Blank service prices use the item's existing price. See
 [service pricing](docs/operations/service-pricing.md) for setup and CSV fields.
 
 Commercial direction: **cloud plus offline**, with Basic (2 devices) and Pro
-(5 devices, recipe editing and QR ordering entitlements). Local licensing includes
+(5 devices, recipe editing and QR ordering entitlements). A counter activates at
+setup with the Customer ID and Order ID from MasalaPOS's setup card. Licences,
+renewals, payments, GST invoices, leads and support are run from the
+[MasalaPOS Portal](docs/operations/vendor-portal.md). Local licensing includes
 verified file import, renewal previews, device management and change history;
-hosted accounts, automatic subscription renewal and business-data sync remain
-to be built. See [commercial licensing](docs/operations/commercial-licensing.md).
+restaurant-facing accounts and business-data sync remain to be built. See
+[commercial licensing](docs/operations/commercial-licensing.md).
 The existing development build still runs without activation.
 
 A local-only desktop POS for restaurants. One Windows PC runs everything —
@@ -76,6 +79,7 @@ parcel workflow, and **New parcel** remains available alongside Quick takeaway.
 Operations: [Quick takeaway billing](docs/operations/quick-takeaway.md),
 [Discount limits](docs/operations/discount-limits.md),
 [Changing sent items](docs/operations/kot-edits.md),
+[Combos](docs/operations/combos.md),
 [Order types](docs/operations/order-types.md),
 [Cash drawer and day close](docs/operations/cash-drawer-and-day-close.md),
 [Customers and loyalty](docs/operations/customers-and-loyalty.md),
@@ -130,16 +134,16 @@ npm run typecheck
 npm run dev           # server (:4100) + Vite UI (:5173) with hot reload
 npm run dev:desktop   # the real thing: Electron window + server + built UI
 npm run package:demo  # standalone sample-data demo installer
-# Set FORKFLOW_LICENSE_PUBLIC_KEY before npm run package:commercial
+# Set MASALAPOS_LICENSE_PUBLIC_KEY before npm run package:commercial
 ```
 
-To open the internal development build on Windows, double-click `Start ForkFlow.cmd`
+To open the internal development build on Windows, double-click `Start MasalaPOS.cmd`
 in the project folder. Keep it in this folder so it can find Electron and the
 build. Opening `build/desktop/app/main.js` directly uses Windows Script Host,
 which reports a syntax error (`800A03EA`) because this file requires Electron.
 
-Use Node.js 24+. The database lives in `./data/forkflow.db` (override with
-`FORKFLOW_DATA_DIR`). Use a separate scratch data directory for testing.
+Use Node.js 24+. The database lives in `./data/masalapos.db` (override with
+`MASALAPOS_DATA_DIR`). Use a separate scratch data directory for testing.
 
 On this Windows/npm 11 installation, npm tried `node-gyp rebuild` for
 better-sqlite3 despite its bundled prebuild. `npm ci --ignore-scripts` installed
@@ -147,7 +151,7 @@ the dependencies successfully and the prebuilt SQLite binary passed all tests.
 That fallback skips Electron's download; run `node node_modules/electron/install.js`
 before using `dev:desktop`. The browser/server development path works without it.
 
-The customer installer is written to `dist/commercial/ForkFlow-Setup-0.7.0.exe`.
+The customer installer is written to `dist/commercial/MasalaPOS-Setup-0.7.0.exe`.
 `package:win` aliases `package:commercial`; both require the public verification
 key. `package:dir` creates the same licensed app without an installer. Development
 builds are for internal use and cannot pass the installer edition check.
@@ -169,7 +173,7 @@ ticket. Billing can proceed after acceptance without waiting for **Done**.
 Restaurants whose kitchen only receives printed KOTs can turn this off in
 Settings with **Require kitchen acceptance before billing dine-in orders**; it is
 on by default.
-Install this update and restart ForkFlow to apply it to an installed 0.6.2 app.
+Install this update and restart MasalaPOS to apply it to an installed 0.6.2 app.
 Installed data is kept in the user's application-data folder, separate from the
 development database. Open it from the tray menu. Closing the window keeps the
 server running; use the tray's Quit action to stop all counters. The current
@@ -271,7 +275,7 @@ before archiving a stock item; its history is retained.
 
 Pro administrators can also see what dishes cost and what the restaurant earned.
 Enter **Amount paid (₹, incl. GST)** when receiving stock, or **Set unit cost** on
-an item, and ForkFlow keeps a weighted-average cost per ingredient. **Inventory →
+an item, and MasalaPOS keeps a weighted-average cost per ingredient. **Inventory →
 Dish costing** shows recipe cost, cost % and margin per price, and **Reports →
 Detailed reports → Food cost & profit** shows revenue, ingredient cost and gross
 profit for a date range, with sales whose cost is unknown or that have no recipe

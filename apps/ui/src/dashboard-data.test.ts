@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AnalyticsHour, OrderAnalyticsReport, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
+import type { AnalyticsHour, OrderAnalyticsReport, OrderTypeAnalytics } from "@masalapos/domain/operational-reports";
 import type { Order } from "./types";
 import { SLOTS, ageLabel, aggregatorAlerts, channelCards, orderStats, slotBars, slotIndex } from "./dashboard-data";
 

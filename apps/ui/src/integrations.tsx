@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { IntegrationId, IntegrationInfo } from "@forkflow/domain/integrations";
+import type { IntegrationId, IntegrationInfo } from "@masalapos/domain/integrations";
 import { ApiError, apiFetch, session, type User } from "./api";
 import { isEnabled as listHas, nextList } from "./integrations-model";
 import { connectWs } from "./ws";
@@ -48,13 +48,13 @@ export function IntegrationsProvider({ user, children }: { user: User; children:
     void load();
     // `licensed` comes from the installation's licence, so a licence import or expiry changes the list too.
     const licenseChanged = () => void load();
-    window.addEventListener("forkflow:license-changed", licenseChanged);
+    window.addEventListener("masalapos:license-changed", licenseChanged);
     const dispose = connectWs({
       onEvent: (event) => { if (event === "integrations.changed") void load(); },
       onStatus: (connected) => { if (connected) void load(); },
       onAuthFail: () => session.clear(),
     });
-    return () => { window.removeEventListener("forkflow:license-changed", licenseChanged); dispose(); };
+    return () => { window.removeEventListener("masalapos:license-changed", licenseChanged); dispose(); };
   }, [allowed, load]);
 
   const setEnabled = useCallback(async (id: IntegrationId, enabled: boolean) => {

@@ -1,12 +1,11 @@
 # Backups, recovery and Windows installation
 
-For the prepared Google Drive backup framework and future integration steps, see
-[Google Drive backups](google-drive-backups.md). Account linking is deferred;
-verified local and second-folder backups work independently.
+Backups can also go to Google Drive; see [Google Drive backups](google-drive-backups.md).
+Verified local and second-folder backups work independently of it.
 
-ForkFlow 0.6 runs one server process. The server owns the SQLite database; other
+MasalaPOS 0.6 runs one server process. The server owns the SQLite database; other
 counters connect through the browser. Close the window to keep the server in the
-tray. **Quit ForkFlow** in the tray menu stops service for every counter.
+tray. **Quit MasalaPOS** in the tray menu stops service for every counter.
 
 ## Build and install
 
@@ -17,7 +16,7 @@ npm ci --ignore-scripts
 node node_modules/electron/install.js
 npm run typecheck
 npm test
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
 npm run package:win
 ```
 
@@ -27,7 +26,7 @@ not download a separate Node runtime or compile SQLite. Electron supplies the
 runtime. The builder's first run downloads Electron/NSIS packaging tools.
 Close apps or test servers using `build/desktop/commercial` before rebuilding it.
 
-Output: `dist/commercial/ForkFlow-Setup-0.7.0.exe`. The package includes the server,
+Output: `dist/commercial/MasalaPOS-Setup-0.7.0.exe`. The package includes the server,
 UI, runtime and SQLite. Customer PCs do not need Node, npm or a compiler.
 `package:win` creates the licensed customer edition. For a sample-data demo use
 `npm run package:demo`; its separate installer is written to `dist/demo`.
@@ -36,15 +35,15 @@ Run the installer as administrator. It installs a private-network, local-subnet
 firewall rule for TCP 4100 and creates the main PC shortcut. First launch enables
 Windows login autostart; toggle **Start with Windows** from the tray menu.
 Do not run development and installed servers on the same port at the same time.
-Changing `FORKFLOW_PORT` also requires changing the firewall rule.
+Changing `MASALAPOS_PORT` also requires changing the firewall rule.
 
 The current build is unsigned. Use a Windows signing certificate for a public
 release. An installer build and packaged-runtime smoke test do not verify UAC,
 firewall access from a second PC, or login startup on a clean customer machine.
 
-Installed data defaults to `%APPDATA%\forkflow-desktop\data`. **Open data and
+Installed data defaults to `%APPDATA%\masalapos-desktop\data`. **Open data and
 backups** in the tray is the authoritative location. Development defaults to
-`./data`, or the absolute folder in `FORKFLOW_DATA_DIR`. The installer never
+`./data`, or the absolute folder in `MASALAPOS_DATA_DIR`. The installer never
 overwrites restaurant data, and uninstall retains it. Existing development data
 is not automatically imported; take a manual backup and restore it in the app.
 
@@ -54,8 +53,12 @@ In **Settings → Backups & recovery**:
 
 - A daily snapshot is taken at startup, then checked hourly using the server's
   local calendar date. If the PC was off, it is taken on the next startup.
-- **Back up now** creates a manual restore point. It can be downloaded by an
-  administrator. Backups contain restaurant and staff data; store them securely.
+- **Back up now** creates a manual restore point on this PC.
+- **Download backup file** creates a fresh verified snapshot and downloads it as one
+  file, e.g. `MasalaPOS backup - Spice Garden - 2026-10-31 1430.db`. It holds all
+  restaurant data (menu and photos, orders, bills, customers, stock, staff, settings).
+  PC-specific setup such as the license installation and Captain HTTPS certificates is
+  not included. Backups contain staff and customer data; store them securely.
 - Daily retention defaults to 30 days, configurable from 7–365. Ten manual and
   ten pre-update snapshots are retained separately. The newest daily copy is
   always retained. Unrelated files in the backup folder are never pruned.
@@ -65,7 +68,7 @@ In **Settings → Backups & recovery**:
 
 Each snapshot uses SQLite `VACUUM INTO`, integrity/reference checks, a disk flush
 and a rename from `.partial`. It includes committed WAL data. Never copy only the
-live `forkflow.db` while the app is running. Large snapshots can briefly pause
+live `masalapos.db` while the app is running. Large snapshots can briefly pause
 requests; queued order actions remain saved on their originating device.
 
 A pre-update snapshot is mandatory before a pending migration or app-version
@@ -77,8 +80,15 @@ Increment the app version for each distributed release.
 
 1. Stop work on all counters and decide which snapshot to restore. Everything
    recorded after that point will leave the live database.
-2. Open the main PC tray menu → **Restore backup…**, select the `.db` snapshot,
-   and read the confirmation. This also works from the startup error dialog.
+2. In **Settings → Backups & connections** on the main PC choose **Restore from a
+   backup file…**, **Restore…** next to a backup on this PC, or a backup in Google
+   Drive. The server copies it to `data/restore-incoming/`, verifies it and shows the
+   restaurant name, bill and order counts and the last bill time. Nothing changes until
+   the admin ticks the confirmation and chooses **Restore and restart**. The server then
+   asks the desktop shell to restore that staged file. Restore is refused from counter
+   PCs, tablets and the development server (no desktop shell).
+   Alternatively, use the tray menu → **Restore backup…** and select a `.db` file. This
+   also works from the startup error dialog.
 3. The desktop stops its server. A data-directory lock prevents another server
    from opening or restoring the same database, even on another port.
 4. The server verifies and stages the snapshot before moving the current DB,
@@ -96,9 +106,9 @@ restaurant data has been verified. The original database in that archive may
 require its accompanying WAL to inspect. Do not copy an archive's DB alone over
 the live database. Use a verified snapshot for normal recovery.
 
-For development-only recovery, with all servers stopped, set `FORKFLOW_DATA_DIR`
-and `FORKFLOW_RESTORE` to absolute paths for one launch of
-`node --import tsx apps/server/src/main.ts`. Remove `FORKFLOW_RESTORE` immediately
+For development-only recovery, with all servers stopped, set `MASALAPOS_DATA_DIR`
+and `MASALAPOS_RESTORE` to absolute paths for one launch of
+`node --import tsx apps/server/src/main.ts`. Remove `MASALAPOS_RESTORE` immediately
 after that launch; never put it in a persistent environment or startup task.
 Windows locks release automatically on process termination. The non-Windows
 development fallback uses a 10-minute stale-lock interval after a forced kill.

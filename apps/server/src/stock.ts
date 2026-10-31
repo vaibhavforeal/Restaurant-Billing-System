@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7,
-  type StockRow, type StockLink, type StockMove, type StockCostChange } from "@forkflow/domain";
+  type StockRow, type StockLink, type StockMove, type StockCostChange } from "@masalapos/domain";
 import { httpError } from "./http-error.js";
 import { assertModuleActive, moduleActive, requireModule } from "./modules.js";
 import { userCan } from "./auth.js";

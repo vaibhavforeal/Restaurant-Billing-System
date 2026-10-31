@@ -20,7 +20,9 @@ export interface UpdateStatus {
 }
 
 /** Server → desktop shell. */
-export type ToDesktop = { type: "update-config"; channel: UpdateChannel } | { type: "update-check" } | { type: "update-install" };
+export type ToDesktop = { type: "update-config"; channel: UpdateChannel } | { type: "update-check" } | { type: "update-install" }
+  /** A verified, admin-confirmed backup staged in the data folder; the shell stops the server and restores it. */
+  | { type: "restore"; path: string };
 /** Desktop shell → server. */
 export type ToServer = { type: "update-status"; status: UpdateStatus };
 
@@ -30,6 +32,6 @@ export function isToServer(value: unknown): value is ToServer {
 }
 export function isToDesktop(value: unknown): value is ToDesktop {
   if (typeof value !== "object" || value === null) return false;
-  const v = value as { type?: unknown; channel?: unknown };
-  return v.type === "update-check" || v.type === "update-install" || (v.type === "update-config" && (UPDATE_CHANNELS as readonly unknown[]).includes(v.channel));
+  const v = value as { type?: unknown; channel?: unknown; path?: unknown };
+  return (v.type === "restore" && typeof v.path === "string") || v.type === "update-check" || v.type === "update-install" || (v.type === "update-config" && (UPDATE_CHANNELS as readonly unknown[]).includes(v.channel));
 }

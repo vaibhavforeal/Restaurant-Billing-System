@@ -1,10 +1,9 @@
 ﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@forkflow/domain";
+import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@masalapos/domain";
 import { moduleSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
 import { isUnreachable, readLicenseCopy, saveLicenseCopy } from "../offline-cache";
 import { downloadText } from "../download";
-import { isDesktopShell, openInDesktopShell, showPendingMessage } from "../checkout-window";
 import { useNavigationGuard } from "../navigation-guard";
 import { SystemSettings } from "./SystemSettings";
 import "../license-settings.css";
@@ -39,9 +38,9 @@ function useLicenseStatus(): LicenseContextValue {
     let pending: ReturnType<typeof setTimeout> | undefined;
     const changed = () => { clearTimeout(pending); pending = setTimeout(() => { void refresh(); }, 80); };
     const timer = setInterval(() => { void refresh(); }, 30_000);
-    window.addEventListener("forkflow:license-changed", changed); window.addEventListener("focus", changed);
+    window.addEventListener("masalapos:license-changed", changed); window.addEventListener("focus", changed);
     return () => { mounted.current = false; sequence.current++; clearTimeout(pending); clearInterval(timer);
-      window.removeEventListener("forkflow:license-changed", changed); window.removeEventListener("focus", changed); };
+      window.removeEventListener("masalapos:license-changed", changed); window.removeEventListener("focus", changed); };
   }, [refresh]);
   return { status, error, refresh };
 }
@@ -76,11 +75,10 @@ export function LicenseSettings() {
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [checkout, setCheckout] = useState<"subscribe" | "manage" | null>(null);
-  const [paymentUrl, setPaymentUrl] = useState("");
+  const [codes, setCodes] = useState({ customerId: "", orderId: "" });
   const [loading, setLoading] = useState(false);
   const lock = useRef(false), sequence = useRef(0), mounted = useRef(false);
-  const dirty = !!license.trim() || !!name.trim() || (!!renaming && renaming.name !== renaming.device.name);
+  const dirty = !!license.trim() || !!name.trim() || !!codes.customerId.trim() || !!codes.orderId.trim() || (!!renaming && renaming.name !== renaming.device.name);
   useNavigationGuard(() => {
     if (lock.current) { window.alert("Wait for the license or device request to finish before leaving."); return false; }
     return !dirty || window.confirm("Discard the unsaved license or device changes?");
@@ -108,10 +106,10 @@ export function LicenseSettings() {
   }, [status?.mode, status?.revision, reload]);
   async function run(action: () => Promise<void>, update = true) {
     if (lock.current) return;
-    lock.current = true; setBusy(true); setError(""); setMessage(""); setPaymentUrl("");
+    lock.current = true; setBusy(true); setError(""); setMessage("");
     try {
       await action();
-      if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("forkflow:license-changed")); }
+      if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("masalapos:license-changed")); }
     } catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : "Request failed"); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
@@ -125,58 +123,53 @@ export function LicenseSettings() {
       setLicense(text); setMessage(`Loaded ${file.name}. Preview it before applying.`);
     }, false);
   }
-  // In a browser the blank tab is opened inside the click so the popup blocker allows it; the payment page is sent there once the counter has a session link.
-  // The desktop app denies blank windows and sends http(s) windows to the system browser, so there it opens the page directly once the link arrives.
-  // The session request can take ~30 s when the counter has to register with the service first, hence the longer timeout.
-  function openCheckout(kind: "subscribe" | "manage") {
-    if (lock.current) return;
-    const desktop = isDesktopShell(navigator.userAgent);
-    const tab = desktop ? null : window.open("", "_blank");
-    if (tab) showPendingMessage(tab);
-    setCheckout(kind);
-    void run(async () => {
-      try {
-        const { url } = await apiFetch<{ url: string }>("/api/license/subscribe-session", { method: "POST", signal: AbortSignal.timeout(45_000) });
-        if (desktop) { if (!openInDesktopShell(url, (target, name) => window.open(target, name)) && mounted.current) setPaymentUrl(url); }
-        else if (tab && !tab.closed) { tab.opener = null; tab.location.href = url; } else if (mounted.current) setPaymentUrl(url);
-      } catch (e) { tab?.close(); throw e; }
-      finally { if (mounted.current) setCheckout(null); }
-    }, false);
-  }
   const timezone = status?.timezone;
-  const showBilling = status?.mode === "commercial" && status.subscriptionAvailable;
+  const online = status?.mode === "commercial" && status.onlineActivation;
+  // Customer ID and Order ID from MasalaPOS's setup card: the first activation, or moving to another order (a trial becoming paid).
+  const enrollForm = <form className="license-device-form" onSubmit={(e) => { e.preventDefault(); void run(async () => {
+    const result = await apiFetch<{ customer: { name: string }; order: { code: string } }>("/api/license/enroll", { method: "POST", body: JSON.stringify(codes), signal: AbortSignal.timeout(30_000) });
+    setCodes({ customerId: "", orderId: "" }); setMessage(`Activated with order ${result.order.code} for ${result.customer.name}.`);
+  }); }}><label>Customer ID<input required maxLength={40} placeholder="FC-XXXX-XXX" autoComplete="off" spellCheck={false} value={codes.customerId} disabled={busy}
+      onChange={(e) => setCodes({ ...codes, customerId: e.target.value })} /></label>
+    <label>Order ID<input required maxLength={40} placeholder="FO-XXXX-XXX" autoComplete="off" spellCheck={false} value={codes.orderId} disabled={busy}
+      onChange={(e) => setCodes({ ...codes, orderId: e.target.value })} /></label>
+    <button className="primary" disabled={busy || !codes.customerId.trim() || !codes.orderId.trim()}>Activate</button></form>;
   const current = devices?.find((d) => d.current);
   const canRegister = status && ["active", "grace"].includes(status.state) && !current && devices !== null && devices.length < (status.maxDevices ?? 0);
   return <section className="panel license-settings" aria-label="Plan and devices">
     <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>
       <div className="license-actions">
-        {showBilling && (!status.plan || status.trial) && <button className="primary" disabled={busy} onClick={() => { openCheckout("subscribe"); }}>{checkout === "subscribe" ? "Opening payment page…" : "Subscribe"}</button>}
-        {showBilling && status.plan && !status.trial && <button disabled={busy} onClick={() => { openCheckout("manage"); }}>{checkout === "manage" ? "Opening payment page…" : "Manage plan"}</button>}
-        {showBilling && <button disabled={busy || loading} onClick={() => { void run(async () => {
+        {online && <button disabled={busy || loading} onClick={() => { void run(async () => {
           setMessage((await apiFetch<{ message: string }>("/api/license/check", { method: "POST" })).message);
         }, true); }}>Check for renewal</button>}
         <button disabled={busy || loading} onClick={() => { void run(async () => {}, true); }}>Refresh plan</button></div></div>
     {(error || loadError || statusError) && <p role="alert" className="error-message">{error || loadError || statusError}</p>}
     {message && <p role="status" className="license-message">{message}</p>}
-    {paymentUrl && <p role="status" className="license-message">The payment page didn't open automatically. <a className="license-link" href={paymentUrl} target="_blank" rel="noopener noreferrer">Open payment page</a></p>}
     {status?.mode === "development" && <p>{status.message}</p>}
     {status?.mode === "commercial" && <>
       <div className="license-summary">
         <div><span className="license-label">Current plan</span><strong>{planName(status.plan)}</strong><span className={`license-badge ${status.state}`}>{status.state.replaceAll("_", " ")}</span>
-          {status.trial && status.expiresAt !== null && <span>Pro trial — ends {dateTime(status.expiresAt, timezone)}</span>}</div>
+          {status.trial && status.expiresAt !== null && <span>Trial — ends {dateTime(status.expiresAt, timezone)}</span>}</div>
         <div><span className="license-label">Registered devices</span><strong>{status.registeredDevices} / {status.maxDevices ?? "-"}</strong><span>{status.deviceRegistered ? "This browser is registered" : current ? status.maxDevices !== null ? "This browser is over the limit" : "Registration saved" : "This browser needs registration"}</span></div>
         <div><span className="license-label">Renewal due</span><strong className="license-date">{status.expiresAt === null ? "Awaiting activation" : dateTime(status.expiresAt, timezone)}</strong><span>{status.revision ? `License revision ${status.revision}` : "Import a license to get started"}</span></div>
       </div>
       <p role={status.canOperate ? "status" : "alert"}>{status.message}</p>
-      {status.plan && <p className="license-help">{moduleSummary(status.modules)}<br />Offline grace ends: {dateTime(status.graceUntil, timezone)}. Times use {timezone} on the restaurant server.</p>}
+      {online && !status.plan && <div className="license-section"><h3>Activate this counter</h3>
+        <p className="license-help">Enter the Customer ID and Order ID from the setup card MasalaPOS gave you. This computer needs the internet for this step.</p>{enrollForm}</div>}
+      {status.plan && <p className="license-help">{moduleSummary(status.modules)}<br />Offline grace ends: {dateTime(status.graceUntil, timezone)}. Times use {timezone} on the restaurant server.<br />
+        To renew or change your plan, contact MasalaPOS{status.customerCode ? ` and quote Customer ID ${status.customerCode}` : ""}. {online ? "The renewed licence arrives here on its own." : "MasalaPOS sends the renewed licence as a file to import below."}</p>}
       <details className="license-identity"><summary>Activation details</summary>
+        {status.customerCode && <p>Customer ID: <code>{status.customerCode}</code></p>}
+        {status.orderCode && <p>Order ID: <code>{status.orderCode}</code></p>}
         <p>Installation ID: <code>{status.installationId}</code></p>
         <p className="license-help">Download these details for your license provider when activating or renewing.</p>
         <button disabled={busy} onClick={() => { void run(async () => {
           const request = await apiFetch<ActivationRequest>("/api/license/activation-request");
-          downloadText(JSON.stringify(request, null, 2) + "\n", `forkflow-activation-${request.installationId}.json`, "application/json;charset=utf-8");
+          downloadText(JSON.stringify(request, null, 2) + "\n", `masalapos-activation-${request.installationId}.json`, "application/json;charset=utf-8");
           setMessage("Activation request downloaded.");
         }, false); }}>Download activation request</button>
+        {online && status.plan && <><h3>Use a different Order ID</h3>
+          <p className="license-help">For example when a trial becomes a paid order. The new order must belong to the same customer.</p>{enrollForm}</>}
       </details>
       <div className="license-section"><h3>Import or renew a license</h3>
         <p className="license-help">Choose a file or paste the signed license from your provider. Preview checks its signature and shows the changes before you apply it.</p>

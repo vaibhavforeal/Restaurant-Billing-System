@@ -1,6 +1,6 @@
 # Captain App
 
-The Captain App is ForkFlow's tablet and phone interface for tables, orders and KOTs. It uses the existing staff PIN, waiter permissions, database, retry queue and kitchen printers. Open `/captain/` on the restaurant server. Waiters signing into the ordinary POS address enter Captain automatically.
+The Captain App is MasalaPOS's tablet and phone interface for tables, orders and KOTs. It uses the existing staff PIN, waiter permissions, database, retry queue and kitchen printers. Open `/captain/` on the restaurant server. Waiters signing into the ordinary POS address enter Captain automatically.
 
 ## Implementation plan and audit
 
@@ -22,7 +22,7 @@ Captain tokens extend the existing palette and spacing: 44px touch controls, 48p
 - pairs by scanning a code in **Settings → Backups & connections → Android Captain app**. The code carries the POS address and the SHA-256 fingerprint of the restaurant CA. The app downloads `/captain/restaurant-ca.cer`, checks that fingerprint, and from then on accepts only server certificates issued by that CA for the paired address. Tablets need no certificate installed in Android settings.
 - accepts a typed address too. It tries `https://<address>:4443` first, then `http://<address>:4100`. A typed HTTPS address shows the fingerprint for staff to compare with POS Settings. A plain HTTP connection warns that PINs and orders are unencrypted.
 - keeps the screen on, closes Captain dialogs and leaves orders with the Android back button, and shows a native reconnect screen with **Change POS server**.
-- updates itself. Each ForkFlow build ships the matching APK at `/captain/android/ForkFlow-Captain.apk` with `version.json`. The app checks on start and every six hours, verifies the SHA-256, and asks Android to install it. The first update asks staff to allow installs from ForkFlow Captain.
+- updates itself. Each MasalaPOS build ships the matching APK at `/captain/android/MasalaPOS-Captain.apk` with `version.json`. The app checks on start and every six hours, verifies the SHA-256, and asks Android to install it. The first update asks staff to allow installs from MasalaPOS Captain.
 
 The app does not use the PWA service worker. Drafts and the retry queue stay in the app's own storage, with the same offline limits as described below.
 
@@ -30,7 +30,7 @@ The app does not use the PWA service worker. Drafts and the retry queue stay in 
 
 1. On the POS, open **Settings → Backups & connections → Android Captain app**.
 2. On the tablet, scan the download code (plain LAN HTTP, because the tablet does not trust the CA yet) and install the APK. Android asks once to allow installs from the browser.
-3. Open ForkFlow Captain, tap **Scan pairing code**, scan the pairing code and sign in with a waiter PIN.
+3. Open MasalaPOS Captain, tap **Scan pairing code**, scan the pairing code and sign in with a waiter PIN.
 
 Run the Captain HTTPS setup below first, so pairing codes are encrypted. Without it, pairing codes use the unencrypted desktop address.
 
@@ -44,7 +44,7 @@ npm run build:captain-android                            # tests, then a signed 
 npm run package:commercial                               # includes the APK when its version matches package.json
 ```
 
-The app's version follows `package.json`: version code = major × 1,000,000 + minor × 1,000 + patch. The build script tests the app and signs the APK with the key in `~/.forkflow/captain-android/` (or `FORKFLOW_ANDROID_SIGNING`), outside the repository. **Back up that folder.** Installed tablets accept updates only when they are signed with the same key. A lost key means uninstalling and reinstalling on every tablet. `tools/build-desktop.mjs` skips an APK built for a different version.
+The app's version follows `package.json`: version code = major × 1,000,000 + minor × 1,000 + patch. The build script tests the app and signs the APK with the key in `~/.masalapos/captain-android/` (or `MASALAPOS_ANDROID_SIGNING`), outside the repository. **Back up that folder.** Installed tablets accept updates only when they are signed with the same key. A lost key means uninstalling and reinstalling on every tablet. `tools/build-desktop.mjs` skips an APK built for a different version.
 
 ## Connectivity and offline behavior
 
@@ -62,7 +62,7 @@ On the POS PC, reserve its IPv4 address in the router. In a PowerShell window at
 .\tools\setup-captain-https.ps1 -ServerAddress 192.168.171.101
 ```
 
-Replace the example with that PC's actual restaurant LAN address. The default data directory is `%APPDATA%\forkflow-desktop\data` and the HTTPS port is 4443. For a development server, pass its actual `-DataDirectory`. Restart ForkFlow after setup. The desktop continues to use HTTP port 4100; HTTPS uses the same handlers, database, staff permissions and live event hub.
+Replace the example with that PC's actual restaurant LAN address. The default data directory is `%APPDATA%\masalapos-desktop\data` and the HTTPS port is 4443. For a development server, pass its actual `-DataDirectory`. Restart MasalaPOS after setup. The desktop continues to use HTTP port 4100; HTTPS uses the same handlers, database, staff permissions and live event hub.
 
 In **Settings → Backups & connections → Captain tablets**, find the HTTPS URL, QR code, certificate expiry and certificate fingerprint. Download the public restaurant certificate there, or copy only `restaurant-ca.cer` from the path printed by the setup script. Never transfer the `.pfx` files or `pfx-password.txt` to tablets.
 
@@ -71,7 +71,7 @@ In **Settings → Backups & connections → Captain tablets**, find the HTTPS UR
 Only on the trusted restaurant network, set the PC's network profile to **Private** in Windows network settings. From an Administrator PowerShell window, allow the Captain port from the local subnet:
 
 ```powershell
-New-NetFirewallRule -DisplayName 'ForkFlow Captain HTTPS 4443' -Direction Inbound -Protocol TCP -LocalPort 4443 -Action Allow -Profile Private -RemoteAddress LocalSubnet
+New-NetFirewallRule -DisplayName 'MasalaPOS Captain HTTPS 4443' -Direction Inbound -Protocol TCP -LocalPort 4443 -Action Allow -Profile Private -RemoteAddress LocalSubnet
 ```
 
 Run this once; check for an existing rule with the same name first. The setup script's optional `-OpenFirewall` does the same check during initial setup. Do not forward the port in the router. Tablets must be on a network that can reach the POS PC; guest Wi-Fi/client isolation may prevent this even when the signal is strong. Ethernet for the POS PC is preferable when available.
@@ -92,7 +92,7 @@ The CA should be installed only on the restaurant's staff devices. Removing the 
 
 ### Renewal and recovery
 
-The server certificate lasts one year. Before expiry, run the setup script with `-Renew` from the same Windows account and restart ForkFlow. It reuses the existing CA so tablet trust continues. If the server IP changes, use the new IP with `-Renew`, and reopen/reinstall Captain at the new address after clearing any pending work at the old address. A router DHCP reservation avoids this interruption.
+The server certificate lasts one year. Before expiry, run the setup script with `-Renew` from the same Windows account and restart MasalaPOS. It reuses the existing CA so tablet trust continues. If the server IP changes, use the new IP with `-Renew`, and reopen/reinstall Captain at the new address after clearing any pending work at the old address. A router DHCP reservation avoids this interruption.
 
 The local CA lasts three years. Its replacement requires trusting the new public CA on each tablet. Keep the private certificate files and their password in a protected backup on the POS PC; ordinary SQLite backups do not include these files. Renewal requires the original CA private key in that Windows account's certificate store; the script reports an error if it is missing.
 

@@ -58,7 +58,7 @@
 
 **Interfaces:**
 - Produces: column `orders.merged_into TEXT REFERENCES orders(id)`; table `table_links(id PK, table_id NOT NULL FK, order_id NOT NULL FK, linked_at NOT NULL, linked_by NOT NULL FK users)` with indexes on `table_id` and `order_id`; table `order_table_events(id PK, kind NOT NULL CHECK IN ('move','merge'), order_id NOT NULL, target_order_id, from_table_id, to_table_id, folded_captain_name, created_at NOT NULL, created_by NOT NULL FK users, client_ref NOT NULL UNIQUE, request_json NOT NULL)` with update/delete triggers whose messages contain `append-only`.
-- Produces: `OrderMove = z.object({ clientRef: z.string().min(8).max(64), tableId: z.string().min(1) }).strict()`; `OrderMerge = z.object({ clientRef: z.string().min(8).max(64), targetOrderId: z.string().min(1) }).strict()`, both exported from `@forkflow/domain`.
+- Produces: `OrderMove = z.object({ clientRef: z.string().min(8).max(64), tableId: z.string().min(1) }).strict()`; `OrderMerge = z.object({ clientRef: z.string().min(8).max(64), targetOrderId: z.string().min(1) }).strict()`, both exported from `@masalapos/domain`.
 
 - [ ] **Step 1: Write failing test** `"adds merge tracking, table links and an append-only transfer log"`: migrate to < 24, insert a user, table and order, migrate fully → `orders.merged_into` is `null`; inserting a `table_links` row succeeds; inserting an `order_table_events` row with `kind: 'swap'` throws; `UPDATE`/`DELETE` on `order_table_events` throw `/append-only/`; duplicate `client_ref` throws.
 - [ ] **Step 2: Run** `npx vitest run packages/domain/src/migrations/024-table-transfers.test.ts` → FAIL.
@@ -103,7 +103,7 @@
 - Modify: `apps/server/src/print/templates.ts`, `apps/server/src/print/queue.ts` (`PrintJobJson.kind` adds `"table"`), `apps/server/src/server.ts` (`enqueuePrint` kind union adds `"table"`; register after `registerKots`)
 
 **Interfaces:**
-- Consumes: `OrderMove` (Task 1); `orderTableLabel` (Task 2); `nextSplitLabel(db, tableId)` (`@forkflow/domain`); `assertTableNotReserved(db, tableId, now)` (`reservation-rules.ts`); `bestEffortPrint` (`print/best-effort.ts`); `app.enqueuePrint`.
+- Consumes: `OrderMove` (Task 1); `orderTableLabel` (Task 2); `nextSplitLabel(db, tableId)` (`@masalapos/domain`); `assertTableNotReserved(db, tableId, now)` (`reservation-rules.ts`); `bestEffortPrint` (`print/best-effort.ts`); `app.enqueuePrint`.
 - Produces:
   - `tableChangeSlip(ctx: { stationName: string; text: string; atMs: number }, paperWidth: 58 | 80, profile?: PrintProfileInput): Buffer` — heading "TABLE CHANGE", the station name, the text in large/bold, time; finished with the profile like `kotSlip`.
   - `notifyKitchenTableChange(app, orderId: string, text: string): string[]` (in `table-transfer.ts`) — for each distinct station with a KOT on `orderId` whose `done_at IS NULL`, render via `bestEffortPrint` and enqueue kind `"table"`, label `Table change — <text>`; returns print error messages.
@@ -164,7 +164,7 @@
 - [ ] **Step 1: Write failing tests** for `moveTargets` (free selectable; occupied/linked-occupied → `"occupied — merge instead"`; reserved → `"reserved now"`; inactive and current omitted) and `mergeTargets` (grouping, labels, excludes current/billed/parcel orders).
 - [ ] **Step 2: Run** `npx vitest run apps/ui/src/table-transfer.test.ts` → FAIL.
 - [ ] **Step 3: Implement** helpers, dialogs and OrderScreen wiring.
-- [ ] **Step 4: Run** `npx vitest run apps/ui`, `npm run typecheck -w @forkflow/ui`, `npm run build -w @forkflow/ui` → PASS.
+- [ ] **Step 4: Run** `npx vitest run apps/ui`, `npm run typecheck -w @masalapos/ui`, `npm run build -w @masalapos/ui` → PASS.
 - [ ] **Step 5: Commit** — `feat(ui): move and merge tables from the order screen`.
 
 ---
@@ -193,6 +193,6 @@
 
 - [ ] **Step 1: Write the guide:** moving a party; merging two tables or two bill groups; linked tables stay occupied until payment; prices (existing items keep prices, new items use the receiving table); kitchen slips; who can do it; what cannot be undone.
 - [ ] **Step 2: Update** the overview and tables guide.
-- [ ] **Step 3: Full checks:** `npx tsc --noEmit -p .`, `npm run typecheck -w @forkflow/ui`, `npx vitest run`, `npm run build -w @forkflow/ui`, `npm run test:packaging`.
-- [ ] **Step 4: Browser check** on a scratch data dir (`FORKFLOW_DATA_DIR=.e2e-scratch/table-transfer`, server source run with tsconfig paths, built UI on port 4100): move T3→T7 and confirm the Kitchen screen label and a `"table"` print job; merge T7 with T4, confirm T4 shows "with T7"; bill and pay; confirm both tables free. Repeat the move from the Captain app (`/captain/`). Record results; stop servers and delete the scratch dir.
+- [ ] **Step 3: Full checks:** `npx tsc --noEmit -p .`, `npm run typecheck -w @masalapos/ui`, `npx vitest run`, `npm run build -w @masalapos/ui`, `npm run test:packaging`.
+- [ ] **Step 4: Browser check** on a scratch data dir (`MASALAPOS_DATA_DIR=.e2e-scratch/table-transfer`, server source run with tsconfig paths, built UI on port 4100): move T3→T7 and confirm the Kitchen screen label and a `"table"` print job; merge T7 with T4, confirm T4 shows "with T7"; bill and pay; confirm both tables free. Repeat the move from the Captain app (`/captain/`). Record results; stop servers and delete the scratch dir.
 - [ ] **Step 5: Commit** — `docs: table move and merge guide`.

@@ -11,10 +11,16 @@
 .theme-toggle[aria-checked="true"] .theme-toggle-thumb { transform: translateX(18px); color: #a82130; }
 .sidebar > .theme-toggle { margin-top: auto; margin-bottom: 6px; }
 .sidebar > .sidebar-footer { margin-top: 0; }
-.auth-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+.auth-brand-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
 .auth-card .auth-brand-row > .brand { margin: 0; }
 .auth-brand-row .theme-toggle-label { display: none; }
 .auth-brand-row .theme-toggle { padding: 6px; }
+.brand-name { white-space: nowrap; }
+.brand-masala { color: #e58a00; }
+.brand-copy { min-width: 0; }
+.brand-tagline { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; letter-spacing: normal; }
+.brand-with-tagline .brand-mark { display: none; }
+.auth-card .brand-with-tagline { font-size: 30px; font-weight: 600; letter-spacing: -.6px; }
 .compact-workspace .theme-toggle { justify-content: center; padding: 6px 3px; }
 .compact-workspace .theme-toggle-label { display: none; }
 @media (min-width: 651px) and (max-width: 1150px) {
