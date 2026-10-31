@@ -12,15 +12,18 @@ import { invoiceRoutes } from "./invoices.js";
 import { leadRoutes } from "./leads.js";
 import { orderRoutes } from "./order-routes.js";
 import { paymentRoutes } from "./payments.js";
+import { remoteRoutes } from "./remote-routes.js";
 import { renewalRoutes } from "./renewals.js";
 import { reportRoutes } from "./reports.js";
 import { searchRoutes } from "./search.js";
 import { settingsRoutes } from "./settings.js";
+import { supportChatRoutes } from "./support-chats.js";
 import { ticketRoutes } from "./tickets.js";
 import { usersRoutes } from "./users.js";
 
 const ROUTES: Route[] = [...usersRoutes, ...settingsRoutes, ...activityRoutes, ...customersRoutes, ...orderRoutes, ...installationsRoutes, ...searchRoutes, ...paymentRoutes, ...invoiceRoutes,
-  ...leadRoutes, ...followUpRoutes, ...ticketRoutes, ...renewalRoutes, ...homeRoutes, ...reportRoutes];
+  ...leadRoutes, ...followUpRoutes, ...ticketRoutes, ...renewalRoutes, ...homeRoutes, ...reportRoutes,
+  ...supportChatRoutes, ...remoteRoutes];
 
 /** Everything under /portal: the JSON API for signed-in staff, and the web app itself. */
 export async function portalRoute(request: Request, env: Env, deps: Deps): Promise<Response> {

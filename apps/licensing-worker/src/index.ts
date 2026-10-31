@@ -6,6 +6,7 @@ import { handleEnroll } from "./enroll.js";
 import { razorpayFor } from "./portal/payments.js";
 import { portalRoute } from "./portal/router.js";
 import { SECRET_HEADER } from "./secret.js";
+import { handleSupportLink, supportRoute } from "./support/visitor.js";
 import { handleWebhook } from "./webhook.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -41,6 +42,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   const deps = async (): Promise<Deps> => ({ db: env.DB, signer: await signerFor(env), now: Date.now, uuid: () => crypto.randomUUID() });
 
   if (url.pathname === "/portal" || url.pathname.startsWith("/portal/")) return portalRoute(request, env, await deps());
+  if (url.pathname === "/support" || url.pathname.startsWith("/support/")) return supportRoute(request, env, await deps());
+  if (method === "POST" && url.pathname === "/v1/support/link") {
+    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    return handleSupportLink(await deps(), request, request.headers.get(SECRET_HEADER));
+  }
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);

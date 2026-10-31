@@ -1,6 +1,9 @@
 // Turns the Worker's fetch(request, env) into a Node HTTP server. Runs behind Caddy on the same machine, which terminates HTTPS.
 import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { Duplex } from "node:stream";
+import { WebSocketServer, type WebSocket } from "ws";
 import type { Env } from "../../licensing-worker/src/env.js";
+import type { LiveHub, Peer } from "../../licensing-worker/src/live/types.js";
 
 export interface Fetcher { fetch(request: Request, env: Env): Promise<Response> }
 export interface AppOptions {
@@ -8,6 +11,8 @@ export interface AppOptions {
   publicOrigin?: string;
   /** Largest request body accepted; the biggest legitimate one is a few KB of JSON. */
   maxBodyBytes?: number;
+  /** Live sockets for support: the hub, and who may open one (live/authorize.ts). Without it every upgrade is refused. */
+  live?: { hub: LiveHub; authorize(request: Request): Promise<Peer | null>; paths: readonly string[] };
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
@@ -47,9 +52,59 @@ function toRequest(req: IncomingMessage, body: Buffer, publicOrigin: string | un
   return new Request(new URL(origin + target), { method, headers, ...(method === "GET" || method === "HEAD" ? {} : { body }) });
 }
 
+/** Largest live message: an SDP offer with many candidates is a few KB. */
+const MAX_LIVE_MESSAGE = 64 * 1024;
+/** Proxies drop idle connections; a ping every 25 s keeps them open and finds dead ones. */
+const HEARTBEAT_MS = 25_000;
+
+function refuse(socket: Duplex, status: number, text: string) {
+  socket.end(["HTTP/1.1 " + status + " " + text, "Connection: close", "Content-Length: 0", "", ""].join("\r\n"));
+}
+
+function attachLive(server: Server, live: NonNullable<AppOptions["live"]>, publicOrigin: string | undefined) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_LIVE_MESSAGE, perMessageDeflate: false });
+  const alive = new WeakMap<WebSocket, boolean>();
+  server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    socket.on("error", () => socket.destroy());
+    void (async () => {
+      let request: Request;
+      try { request = toRequest(req, Buffer.alloc(0), publicOrigin); } catch { refuse(socket, 400, "Bad Request"); return; }
+      if (!live.paths.includes(new URL(request.url).pathname)) { refuse(socket, 404, "Not Found"); return; }
+      const peer = await live.authorize(request).catch(() => null);
+      if (!peer) { refuse(socket, 403, "Forbidden"); return; }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const connection = live.hub.connect(peer, {
+          send: (text) => { if (ws.readyState === ws.OPEN) ws.send(text); },
+          close: (code, reason) => ws.close(code, reason),
+        });
+        alive.set(ws, true);
+        ws.on("pong", () => alive.set(ws, true));
+        ws.on("message", (data, isBinary) => { if (isBinary) ws.close(1003, "Text only"); else connection.onMessage(data.toString()); });
+        ws.on("close", () => connection.onClose());
+        ws.on("error", () => ws.terminate());
+      });
+    })().catch(() => refuse(socket, 500, "Internal Server Error"));
+  });
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!alive.get(ws)) { ws.terminate(); continue; }
+      alive.set(ws, false);
+      ws.ping();
+    }
+  }, HEARTBEAT_MS);
+  heartbeat.unref();
+  // Upgraded sockets would keep close() waiting: they go first.
+  const close = server.close.bind(server);
+  server.close = ((callback?: (error?: Error) => void) => {
+    clearInterval(heartbeat);
+    for (const ws of wss.clients) ws.terminate();
+    return close(callback);
+  }) as Server["close"];
+}
+
 export function createApp(worker: Fetcher, env: Env, options: AppOptions = {}): Server {
   const limit = options.maxBodyBytes ?? 1_048_576;
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
     try {
       const response = await worker.fetch(toRequest(req, await readBody(req, limit), options.publicOrigin), env);
       const headers: [string, string][] = [];
@@ -64,4 +119,6 @@ export function createApp(worker: Fetcher, env: Env, options: AppOptions = {}): 
       res.end(JSON.stringify({ error: code }));
     }
   });
+  if (options.live) attachLive(server, options.live, options.publicOrigin);
+  return server;
 }
