@@ -32,3 +32,6 @@ output/
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Google OAuth client downloaded from Cloud console (Drive backups); never commit
+client_secret_*.json

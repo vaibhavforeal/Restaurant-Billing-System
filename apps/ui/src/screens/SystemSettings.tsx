@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 import { apiFetch, authHeaders, session } from "../api";
-import { CloudBackupSettings } from "./CloudBackupSettings";
+import { BackupSettings } from "./BackupSettings";
 import { useIntegrations } from "../integrations";
 
-interface BackupStatus {
-  retentionDays: number; secondLocation: string; folder: string;
-  lastError: string | null; secondError: string | null;
-  backups: Array<{ name: string; kind: string; createdAt: number; bytes: number }>;
-}
 interface CaptainConnection {
   enabled: boolean; error?: string; fingerprint?: string; expiresAt?: string;
   connections: Array<{ url: string; qr: string }>;
@@ -26,9 +21,6 @@ async function download(path: string, filename: string) {
 }
 export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean }) {
   const kitchenDisplay = useIntegrations().isEnabled("kds");
-  const [status, setStatus] = useState<BackupStatus | null>(null);
-  const [days, setDays] = useState(30);
-  const [second, setSecond] = useState("");
   const [connections, setConnections] = useState<Array<{ url: string; qr: string }>>([]);
   const [captain, setCaptain] = useState<CaptainConnection | null>(null);
   const [android, setAndroid] = useState<AndroidCaptain | null>(null);
@@ -38,9 +30,9 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let active = true;
-    Promise.all([apiFetch<BackupStatus>("/api/system/backups"), backupOnly ? Promise.resolve({ connections: [], captain: undefined, android: undefined }) : apiFetch<{ connections: Array<{ url: string; qr: string }>; captain?: CaptainConnection; android?: AndroidCaptain }>("/api/system/connections")])
-      .then(([s, c]) => { if (active) { setStatus(s); setDays(s.retentionDays); setSecond(s.secondLocation); setConnections(c.connections); setCaptain(c.captain ?? null); setAndroid(c.android ?? null); } })
-      .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load backup settings"); });
+    if (!backupOnly) apiFetch<{ connections: Array<{ url: string; qr: string }>; captain?: CaptainConnection; android?: AndroidCaptain }>("/api/system/connections")
+      .then((c) => { if (active) { setConnections(c.connections); setCaptain(c.captain ?? null); setAndroid(c.android ?? null); } })
+      .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load connection settings"); });
     // Present only in builds that include the Android app; the static fallback serves HTML otherwise.
     if (!backupOnly) fetch("/captain/android/version.json", { cache: "no-store" }).then((res) => res.ok ? res.json() : null)
       .then((info: { versionName?: unknown } | null) => { if (active && typeof info?.versionName === "string") setApk({ versionName: info.versionName }); })
@@ -53,28 +45,8 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
     try { await action(); } catch (e) { setError(e instanceof Error ? e.message : "Request failed"); } finally { setBusy(false); }
   }
   return <section aria-label="Backups and connections" className="panel system-settings">
-    <h2>Backups & recovery</h2>
-    <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error || status?.lastError || status?.secondError}</p>
-    <p role="status">{message}</p>
-    {status && <>
-      <p>Verified daily snapshots are saved in <code>{status.folder}</code>. The latest 10 manual and 10 pre-update backups are also kept.</p>
-      <fieldset disabled={busy}><legend>Backup storage</legend>
-        <p><label>Keep daily backups (days) <input type="number" min={7} max={365} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label></p>
-        <p><label>Second backup folder on the server PC <input style={{ width: "min(100%, 460px)" }} placeholder="E:\\ForkFlow Backups (optional)" value={second} onChange={(e) => setSecond(e.target.value)} /></label></p>
-        <button onClick={() => void run(async () => {
-          setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "PUT", body: JSON.stringify({ retentionDays: days, secondLocation: second }) }));
-          setMessage("Backup settings saved. Use Back up now to check the second folder.");
-        })}>Save backup settings</button>{" "}
-        <button className="primary" onClick={() => void run(async () => { setStatus(await apiFetch<BackupStatus>("/api/system/backups", { method: "POST" })); setMessage("Verified local backup saved."); })}>Back up now</button>
-      </fieldset>
-      <p>To restore: on the main PC, open the ForkFlow tray menu → Restore backup. All counters must stop work. Restore replaces current data with the selected snapshot and archives the previous database.</p>
-      <details><summary>Available backups ({status.backups.length})</summary>
-        <ul>{status.backups.map((b) => <li key={b.name} style={{ marginBlock: 8 }}>{new Date(b.createdAt).toLocaleString()} · {b.kind} · {Math.ceil(b.bytes / 1024)} KB {" "}
-          <button disabled={busy} onClick={() => void run(() => download(`/api/system/backups/${encodeURIComponent(b.name)}`, b.name))}>Download</button>
-        </li>)}</ul>
-      </details>
-      <CloudBackupSettings />
-    </>}
+    <BackupSettings />
+    {(error || message) && <><p role="alert" className="danger-text">{error}</p><p role="status">{message}</p></>}
     {!backupOnly && <><h2>Connect another device</h2>
     <p>Use the same local network. Scan a QR code on a phone, or open its address on a counter PC. Every device needs a staff PIN.</p>
     {!connections.length && <p>No LAN address found. Connect this PC to Wi-Fi or Ethernet, then reopen Settings.</p>}

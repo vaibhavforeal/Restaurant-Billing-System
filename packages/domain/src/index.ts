@@ -55,7 +55,7 @@ export {
 } from "./printer-schemas.js";
 
 export * from "./pricing.js";
-export { CloudBackupPreferences, type CloudBackupSettings, type CloudBackupState, type CloudBackupAccount, type CloudBackupStatus } from "./cloud-backups.js";
+export { CloudBackupPreferences, type CloudBackupSettings, type CloudBackupState, type CloudBackupAccount, type CloudBackupStatus, type CloudBackupFile, type RestorePreview } from "./cloud-backups.js";
 export { ShiftOpen, CashMovementCreate, ShiftClose, DayClose } from "./shift-schemas.js";
 export { normalizePhone, CustomerCreate, CustomerUpdate, CustomerSlab, CustomerTypeCreate, CustomerTypeUpdate, LoyaltySettingsUpdate, LoyaltyTierCreate, LoyaltyTierUpdate, LoyaltyAdjust, OrderCustomerSet, FeedbackSubmit, bestSlabPercent, percentOf, pointsEarned, tierFor, daysUntilOccasion, addMonths, type SlabRule, type TierRule } from "./customers.js";
 export { openLots, expiryDue, expiringSoon, expireRef, type LedgerEntry, type PointsLot } from "./loyalty-expiry.js";

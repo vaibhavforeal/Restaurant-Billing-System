@@ -1,103 +1,88 @@
-# Google Drive backup framework
+# Google Drive backups
 
-ForkFlow 0.6.4 includes the settings, queue, worker and provider contract. Google
-OAuth, Windows credential encryption, Drive networking, and cloud restore are
-deferred. The shipping app supplies no provider and makes no Google requests.
-Adding credentials alone will not activate it; implement the adapter below first.
+Admins connect a Google account in **Settings → Backups & connections** on the main POS
+PC. Every verified local backup (daily, manual, pre-update) is then uploaded to a
+**ForkFlow Backups** folder in that account, and any of them can be restored from the same
+screen, including backups uploaded by an older PC. Local backups and backup files keep
+working whether or not Drive is connected.
 
-Admins can save automatic-upload, folder-name and retention preferences now.
-Settings show **Not configured** and disable Connect/Upload/Retry until integration.
-Local daily, manual, second-folder and pre-update backups continue normally.
+## One-time setup (ForkFlow team, before building)
 
-## Implemented behavior
+1. In Google Cloud console create one ForkFlow project and enable the **Google Drive API**.
+2. Configure the OAuth consent screen (External, app name/logo/support email, privacy
+   policy URL). Add the scopes `openid`, `email` and `https://www.googleapis.com/auth/drive.file`.
+   `drive.file` is a non-sensitive scope, so no security assessment is needed, but the
+   app must be **published** (In production). In Testing mode only listed test users can
+   sign in and refresh tokens expire after seven days.
+3. Create an OAuth client of type **Desktop app**. Google treats a desktop client secret
+   as public; sign-in is protected by PKCE and a single-use loopback redirect.
+4. Build with the client in the environment:
+   ```powershell
+   $env:FORKFLOW_GOOGLE_CLIENT_ID = "...apps.googleusercontent.com"
+   $env:FORKFLOW_GOOGLE_CLIENT_SECRET = "GOCSPX-..."
+   npm run package:win
+   ```
+   `tools/build-desktop.mjs` embeds both. A build without them shows Drive as
+   **Not available**; nothing else changes. For a development server, set the same two
+   variables before `npm run dev:server`.
 
-`CloudBackups` in `apps/server/src/cloud-backups.ts` accepts a `CloudBackupProvider`
-injected through `buildServer({ cloudBackupProvider })`. Production currently
-supplies no provider. Shared schemas/types are in `packages/domain/src/cloud-backups.ts`.
+## How it works
 
-The worker uploads verified standalone SQLite snapshots, rechecks integrity,
-streams a SHA-256 hash, and queues work outside the local backup response. One
-upload runs at a time with a two-minute cancellation deadline. Failed uploads
-retry after 1, 2, 4, 8, 16, 32, then 60 minutes while the main PC runs.
+- **Sign-in** (`apps/server/src/google-drive.ts`): *Connect Google Drive* is enabled only
+  in the desktop window on the main PC (loopback request). The server opens a one-time
+  listener on `127.0.0.1:<random port>`, the window opens Google in the system browser,
+  and Google redirects back with a code checked against a random `state` and PKCE
+  verifier. The listener closes after one valid redirect or 10 minutes. Sign-in fails
+  with a clear message if the Drive permission box is unticked or a different Google
+  account is used than the one already linked (disconnect first to switch).
+- **Credentials**: the refresh token is sealed with AES-256-GCM in
+  `<data>/google-drive.json`. The key is created by the desktop shell, protected with
+  Windows DPAPI (Electron `safeStorage`) in `%APPDATA%\forkflow-desktop\cloud-secret.bin`
+  and handed to the server in its environment, which removes it at start-up. Tokens
+  never enter the database, backups, logs or API responses. A data folder moved to
+  another PC or Windows user shows **Reconnect required**, and so does a revoked grant.
+  Development servers without the desktop shell use an unprotected `dev-secret.key`;
+  customer builds never do.
+- **Upload**: the existing queue in `cloud-backups.ts` (retry after 1 to 60 min, one at a
+  time, pending files protected from local retention) calls a resumable upload in 8 MB
+  chunks. Drive's size and MD5 must match the local file before the upload counts. A file
+  left over from a lost response is reused, not duplicated. Each file records its
+  SHA-256, installation ID and restaurant name in `appProperties`.
+- **Retention**: after each upload, this installation's Drive backups follow the same
+  rules as local ones (`expiredBackups` in `backups.ts`): the newest backup is always
+  kept, then dailies for the configured days, plus 10 manual and 10 pre-update. Expired
+  files go to the Drive trash. Other PCs' backups and any non-ForkFlow file are never touched.
+- **Folder**: one app-created folder per account, found again by its `appProperties`
+  after a reinstall. Changing the folder name in Settings renames it, and a rename done
+  in Drive itself is kept.
+- **Restore**: *Backups in Google Drive* lists every ForkFlow backup in the account. A
+  restore downloads into `<data>/restore-incoming/`, checks MD5 and SHA-256, and then
+  follows the same preview and confirm flow as a backup file (see
+  [backup-and-recovery.md](backup-and-recovery.md)).
+- **Disconnect** forgets and revokes the credential and clears pending uploads. Files
+  already in Drive and on the PC are kept.
 
-Queue/completion metadata persists under the restaurant data directory in
-`cloud-backup-state.json`; preferences are in `cloud-backup-settings.json`. Neither
-contains OAuth credentials or is part of the database snapshot. Pending snapshots
-are protected from local retention. Startup reconciles existing snapshots with
-completion records when automatic uploads are enabled, recovering missed events.
-An explicit cloud backup works even with automatic uploads off. Turning automatic
-off prevents new automatic queue entries; previously queued files still retry.
+## API
 
-Only a provider-confirmed remote file ID marks upload success. Remote cleanup
-failure never re-uploads a confirmed snapshot. Queue entries belong to a stable
-account ID; unexpected account changes require disconnect before resuming.
-Disconnect cancels work, clears pending entries and preserves local/remote files.
-Cloud metadata files that cannot be read are left untouched, keep billing and
-local backups available, and keep cloud backup off until the server restarts. A
-failed save of upload progress, such as a briefly full disk, is reported in
-status and retried automatically; the message clears after the next successful run. Provider error details are not exposed in status or persisted.
-
-## API contract
-
-All endpoints require `settings.manage` (admin). Status GET uses `no-store`.
+All routes need `settings.manage`. The routes marked "main PC" also require a loopback request.
 
 | Method | Route | Result |
 | --- | --- | --- |
-| GET | `/api/system/cloud-backups` | Safe status, account, preferences and queue |
+| GET | `/api/system/cloud-backups` | Status, account, preferences, queue, `connecting`, `onMainPc` |
 | PUT | `/api/system/cloud-backups` | Save `automatic`, `folderName`, `retentionDays` |
+| POST | `/api/system/cloud-backups/connect` | main PC: `{ authUrl }` to open in the system browser |
 | POST | `/api/system/cloud-backups/upload` | Verified manual snapshot queued; 202 |
-| POST | `/api/system/cloud-backups/retry` | Pending account uploads made due; 202 |
-| POST | `/api/system/cloud-backups/disconnect` | Provider disconnect; clear pending queue |
-
-Without a provider, upload/retry/disconnect return 409 with an explanatory message.
-No pretend account or success is created. Sign-in routes will be added with OAuth.
-
-## Future Google integration
-
-1. Create one ForkFlow Google Cloud project, enable Drive API, and configure an
-   external consent screen and **Desktop app** OAuth client. Publish and complete
-   applicable verification; Testing-mode Drive refresh tokens expire after seven days.
-2. Implement sign-in on the main POS PC using the default browser, PKCE, random
-   state, short-lived authorization, random-port 127.0.0.1 callback, exact redirect
-   validation and a single-use callback. Do not use an embedded browser or accept
-   tokens from LAN forms. Use `drive.file` for a visible app-created backup folder.
-3. Keep refresh tokens encrypted with Windows credential protection, outside
-   database snapshots, queue files, logs, renderer storage and API responses.
-   A desktop client secret is not a server secret; do not rely on it to authenticate
-   installations. Expired/revoked grants must show `reconnect_required`.
-4. Implement `CloudBackupProvider.connection()` with a stable Google account ID
-   and email. Supply the adapter from `apps/server/src/main.ts` to `buildServer`.
-   Report `not_connected` before OAuth and `connected` only after credentials work.
-5. Implement `upload()` using resumable Drive uploads and honoring `AbortSignal`.
-   Use account plus supplied `idempotencyKey` in app properties to find/reuse an
-   uploaded file after a lost success response. Include SHA-256 and installation
-   ownership metadata. Validate completed size and a supported Drive checksum
-   (binary files provide MD5, which can be computed locally) before returning
-   `remoteId`; validate stored checksum properties on reuse.
-6. Implement `prune()` strictly for app-owned files in this installation/account.
-   Preserve the newest backup, daily backups for `retentionDays`, ten manual and
-   ten pre-update points. Never delete user files or another restaurant's backups.
-   Save a folder ID and define rename behavior without creating duplicate folders.
-7. Implement `disconnect()` to stop credential use, revoke grants where possible,
-   and erase local encrypted tokens. Never delete backups or switch accounts silently.
-8. Wire the disabled Connect button to the desktop authorization bridge. Enable it
-   only when OAuth is configured and the admin is on the main PC. Upload, retry,
-   disconnect, account status and periodic status refresh are already wired.
-9. Add cloud listing/download and restore preview. Download to a staging file,
-   verify integrity, then use the existing desktop restore flow to stop counters
-   and archive old data. Fresh-PC recovery must reauthorize and locate app-owned
-   backups without the old queue file; credentials stay outside restored data.
+| POST | `/api/system/cloud-backups/retry` | Pending uploads made due; 202 |
+| POST | `/api/system/cloud-backups/disconnect` | Revoke and forget the credential; clear pending queue |
+| GET | `/api/system/cloud-backups/files` | ForkFlow backups in the account |
+| POST | `/api/system/cloud-backups/restore` | main PC: `{ id }` → download, verify, restore preview |
 
 ## Verification
 
-`npm test -- apps/server/src/cloud-backups.test.ts apps/server/src/backups.test.ts`
-uses a fake provider to cover restart/backoff, missed events, integrity, retention,
-cancellation, account changes, malformed metadata and admin API permissions.
-
-For browser QA build the UI, start `node --import tsx tools/e2e/backups-server.mts`,
-sign in as admin (1234) at `http://127.0.0.1:4169/`, then run
-`tools/e2e/cloud-backups.js` through agent-browser with UTF-8 stdin. This uses a
-temporary restaurant database and makes no Google requests.
-
-References: [Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app),
-[Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+`npx vitest run apps/server/src/google-drive.test.ts apps/server/src/cloud-backups.test.ts apps/server/src/restore-staging.test.ts`
+runs the provider against an in-memory Google. It covers the real loopback redirect,
+forged state, a cancelled sign-in, a missing Drive permission, a switched account,
+a revoked grant, a token sealed on another PC, chunked upload, duplicate reuse, checksum
+mismatch, retention scope, listing and verified download.
+An end-to-end check against real Google needs the OAuth client above and an
+installed build on a Windows PC.

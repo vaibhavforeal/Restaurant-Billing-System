@@ -1,8 +1,7 @@
 # Backups, recovery and Windows installation
 
-For the prepared Google Drive backup framework and future integration steps, see
-[Google Drive backups](google-drive-backups.md). Account linking is deferred;
-verified local and second-folder backups work independently.
+Backups can also go to Google Drive; see [Google Drive backups](google-drive-backups.md).
+Verified local and second-folder backups work independently of it.
 
 ForkFlow 0.6 runs one server process. The server owns the SQLite database; other
 counters connect through the browser. Close the window to keep the server in the
@@ -54,8 +53,12 @@ In **Settings → Backups & recovery**:
 
 - A daily snapshot is taken at startup, then checked hourly using the server's
   local calendar date. If the PC was off, it is taken on the next startup.
-- **Back up now** creates a manual restore point. It can be downloaded by an
-  administrator. Backups contain restaurant and staff data; store them securely.
+- **Back up now** creates a manual restore point on this PC.
+- **Download backup file** creates a fresh verified snapshot and downloads it as one
+  file, e.g. `ForkFlow backup - Spice Garden - 2026-10-31 1430.db`. It holds all
+  restaurant data (menu and photos, orders, bills, customers, stock, staff, settings).
+  PC-specific setup such as the license installation and Captain HTTPS certificates is
+  not included. Backups contain staff and customer data; store them securely.
 - Daily retention defaults to 30 days, configurable from 7–365. Ten manual and
   ten pre-update snapshots are retained separately. The newest daily copy is
   always retained. Unrelated files in the backup folder are never pruned.
@@ -77,8 +80,15 @@ Increment the app version for each distributed release.
 
 1. Stop work on all counters and decide which snapshot to restore. Everything
    recorded after that point will leave the live database.
-2. Open the main PC tray menu → **Restore backup…**, select the `.db` snapshot,
-   and read the confirmation. This also works from the startup error dialog.
+2. In **Settings → Backups & connections** on the main PC choose **Restore from a
+   backup file…**, **Restore…** next to a backup on this PC, or a backup in Google
+   Drive. The server copies it to `data/restore-incoming/`, verifies it and shows the
+   restaurant name, bill and order counts and the last bill time. Nothing changes until
+   the admin ticks the confirmation and chooses **Restore and restart**. The server then
+   asks the desktop shell to restore that staged file. Restore is refused from counter
+   PCs, tablets and the development server (no desktop shell).
+   Alternatively, use the tray menu → **Restore backup…** and select a `.db` file. This
+   also works from the startup error dialog.
 3. The desktop stops its server. A data-directory lock prevents another server
    from opening or restoring the same database, even on another port.
 4. The server verifies and stages the snapshot before moving the current DB,

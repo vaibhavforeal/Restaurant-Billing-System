@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { desktopBuildConfig } from "./desktop-build-config.mjs";
 import { stageCaptainAndroid } from "./captain-android-release.mjs";
+import { googleOAuthClient } from "./google-oauth-client.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint, serviceUrl } = desktopBuildConfig(process.argv.slice(2), process.env);
@@ -43,8 +44,12 @@ function copyDependency(name, from, parent = stage) {
   return manifest.version;
 }
 for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
+const google = googleOAuthClient(root);
+console.log(google.clientId ? `Google Drive backup: enabled (${google.clientId.split("-")[0]}…, from ${google.source === "environment" ? "environment" : relative(root, google.source)})` : "Google Drive backup: not configured (no Google OAuth client)");
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) },
+  define: { __FORKFLOW_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __FORKFLOW_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial),
+    // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
+    __FORKFLOW_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __FORKFLOW_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
   plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@forkflow\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
 });
 await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __FORKFLOW_DEMO__: JSON.stringify(demo), __FORKFLOW_COMMERCIAL__: JSON.stringify(commercial) } });

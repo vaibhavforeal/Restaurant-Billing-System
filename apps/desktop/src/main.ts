@@ -1,8 +1,8 @@
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { appendFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
+import { appendFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes, randomUUID } from "node:crypto";
+import { app, BrowserWindow, dialog, Menu, nativeImage, safeStorage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
 import { startupDocument } from "../../ui/src/startup-screen.js";
 import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
 import { createUpdater, type AutoUpdaterLike } from "./updater.js";
@@ -41,6 +41,20 @@ else {
   };
   writeLog(`Desktop ${app.getVersion()} starting at ${new Date().toISOString()}\n`);
   function showWindow() { window?.show(); window?.focus(); }
+  /** Key that seals cloud-backup credentials, protected by Windows for this user and PC. Kept outside the data folder. */
+  let secretKey: string | undefined;
+  function cloudSecretKey(): string | undefined {
+    if (secretKey !== undefined || demo) return secretKey || undefined;
+    secretKey = "";
+    try {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows credential protection is unavailable");
+      const path = join(app.getPath("userData"), "cloud-secret.bin");
+      if (existsSync(path)) secretKey = safeStorage.decryptString(readFileSync(path));
+      else { secretKey = randomBytes(32).toString("base64"); writeFileSync(path, safeStorage.encryptString(secretKey)); }
+    } catch (error) { writeLog(`Cloud backup key unavailable: ${String(error)}
+`); secretKey = ""; }
+    return secretKey || undefined;
+  }
   async function failure(message: string) {
     if (errorShown || quitting || recovering) return;
     errorShown = true;
@@ -59,7 +73,8 @@ else {
     const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
       cwd: dataDir, stdio: "pipe", serviceName: "ForkFlow POS server",
       env: { ...process.env, FORKFLOW_DATA_DIR: dataDir, FORKFLOW_UI_DIR: join(here, "ui"), FORKFLOW_PORT: port,
-        FORKFLOW_APP_VERSION: app.getVersion(), FORKFLOW_INSTANCE_ID: instanceId, ...(restorePath ? { FORKFLOW_RESTORE: restorePath } : {}) },
+        FORKFLOW_APP_VERSION: app.getVersion(), FORKFLOW_INSTANCE_ID: instanceId, ...(restorePath ? { FORKFLOW_RESTORE: restorePath } : {}),
+        ...(cloudSecretKey() ? { FORKFLOW_SECRET_KEY: cloudSecretKey() } : {}) },
     });
     server = child;
     child.on("spawn", () => writeLog(`Server spawned (${child.pid})\n`));
@@ -77,7 +92,13 @@ else {
     // The server relays Settings -> Updates; the shell answers with the updater's status.
     child.on("message", (data: unknown) => {
       if (!isToDesktop(data) || server !== child) return;
-      if (data.type === "update-config") updates?.configure(data.channel);
+      if (data.type === "restore") {
+        // Settings staged and verified this file and the admin confirmed it on this PC; accept only that folder.
+        const staged = resolve(data.path), incoming = resolve(dataDir, "restore-incoming") + sep;
+        if (staged.startsWith(incoming) && existsSync(staged)) void runRestore(staged);
+        else writeLog(`Ignored restore request outside ${incoming}
+`);
+      } else if (data.type === "update-config") updates?.configure(data.channel);
       else if (data.type === "update-check") updates?.check();
       else void updates?.install();
     });
@@ -126,11 +147,18 @@ else {
     const { response } = await dialog.showMessageBox({ type: "warning", title: "Restore backup", message: "Stop work on all counters before restoring.",
       detail: `Restore ${selection.filePaths[0]}? Current data will be archived; all changes since this snapshot will leave the live database. Staff must sign in again and review open orders.`, buttons: ["Cancel", "Restore this backup"], defaultId: 0, cancelId: 0 });
     if (response !== 1) return;
+    await runRestore(selection.filePaths[0]);
+  }
+  async function runRestore(path: string) {
+    if (recovering) return;
     recovering = true;
+    writeLog(`Restoring backup ${path}
+`);
     await stopServer();
     await window?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument("restoring"))}`);
+    showWindow();
     restarts = 5; // invalid backups produce a reviewable error, never silently fall back
-    startServer(selection.filePaths[0]);
+    startServer(path);
     recovering = false;
   }
   async function resetDemo() {

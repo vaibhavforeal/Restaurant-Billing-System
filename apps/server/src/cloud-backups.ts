@@ -2,16 +2,23 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { CloudBackupPreferences, type CloudBackupAccount, type CloudBackupSettings, type CloudBackupStatus } from "@forkflow/domain";
+import { CloudBackupPreferences, type CloudBackupAccount, type CloudBackupFile, type CloudBackupSettings, type CloudBackupStatus } from "@forkflow/domain";
 import { atomicJson, verifyBackup, type Backups } from "./backups.js";
 import { httpError } from "./http-error.js";
 
 export interface CloudBackupConnection {
   state: "not_connected" | "connected" | "reconnect_required";
   account: CloudBackupAccount | null;
+  /** A browser sign-in is in progress. */
+  connecting?: boolean;
+  /** Why the last sign-in did not complete, safe to show to the admin. */
+  message?: string | null;
 }
 
-/** The future Drive OAuth/API module owns credentials. This worker never sees tokens.
+/** Status sent to the UI; the route adds whether the request came from the main PC. */
+export type CloudBackupWorkerStatus = Omit<CloudBackupStatus, "onMainPc">;
+
+/** The Drive OAuth/API module (google-drive.ts) owns credentials. This worker never sees tokens.
  * Upload must find/reuse an existing remote file for (account, idempotencyKey).
  * Resolve only after Drive confirms the complete file and checksum; honor signal.
  */
@@ -23,7 +30,16 @@ export interface CloudBackupProvider {
   }): Promise<{ remoteId: string }>;
   prune(input: { account: CloudBackupAccount; retentionDays: number; signal: AbortSignal }): Promise<void>;
   disconnect(): Promise<void>;
+  /** Start a browser sign-in on the main PC; returns the URL to open. */
+  beginConnect?(): Promise<{ authUrl: string }>;
+  /** Backups available for restore, including other installations' uploads in the same account. */
+  list?(signal: AbortSignal): Promise<CloudBackupFile[]>;
+  /** Download and integrity-check one backup into `target`. */
+  download?(id: string, target: string, signal: AbortSignal): Promise<{ name: string }>;
 }
+
+/** Large databases on a slow restaurant connection need well over the old two-minute deadline. */
+const UPLOAD_DEADLINE_MS = 30 * 60_000;
 
 const queuedFile = z.object({ name: z.string(), accountId: z.string(), attempts: z.number().int().nonnegative(), nextAttemptAt: z.number() });
 const storedState = z.object({
@@ -79,7 +95,7 @@ export class CloudBackups {
       !!connection.account && (!this.state.accountId || this.state.accountId === connection.account.id);
   }
   private save() { atomicJson(this.statePath, this.state); }
-  status(): CloudBackupStatus {
+  status(): CloudBackupWorkerStatus {
     const connection = this.provider?.connection();
     const account = connection?.account ?? null;
     const accountChanged = !!this.state.accountId && !!account && this.state.accountId !== account.id;
@@ -87,10 +103,10 @@ export class CloudBackups {
     const last = this.state.uploaded.filter((entry) => entry.accountId === account?.id).at(-1);
     return { ...this.settings, provider: "google_drive", state: accountChanged ? "reconnect_required" : connection?.state ?? "not_configured", account,
       uploading: !!this.active, pendingCount: queue.length, queue: queue.map(({ name, attempts, nextAttemptAt }) => ({ name, attempts, nextAttemptAt })),
-      lastUploadedAt: last?.uploadedAt ?? null, lastUploadedName: last?.name ?? null,
-      lastError: this.damaged ?? this.storageError ?? (accountChanged ? "Google account changed. Disconnect before linking a different account." : this.state.lastError) };
+      lastUploadedAt: last?.uploadedAt ?? null, lastUploadedName: last?.name ?? null, connecting: !!connection?.connecting,
+      lastError: this.damaged ?? this.storageError ?? (accountChanged ? "Google account changed. Disconnect before linking a different account." : connection?.message ?? this.state.lastError) };
   }
-  configure(input: unknown): CloudBackupStatus {
+  configure(input: unknown): CloudBackupWorkerStatus {
     if (this.damaged) throw httpError(409, this.damaged);
     const settings = CloudBackupPreferences.parse(input);
     atomicJson(this.configPath, settings);
@@ -115,7 +131,7 @@ export class CloudBackups {
     this.state.queue.push({ name, accountId: account.id, attempts: 0, nextAttemptAt: this.now() });
     this.save();
   }
-  uploadNow(): CloudBackupStatus {
+  uploadNow(): CloudBackupWorkerStatus {
     this.requireConnection();
     // The local snapshot is committed and verified before it enters the queue.
     const { name } = this.backups.create("manual");
@@ -123,14 +139,14 @@ export class CloudBackups {
     void this.process();
     return this.status();
   }
-  retry(): CloudBackupStatus {
+  retry(): CloudBackupWorkerStatus {
     const account = this.requireConnection();
     for (const item of this.state.queue) if (item.accountId === account.id) item.nextAttemptAt = this.now();
     this.save();
     void this.process();
     return this.status();
   }
-  async disconnect(): Promise<CloudBackupStatus> {
+  async disconnect(): Promise<CloudBackupWorkerStatus> {
     if (!this.provider) throw httpError(409, "Google Drive backup is not configured yet.");
     this.disconnecting = true;
     try {
@@ -144,6 +160,27 @@ export class CloudBackups {
       this.save();
       return this.status();
     } finally { this.disconnecting = false; }
+  }
+  async connect(): Promise<{ authUrl: string }> {
+    if (this.damaged) throw httpError(409, this.damaged);
+    if (!this.provider?.beginConnect) throw httpError(409, "Google Drive backup is not available in this ForkFlow build. Local backups remain available.");
+    if (this.disconnecting || this.closing) throw httpError(409, "Cloud backup is stopping.");
+    return this.provider.beginConnect();
+  }
+  private remote() {
+    if (!this.provider?.list || !this.provider.download) throw httpError(409, "Google Drive backup is not available in this ForkFlow build.");
+    const connection = this.provider.connection();
+    if (connection.state !== "connected") throw httpError(409, "Connect Google Drive on the main POS PC first.");
+    return this.provider as Required<CloudBackupProvider>;
+  }
+  async listRemote(): Promise<CloudBackupFile[]> {
+    try { return await this.remote().list(AbortSignal.timeout(60_000)); }
+    catch (error) { throw isHttp(error) ? error : httpError(502, "Could not reach Google Drive. Check the internet connection and try again."); }
+  }
+  async downloadRemote(id: string, target: string): Promise<{ name: string }> {
+    const provider = this.remote();
+    try { return await provider.download(id, target, AbortSignal.timeout(UPLOAD_DEADLINE_MS)); }
+    catch (error) { throw isHttp(error) ? error : httpError(502, error instanceof Error && /match/.test(error.message) ? error.message : "Could not download the backup from Google Drive. Try again."); }
   }
   start() {
     if (this.timer || this.closing) return;
@@ -180,7 +217,7 @@ export class CloudBackups {
       }
       const controller = new AbortController();
       this.controller = controller;
-      const timeout = setTimeout(() => controller.abort(), 120_000);
+      const timeout = setTimeout(() => controller.abort(), UPLOAD_DEADLINE_MS);
       try {
         verifyBackup(path);
         const hash = createHash("sha256");
@@ -217,4 +254,8 @@ export class CloudBackups {
     this.controller?.abort();
     await this.active;
   }
+}
+
+function isHttp(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "statusCode" in error;
 }

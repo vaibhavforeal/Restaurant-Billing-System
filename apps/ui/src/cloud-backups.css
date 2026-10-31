@@ -13,3 +13,9 @@
 .cloud-backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .system-settings .cloud-backup-error { color: var(--danger-text, crimson); }
 @media (max-width: 650px) { .cloud-backup-fields { grid-template-columns: 1fr; } .cloud-backup-actions > button { flex: 1 1 160px; } }
+.cloud-backup-state.connected { color: #1d7a46; border-color: #a9d9bd; }
+.cloud-backup-state.reconnect_required { color: #a35b00; border-color: #f0c98d; }
+.cloud-backup-waiting { color: var(--muted); }
+.cloud-backup-prefs { margin: 16px 0; }
+.cloud-backup-prefs summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.cloud-backup-prefs fieldset { margin-top: 8px; }

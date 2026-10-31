@@ -14,9 +14,13 @@ import { licenseConfig } from "./license-config.js";
 import { loadCaptainHttps, startCaptainHttps, type CaptainHttpsInfo } from "./captain-https.js";
 import { seedDemo } from "./demo-seed.js";
 import { makeFakeSink } from "./print/sinks.js";
+import { driveProvider } from "./drive-config.js";
 
 declare const __FORKFLOW_DEMO__: boolean;
 const demo = typeof __FORKFLOW_DEMO__ !== "undefined" && __FORKFLOW_DEMO__;
+// Handed over by the desktop shell (Windows-protected at rest); keep it out of anything this process spawns.
+const secretKey = process.env["FORKFLOW_SECRET_KEY"];
+delete process.env["FORKFLOW_SECRET_KEY"];
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dataDir = resolve(process.env["FORKFLOW_DATA_DIR"] ?? "./data");
@@ -43,7 +47,11 @@ try {
   // The desktop shell's message port: shutdown requests and the auto-updater's status arrive here.
   const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void; postMessage(message: unknown): void } }).parentPort;
   const updateBridge = parent ? { send: (message: unknown) => parent.postMessage(message), onMessage: (listener: (message: unknown) => void) => parent.on("message", ({ data }) => listener(data)) } : undefined;
-  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
+  const liveDb = db;
+  const cloudBackupProvider = demo ? undefined : driveProvider({ dataDir, secretKey,
+    restaurantName: () => (liveDb.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name?: string } | undefined)?.restaurant_name ?? "",
+    warn: (message) => console.warn(message) });
+  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["FORKFLOW_INSTANCE_ID"] ?? "standalone", logger: {
     serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
   } });
   const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };
