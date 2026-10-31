@@ -6,6 +6,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { CaptainInstall } from "./CaptainInstall";
 import { useShortcutLabels } from "./pos-shortcuts";
+import { GetSupportButton } from "./support";
 
 export function CaptainNav({ user, onNavigate, onLogout, beforeLogout }: {
   user: User; onNavigate: (page: Page) => void; onLogout: () => void; beforeLogout: () => boolean;
@@ -29,6 +30,7 @@ export function CaptainNav({ user, onNavigate, onLogout, beforeLogout }: {
         <button {...shortcutProps("tables")} title={shortcut("tables", "Tables")} onClick={() => { setOpen(false); onNavigate({ name: "tables" }); }}>Tables & orders</button>
         <button onClick={() => { setOpen(false); onNavigate({ name: "home" }); }}>Service overview</button>
         <ThemeToggle />
+        <GetSupportButton className="" />
         {user.role !== "waiter" && <button onClick={() => { if (beforeLogout()) window.location.assign("/"); }}>Open full POS</button>}
       </div>
       <CaptainInstall />

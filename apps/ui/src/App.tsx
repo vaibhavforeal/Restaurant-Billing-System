@@ -33,6 +33,7 @@ import { listenForAndroidBack } from "./android-back";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
+import { RemoteConsent } from "./support";
 import "./compact-workspace.css";
 import { CurrentUserProvider, userCan } from "./permissions";
 import { connectWs } from "./ws";
@@ -177,6 +178,8 @@ function StaffApp() {
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
+          {/* Outside the licence gate: support must reach a counter whose licence stopped billing. */}
+          <RemoteConsent user={user} />
           <LicenseGate key={user.id} user={user}>
           <ConnectionStatus key={user.id} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
           <QrNotifications key={user.id} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>

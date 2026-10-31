@@ -7,6 +7,7 @@ import { navTabVisible } from "./integrations-model";
 import { readPreference, useShortcutLabels } from "./pos-shortcuts";
 import { STAFF_TABS, staffTabVisible } from "./integrations-model";
 import { userCan } from "./permissions";
+import { GetSupportButton } from "./support";
 
 export type Page =
   | { name: "home" }
@@ -88,6 +89,7 @@ export function NavBar({
         </button>
       ))}
       </div>
+      <GetSupportButton />
       <ThemeToggle />
       <div className="sidebar-footer"><span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div></div>
       <button className="nav-item logout" onClick={() => void logout()} title="Log out" aria-label="Log out">
