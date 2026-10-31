@@ -78,7 +78,7 @@ function RecordPayment({ order, owing, onClose, onSaved }: { order: OrderDetail;
       const receivedAt = day === isoDay(Date.now()) ? Date.now() : startOfIsoDay(day) + 12 * 3_600_000;
       void run(async () => onSaved((await post<{ order: OrderDetail }>(`/orders/${order.id}/payments`, { amountPaise, method, reference, receivedAt, note, pending: method === "cheque" && pending })).order));
     }}>
-      <Field label="Amount (₹)" hint={`${money(owing)} is still to pay.`}><input inputMode="decimal" required autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></Field>
+      <Field label="Amount (Rs.)" hint={`${money(owing)} is still to pay.`}><input inputMode="decimal" required autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></Field>
       <Field label="Method"><select value={method} onChange={(e) => setMethod(e.target.value as typeof method)} disabled={busy}>
         {(["upi", "bank", "cash", "cheque", "card"] as const).map((m) => <option key={m} value={m}>{METHODS[m]}</option>)}</select></Field>
       <Field label={method === "cheque" ? "Cheque number" : method === "cash" ? "Receipt number" : "Transaction reference"}><input maxLength={100} value={reference} onChange={(e) => setReference(e.target.value)} disabled={busy} /></Field>

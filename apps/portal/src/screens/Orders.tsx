@@ -63,7 +63,7 @@ export function OrdersTable({ orders, loaded, hideCustomer, empty }: { orders: O
   </table></div>;
 }
 
-function PickCustomer({ onClose }: { onClose: () => void }) {
+export function PickCustomer({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState("");
   const key = query({ q: text.trim() });
   const { data } = useData(() => api<{ customers: CustomerSummary[] }>(`/customers${key}`), key);

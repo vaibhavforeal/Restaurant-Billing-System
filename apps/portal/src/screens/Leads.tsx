@@ -141,7 +141,7 @@ function LeadDialog({ me, staff, lead, onClose, onSaved }: { me: StaffUser; staf
         {Object.entries(GST_STATES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></Field>
       <Field label="Interested in"><select value={form.expectedPlan} onChange={set("expectedPlan")} disabled={busy}><option value="">Not sure yet</option><option value="pro">Pro</option><option value="basic">Basic</option></select></Field>
       <Field label="Outlets"><input type="number" min={1} max={500} value={form.expectedOutlets} onChange={set("expectedOutlets")} disabled={busy} /></Field>
-      <Field label="Worth about (₹)" hint="A year's licences, before GST."><input inputMode="decimal" value={form.worth} onChange={set("worth")} disabled={busy} /></Field>
+      <Field label="Worth about (Rs.)" hint="A year's licences, before GST."><input inputMode="decimal" value={form.worth} onChange={set("worth")} disabled={busy} /></Field>
       {me.role === "admin" && <Field label="Sales rep"><select value={form.ownerId} onChange={set("ownerId")} disabled={busy}><option value="">Not assigned</option>
         {staff.filter((s) => s.role === "sales" || s.role === "admin").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>}
       <Field label="Notes" wide><textarea rows={3} maxLength={2000} value={form.notes} onChange={set("notes")} disabled={busy} /></Field>
