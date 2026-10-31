@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

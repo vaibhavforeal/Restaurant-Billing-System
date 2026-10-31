@@ -30,7 +30,7 @@
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value);
     input.dispatchEvent(new view.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await pause();
   };
-  const headers = { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
+  const headers = { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body) => {
     const res = await fetch('/api' + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;

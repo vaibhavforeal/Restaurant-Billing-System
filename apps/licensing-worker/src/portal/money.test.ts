@@ -33,7 +33,7 @@ beforeEach(async () => {
   admin = await as(env, "admin", { name: "Asha" });
   accounts = await as(env, "accounts", { name: "Imran" });
   await admin.ok("PUT", "/settings", {
-    seller: { legalName: "ForkFlow Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "accounts@forkflow.in", phone: "" },
+    seller: { legalName: "MasalaPOS Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "accounts@masalapos.in", phone: "" },
     invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800, bankDetails: "HDFC Bank, A/c 5020001234", terms: "Due in 15 days." }, prices: [], extraDevicePaise: 0, trialDays: 7,
   });
 });
@@ -127,13 +127,13 @@ describe("GST invoices", () => {
     expect(invoice).toMatchObject({
       intraState: true, placeOfSupply: "Maharashtra (27)", subtotalPaise: 2_100_000, cgstPaise: 189_000, sgstPaise: 189_000, igstPaise: 0, totalPaise: 2_478_000,
       amountInWords: "Rupees Twenty-Four Thousand Seven Hundred Eighty Only",
-      seller: { name: "ForkFlow Technologies LLP", gstin: "27AAPFU0939F1ZV", bankDetails: "HDFC Bank, A/c 5020001234" }, buyer: { name: "Spice Route", gstin: "27AAKFS3412M1Z9" },
+      seller: { name: "MasalaPOS Technologies LLP", gstin: "27AAPFU0939F1ZV", bankDetails: "HDFC Bank, A/c 5020001234" }, buyer: { name: "Spice Route", gstin: "27AAKFS3412M1Z9" },
     });
     expect(invoice.lines.map((l) => [l.sac, l.quantity, l.taxablePaise])).toEqual([["997331", 2, 1_850_000], ["999293", 1, 250_000]]);
     // Later changes to the settings or the customer do not touch an issued invoice.
     await admin.ok("PUT", "/settings", { seller: { legalName: "Renamed LLP", gstin: "", address: "", city: "", stateCode: "27", pincode: "", email: "", phone: "" },
       invoice: { prefix: "XY", sac: "997331", gstRateBp: 1800, bankDetails: "", terms: "" }, prices: [], extraDevicePaise: 0, trialDays: 7 });
-    expect((await admin.ok<{ invoice: InvoiceDetail }>("GET", `/invoices/${summary!.id}`)).invoice.seller.name).toBe("ForkFlow Technologies LLP");
+    expect((await admin.ok<{ invoice: InvoiceDetail }>("GET", `/invoices/${summary!.id}`)).invoice.seller.name).toBe("MasalaPOS Technologies LLP");
     const karnataka = await confirmedOrder({}, { businessName: "Udupi Grand", gstin: "29AABCU7781K1ZP" });
     await pay(accounts, karnataka.order.id, karnataka.order.totalPaise);
     const igst = (await invoices()).find((i) => i.orderId === karnataka.order.id)!;
@@ -147,7 +147,7 @@ describe("GST invoices", () => {
     const res = await admin.call("GET", `/invoices/${summary!.id}/pdf`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/pdf");
-    expect(res.headers.get("content-disposition")).toContain("ForkFlow-invoice-FF-26-27-00001.pdf");
+    expect(res.headers.get("content-disposition")).toContain("MasalaPOS-invoice-FF-26-27-00001.pdf");
     const pdf = await PDFDocument.load(new Uint8Array(await res.arrayBuffer()));
     expect([pdf.getTitle(), pdf.getPageCount()]).toEqual(["Tax invoice FF/26-27/00001", 1]);
   });
@@ -314,7 +314,7 @@ describe("payments that land together, and orders that change underneath a reque
     expect(orders.entries.map((e) => e.action)).toContain("order.paid");
   });
 
-  it("the activity log's ForkFlow (automatic) option shows only what the system did, as the portal asks for it", async () => {
+  it("the activity log's MasalaPOS (automatic) option shows only what the system did, as the portal asks for it", async () => {
     const { order } = await confirmedOrder();
     await admin.ok("POST", `/orders/${order.id}/payment-link`);
     await webhook("payment_link.paid", "evt_sys", "plink_Test1abc", { id: "pay_SYS", amount: order.totalPaise });
@@ -327,7 +327,7 @@ describe("payments that land together, and orders that change underneath a reque
 
   it("an invoice with long terms continues on a second page instead of running off the first", async () => {
     await admin.ok("PUT", "/settings", {
-      seller: { legalName: "ForkFlow Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "accounts@forkflow.in", phone: "" },
+      seller: { legalName: "MasalaPOS Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "accounts@masalapos.in", phone: "" },
       invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800, bankDetails: "HDFC Bank, A/c 5020001234", terms: Array.from({ length: 60 }, (_, i) => `Term ${i + 1}`).join("\n") },
       prices: [], extraDevicePaise: 0, trialDays: 7,
     });

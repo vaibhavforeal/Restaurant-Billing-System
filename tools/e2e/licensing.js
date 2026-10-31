@@ -16,15 +16,15 @@
   const messageIs = (text) => panel().querySelector('.license-message')?.textContent === text;
   const alertHas = (text) => [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes(text));
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
-  const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' });
+  const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' });
   const api = async (path, method = 'GET', body, as = headers()) => {
     const res = await originalFetch('/api' + path, { method, headers: as, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (res.status === 204) return {};
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };
   const registerOther = async (credential, name) => {
-    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-forkflow-device': credential, 'content-type': 'application/json' });
-    const as = { authorization: 'Bearer ' + login.token, 'x-forkflow-device': credential, 'content-type': 'application/json' };
+    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
+    const as = { authorization: 'Bearer ' + login.token, 'x-masalapos-device': credential, 'content-type': 'application/json' };
     await api('/license/devices', 'POST', { name }, as); return as;
   };
   URL.createObjectURL = function (blob) { const url = originalUrl.call(this, blob); blobs.set(url, blob); return url; };
@@ -72,8 +72,8 @@
     await wait(() => document.body.innerText.includes('Dashboard'));
     check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
     await api('/users', 'POST', { name: 'QA Cashier', pin: '2468', role: 'cashier' });
-    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' });
-    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' };
+    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' });
+    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' };
     const codes = JSON.stringify({ customerId: fixtures.customerCode, orderId: fixtures.orderCode });
     check((await originalFetch('/api/license/enroll', { method: 'POST', headers: asCashier, body: codes })).status === 403
       && (await originalFetch('/api/license/enroll', { method: 'POST', headers: { 'content-type': 'application/json' }, body: codes })).status === 401,
@@ -111,7 +111,7 @@
     check(!alertHas('Device list unavailable'), 'Device management recovers after a failed refresh');
     const history = (await api('/license/history')).events;
     check(history.some((e) => e.kind === 'device_removed') && history.some((e) => e.kind === 'device_renamed') && history.every((e) => e.actorName === 'QA Admin'), 'History records activation and device changes with the acting administrator');
-    check(!button('Manage plan') && !button('Subscribe') && panel().innerText.includes('To renew or change your plan, contact ForkFlow'), 'A paid plan points to ForkFlow for renewals instead of a checkout');
+    check(!button('Manage plan') && !button('Subscribe') && panel().innerText.includes('To renew or change your plan, contact MasalaPOS'), 'A paid plan points to MasalaPOS for renewals instead of a checkout');
     await post('/__fake-service/queue', { licenses: [fixtures.trialFromService] });
     await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && panel().innerText.includes('Trial — ends'));
     check((await api('/license')).revision === 4 && !button('Subscribe'), 'Check for renewal installs the trial licence the service has queued');

@@ -1,7 +1,7 @@
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@forkflow/domain";
-import { parseVendorCode } from "@forkflow/domain/vendor-codes";
-import { verifyLicenseSignature } from "@forkflow/core";
+import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@masalapos/domain";
+import { parseVendorCode } from "@masalapos/domain/vendor-codes";
+import { verifyLicenseSignature } from "@masalapos/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
@@ -22,14 +22,14 @@ export interface LicensingOptions {
   fetch?: typeof fetch;
 }
 export const INSTALLATION_SECRET_PATTERN = /^[a-f0-9]{64}$/;
-const SECRET_HEADER = "X-ForkFlow-Installation-Secret";
+const SECRET_HEADER = "X-MasalaPOS-Installation-Secret";
 export interface LicenseCheckResult {
   outcome: "installed" | "up_to_date" | "unreachable" | "rejected" | "disabled" | "not_enrolled";
   message: string;
   /** Why a licence was rejected, for the log; never contains licence text. */
   detail?: string;
 }
-// Hourly, so module changes the ForkFlow owner makes reach the counter within an hour; a check is one small request.
+// Hourly, so module changes the MasalaPOS owner makes reach the counter within an hour; a check is one small request.
 const RENEWAL_INTERVAL_MS = 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
 const AUTOMATIC_ACTOR = "Automatic renewal";
@@ -39,13 +39,13 @@ const CHECK_MESSAGES = {
   installed: "A new licence was installed.",
   rejected: "The licensing service returned a licence this installation can't use.",
   disabled: "Automatic renewal is not set up for this installation.",
-  not_enrolled: "This counter isn't activated yet. Enter the Customer ID and Order ID from your ForkFlow setup card.",
+  not_enrolled: "This counter isn't activated yet. Enter the Customer ID and Order ID from your MasalaPOS setup card.",
 } as const;
-const NOT_RECOGNISED = "The licensing service doesn't recognise this installation. Contact ForkFlow support.";
+const NOT_RECOGNISED = "The licensing service doesn't recognise this installation. Contact MasalaPOS support.";
 const SERVICE_BUSY = "The licensing service is busy. Try again in a minute.";
 const SERVICE_UNREACHABLE = "Couldn't reach the licensing service. Check the internet connection and try again.";
-const WRONG_KEY = "The licensing service signs with a different key than this build trusts. Contact ForkFlow support.";
-const CHECK_CODES = "Check the Customer ID and Order ID. They are on the setup card ForkFlow gave you.";
+const WRONG_KEY = "The licensing service signs with a different key than this build trusts. Contact MasalaPOS support.";
+const CHECK_CODES = "Check the Customer ID and Order ID. They are on the setup card MasalaPOS gave you.";
 const serviceReply = z.object({ license: z.string().max(16_384).nullable(), enrolled: z.boolean().optional() });
 const enrollReply = z.object({
   license: z.string().max(16_384).nullable(),
@@ -225,9 +225,9 @@ export class Licensing {
   activationRequest(): ActivationRequest {
     if (!this.options) throw httpError(409, "This development build does not need activation");
     const saved = this.saved();
-    // Reported so ForkFlow support can tell which restaurant and version a counter is; neither changes the licence.
+    // Reported so MasalaPOS support can tell which restaurant and version a counter is; neither changes the licence.
     const outletName = (this.app.db.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name: string | null } | undefined)?.restaurant_name?.trim().slice(0, 120);
-    return { format: "forkflow-activation-request", version: 1, installationId: this.options.installationId, licenseId: saved.license_id,
+    return { format: "masalapos-activation-request", version: 1, installationId: this.options.installationId, licenseId: saved.license_id,
       organizationId: saved.organization_id, outletId: saved.outlet_id, currentRevision: saved.revision, generatedAt: this.now(),
       verificationKeyFingerprint: createHash("sha256").update(createPublicKey(this.options.publicKey).export({ type: "spki", format: "der" })).digest("hex"),
       ...(this.appVersion ? { appVersion: this.appVersion.slice(0, 40) } : {}), ...(outletName ? { outletName } : {}) };
@@ -269,7 +269,7 @@ export class Licensing {
     } catch (error) { return result("rejected", error instanceof Error ? error.message : "The licence could not be installed"); }
   }
   /**
-   * Activates this counter with the Customer ID and Order ID from its ForkFlow setup card: the service checks the order and hands
+   * Activates this counter with the Customer ID and Order ID from its MasalaPOS setup card: the service checks the order and hands
    * back its licence, which is installed like any other. Never throws; a refusal comes back in plain words.
    */
   async enroll(input: { customerId: string; orderId: string }, actorName: string): Promise<EnrollResult | { error: string; status: 400 | 409 | 503 }> {
@@ -339,7 +339,7 @@ export class Licensing {
     if (path === "/api/me" || path === "/api/logout" || path?.startsWith("/api/license")) return;
     // Never charge for access to backups, even after a subscription expires.
     if (path?.startsWith("/api/system/backups")) return;
-    const status = this.status(req.headers["x-forkflow-device"]);
+    const status = this.status(req.headers["x-masalapos-device"]);
     if (!status.canOperate) throw httpError(403, status.message);
   }
 }
@@ -354,7 +354,7 @@ export function registerLicensing(app: FastifyInstance) {
   const deviceName = z.string().trim().min(1).max(80);
   const licenseChanged = () => app.licensing.announceChange();
   app.get("/api/license", { preHandler: app.requireAuth }, async (req, reply) => {
-    reply.header("Cache-Control", "no-store"); return app.licensing.status(req.headers["x-forkflow-device"]);
+    reply.header("Cache-Control", "no-store"); return app.licensing.status(req.headers["x-masalapos-device"]);
   });
   app.post("/api/license/preview", { preHandler: manage }, async (req, reply) => {
     const { license } = licenseBody.parse(req.body);
@@ -363,19 +363,19 @@ export function registerLicensing(app: FastifyInstance) {
   app.put("/api/license", { preHandler: manage }, async (req) => {
     const { license, previewKey } = licenseBody.extend({ previewKey: z.string().regex(/^[a-f0-9]{64}$/).optional() }).parse(req.body);
     app.licensing.activate(license, req.user.name, previewKey); licenseChanged();
-    return app.licensing.status(req.headers["x-forkflow-device"]);
+    return app.licensing.status(req.headers["x-masalapos-device"]);
   });
   app.post("/api/license/check", { preHandler: manage }, async (req, reply) => {
     const result = await app.licensing.fetchLatest();
     if (result.outcome === "installed") licenseChanged();
-    reply.header("Cache-Control", "no-store"); return { ...result, status: app.licensing.status(req.headers["x-forkflow-device"]) };
+    reply.header("Cache-Control", "no-store"); return { ...result, status: app.licensing.status(req.headers["x-masalapos-device"]) };
   });
   // Re-activation after setup, e.g. moving from a trial order to the paid one.
   app.post("/api/license/enroll", { preHandler: manage }, async (req, reply) => {
     const result = await app.licensing.enroll(enrollBody.parse(req.body), req.user.name);
     reply.header("Cache-Control", "no-store");
     if ("error" in result) return reply.status(result.status).send({ error: result.error });
-    return { ...result, status: app.licensing.status(req.headers["x-forkflow-device"]) };
+    return { ...result, status: app.licensing.status(req.headers["x-masalapos-device"]) };
   });
   app.get("/api/license/activation-request", { preHandler: manage }, async (_req, reply) => {
     reply.header("Cache-Control", "no-store"); return app.licensing.activationRequest();
@@ -385,18 +385,18 @@ export function registerLicensing(app: FastifyInstance) {
     reply.header("Cache-Control", "no-store"); return app.licensing.history(before);
   });
   app.get("/api/license/devices", { preHandler: manage }, async (req, reply) => {
-    reply.header("Cache-Control", "no-store"); return { devices: app.licensing.devices(req.headers["x-forkflow-device"]) };
+    reply.header("Cache-Control", "no-store"); return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
   });
   app.post("/api/license/devices", { preHandler: manage }, async (req) => {
     const { name } = z.object({ name: deviceName }).parse(req.body);
-    app.licensing.register(req.headers["x-forkflow-device"], name, req.user.name); licenseChanged();
-    return { devices: app.licensing.devices(req.headers["x-forkflow-device"]) };
+    app.licensing.register(req.headers["x-masalapos-device"], name, req.user.name); licenseChanged();
+    return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
   });
   app.patch("/api/license/devices/:id", { preHandler: manage }, async (req) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { name, version } = z.object({ name: deviceName, version: z.number().int().positive() }).parse(req.body);
     app.licensing.rename(id, name, version, req.user.name); licenseChanged();
-    return { devices: app.licensing.devices(req.headers["x-forkflow-device"]) };
+    return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
   });
   app.delete("/api/license/devices/:id", { preHandler: manage }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);

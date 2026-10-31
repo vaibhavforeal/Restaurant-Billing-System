@@ -1,7 +1,7 @@
 import {
   CustomerCreate, CustomerTypeCreate, CustomerTypeUpdate, CustomerUpdate, LoyaltyAdjust, LoyaltySettingsUpdate, OrderCustomerSet,
   bestSlabPercent, percentOf, uuidv7, type Database, type SlabRule,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";

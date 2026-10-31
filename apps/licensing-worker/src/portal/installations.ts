@@ -1,6 +1,6 @@
-import { MODULES, isModuleId, resolveModules, MODULE_IDS, type ModuleId, type ModuleOverrides } from "@forkflow/domain/modules";
-import { PLANS } from "@forkflow/domain/licensing";
-import { parseActivationRequest, readClaims } from "@forkflow/license-issuer";
+import { MODULES, isModuleId, resolveModules, MODULE_IDS, type ModuleId, type ModuleOverrides } from "@masalapos/domain/modules";
+import { PLANS } from "@masalapos/domain/licensing";
+import { parseActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
 import { GRACE_MS } from "../dates.js";
 import { assignSeat, orderFull } from "../enroll.js";
@@ -198,7 +198,7 @@ export const installationsRoutes: Route[] = [
     const installation = await visibleInstallation(ctx, ctx.params[0]!);
     const latest = await latestLicense(ctx.deps.db, installation.installationId);
     if (!latest) throw notFound("A licence for this counter");
-    return json({ license: latest.envelope, fileName: `forkflow-licence-${installation.installationId.slice(0, 8)}-r${latest.revision}.txt` });
+    return json({ license: latest.envelope, fileName: `masalapos-licence-${installation.installationId.slice(0, 8)}-r${latest.revision}.txt` });
   } },
 
   // Activates a counter that has no internet: its activation request file comes in, and its licence goes out as a file. It takes a seat.
@@ -206,7 +206,7 @@ export const installationsRoutes: Route[] = [
     const { activationRequest } = await readBody(ctx.request, z.object({ activationRequest: z.string().max(4000) }).strict());
     let request;
     try { request = parseActivationRequest(activationRequest); } catch (error) { throw new HttpError(400, (error as Error).message); }
-    if (request.verificationKeyFingerprint !== ctx.deps.signer.fingerprint) throw new HttpError(400, "This activation request is from a ForkFlow build that trusts a different signing key.");
+    if (request.verificationKeyFingerprint !== ctx.deps.signer.fingerprint) throw new HttpError(400, "This activation request is from a MasalaPOS build that trusts a different signing key.");
     const order = await orderById(ctx.deps.db, ctx.params[0]!);
     const scope = ownedBy(ctx.user, "owner_id");
     if (!order || !(await ctx.deps.db.prepare(`SELECT 1 AS hit FROM customers WHERE id = ? AND ${scope.sql}`).bind(order.customerId, ...scope.binds).first())) throw notFound("That order");
@@ -233,7 +233,7 @@ export const installationsRoutes: Route[] = [
       const row = await assignSeat(ctx.deps, installation, order, { actorId: ctx.user.id, outletName: request.outletName ?? null, appVersion: request.appVersion ?? null, handedOut: true });
       envelope = row.envelope; revision = row.revision;
     }
-    return json({ license: envelope, fileName: `forkflow-licence-${request.installationId.slice(0, 8)}-r${revision}.txt`, installationId: request.installationId });
+    return json({ license: envelope, fileName: `masalapos-licence-${request.installationId.slice(0, 8)}-r${revision}.txt`, installationId: request.installationId });
   } },
 ];
 

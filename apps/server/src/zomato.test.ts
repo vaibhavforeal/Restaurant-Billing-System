@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { MIGRATIONS, migrate, openDb, uuidv7 } from "@forkflow/domain";
-import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoImportKind, type ZomatoReconciliation } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, uuidv7 } from "@masalapos/domain";
+import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoImportKind, type ZomatoReconciliation } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
 import { auth, createUser, enableIntegration, setupAdmin } from "./test-helpers.js";

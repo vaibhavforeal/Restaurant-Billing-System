@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, migrate, openDb } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";

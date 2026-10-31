@@ -13,9 +13,9 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: StaffUser) => void }
     void run(async () => onSignedIn((await post<{ user: StaffUser }>("/login", { email, password })).user));
   };
   return <main className="signin"><div className="signin-card">
-    <div className="brand"><Mark /><div>ForkFlow Portal<small>Staff sign-in</small></div></div>
+    <div className="brand"><Mark /><div>MasalaPOS Portal<small>Staff sign-in</small></div></div>
     <h1>Sign in</h1>
-    <p className="muted">Customers, orders, licences and support for ForkFlow.</p>
+    <p className="muted">Customers, orders, licences and support for MasalaPOS.</p>
     <form onSubmit={submit}>
       <Field label="Email"><input type="email" autoComplete="username" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} /></Field>
       <Field label="Password"><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} /></Field>
@@ -45,7 +45,7 @@ export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: (
   </form>;
   if (!forced) return form;
   return <main className="signin"><div className="signin-card">
-    <div className="brand"><Mark /><div>ForkFlow Portal<small>First sign-in</small></div></div>
+    <div className="brand"><Mark /><div>MasalaPOS Portal<small>First sign-in</small></div></div>
     <h1>Choose your password</h1>
     <p className="muted">You signed in with a temporary password. Choose your own before you continue.</p>
     {form}

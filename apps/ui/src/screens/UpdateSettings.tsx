@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useEffect, useState } from "react";
-import type { UpdateChannel, UpdateStatus } from "@forkflow/domain/updates";
+import type { UpdateChannel, UpdateStatus } from "@masalapos/domain/updates";
 import { ApiError, apiFetch } from "../api";
 
 interface UpdateState { channel: UpdateChannel; status: UpdateStatus; openOrders: number }
@@ -9,7 +9,7 @@ const STATE_TEXT: Record<UpdateStatus["state"], string> = {
   unsupported: "Automatic updates are not available here.",
   idle: "Waiting for the first check.",
   checking: "Checking for updates…",
-  "up-to-date": "ForkFlow is up to date.",
+  "up-to-date": "MasalaPOS is up to date.",
   downloading: "Downloading an update in the background.",
   ready: "An update is downloaded and ready to install.",
   error: "The last update check did not finish.",
@@ -60,11 +60,11 @@ export function UpdateSettings() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => void run(() => apiFetch("/api/system/updates/check", { method: "POST" }), "Checking for updates…")}>Check now</button>
         {status.state === "ready" && <button className="primary" disabled={data.openOrders > 0} onClick={() => void run(async () => {
-          if (!window.confirm(`Install version ${status.availableVersion} now? ForkFlow restarts and every counter disconnects for about a minute. A backup is taken first.`)) return;
+          if (!window.confirm(`Install version ${status.availableVersion} now? MasalaPOS restarts and every counter disconnects for about a minute. A backup is taken first.`)) return;
           await apiFetch("/api/system/updates/install", { method: "POST" });
-        }, "Installing. ForkFlow will restart in a moment.")}>Restart &amp; update</button>}
+        }, "Installing. MasalaPOS will restart in a moment.")}>Restart &amp; update</button>}
       </div>
-      {status.state === "ready" && data.openOrders > 0 && <p className="muted">Finish service first: {data.openOrders} order(s) are open or waiting for payment. The update also installs when ForkFlow is next quit from the tray.</p>}
+      {status.state === "ready" && data.openOrders > 0 && <p className="muted">Finish service first: {data.openOrders} order(s) are open or waiting for payment. The update also installs when MasalaPOS is next quit from the tray.</p>}
     </fieldset>
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}

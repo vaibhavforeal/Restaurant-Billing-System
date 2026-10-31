@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {

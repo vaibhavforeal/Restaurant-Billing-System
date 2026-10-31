@@ -1,4 +1,4 @@
-import { uuidv7, type ComboGroup, type ComboGroupInputValue, type Database } from "@forkflow/domain";
+import { uuidv7, type ComboGroup, type ComboGroupInputValue, type Database } from "@masalapos/domain";
 import { httpError } from "./http-error.js";
 
 interface OptionRow {

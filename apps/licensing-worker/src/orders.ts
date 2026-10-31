@@ -1,5 +1,5 @@
-import type { Plan } from "@forkflow/domain/licensing";
-import type { ModuleOverrides } from "@forkflow/domain/modules";
+import type { Plan } from "@masalapos/domain/licensing";
+import type { ModuleOverrides } from "@masalapos/domain/modules";
 import { addMonths, DAY_MS, GRACE_MS } from "./dates.js";
 import type { D1Like } from "./env.js";
 import { parseOverrides } from "./store.js";

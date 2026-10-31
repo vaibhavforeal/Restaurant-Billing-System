@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type ModuleOverrides, type IntegrationId, type Plan } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type ModuleOverrides, type IntegrationId, type Plan } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer, type ServerOptions } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -89,7 +89,7 @@ export function enableIntegration(app: FastifyInstance, id: IntegrationId): void
 
 /**
  * A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device).
- * `overrides` are the ForkFlow owner's module choices signed into the licence.
+ * `overrides` are the MasalaPOS owner's module choices signed into the licence.
  */
 export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {}) {
   const keys = generateKeyPairSync("ed25519");
@@ -97,8 +97,8 @@ export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {})
   const db = openDb(":memory:");
   migrate(db, MIGRATIONS);
   const app = buildServer({ db, licensing: { publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId } });
-  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
-  const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
+  const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const now = Date.now();
   const claims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(), revision: 1, plan,
     maxDevices: PLANS[plan].maxDevices, features: featuresFromModules(resolveModules(plan, overrides)), modules: resolveModules(plan, overrides), issuedAt: now - 1000, expiresAt: now + 86_400_000, graceUntil: now + 2 * 86_400_000 };

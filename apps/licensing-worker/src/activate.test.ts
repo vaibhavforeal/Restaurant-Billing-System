@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate, type ActivateDeps, type Deps } from "./activate.js";
 import { DAY_MS, GRACE_MS } from "./dates.js";
 import { handleEnroll } from "./enroll.js";
@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 const request = (over: Record<string, unknown> = {}) => ({
-  format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
+  format: "masalapos-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
   currentRevision: 0, generatedAt: T0, verificationKeyFingerprint: signer.fingerprint, ...over,
 });
 const activate = async (over: Record<string, unknown> = {}, secret: string | null = TEST_SECRET) => {

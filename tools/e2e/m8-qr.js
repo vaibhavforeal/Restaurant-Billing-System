@@ -32,7 +32,7 @@
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value);
     input.dispatchEvent(new view.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await pause();
   };
-  const headers = { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
+  const headers = { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body) => {
     const r = await fetch('/api' + path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const data = r.status === 204 ? null : await r.json();
@@ -96,7 +96,7 @@
     await click(guest, 'Retry the same request');
     await wait(() => guest.querySelector('[aria-label="Request status"]'), 'guest receipt after retry');
     check(writes.length === 2 && writes[0].body === writes[1].body && writes[0].status === 201 && writes[1].status === 200, 'Lost-response retry sends the exact same request and returns its original receipt');
-    check(writes.every((w) => !w.headers.authorization && !w.headers['x-forkflow-device']), 'Guest submission carries no staff session or device credentials');
+    check(writes.every((w) => !w.headers.authorization && !w.headers['x-masalapos-device']), 'Guest submission carries no staff session or device credentials');
     const requestDialog = await openStaffDialog('Review requests');
     await click(document, 'Refresh requests');
     const card = await wait(() => requestDialog.querySelector(`[aria-label="QR request from ${table.name}"]`), 'staff pending card');

@@ -1,6 +1,6 @@
-# ForkFlow Portal
+# MasalaPOS Portal
 
-The portal is where ForkFlow's own staff run the business. It covers leads and follow-ups, customers, orders and payments, GST tax invoices, the counters each customer runs (their licences, modules and seats), renewals, support tickets and reports.
+The portal is where MasalaPOS's own staff run the business. It covers leads and follow-ups, customers, orders and payments, GST tax invoices, the counters each customer runs (their licences, modules and seats), renewals, support tickets and reports.
 
 It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the first admin, Razorpay) is in the [licensing worker README](../../apps/licensing-worker/README.md).
 
@@ -10,7 +10,7 @@ It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the
 2. **Customer.** When it is ready to try or buy, **Convert to customer**. The customer gets a **Customer ID** such as `FC-7K3M-9QX`.
 3. **Trial (optional).** On the customer, **Start a trial** makes a free trial order, ready at once. Its length comes from Settings and is 7 days by default.
 4. **Order.** **New order** prices the outlets, devices and extra lines from the price list. **Confirm** fixes the price. The order gets an **Order ID** such as `FO-2X8H-PD4`.
-5. **Setup card.** Every order shows both IDs, large, with **Print**. At first run, ForkFlow asks for them; the counter then gets the order's licence and takes one of its seats.
+5. **Setup card.** Every order shows both IDs, large, with **Print**. At first run, MasalaPOS asks for them; the counter then gets the order's licence and takes one of its seats.
 6. **Payment.** Either way, the order is paid when the money covers it:
    - **Send payment link**: Razorpay texts and emails the customer, and the payment records itself.
    - **Record payment**: for cash, bank transfer, UPI, card or cheque.
@@ -58,7 +58,7 @@ It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the
   - A discount reduces the licence line.
 - **Renewal.** Choose the customer's counters to extend. The licence line counts the counters chosen.
 - **Trial.** Free, no invoice, ready at once.
-- **GST.** CGST and SGST when ForkFlow and the customer are in the same state, IGST otherwise.
+- **GST.** CGST and SGST when MasalaPOS and the customer are in the same state, IGST otherwise.
   - The customer's state comes from their GSTIN, or from their address when they have none.
   - An order can be confirmed only when both states are known and the seller details are filled in.
 - **On credit.** An admin can let a confirmed order activate before payment, until a date.
@@ -100,7 +100,7 @@ It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the
 Each customer's **Counters** tab and every order show the licences on one timeline. Each bar runs from the day the counter activated to its end date. The lighter end is the grace period, when billing still works but the licence is due. A line marks today. Open a counter for:
 
 - **Licence**: plan, devices, end date, revision. **Waiting for its next check-in** means a new revision is signed but the counter hasn't collected it; it does within the hour.
-- **Last seen** and the ForkFlow version the counter reports.
+- **Last seen** and the MasalaPOS version the counter reports.
 - **Modules** (admins change them): see [Feature controls](feature-controls.md).
 - **Change this licence** (admins): another plan, end date or number of devices, with a reason that goes into the activity log. Use it for a goodwill extension or a correction.
 - **Move to another order** (admins): for example from the trial to the paid order, when the restaurant doesn't re-enter the IDs itself. The term starts that day.

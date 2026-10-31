@@ -1,9 +1,9 @@
 {
-  "name": "@forkflow/portal",
+  "name": "@masalapos/portal",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "ForkFlow Portal: the staff web app for customers, leads, orders, licences, invoices and support. Built into dist/portal and served by the licensing Worker.",
+  "description": "MasalaPOS Portal: the staff web app for customers, leads, orders, licences, invoices and support. Built into dist/portal and served by the licensing Worker.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -1,4 +1,4 @@
-import { PrinterCreate, PrinterUpdate, uuidv7 } from "@forkflow/domain";
+import { PrinterCreate, PrinterUpdate, uuidv7 } from "@masalapos/domain";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";

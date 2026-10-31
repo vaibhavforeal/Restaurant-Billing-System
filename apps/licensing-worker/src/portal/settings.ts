@@ -7,7 +7,7 @@ import { GST_STATES, GSTIN_PATTERN } from "./shared.js";
 
 const optional = (max: number) => z.string().trim().max(max).default("");
 export const PortalSettings = z.object({
-  /** ForkFlow as the seller on every invoice. */
+  /** MasalaPOS as the seller on every invoice. */
   seller: z.object({
     legalName: optional(120), gstin: z.string().trim().toUpperCase().refine((v) => v === "" || GSTIN_PATTERN.test(v), "Enter a 15-character GSTIN").default(""),
     address: optional(300), city: optional(80), stateCode: z.string().refine((v) => v === "" || v in GST_STATES, "Choose a state").default(""),

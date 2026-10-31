@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
-import { calculateBill, RECEIPT_STYLES, type Bill } from "@forkflow/domain";
+import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
 import { billUpiPayment } from "./upi.js";
 import { receiptHtml, receiptSlip } from "./receipt.js";
 

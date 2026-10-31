@@ -43,7 +43,7 @@ const service: Server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", serviceUrl);
   if (req.method !== "POST" || (url.pathname !== "/v1/activate" && url.pathname !== "/v1/enroll")) { res.writeHead(404).end(); return; }
   const body = await readBody(req);
-  if (req.headers["x-forkflow-installation-secret"] !== installationSecret) return answer(res, 401, { error: "unauthorized" });
+  if (req.headers["x-masalapos-installation-secret"] !== installationSecret) return answer(res, 401, { error: "unauthorized" });
   if (url.pathname === "/v1/activate") return answer(res, 200, { license: queued.shift() ?? null, enrolled });
   let codes: { customerId?: unknown; orderId?: unknown } = {};
   try { codes = JSON.parse(body) as typeof codes; } catch { /* an unreadable body names no order */ }
@@ -52,7 +52,7 @@ const service: Server = createServer(async (req, res) => {
   answer(res, 200, { license: fixtures.enrolledFromService, customer: { code: customerCode, name: "Spice Route" }, order: { code: orderCode, plan: "pro", trial: false, expiresAt: now + 3600000 } });
 });
 await new Promise<void>((resolveListen) => service.listen(4129, "127.0.0.1", resolveListen));
-const db = openDb(join(dataDir, "forkflow.db")); migrate(db, MIGRATIONS);
+const db = openDb(join(dataDir, "masalapos.db")); migrate(db, MIGRATIONS);
 const app = buildServer({ db, backups: new Backups(db, dataDir), port: 4128, logger: { level: "warn" }, licensing: {
   publicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId, serviceUrl,
   installationSecret,

@@ -1,11 +1,11 @@
 # Licensing service and portal: Razorpay test-mode checklist
 
-A manual end-to-end run of the licensing service and the ForkFlow Portal in Razorpay **test mode**. It needs your Razorpay test keys, so it is not automated. Do it against the test Worker before the live one; the deployment steps are in `apps/licensing-worker/README.md`.
+A manual end-to-end run of the licensing service and the MasalaPOS Portal in Razorpay **test mode**. It needs your Razorpay test keys, so it is not automated. Do it against the test Worker before the live one; the deployment steps are in `apps/licensing-worker/README.md`.
 
 > [!WARNING]
 > The test Worker signs with its own **test** key pair (`C:\secure\license-test-private.pem`), never the production key. Anyone with a portal account on the test Worker can issue licences, so a test Worker holding the production key would hand out licences that production counters accept.
 
-Use a disposable counter: a test build that embeds the **test** public key (`FORKFLOW_LICENSE_PUBLIC_KEY` from `C:\secure\license-test-public.pem`) and the test Worker's URL (`FORKFLOW_LICENSE_SERVICE_URL`), run with a fresh data folder so it is a new installation. Never give a test build to a restaurant. Keep `npx wrangler tail --env test` open in a terminal for the whole run.
+Use a disposable counter: a test build that embeds the **test** public key (`MASALAPOS_LICENSE_PUBLIC_KEY` from `C:\secure\license-test-public.pem`) and the test Worker's URL (`MASALAPOS_LICENSE_SERVICE_URL`), run with a fresh data folder so it is a new installation. Never give a test build to a restaurant. Keep `npx wrangler tail --env test` open in a terminal for the whole run.
 
 Test-mode helpers (check Razorpay's current test-mode documentation if any of these has changed): test card `4111 1111 1111 1111` with any future expiry and any CVV, and the test UPI id `success@razorpay` (for a failing UPI payment use `failure@razorpay`).
 

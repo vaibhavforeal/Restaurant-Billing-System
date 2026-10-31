@@ -1,4 +1,4 @@
-import { makeVendorCode, type VendorCodeKind } from "@forkflow/domain/vendor-codes";
+import { makeVendorCode, type VendorCodeKind } from "@masalapos/domain/vendor-codes";
 
 /**
  * Runs `insert(code)` with fresh random codes until one is not taken: a Customer ID or Order ID collides about once in a billion, so

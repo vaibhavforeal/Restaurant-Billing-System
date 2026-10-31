@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHmac, randomUUID } from "node:crypto";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import type { D1Like } from "./env.js";
 import { memoryD1 } from "./testing/d1.js";
 import { keyPair } from "./testing/harness.js";

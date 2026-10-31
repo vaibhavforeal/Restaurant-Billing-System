@@ -11,7 +11,7 @@ export interface SeededStaff { id: string; email: string; name: string; role: Ro
 /** Hashed with few iterations so tests stay fast; the hash records its own count, so sign-in verifies it the same way. */
 export async function seedStaff(env: Env, role: Role, over: { email?: string; name?: string; password?: string; mustChange?: boolean } = {}): Promise<SeededStaff> {
   const id = crypto.randomUUID(), name = over.name ?? `${role[0]!.toUpperCase()}${role.slice(1)} ${id.slice(0, 4)}`;
-  const email = over.email ?? `${role}-${id.slice(0, 8)}@forkflow.test`, now = Date.now();
+  const email = over.email ?? `${role}-${id.slice(0, 8)}@masalapos.test`, now = Date.now();
   await env.DB.prepare(`INSERT INTO staff_users (id, email, name, role, password_hash, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(id, email, name, role, await hashPassword(over.password ?? PASSWORD, 1000), over.mustChange ? 1 : 0, now, now).run();
   return { id, email, name, role };

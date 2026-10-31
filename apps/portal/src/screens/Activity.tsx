@@ -31,7 +31,7 @@ export function Activity() {
     <PageHead title="Activity" sub="Every change made in the portal, by a payment or by a counter activating, newest first." />
     <div className="toolbar">
       <select aria-label="Who" value={actorId} onChange={(e) => setActorId(e.target.value)} style={{ width: 220 }}>
-        <option value="">Everyone</option><option value="system">ForkFlow (automatic)</option>
+        <option value="">Everyone</option><option value="system">MasalaPOS (automatic)</option>
         {staff.data?.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
       </select>
       <select aria-label="What" value={entityType} onChange={(e) => setEntityType(e.target.value)} style={{ width: 200 }}>
@@ -57,7 +57,7 @@ export function ActivityTable({ entries, loaded, compact }: { entries: ActivityI
         return <tr key={e.id}>
           <td>{to ? <Link className="name" to={to}>{e.summary}</Link> : e.summary}</td>
           {!compact && <td className="phone-hide muted">{e.customer ? <Link to={`/customers/${e.customer.id}`}>{e.customer.name}</Link> : "—"}</td>}
-          <td>{e.actor ? <Person name={e.actor.name} id={e.actor.id} /> : <span className="muted">ForkFlow</span>}</td>
+          <td>{e.actor ? <Person name={e.actor.name} id={e.actor.id} /> : <span className="muted">MasalaPOS</span>}</td>
           <td className="num muted">{dateTime(e.at)}</td>
         </tr>;
       })}

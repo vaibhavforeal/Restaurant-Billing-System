@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SEGMENT_PRESETS, type SavedSegment, type SegmentCustomer, type SegmentFilterInput } from "@forkflow/domain/customer-segments";
+import { SEGMENT_PRESETS, type SavedSegment, type SegmentCustomer, type SegmentFilterInput } from "@masalapos/domain/customer-segments";
 import { ApiError, apiFetch, authHeaders } from "../api";
 import { parseTags } from "../crm";
 import { downloadText } from "../download";

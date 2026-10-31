@@ -1,4 +1,4 @@
-// Run on the isolated ForkFlow Demo, signed in as admin at /.
+// Run on the isolated MasalaPOS Demo, signed in as admin at /.
 // Sends a table KOT and bills it straight away: billing never waits for the kitchen.
 // The ticket stays open on the Kitchen Display for tools/e2e/kitchen-app.js.
 (async () => {
@@ -22,8 +22,8 @@
   };
   const api = async (path, method = "GET", body) => {
     const response = await fetch(path, { method, headers: {
-      authorization: `Bearer ${localStorage.getItem("forkflow.token")}`,
-      "x-forkflow-device": localStorage.getItem("forkflow.device.v1"),
+      authorization: `Bearer ${localStorage.getItem("masalapos.token")}`,
+      "x-masalapos-device": localStorage.getItem("masalapos.device.v1"),
       "content-type": "application/json",
     }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, ...(await response.json()) };

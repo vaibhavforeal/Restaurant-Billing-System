@@ -61,7 +61,7 @@ export function CounterDialog({ id, me, onClose, onChanged }: { id: string; me: 
         <dt>Licence</dt><dd>{c.licence ? <>{PLAN_NAMES[c.licence.plan]}{c.licence.trial ? " trial" : ""}, {c.licence.maxDevices} devices · <LicenceState counter={c} /></> : "None yet"}</dd>
         <dt>Revision</dt><dd>{c.licence ? <>{c.licence.revision} {c.licence.delivered ? <span className="muted">· on the counter</span> : <Pill tone="warning">Waiting for its next check-in</Pill>}</> : "—"}</dd>
         <dt>Order</dt><dd>{c.order ? <span className="mono">{c.order.code}</span> : <span className="muted">No seat (released)</span>}{c.licence?.orderCode && c.licence.orderCode !== c.order?.code && <span className="muted"> · licence from {c.licence.orderCode}</span>}</dd>
-        <dt>Last seen</dt><dd>{c.lastSeenAt ? `${dateTime(c.lastSeenAt)}${c.appVersion ? ` · ForkFlow ${c.appVersion}` : ""}` : "Never online"}</dd>
+        <dt>Last seen</dt><dd>{c.lastSeenAt ? `${dateTime(c.lastSeenAt)}${c.appVersion ? ` · MasalaPOS ${c.appVersion}` : ""}` : "Never online"}</dd>
         <dt>Activated</dt><dd>{dateTime(c.activatedAt)}</dd>
         <dt>Installation ID</dt><dd className="code-row"><span className="mono">{c.id}</span><CopyButton text={c.id} /></dd>
         <dt>Pairing</dt><dd>{c.paired ? "Paired with its computer" : <Pill tone="warning">Waiting for the computer to claim it</Pill>}</dd>
@@ -76,7 +76,7 @@ export function CounterDialog({ id, me, onClose, onChanged }: { id: string; me: 
           if (window.confirm(`Release ${counterName(c)}'s seat? Its order can then activate another computer. This computer's licence keeps working offline until it ends.`)) void act(() => post(`/installations/${c.id}/release`), "Seat released.");
         }}>Release seat</button>}
         {support && c.paired && <button className="secondary" disabled={busy} onClick={() => {
-          if (window.confirm("Reset the pairing? The next computer that checks in with this installation ID claims it. Do this only after the restaurant restored or reinstalled ForkFlow.")) void act(() => post(`/installations/${c.id}/reset-pairing`), "Pairing reset.");
+          if (window.confirm("Reset the pairing? The next computer that checks in with this installation ID claims it. Do this only after the restaurant restored or reinstalled MasalaPOS.")) void act(() => post(`/installations/${c.id}/reset-pairing`), "Pairing reset.");
         }}>Reset pairing</button>}
       </div>}
       {admin && c.customer && <MoveCounter counter={c} onMoved={(next) => { setData({ installation: next }); onChanged(); }} />}

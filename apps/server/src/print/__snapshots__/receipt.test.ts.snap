@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`receipts > renders a 58mm GST receipt with split and payment details 1`] = `
-"<1B><40><1B><61><01><1B><45><01><1D><21><01>ForkFlow Cafe
+"<1B><40><1B><61><01><1B><45><01><1D><21><01>MasalaPOS Cafe
 <1D><21><00><1B><45><00>12 Market Road
 GSTIN: 29ABCDE1234F1Z5
 FSSAI: 12345678901234
@@ -37,7 +37,7 @@ UPI                       110.00
 `;
 
 exports[`receipts > renders a 80mm GST receipt with split and payment details 1`] = `
-"<1B><40><1B><61><01><1B><45><01><1D><21><01>ForkFlow Cafe
+"<1B><40><1B><61><01><1B><45><01><1D><21><01>MasalaPOS Cafe
 <1D><21><00><1B><45><00>12 Market Road
 GSTIN: 29ABCDE1234F1Z5
 FSSAI: 12345678901234

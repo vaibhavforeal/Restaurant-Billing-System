@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
-import { parseVendorCode } from "@forkflow/domain/vendor-codes";
+import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { apiFetch, session, type User } from "../api";
 import { AuthLayout } from "./AuthLayout";
 
@@ -7,7 +7,7 @@ import { AuthLayout } from "./AuthLayout";
 export type SetupActivation = "online" | "offline" | "none";
 interface Activated { customer: { code: string; name: string }; order: { code: string; plan: "basic" | "pro"; trial: boolean; expiresAt: number | null } }
 
-const CHECK_CODES = "Check the Customer ID and Order ID. They are on the setup card ForkFlow gave you.";
+const CHECK_CODES = "Check the Customer ID and Order ID. They are on the setup card MasalaPOS gave you.";
 
 export function Setup({ activation = "none", licensed = true, onDone }: { activation?: SetupActivation; licensed?: boolean; onDone: (user: User) => void }) {
   const [step, setStep] = useState<"activate" | "admin">(activation === "online" && !licensed ? "activate" : "admin");
@@ -30,7 +30,7 @@ export function Setup({ activation = "none", licensed = true, onDone }: { activa
     } catch { setError("Setup failed. Check the fields and use a 4–6 digit PIN."); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Set up ForkFlow</h2>
+  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Set up MasalaPOS</h2>
     {activated && <p role="status">Activated for {activated.customer.name}: {activated.order.plan === "pro" ? "Pro" : "Basic"}{activated.order.trial ? " trial" : ""}
       {activated.order.expiresAt !== null && <> until {new Date(activated.order.expiresAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</>}.</p>}
     <label>Restaurant name<input required placeholder="Restaurant name" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} disabled={busy} /></label>
@@ -40,7 +40,7 @@ export function Setup({ activation = "none", licensed = true, onDone }: { activa
   </form></AuthLayout>;
 }
 
-/** The first step on a commercial counter: the Customer ID and Order ID from ForkFlow's setup card bring the licence down. */
+/** The first step on a commercial counter: the Customer ID and Order ID from MasalaPOS's setup card bring the licence down. */
 function ActivateStep({ onActivated, onSkip }: { onActivated: (result: Activated) => void; onSkip: () => void }) {
   const [customerId, setCustomerId] = useState("");
   const [orderId, setOrderId] = useState("");
@@ -56,8 +56,8 @@ function ActivateStep({ onActivated, onSkip }: { onActivated: (result: Activated
     } catch (err) { setError(err instanceof Error ? err.message : "Activation failed. Try again."); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Activate ForkFlow</h2>
-    <p>Enter the Customer ID and Order ID from the setup card ForkFlow gave you. This computer needs the internet for this step.</p>
+  return <AuthLayout><form onSubmit={submit} className="auth-form"><h2>Activate MasalaPOS</h2>
+    <p>Enter the Customer ID and Order ID from the setup card MasalaPOS gave you. This computer needs the internet for this step.</p>
     <label>Customer ID<input required autoFocus placeholder="FC-XXXX-XXX" autoCapitalize="characters" autoComplete="off" spellCheck={false} maxLength={40}
       value={customerId} onChange={(e) => setCustomerId(e.target.value)} disabled={busy} /></label>
     <label>Order ID<input required placeholder="FO-XXXX-XXX" autoCapitalize="characters" autoComplete="off" spellCheck={false} maxLength={40}

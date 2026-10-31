@@ -83,7 +83,7 @@ export function Order({ id, me }: { id: string; me: StaffUser }) {
 function SetupCard({ order, usable }: { order: OrderDetail; usable: boolean }) {
   return <section className="setup-card">
     <div className="panel-head"><h2>Setup card</h2><button type="button" className="ghost small no-print" onClick={() => window.print()}>Print</button></div>
-    <p className="muted">At first run, ForkFlow asks for these two IDs. {!usable ? "They work once the order is paid or approved on credit." : order.seatsUsed >= order.outlets ? "Every outlet on this order is activated." : `They activate ${plural(order.outlets - order.seatsUsed, "more outlet")}.`}</p>
+    <p className="muted">At first run, MasalaPOS asks for these two IDs. {!usable ? "They work once the order is paid or approved on credit." : order.seatsUsed >= order.outlets ? "Every outlet on this order is activated." : `They activate ${plural(order.outlets - order.seatsUsed, "more outlet")}.`}</p>
     <div className="ids">
       <div><div className="kpi-label">Customer ID</div><div className="code-row"><span className="setup-id">{order.customer.code}</span><span className="no-print"><CopyButton text={order.customer.code} /></span></div></div>
       <div><div className="kpi-label">Order ID</div><div className="code-row"><span className="setup-id">{order.code}</span><span className="no-print"><CopyButton text={order.code} /></span></div></div>

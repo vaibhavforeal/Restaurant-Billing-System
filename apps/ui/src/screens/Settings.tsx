@@ -1,7 +1,7 @@
 import { InfoTip } from "../InfoTip";
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_GST_RATES } from "@forkflow/domain/gst";
-import { resolveReceiptStyle } from "@forkflow/domain/receipt-styles";
+import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
+import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
 import { SystemSettings } from "./SystemSettings";

@@ -1,8 +1,8 @@
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 import { httpError } from "./http-error.js";
 import { moduleActive } from "./modules.js";
 
-/** The Kitchen Display works only when the ForkFlow owner allows it and an admin has switched it on in the Marketplace. */
+/** The Kitchen Display works only when the MasalaPOS owner allows it and an admin has switched it on in the Marketplace. */
 export function kdsActive(db: Database): boolean {
   return moduleActive(db, "kds");
 }

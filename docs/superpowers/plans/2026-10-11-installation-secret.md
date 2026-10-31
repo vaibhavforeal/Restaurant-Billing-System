@@ -12,13 +12,13 @@
 
 ## Global Constraints
 
-- Header name: `X-ForkFlow-Installation-Secret`. Secret format: `^[a-f0-9]{64}$` (32 random bytes, hex).
+- Header name: `X-MasalaPOS-Installation-Secret`. Secret format: `^[a-f0-9]{64}$` (32 random bytes, hex).
 - Worker stores `secret_hash` = lowercase hex SHA-256 of the secret string; comparison is constant time.
 - Session token: 32 random bytes, base64url (43 chars); stored as SHA-256 hex; TTL 30 minutes (`30 * 60_000`); reusable within TTL.
 - Worker errors: `401 { error: "unauthorized" }` (secret), `404 { error: "unknown_installation" }` (sessions), `401 { error: "session_expired" }` (checkout).
-- Copy (verbatim): expired link page → `This payment link has expired. In ForkFlow, open Settings > Plan and devices and press Subscribe again.`; 401 on the counter → `The licensing service doesn't recognise this installation. Contact ForkFlow support.`; session unreachable → `Couldn't reach the licensing service. Check the internet connection and try again.`; no service URL → `Automatic renewal is not set up for this installation.`
+- Copy (verbatim): expired link page → `This payment link has expired. In MasalaPOS, open Settings > Plan and devices and press Subscribe again.`; 401 on the counter → `The licensing service doesn't recognise this installation. Contact MasalaPOS support.`; session unreachable → `Couldn't reach the licensing service. Check the internet connection and try again.`; no service URL → `Automatic renewal is not set up for this installation.`
 - The secret never appears in a response to a browser, the activation-request file, a log line, or D1 in plain form.
-- Worker source: only WebCrypto/fetch/Request/Response/URL/console; imports `@forkflow/license-issuer`, `@forkflow/domain/licensing`, `zod`, local files; no `node:` outside tests.
+- Worker source: only WebCrypto/fetch/Request/Response/URL/console; imports `@masalapos/license-issuer`, `@masalapos/domain/licensing`, `zod`, local files; no `node:` outside tests.
 - Run vitest from the repo root; the two `captain-https` failures in the main folder are a known environment issue. Vitest rewrites `apps/server/src/print/__snapshots__/*.snap` with LF endings — restore those two files with `git checkout --` after a full run unless the user had already modified them (the user has uncommitted changes to `receipt.test.ts.snap`: never touch or stage it).
 - The main checkout has unrelated uncommitted user changes; stage only the files each task names. Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Never run `npm install`/`npm ci`.
@@ -40,7 +40,7 @@
 - Modify: `apps/licensing-worker/src/testing/d1.ts` (apply every `migrations/*.sql` in name order), `apps/licensing-worker/src/store.ts`, `apps/licensing-worker/src/activate.ts`, `apps/licensing-worker/src/index.ts`, `apps/licensing-worker/src/activate.test.ts`, `apps/licensing-worker/src/index.test.ts`, `apps/licensing-worker/src/webhook.test.ts` (only if it activates)
 
 **Interfaces:**
-- Produces (`secret.ts`): `SECRET_HEADER = "x-forkflow-installation-secret"`; `isWellFormedSecret(value: string | null): value is string`; `sha256Hex(text: string): Promise<string>`; `constantTimeEqual(a: string, b: string): boolean`.
+- Produces (`secret.ts`): `SECRET_HEADER = "x-masalapos-installation-secret"`; `isWellFormedSecret(value: string | null): value is string`; `sha256Hex(text: string): Promise<string>`; `constantTimeEqual(a: string, b: string): boolean`.
 - Produces (`store.ts`): `InstallationRow.secretHash: string | null`; `createInstallation` row input gains `secretHash: string | null`; `claimSecretStatement(db, installationId, secretHash): D1StatementLike` (`UPDATE … SET secret_hash = ? WHERE installation_id = ? AND secret_hash IS NULL`).
 - Changes: `handleActivate(deps, body, secret: string | null): Promise<Response>`.
 
@@ -90,7 +90,7 @@
 - Consumes: Task 3 `subscriptionAvailable`, `POST /api/license/subscribe-session`.
 
 - [ ] **Step 1: UI.** **Subscribe** / **Manage plan** become buttons (same visibility rules, keyed on `subscriptionAvailable`). Click: `const tab = window.open("", "_blank")` synchronously; `POST /api/license/subscribe-session`; on success, if `tab` → `tab.opener = null; tab.location.href = url`, else render the URL as an `<a target="_blank" rel="noopener noreferrer">Open payment page</a>` with a short note that the browser blocked the new tab; on error → `tab?.close()` and show the error message in the existing alert line.
-- [ ] **Step 2: e2e.** The fake service on 4129 requires the secret header on `/v1/activate` (401 otherwise) and implements `POST /v1/subscribe-sessions` (returns a fixed token). `licensing.js`: stub `window.open` to capture the tab and the URL it is sent to; assert Subscribe sends the tab to `http://127.0.0.1:4129/subscribe?session=<token>`; assert the blocked-tab fallback link (stub returns `null`); assert a cashier's `POST /api/license/subscribe-session` is 403; keep all existing checks passing. Run through the Playwright MCP (`npm run build -w @forkflow/ui` first; ports 4128/4129; never 4110).
+- [ ] **Step 2: e2e.** The fake service on 4129 requires the secret header on `/v1/activate` (401 otherwise) and implements `POST /v1/subscribe-sessions` (returns a fixed token). `licensing.js`: stub `window.open` to capture the tab and the URL it is sent to; assert Subscribe sends the tab to `http://127.0.0.1:4129/subscribe?session=<token>`; assert the blocked-tab fallback link (stub returns `null`); assert a cashier's `POST /api/license/subscribe-session` is 403; keep all existing checks passing. Run through the Playwright MCP (`npm run build -w @masalapos/ui` first; ports 4128/4129; never 4110).
 - [ ] **Step 3: Docs.** README: the installation secret (where it lives, header name, trust on first use, `UPDATE installations SET secret_hash = NULL WHERE installation_id = ?` to re-pair a counter, apply migration `0002` with `wrangler d1 migrations apply` before deploying), checkout now via Subscribe in Settings only. Test-mode checklist: add "a request without the secret gets 401" and "an expired payment link shows the expired copy".
 - [ ] **Step 4: Gates.** `npx vitest run`, `npm run typecheck`, `npm run test:packaging`, licensing e2e (and licensing-recovery e2e) — all pass apart from the known captain-https pair.
 - [ ] **Step 5: Commit** — `feat(ui): checkout via admin session from Plan and devices`, then `docs(licensing-worker): installation secret and session checkout`

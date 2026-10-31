@@ -57,7 +57,7 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
   };
   return <form onSubmit={submit}>
     <section className="settings-section">
-      <div><h2>Seller on invoices</h2><p>ForkFlow's legal name, GSTIN and address as printed on every tax invoice. The state decides CGST and SGST or IGST.</p></div>
+      <div><h2>Seller on invoices</h2><p>MasalaPOS's legal name, GSTIN and address as printed on every tax invoice. The state decides CGST and SGST or IGST.</p></div>
       <div className="settings-panel form-grid">
         <Field label="Legal name" wide><input maxLength={120} value={s.seller.legalName} onChange={seller("legalName")} /></Field>
         <Field label="GSTIN"><input maxLength={15} value={s.seller.gstin} onChange={seller("gstin")} placeholder="27AAAAA0000A1Z5" /></Field>

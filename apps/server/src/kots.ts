@@ -1,4 +1,4 @@
-import { nextSequence, localDateKey, uuidv7, consumeStock } from "@forkflow/domain";
+import { nextSequence, localDateKey, uuidv7, consumeStock } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";

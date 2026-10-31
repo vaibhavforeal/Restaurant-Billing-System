@@ -1,4 +1,4 @@
--- ForkFlow Portal, part 1: staff accounts, customers, orders and the activity log. A counter is enrolled against an order
+-- MasalaPOS Portal, part 1: staff accounts, customers, orders and the activity log. A counter is enrolled against an order
 -- (Customer ID + Order ID at setup) instead of getting a trial on first contact, and self-serve subscriptions are gone.
 
 CREATE TABLE staff_users (

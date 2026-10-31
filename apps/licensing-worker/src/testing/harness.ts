@@ -1,8 +1,8 @@
 // Test-only: one signing key pair per test file, an Env over an in-memory D1, and request helpers for driving the Worker.
 import { generateKeyPairSync } from "node:crypto";
-import { verifyLicenseSignature } from "@forkflow/core";
-import { LicenseClaims } from "@forkflow/domain/licensing";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { verifyLicenseSignature } from "@masalapos/core";
+import { LicenseClaims } from "@masalapos/domain/licensing";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import type { Env } from "../env.js";
 import worker from "../index.js";
 import { SECRET_HEADER } from "../secret.js";
@@ -41,6 +41,6 @@ export function send(env: Env, method: string, path: string, body?: unknown, hea
 export const withSecret = (headers: Record<string, string> = {}, secret = TEST_SECRET) => ({ [SECRET_HEADER]: secret, ...headers });
 
 export const activation = (installationId: string, fingerprint: string, over: Record<string, unknown> = {}) => ({
-  format: "forkflow-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
+  format: "masalapos-activation-request", version: 1, installationId, licenseId: null, organizationId: null, outletId: null,
   currentRevision: 0, generatedAt: Date.now(), verificationKeyFingerprint: fingerprint, ...over,
 });

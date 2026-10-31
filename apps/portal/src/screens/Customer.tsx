@@ -91,7 +91,7 @@ function CountersTable({ counters, onOpen }: { counters: InstallationSummary[]; 
     <thead><tr><th>Counter</th><th className="phone-hide">Order</th><th className="phone-hide">Plan</th><th className="phone-hide">Last seen</th><th className="num">Licence</th></tr></thead>
     <tbody>
       {counters.map((i) => <tr key={i.id} className="clickable" onClick={() => onOpen(i)}>
-        <td><button type="button" className="link" style={{ textDecoration: "none" }}>{counterName(i)}</button><span className="sub">{i.appVersion ? `ForkFlow ${i.appVersion}` : "Version not reported"}</span></td>
+        <td><button type="button" className="link" style={{ textDecoration: "none" }}>{counterName(i)}</button><span className="sub">{i.appVersion ? `MasalaPOS ${i.appVersion}` : "Version not reported"}</span></td>
         <td className="phone-hide">{i.order ? <span className="mono">{i.order.code}</span> : <span className="muted">Seat released</span>}</td>
         <td className="phone-hide">{i.licence ? `${i.licence.plan === "pro" ? "Pro" : "Basic"}${i.licence.trial ? " trial" : ""}, ${i.licence.maxDevices} devices` : "—"}</td>
         <td className="phone-hide muted">{date(i.lastSeenAt)}</td>

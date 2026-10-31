@@ -1,4 +1,4 @@
--- ForkFlow Portal, part 4: leads and their pipeline, follow-ups on leads and customers, and support tickets.
+-- MasalaPOS Portal, part 4: leads and their pipeline, follow-ups on leads and customers, and support tickets.
 
 -- A restaurant that might buy. It becomes a customer when converted (stage 'won'); `stage_changed_at` dates the pipeline.
 CREATE TABLE leads (

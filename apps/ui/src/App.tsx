@@ -16,7 +16,7 @@ import { Inventory } from "./screens/Inventory";
 import { IntegrationOff, Marketplace, ModuleOff } from "./screens/Marketplace";
 import { IntegrationsProvider, useIntegrations } from "./integrations";
 import { ModulesProvider, useModules } from "./modules";
-import type { ModuleId } from "@forkflow/domain/modules";
+import type { ModuleId } from "@masalapos/domain/modules";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIGRATIONS, migrate, openDb, type Database } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { PrintQueue } from "./queue.js";
 import { makeFakeSink, PrintOutcomeUnknown } from "./sinks.js";
 
@@ -32,7 +32,7 @@ describe("durable print jobs", () => {
   });
 
   it("survives a database reopen and only automatically resumes copies never started", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "forkflow-print-recovery-"));
+    const directory = mkdtempSync(join(tmpdir(), "masalapos-print-recovery-"));
     cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
     const file = join(directory, "test.db");
     let db = openDb(file); migrate(db, MIGRATIONS);

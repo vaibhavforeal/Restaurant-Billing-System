@@ -40,7 +40,7 @@ function wrap(font: PDFFont, size: number, text: string, width: number): string[
 
 export async function invoicePdf(invoice: InvoiceDetail): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  doc.setTitle(`Tax invoice ${invoice.number}`); doc.setAuthor(invoice.seller.name); doc.setCreator("ForkFlow Portal"); doc.setProducer("ForkFlow Portal");
+  doc.setTitle(`Tax invoice ${invoice.number}`); doc.setAuthor(invoice.seller.name); doc.setCreator("MasalaPOS Portal"); doc.setProducer("MasalaPOS Portal");
   doc.setCreationDate(new Date(invoice.issuedAt)); doc.setModificationDate(new Date(invoice.issuedAt));
   const regular = await doc.embedFont(StandardFonts.Helvetica), bold = await doc.embedFont(StandardFonts.HelveticaBold);
   let page: PDFPage = doc.addPage([W, H]);

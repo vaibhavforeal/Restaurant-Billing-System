@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey } from "@forkflow/domain";
-import type { AnalyticsDay, AnalyticsHour, CategoryAnalytics, ItemAnalytics, OrderAnalyticsReport, OrderTypeAnalytics } from "@forkflow/domain/operational-reports";
+import { localDateKey } from "@masalapos/domain";
+import type { AnalyticsDay, AnalyticsHour, CategoryAnalytics, ItemAnalytics, OrderAnalyticsReport, OrderTypeAnalytics } from "@masalapos/domain/operational-reports";
 import { z } from "zod";
 import { reportRange } from "./sales-reports.js";
 import { requireModule } from "./modules.js";

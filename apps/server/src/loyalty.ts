@@ -1,7 +1,7 @@
 import {
   LoyaltyTierCreate, LoyaltyTierUpdate, addMonths, expireRef, expiringSoon, expiryDue, tierFor, uuidv7,
   type Database, type LedgerEntry, type TierRule,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { requireIntegration } from "./integrations.js";

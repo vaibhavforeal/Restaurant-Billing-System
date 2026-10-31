@@ -1,4 +1,4 @@
-import { isFixedGroup, type ComboGroup, type ComboGroupInputValue } from "@forkflow/domain/combos";
+import { isFixedGroup, type ComboGroup, type ComboGroupInputValue } from "@masalapos/domain/combos";
 import { InfoTip } from "../InfoTip";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Product } from "../types";

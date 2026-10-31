@@ -92,7 +92,7 @@ export const PLAN_NAMES = { basic: "Basic", pro: "Pro" } as const;
 export const termLabel = (o: { termMonths: number | null; termDays: number | null }) =>
   o.termDays !== null ? `${o.termDays} days` : o.termMonths === 1 ? "1 month" : o.termMonths! % 12 === 0 ? (o.termMonths === 12 ? "1 year" : `${o.termMonths! / 12} years`) : `${o.termMonths} months`;
 
-/** Devices each plan includes per outlet; the same numbers as PLANS in @forkflow/domain/licensing (a test keeps them equal). */
+/** Devices each plan includes per outlet; the same numbers as PLANS in @masalapos/domain/licensing (a test keeps them equal). */
 export const PLAN_DEVICES = { basic: 2, pro: 5 } as const;
 
 export interface DraftLine extends PricedLine { kind: "licence" | "extra"; description: string; sac: string }
@@ -113,7 +113,7 @@ export function draftLines(o: OrderChoices, settings: { invoice: { sac: string; 
   const term = termLabel({ termMonths: o.termMonths, termDays: null });
   const { sac, gstRateBp } = settings.invoice;
   const lines: DraftLine[] = [{
-    kind: "licence", description: `ForkFlow ${PLAN_NAMES[o.plan]} licence${renewal ? " renewal" : ""}, ${term}, per outlet`, sac,
+    kind: "licence", description: `MasalaPOS ${PLAN_NAMES[o.plan]} licence${renewal ? " renewal" : ""}, ${term}, per outlet`, sac,
     quantity, unitPricePaise: o.pricePerOutletPaise, discountPaise: o.discountPaise, gstRateBp,
   }];
   const extraDevices = o.maxDevices - PLAN_DEVICES[o.plan];

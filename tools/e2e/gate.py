@@ -1,4 +1,4 @@
-# ForkFlow e2e gate — click-through acceptance test for M3a (orders/KOT) + M3s (splits).
+# MasalaPOS e2e gate — click-through acceptance test for M3a (orders/KOT) + M3s (splits).
 # Run: python tools/e2e/gate.py
 # Requires: Python 3.10+, playwright, chromium installed.
 # Assumes: FRESH scratch DB (KOT numbers are per-day sequences).
@@ -57,7 +57,7 @@ def main():
         try:
             step("Setup: first-run admin on scratch DB")
             page1.goto(BASE)
-            expect(page1.get_by_role("heading", name="Set up ForkFlow")).to_be_visible()
+            expect(page1.get_by_role("heading", name="Set up MasalaPOS")).to_be_visible()
             page1.get_by_placeholder("Restaurant name").fill("Testaurant")
             page1.get_by_placeholder("Your name (admin)").fill("Admin")
             page1.get_by_placeholder("Admin PIN (4-6 digits)").fill("111111")

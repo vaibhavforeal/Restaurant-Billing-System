@@ -1,4 +1,4 @@
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth.js";

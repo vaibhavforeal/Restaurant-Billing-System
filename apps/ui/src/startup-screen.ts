@@ -25,13 +25,13 @@ export const startupStyles = `
 export function startupMarkup(mode: "opening" | "restoring" = "opening") {
   const restoring = mode === "restoring";
   return `<div class="ff-startup">
-    <main class="ff-startup-main" aria-label="ForkFlow startup">
+    <main class="ff-startup-main" aria-label="MasalaPOS startup">
       <div class="ff-startup-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v5a3 3 0 0 0 6 0V3M7 3v18M18 3c-3 3-3 8 0 8h2M20 3v18"/></svg></div>
-      <h1 class="ff-startup-name">ForkFlow</h1><p class="ff-startup-descriptor">Restaurant POS</p>
+      <h1 class="ff-startup-name">MasalaPOS</h1><p class="ff-startup-descriptor">Restaurant POS</p>
       <div class="ff-startup-status" role="status" aria-live="polite">
         <p class="ff-startup-title">${restoring ? "Restoring your backup…" : "Preparing your workspace…"}</p>
         <div class="ff-startup-line" aria-hidden="true"></div>
-        <p class="ff-startup-support">${restoring ? "Please keep ForkFlow open while your data is restored" : "Getting things ready for service"}</p>
+        <p class="ff-startup-support">${restoring ? "Please keep MasalaPOS open while your data is restored" : "Getting things ready for service"}</p>
       </div>
     </main>
     <footer class="ff-startup-footer"><span>Orders</span><span class="ff-startup-dot" aria-hidden="true"></span><span>Billing</span><span class="ff-startup-dot" aria-hidden="true"></span><span>Kitchen</span></footer>
@@ -39,5 +39,5 @@ export function startupMarkup(mode: "opening" | "restoring" = "opening") {
 }
 
 export function startupDocument(mode: "opening" | "restoring" = "opening") {
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>ForkFlow</title><style>html,body{margin:0;background:#f6f7f9}${startupStyles}</style></head><body>${startupMarkup(mode)}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>MasalaPOS</title><style>html,body{margin:0;background:#f6f7f9}${startupStyles}</style></head><body>${startupMarkup(mode)}</body></html>`;
 }

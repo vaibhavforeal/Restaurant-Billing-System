@@ -1,5 +1,5 @@
-import { isModuleId, MODULE_IDS, type ModuleOverrides } from "@forkflow/domain/modules";
-import { parseVendorCode } from "@forkflow/domain/vendor-codes";
+import { isModuleId, MODULE_IDS, type ModuleOverrides } from "@masalapos/domain/modules";
+import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { z } from "zod";
 import { DAY_MS } from "../dates.js";
 import type { D1StatementLike } from "../env.js";
@@ -46,7 +46,7 @@ function build(body: OrderBody, settings: PortalSettings): { termMonths: number 
   return { termMonths: body.termMonths, termDays: null, outlets: renewal ? 0 : body.outlets, lines: draftLines(body, settings) };
 }
 
-/** CGST and SGST when ForkFlow and the customer are in the same state; null while either state is unknown. */
+/** CGST and SGST when MasalaPOS and the customer are in the same state; null while either state is unknown. */
 export const intraStateFor = (settings: PortalSettings, customer: { gstin: string | null; stateCode: string | null }) => {
   const buyer = buyerState(customer);
   return settings.seller.stateCode && buyer ? settings.seller.stateCode === buyer : null;

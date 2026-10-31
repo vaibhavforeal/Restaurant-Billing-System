@@ -28,7 +28,7 @@ beforeEach(() => {
 afterEach(() => { stop?.(); stop = undefined; vi.unstubAllGlobals(); });
 
 function saveV1(id: string, changes: Record<string, unknown> = {}) {
-  values.set(`forkflow.queue.v1.${id}`, JSON.stringify({
+  values.set(`masalapos.queue.v1.${id}`, JSON.stringify({
     id, userId: "cashier", generation: "current", path: "/api/orders/order-1/send",
     body: JSON.stringify({ clientRef: "request-1", itemIds: [] }), label: "Send to kitchen",
     createdAt: 1, error: "Too small: expected array to have >=1 items", ...changes,
@@ -38,7 +38,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("offline queue in the browser", () => {
   it("rejects an empty kitchen send before saving it or calling the server", async () => {
-    values.set("forkflow.generation", "current");
+    values.set("masalapos.generation", "current");
     stop = startQueue("cashier");
     await expect(reliablePost("/api/orders/order-1/send", { clientRef: "request-1", itemIds: [] }, "Send to kitchen"))
       .rejects.toThrow("No items are waiting for a kitchen ticket.");
@@ -51,18 +51,18 @@ describe("offline queue in the browser", () => {
     saveV1("real-kot", { body: JSON.stringify({ clientRef: "request-2", itemIds: ["item-1"] }) });
     saveV1("bill", { path: "/api/orders/order-1/bill" });
     saveV1("unacknowledged", { error: "", path: "/api/orders/order-2/items", body: JSON.stringify({ items: [] }) });
-    values.set("forkflow.draft.cashier.order-1", '[{"clientRef":"cart-1","qty":2}]');
+    values.set("masalapos.draft.cashier.order-1", '[{"clientRef":"cart-1","qty":2}]');
     stop = startQueue("cashier");
     expect(queuedRequests().map((e) => [e.id, e.status, e.lane])).toEqual([
       ["bill", "attention", "order-1"], ["real-kot", "attention", "order-1"], ["unacknowledged", "pending", "order-2"],
     ]);
     expect(queuedRequests("waiter").map((e) => e.id)).toEqual(["other-user"]);
-    expect([...values.keys()].some((k) => k.startsWith("forkflow.queue.v1."))).toBe(false);
-    expect(values.get("forkflow.draft.cashier.order-1")).toBe('[{"clientRef":"cart-1","qty":2}]');
+    expect([...values.keys()].some((k) => k.startsWith("masalapos.queue.v1."))).toBe(false);
+    expect(values.get("masalapos.draft.cashier.order-1")).toBe('[{"clientRef":"cart-1","qty":2}]');
   });
 
   it("keeps actions saved while the hub is unreachable and lets them be queued for the order's lane", async () => {
-    values.set("forkflow.generation", "current");
+    values.set("masalapos.generation", "current");
     stop = startQueue("cashier");
     const punch = enqueueRequest({ path: "/api/orders/order-1/items", body: { items: [{ clientRef: "r1" }] }, label: "Add items" });
     const captain = enqueueRequest({ method: "PATCH", path: "/api/orders/order-1/captain", body: { captainId: "w1" }, label: "Change captain" });
@@ -75,19 +75,19 @@ describe("offline queue in the browser", () => {
   });
 
   it("tells the caller the outcome even when another window sent the action", async () => {
-    values.set("forkflow.generation", "current");
+    values.set("masalapos.generation", "current");
     stop = startQueue("cashier");
     const { id, done } = enqueueRequest<{ ok: boolean }>({ path: "/api/orders/order-1/send", body: { clientRef: "k1", itemIds: ["i1"] }, label: "Send to kitchen" });
     await flush();
     // Another window finishes it and leaves the result record.
-    values.delete(`forkflow.queue.v2.${id}`);
-    values.set(`forkflow.queue-result.v2.${id}`, JSON.stringify({ id, status: "done", value: { ok: true }, at: Date.now() }));
-    window.dispatchEvent(Object.assign(new Event("storage"), { key: `forkflow.queue-result.v2.${id}` }));
+    values.delete(`masalapos.queue.v2.${id}`);
+    values.set(`masalapos.queue-result.v2.${id}`, JSON.stringify({ id, status: "done", value: { ok: true }, at: Date.now() }));
+    window.dispatchEvent(Object.assign(new Event("storage"), { key: `masalapos.queue-result.v2.${id}` }));
     await expect(done).resolves.toEqual({ ok: true });
   });
 
   it("retries a stopped action and discards one on request", async () => {
-    values.set("forkflow.generation", "current");
+    values.set("masalapos.generation", "current");
     saveV1("refused", { path: "/api/orders/order-3/bill", body: JSON.stringify({ clientRef: "b1" }), error: "Order changed; review a fresh bill preview" });
     stop = startQueue("cashier");
     expect(queuedRequests()[0]).toMatchObject({ id: "refused", status: "attention", error: "Order changed; review a fresh bill preview" });
@@ -95,11 +95,11 @@ describe("offline queue in the browser", () => {
     expect(queuedRequests()[0]).toMatchObject({ status: "pending" });
     discardRequest("refused");
     expect(queuedRequests()).toEqual([]);
-    expect(JSON.parse(values.get("forkflow.queue-result.v2.refused")!)).toMatchObject({ status: "discarded" });
+    expect(JSON.parse(values.get("masalapos.queue-result.v2.refused")!)).toMatchObject({ status: "discarded" });
   });
 
   it("tells the screen an action is saved once the hub cannot be reached, and gives the reply when it can", async () => {
-    values.set("forkflow.generation", "current");
+    values.set("masalapos.generation", "current");
     stop = startQueue("cashier");
     await expect(outcomeOrSaved(enqueueRequest({ path: "/api/orders/order-1/cancel", body: {}, label: "Cancel order" }), 60_000)).resolves.toEqual({ saved: true });
     vi.mocked(apiFetch).mockImplementation(async (path: string) => path === "/api/system/generation" ? { generation: "current" } : { ok: path });
@@ -108,7 +108,7 @@ describe("offline queue in the browser", () => {
   });
 
   it("finishes a saved bill and its payment after a reload, paying the bill the hub issued", async () => {
-    values.set("forkflow.generation", "current");
+    values.set("masalapos.generation", "current");
     stop = startQueue("cashier");
     const bill = enqueueRequest({ path: "/api/orders/order-1/bill", body: { clientRef: "b1" }, label: "Issue bill" });
     const pay = enqueueRequest({ path: "/api/bills/{after:bill.id}/settle", after: bill.id, lane: "order-1", body: { clientRef: "p1", payments: [] }, label: "Record payment" });

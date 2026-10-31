@@ -35,7 +35,7 @@ export function App() {
     return () => { session.onSignedOut = null; session.onPasswordChange = null; };
   }, []);
   switch (state.kind) {
-    case "loading": return <main className="signin" aria-busy="true"><p className="muted">Opening ForkFlow Portal…</p></main>;
+    case "loading": return <main className="signin" aria-busy="true"><p className="muted">Opening MasalaPOS Portal…</p></main>;
     case "error": return <main className="signin"><div className="signin-card"><h1>The portal could not start</h1><p className="muted">{state.message}</p>
       <button className="primary" onClick={() => window.location.reload()}>Try again</button></div></main>;
     case "out": return <SignIn onSignedIn={(user) => setState({ kind: "in", user })} />;
@@ -75,7 +75,7 @@ function Shell({ user, onSignedOut, onUser }: { user: StaffUser; onSignedOut: ()
   const nav = (item: NavItem) => <Link key={item.to} to={item.to} className="nav-item" aria-current={current(item.to) ? "page" : undefined}><Icon name={item.icon} />{item.label}</Link>;
   return <div className={`app${menuOpen ? " menu-open" : ""}`}>
     <aside className="sidebar" aria-label="Portal navigation">
-      <div className="brand"><Mark /><div>ForkFlow Portal<small>Sales, licences and support</small></div></div>
+      <div className="brand"><Mark /><div>MasalaPOS Portal<small>Sales, licences and support</small></div></div>
       {work.length > 0 && <nav className="nav-group">{work.map(nav)}</nav>}
       {admin.length > 0 && <nav className="nav-group" aria-label="Administration"><div className="nav-heading">Administration</div>{admin.map(nav)}</nav>}
       <div className="account">

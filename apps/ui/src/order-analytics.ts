@@ -1,4 +1,4 @@
-import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { operationalCsv } from "./operational-report";
 import { reportMoney } from "./sales-report";
 

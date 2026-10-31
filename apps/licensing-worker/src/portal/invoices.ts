@@ -105,7 +105,7 @@ export const invoiceRoutes: Route[] = [
     const invoice = await visibleInvoice(ctx, ctx.params[0]!);
     const bytes = await invoicePdf(invoice);
     return new Response(bytes, { headers: { ...SECURITY_HEADERS, "content-type": "application/pdf", "cache-control": "no-store",
-      "content-disposition": `attachment; filename="ForkFlow-invoice-${invoice.number.replace(/\//g, "-")}.pdf"` } });
+      "content-disposition": `attachment; filename="MasalaPOS-invoice-${invoice.number.replace(/\//g, "-")}.pdf"` } });
   } },
   // Before payment, for a customer on credit who needs the invoice to pay it. A paid order gets its invoice on its own.
   { method: "POST", path: path("/orders/:id/invoice"), permission: "invoices.issue", handler: async (ctx) => {

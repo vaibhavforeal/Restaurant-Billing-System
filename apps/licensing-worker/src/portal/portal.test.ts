@@ -28,10 +28,10 @@ describe("staff passwords", () => {
 
 describe("portal sign-in", () => {
   it("signs in with a session cookie that only the portal path sees, and signs out", async () => {
-    const admin = await seedStaff(env, "admin", { email: "asha@forkflow.test", name: "Asha" });
-    const res = await login("ASHA@forkflow.test", PASSWORD);
+    const admin = await seedStaff(env, "admin", { email: "asha@masalapos.test", name: "Asha" });
+    const res = await login("ASHA@masalapos.test", PASSWORD);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ user: { id: admin.id, email: "asha@forkflow.test", name: "Asha", role: "admin", mustChangePassword: false } });
+    expect(await res.json()).toEqual({ user: { id: admin.id, email: "asha@masalapos.test", name: "Asha", role: "admin", mustChangePassword: false } });
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/^ff_portal=[A-Za-z0-9_-]{43}; Path=\/portal; HttpOnly; Secure; SameSite=Strict; Max-Age=43200$/);
     expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
@@ -46,7 +46,7 @@ describe("portal sign-in", () => {
     const staff = await seedStaff(env, "sales");
     await env.DB.prepare(`UPDATE staff_users SET active = 0 WHERE id = ?`).bind(staff.id).run();
     const bodies = new Set<string>();
-    for (const [email, password] of [["nobody@forkflow.test", PASSWORD], [staff.email, "wrong password"], [staff.email, PASSWORD]] as const) {
+    for (const [email, password] of [["nobody@masalapos.test", PASSWORD], [staff.email, "wrong password"], [staff.email, PASSWORD]] as const) {
       const res = await login(email, password);
       expect(res.status).toBe(401);
       bodies.add(await res.text());
@@ -60,7 +60,7 @@ describe("portal sign-in", () => {
     const locked = await login(staff.email, PASSWORD);
     // Answered exactly like a wrong password or an unknown address, so the lock does not reveal which staff addresses exist.
     expect(locked.status).toBe(401);
-    expect(await locked.text()).toBe(await (await login("nobody@forkflow.test", PASSWORD)).text());
+    expect(await locked.text()).toBe(await (await login("nobody@masalapos.test", PASSWORD)).text());
     vi.setSystemTime(T0 + LOCK_MS + 1);
     expect((await login(staff.email, PASSWORD)).status).toBe(200);
   });
@@ -68,7 +68,7 @@ describe("portal sign-in", () => {
   it("is rate limited per address, by the sign-in limiter when there is one", async () => {
     const keys: string[] = [];
     env.LOGIN_LIMITER = { limit: async ({ key }) => { keys.push(key); return { success: false } } };
-    const res = await login("a@forkflow.test", PASSWORD, { "cf-connecting-ip": "203.0.113.4" });
+    const res = await login("a@masalapos.test", PASSWORD, { "cf-connecting-ip": "203.0.113.4" });
     expect(res.status).toBe(429);
     expect(keys).toEqual(["portal:203.0.113.4"]);
   });
@@ -114,16 +114,16 @@ describe("portal sign-in", () => {
 describe("staff accounts", () => {
   it("an admin adds staff with a temporary password; emails are unique; other roles cannot", async () => {
     const admin = await as(env, "admin");
-    const created = await admin.call("POST", "/users", { email: " Ravi@ForkFlow.test ", name: "Ravi", role: "sales", password: "temporary password" });
+    const created = await admin.call("POST", "/users", { email: " Ravi@MasalaPOS.test ", name: "Ravi", role: "sales", password: "temporary password" });
     expect(created.status).toBe(201);
-    expect((await created.json() as { user: unknown }).user).toMatchObject({ email: "ravi@forkflow.test", role: "sales", active: true, mustChangePassword: true });
-    expect((await admin.call("POST", "/users", { email: "ravi@forkflow.test", name: "Ravi 2", role: "sales", password: "temporary password" })).status).toBe(409);
-    const ravi = await signIn(env, { email: "ravi@forkflow.test" }, "temporary password");
+    expect((await created.json() as { user: unknown }).user).toMatchObject({ email: "ravi@masalapos.test", role: "sales", active: true, mustChangePassword: true });
+    expect((await admin.call("POST", "/users", { email: "ravi@masalapos.test", name: "Ravi 2", role: "sales", password: "temporary password" })).status).toBe(409);
+    const ravi = await signIn(env, { email: "ravi@masalapos.test" }, "temporary password");
     expect((await ravi.call("GET", "/settings")).status).toBe(403);
     for (const role of ["sales", "accounts", "support"] as const) {
       const other = await as(env, role);
       expect((await other.call("GET", "/users")).status).toBe(403);
-      expect((await other.call("POST", "/users", { email: "x@forkflow.test", name: "X", role: "admin", password: "temporary password" })).status).toBe(403);
+      expect((await other.call("POST", "/users", { email: "x@masalapos.test", name: "X", role: "admin", password: "temporary password" })).status).toBe(403);
     }
   });
 
@@ -169,7 +169,7 @@ describe("portal settings and activity", () => {
     const admin = await as(env, "admin"), sales = await as(env, "sales");
     const { settings } = await sales.ok<{ settings: { invoice: { prefix: string; sac: string; gstRateBp: number }; trialDays: number } }>("GET", "/settings");
     expect(settings).toMatchObject({ invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800 }, trialDays: 7 });
-    const next = { ...settings, seller: { legalName: "ForkFlow Technologies", gstin: "27aapfu0939f1zv", address: "Baner", city: "Pune", stateCode: "27", pincode: "411045", email: "", phone: "" },
+    const next = { ...settings, seller: { legalName: "MasalaPOS Technologies", gstin: "27aapfu0939f1zv", address: "Baner", city: "Pune", stateCode: "27", pincode: "411045", email: "", phone: "" },
       prices: [{ plan: "pro", termMonths: 12, pricePaise: 1_499_900 }] };
     expect((await sales.call("PUT", "/settings", next)).status).toBe(403);
     const saved = await admin.ok<{ settings: { seller: { gstin: string } } }>("PUT", "/settings", next);
@@ -182,7 +182,7 @@ describe("portal settings and activity", () => {
 
   it("admins see who changed what, newest first, a page at a time; other roles cannot", async () => {
     const admin = await as(env, "admin", { name: "Asha" });
-    for (let i = 0; i < 52; i++) await admin.ok("POST", "/users", { email: `s${i}@forkflow.test`, name: `Staff ${i}`, role: "support", password: "temporary password" });
+    for (let i = 0; i < 52; i++) await admin.ok("POST", "/users", { email: `s${i}@masalapos.test`, name: `Staff ${i}`, role: "support", password: "temporary password" });
     const first = await admin.ok<{ entries: Array<{ summary: string; actor: { name: string } }>; nextBefore: number }>("GET", "/activity");
     expect(first.entries).toHaveLength(50);
     expect(first.entries[0]).toMatchObject({ summary: "Added Staff 51 (Support)", actor: { name: "Asha" } });

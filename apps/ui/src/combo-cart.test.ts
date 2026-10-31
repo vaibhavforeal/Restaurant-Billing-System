@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ComboGroup } from "@forkflow/domain/combos";
+import type { ComboGroup } from "@masalapos/domain/combos";
 import { cartRowForKitchen, comboContents, comboExtraPaise, comboProductIds, isComboLine, kitchenLines } from "./combo-cart";
 import type { OrderItem, Product } from "./types";
 

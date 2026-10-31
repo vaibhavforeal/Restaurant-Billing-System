@@ -1,6 +1,6 @@
 // Test-only: portal rows written straight into the store, so licensing tests need not drive the portal API.
-import { makeVendorCode } from "@forkflow/domain/vendor-codes";
-import type { ModuleOverrides } from "@forkflow/domain/modules";
+import { makeVendorCode } from "@masalapos/domain/vendor-codes";
+import type { ModuleOverrides } from "@masalapos/domain/modules";
 import type { D1Like } from "../env.js";
 
 let sequence = 0;

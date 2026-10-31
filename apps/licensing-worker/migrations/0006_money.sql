@@ -1,4 +1,4 @@
--- ForkFlow Portal, part 3: payments against orders, Razorpay payment links, and GST tax invoices.
+-- MasalaPOS Portal, part 3: payments against orders, Razorpay payment links, and GST tax invoices.
 
 -- Only a cleared payment counts towards an order's total; a cheque waits as 'pending' until it clears. A Razorpay payment is recorded
 -- once whatever the webhook does, by its payment id.

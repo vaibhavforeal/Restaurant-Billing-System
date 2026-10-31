@@ -62,7 +62,7 @@ async function api(request: Request, env: Env, deps: Deps, url: URL): Promise<Re
 async function serveApp(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "not_found" }, 404);
   if (url.pathname === "/portal") return Response.redirect(`${url.origin}/portal/`, 308);
-  if (!env.ASSETS) return new Response("The portal app is not built. Run: npm run build -w @forkflow/portal", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", ...SECURITY_HEADERS } });
+  if (!env.ASSETS) return new Response("The portal app is not built. Run: npm run build -w @masalapos/portal", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", ...SECURITY_HEADERS } });
   const file = /\/[^/]+\.[a-z0-9]+$/i.test(url.pathname);
   // "/portal/" and not "/portal/index.html": the assets layer redirects the latter to the former.
   const asset = await env.ASSETS.fetch(file ? request : new Request(new URL("/portal/", url), request));

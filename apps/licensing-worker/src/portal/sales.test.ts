@@ -19,7 +19,7 @@ beforeEach(async () => {
   env = testEnv(keys.privatePem);
   admin = await as(env, "admin", { name: "Asha" });
   await admin.ok("PUT", "/settings", {
-    seller: { legalName: "ForkFlow Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "", phone: "" },
+    seller: { legalName: "MasalaPOS Technologies LLP", gstin: "27AAPFU0939F1ZV", address: "Baner Road", city: "Pune", stateCode: "27", pincode: "411045", email: "", phone: "" },
     invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800, bankDetails: "", terms: "" }, prices: [], extraDevicePaise: 50_000, trialDays: 7,
   });
 });
@@ -74,7 +74,7 @@ describe("orders", () => {
     const order = await newOrder(admin, customer.id, { outlets: 2, maxDevices: 7, discountPaise: 100_000, extras: [{ description: "On-site installation", sac: "998734", quantity: 1, unitPricePaise: 300_000 }] });
     expect(order).toMatchObject({ status: "draft", intraState: true, seatsUsed: 0, outlets: 2 });
     expect(order.lines.map((l) => [l.description, l.quantity, l.unitPricePaise, l.taxablePaise])).toEqual([
-      ["ForkFlow Pro licence, 1 year, per outlet", 2, 1_200_000, 2_300_000],
+      ["MasalaPOS Pro licence, 1 year, per outlet", 2, 1_200_000, 2_300_000],
       ["Extra devices beyond the plan's 5, 1 year", 4, 50_000, 200_000],
       ["On-site installation", 1, 300_000, 300_000],
     ]);
@@ -228,7 +228,7 @@ describe("counters", () => {
     expect((await support.ok<{ installation: InstallationDetail }>("POST", `/installations/${COUNTER}/reset-pairing`)).installation.paired).toBe(false);
     expect((await getInstallation(env.DB, COUNTER))!.secretHash).toBeNull();
     const file = await support.ok<{ license: string; fileName: string }>("GET", `/installations/${OTHER_COUNTER}/licence`);
-    expect(file.fileName).toMatch(/^forkflow-licence-88888888-r1\.txt$/);
+    expect(file.fileName).toMatch(/^masalapos-licence-88888888-r1\.txt$/);
     expect(keys.claims(file.license).installationId).toBe(OTHER_COUNTER);
   });
 

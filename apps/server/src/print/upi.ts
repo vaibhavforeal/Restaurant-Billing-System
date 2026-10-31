@@ -1,4 +1,4 @@
-import { UpiId, type Bill } from "@forkflow/domain";
+import { UpiId, type Bill } from "@masalapos/domain";
 import QRCode from "qrcode";
 
 /** A payment request, never evidence that a payment was received. */

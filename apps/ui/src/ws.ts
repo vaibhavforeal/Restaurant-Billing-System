@@ -64,7 +64,7 @@ function connect() {
       notify((h) => h.onStatus(true));
       return; // Do NOT forward to onEvent
     }
-    if (message.event === "license.changed") window.dispatchEvent(new Event("forkflow:license-changed"));
+    if (message.event === "license.changed") window.dispatchEvent(new Event("masalapos:license-changed"));
     notify((h) => h.onEvent(message.event, message.data));
   };
 
@@ -81,7 +81,7 @@ function connect() {
     notify((h) => h.onStatus(false));
     if (e.code === 4403) {
       socketToken = null;
-      window.dispatchEvent(new Event("forkflow:license-changed"));
+      window.dispatchEvent(new Event("masalapos:license-changed"));
       return;
     }
     reconnectTimer = setTimeout(() => {

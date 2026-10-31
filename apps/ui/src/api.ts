@@ -1,5 +1,5 @@
-const TOKEN_KEY = typeof location !== "undefined" && /^\/kitchen\/?$/.test(location.pathname) ? "forkflow.kitchen.token" : "forkflow.token";
-const DEVICE_KEY = "forkflow.device.v1";
+const TOKEN_KEY = typeof location !== "undefined" && /^\/kitchen\/?$/.test(location.pathname) ? "masalapos.kitchen.token" : "masalapos.token";
+const DEVICE_KEY = "masalapos.device.v1";
 export function deviceCredential(): string {
   let value = localStorage.getItem(DEVICE_KEY);
   if (!value || !/^[a-f0-9]{64}$/.test(value)) {
@@ -9,7 +9,7 @@ export function deviceCredential(): string {
   return value;
 }
 export function authHeaders() {
-  return { authorization: `Bearer ${session.token ?? ""}`, "x-forkflow-device": deviceCredential() };
+  return { authorization: `Bearer ${session.token ?? ""}`, "x-masalapos-device": deviceCredential() };
 }
 
 export const session = {
@@ -41,7 +41,7 @@ export class ApiError extends Error {
  */
 export async function apiFetch<T>(path: string, init?: RequestInit, options?: { keepSessionOnMessage?: string }): Promise<T> {
   const headers = new Headers(init?.headers);
-  headers.set("x-forkflow-device", deviceCredential());
+  headers.set("x-masalapos-device", deviceCredential());
   if (init?.body) headers.set("content-type", "application/json");
   const token = session.token;
   if (token) headers.set("authorization", `Bearer ${token}`);

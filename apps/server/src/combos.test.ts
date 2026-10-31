@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill, type ComboGroup } from "@forkflow/domain";
+import { uuidv7, type Bill, type ComboGroup } from "@masalapos/domain";
 import { auth, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 type Item = { id: string; productId: string; name: string; qty: number; pricePaise: number; status: string; kotId: string | null; parentItemId: string | null };

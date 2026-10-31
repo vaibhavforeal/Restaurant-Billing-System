@@ -1,8 +1,8 @@
-// Operator-only: the first ForkFlow Portal admin. Hashes the password on this PC and prints the SQL to run with wrangler, so neither the
+// Operator-only: the first MasalaPOS Portal admin. Hashes the password on this PC and prints the SQL to run with wrangler, so neither the
 // password nor a bootstrap secret ever reaches the Worker. Every later staff account is added from the portal itself.
-// node --import tsx tools/portal-create-admin.ts admin@forkflow.in "Vaibhav"   (asks for the password; it is not echoed)
+// node --import tsx tools/portal-create-admin.ts admin@masalapos.in "Vaibhav"   (asks for the password; it is not echoed)
 // With --sql only the INSERT goes to stdout (prompts go to stderr), for the Node/SQLite server:
-//   node --import tsx tools/portal-create-admin.ts --sql admin@forkflow.in "Vaibhav" | ssh <server> "sudo -u forkflow sqlite3 /var/lib/forkflow-portal/licensing.db"
+//   node --import tsx tools/portal-create-admin.ts --sql admin@masalapos.in "Vaibhav" | ssh <server> "sudo -u masalapos sqlite3 /var/lib/masalapos-portal/licensing.db"
 import { randomUUID } from "node:crypto";
 import { stderr, stdin, stdout } from "node:process";
 import { parseArgs } from "node:util";
@@ -43,5 +43,5 @@ const sql = `INSERT INTO staff_users (id, email, name, role, password_hash, must
   quote(randomUUID()), quote(email.toLowerCase()), quote(name), quote("admin"), quote(await hashPassword(password)), "0", String(now), String(now),
 ].join(", ")});`;
 if (values.sql) { console.log(sql); process.exit(0); }
-console.log(`\nRun this from apps/licensing-worker. For the test Worker use forkflow-licensing-test and add --env test; for wrangler dev use --local instead of --remote:\n`);
-console.log(`npx wrangler@4 d1 execute forkflow-licensing --remote --command "${sql.replace(/"/g, '\\"')}"\n`);
+console.log(`\nRun this from apps/licensing-worker. For the test Worker use masalapos-licensing-test and add --env test; for wrangler dev use --local instead of --remote:\n`);
+console.log(`npx wrangler@4 d1 execute masalapos-licensing --remote --command "${sql.replace(/"/g, '\\"')}"\n`);

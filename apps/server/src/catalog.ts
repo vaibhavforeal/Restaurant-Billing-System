@@ -5,7 +5,7 @@ import {
   StationCreate, StationUpdate,
   uuidv7,
   type ComboGroup,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { menuPhotoUrl, validateMenuPhoto } from "./menu-photo.js";

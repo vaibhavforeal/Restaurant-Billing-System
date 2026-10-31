@@ -1,6 +1,6 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb, planModules } from "@forkflow/domain";
+import { LicenseClaims, MIGRATIONS, PLANS, migrate, openDb, planModules } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import type { LicensingOptions } from "./licensing.js";
 import { buildServer } from "./server.js";
@@ -30,18 +30,18 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
   app.get("/api/test-recipes", { preHandler: [app.requirePermission("stock.manage"), requireModule(app, "recipes")] }, async () => ({ allowed: true }));
   app.get("/api/test-kds", { preHandler: [app.requirePermission("kots.read"), requireModule(app, "kds")] }, async () => ({ allowed: true }));
   apps.push(app);
-  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode).toBe(201);
-  const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const claims: LicenseClaims = { version: 1, ...scope, revision: 1, plan: "basic", features: PLANS.basic.features, modules: planModules("basic"), maxDevices: PLANS.basic.maxDevices,
     issuedAt: now - 1000, expiresAt: now + 60_000, graceUntil: now + 120_000 };
   const clean = LicenseClaims.parse(claims);
   const activate = (c: LicenseClaims = clean) => app.inject({ method: "PUT", url: "/api/license", payload: { license: signed(c) }, headers });
   const register = (h = headers, name = "Main counter") => app.inject({ method: "POST", url: "/api/license/devices", payload: { name }, headers: h });
   const login = async (credential: string, pin = "1234") => {
-    const res = await app.inject({ method: "POST", url: "/api/login", payload: { pin }, headers: { "x-forkflow-device": credential } });
+    const res = await app.inject({ method: "POST", url: "/api/login", payload: { pin }, headers: { "x-masalapos-device": credential } });
     expect(res.statusCode).toBe(200);
-    return { authorization: `Bearer ${res.json().token}`, "x-forkflow-device": credential };
+    return { authorization: `Bearer ${res.json().token}`, "x-masalapos-device": credential };
   };
   return { app, headers, claims: clean, activate, register, login, setNow: (value: number) => { now = value; } };
 }
@@ -95,7 +95,7 @@ describe("commercial licensing", () => {
   it("exports activation identity without a grant or device secrets and supports renewal after expiry", async () => {
     const f = await fixture();
     const initial = await f.app.inject({ url: "/api/license/activation-request", headers: f.headers });
-    expect(initial.json()).toMatchObject({ format: "forkflow-activation-request", installationId, currentRevision: 0, licenseId: null });
+    expect(initial.json()).toMatchObject({ format: "masalapos-activation-request", installationId, currentRevision: 0, licenseId: null });
     expect(initial.headers["cache-control"]).toBe("no-store");
     expect(initial.json().verificationKeyFingerprint).toMatch(/^[a-f0-9]{64}$/);
     await f.activate(); await f.register(); f.setNow(f.claims.graceUntil);
@@ -287,7 +287,7 @@ describe("commercial licensing", () => {
     const third = await f.login("c".repeat(64));
     expect((await f.register(third, "Phone")).statusCode).toBe(409);
     expect((await f.app.inject({ url: "/api/products", headers: { authorization: f.headers.authorization } })).statusCode).toBe(401);
-    expect((await f.app.inject({ url: "/api/products", headers: { ...f.headers, "x-forkflow-device": third["x-forkflow-device"] } })).statusCode).toBe(401);
+    expect((await f.app.inject({ url: "/api/products", headers: { ...f.headers, "x-masalapos-device": third["x-masalapos-device"] } })).statusCode).toBe(401);
     const listed = (await f.app.inject({ url: "/api/license/devices", headers: f.headers })).json();
     expect(listed.devices).toHaveLength(2);
     expect(JSON.stringify(listed)).not.toContain("credential");
@@ -387,16 +387,16 @@ describe("licence renewal from the licensing service", () => {
     expect(f.app.licensing.history().events[0]).toMatchObject({ kind: "license_activated", actorName: "Automatic renewal", revision: 2 });
     const [url, init] = s.spy.mock.calls[0]!;
     expect(url).toBe(`${serviceUrl}/v1/activate`);
-    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json", "X-ForkFlow-Installation-Secret": installationSecret } });
+    expect(init).toMatchObject({ method: "POST", headers: { "content-type": "application/json", "X-MasalaPOS-Installation-Secret": installationSecret } });
     expect(init!.signal).toBeInstanceOf(AbortSignal);
-    expect(JSON.parse(init!.body as string)).toMatchObject({ format: "forkflow-activation-request", installationId, currentRevision: 1, licenseId: scope.licenseId });
+    expect(JSON.parse(init!.body as string)).toMatchObject({ format: "masalapos-activation-request", installationId, currentRevision: 1, licenseId: scope.licenseId });
     expect(init!.body).not.toContain(installationSecret);
   });
 
   it("a 401 from the service means the installation is not recognised", async () => {
     const f = await fixture({ serviceUrl, fetch: service(() => reply(401, { error: "unauthorized" })).fetch }); await f.activate(); await f.register();
     const before = f.app.licensing.status(device);
-    expect(await f.app.licensing.fetchLatest()).toEqual({ outcome: "rejected", message: "The licensing service doesn't recognise this installation. Contact ForkFlow support." });
+    expect(await f.app.licensing.fetchLatest()).toEqual({ outcome: "rejected", message: "The licensing service doesn't recognise this installation. Contact MasalaPOS support." });
     expect(f.app.licensing.status(device)).toEqual(before);
   });
 
@@ -564,9 +564,9 @@ describe("licence renewal from the licensing service", () => {
 describe("activation with a Customer ID and Order ID", () => {
   const serviceUrl = "https://license.example.com";
   const CUSTOMER = "FC-7M3N-9QK", ORDER = "FO-2X8H-PDD";
-  const notRecognised = "The licensing service doesn't recognise this installation. Contact ForkFlow support.";
+  const notRecognised = "The licensing service doesn't recognise this installation. Contact MasalaPOS support.";
   const unreachable = "Couldn't reach the licensing service. Check the internet connection and try again.";
-  const checkCodes = "Check the Customer ID and Order ID. They are on the setup card ForkFlow gave you.";
+  const checkCodes = "Check the Customer ID and Order ID. They are on the setup card MasalaPOS gave you.";
   const reply = (status: number, body: unknown) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
   function service(answer: (url: string, init?: RequestInit) => Response | Promise<Response>) {
     const spy = vi.fn(async (url: unknown, init?: RequestInit) => answer(String(url), init));
@@ -597,7 +597,7 @@ describe("activation with a Customer ID and Order ID", () => {
     });
     const [url, init] = s.spy.mock.calls[0]!;
     expect(url).toBe(`${serviceUrl}/v1/enroll`);
-    expect(init).toMatchObject({ method: "POST", headers: { "X-ForkFlow-Installation-Secret": installationSecret } });
+    expect(init).toMatchObject({ method: "POST", headers: { "X-MasalaPOS-Installation-Secret": installationSecret } });
     const body = JSON.parse(init!.body as string);
     expect(body).toMatchObject({ customerId: CUSTOMER, orderId: ORDER, activation: { installationId, currentRevision: 0, outletName: SETUP.restaurantName } });
     expect(f.app.licensing.status(device)).toMatchObject({ plan: "pro", maxDevices: 3, customerCode: CUSTOMER, orderCode: ORDER, onlineActivation: true });
@@ -668,17 +668,17 @@ describe("activation with a Customer ID and Order ID", () => {
   it("setup starts with activation: then the admin is created and this browser is registered without another step", async () => {
     const app = bare({ serviceUrl, fetch: service(() => enrolled()).fetch });
     expect((await app.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "online", licensed: false });
-    const activate = await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-forkflow-device": device } });
+    const activate = await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } });
     expect(activate.statusCode, activate.body).toBe(200);
     expect(activate.json()).toMatchObject({ customer: { code: CUSTOMER, name: "Spice Route" }, order: { code: ORDER } });
     expect((await app.inject({ url: "/api/needs-setup" })).json()).toMatchObject({ licensed: true });
-    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
     expect(setup.statusCode).toBe(201);
     const status = app.licensing.status(device);
     expect(status).toMatchObject({ canOperate: true, deviceRegistered: true, registeredDevices: 1 });
     expect(app.licensing.devices(device)[0]).toMatchObject({ name: "Main counter", current: true });
     // Once anyone can sign in, activation goes through Settings and its permission check instead.
-    const again = await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-forkflow-device": device } });
+    const again = await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } });
     expect([again.statusCode, again.json()]).toEqual([409, { error: "already set up" }]);
     expect((await app.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: false });
   });
@@ -688,12 +688,12 @@ describe("activation with a Customer ID and Order ID", () => {
     const app = bare({ serviceUrl, fetch: s.fetch });
     expect((await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid })).statusCode).toBe(400);
     const tries = [];
-    for (let i = 0; i < 6; i++) tries.push((await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-forkflow-device": device } })).statusCode);
+    for (let i = 0; i < 6; i++) tries.push((await app.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } })).statusCode);
     expect(tries).toEqual([400, 400, 400, 400, 400, 429]);
     expect(s.spy).toHaveBeenCalledTimes(5);
     // Skipping activation (no internet) still lets setup finish; the licence comes later from Settings.
     const offline = bare({ serviceUrl, fetch: service(() => { throw new TypeError("fetch failed"); }).fetch });
-    expect((await offline.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } })).statusCode).toBe(201);
+    expect((await offline.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } })).statusCode).toBe(201);
     expect(offline.licensing.status(device)).toMatchObject({ state: "unactivated", registeredDevices: 0 });
   });
 
@@ -701,7 +701,7 @@ describe("activation with a Customer ID and Order ID", () => {
     expect((await bare().inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "offline", licensed: false });
     const dev = freshApp(); apps.push(dev);
     expect((await dev.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "none", licensed: true });
-    expect((await dev.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-forkflow-device": device } })).statusCode).toBe(409);
+    expect((await dev.inject({ method: "POST", url: "/api/setup/activate", payload: valid, headers: { "x-masalapos-device": device } })).statusCode).toBe(409);
   });
 
   it("an unactivated counter's hourly check is quiet; a released one keeps its licence", async () => {

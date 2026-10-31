@@ -1,4 +1,4 @@
-package app.forkflow.captain
+package app.masalapos.captain
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -16,7 +16,7 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 /**
- * Installs the Captain app shipped with each ForkFlow release, from the paired POS.
+ * Installs the Captain app shipped with each MasalaPOS release, from the paired POS.
  * tools/build-desktop.mjs publishes version.json and the APK under /captain/android/.
  */
 class AppUpdater(private val activity: Activity, private val server: PairedServer) {
@@ -74,9 +74,9 @@ class AppUpdater(private val activity: Activity, private val server: PairedServe
 
     private fun fetch(release: Release): File {
         val folder = File(activity.cacheDir, "updates").apply { mkdirs() }
-        val file = File(folder, "ForkFlow-Captain.apk")
+        val file = File(folder, "MasalaPOS-Captain.apk")
         val digest = MessageDigest.getInstance("SHA-256")
-        val connection = PosConnection.open(server, "/captain/android/ForkFlow-Captain.apk", timeoutMs = 60_000)
+        val connection = PosConnection.open(server, "/captain/android/MasalaPOS-Captain.apk", timeoutMs = 60_000)
         try {
             if (connection.responseCode != 200) throw IOException("Update download failed")
             connection.inputStream.use { input ->

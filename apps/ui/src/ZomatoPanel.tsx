@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ZomatoSettings } from "@forkflow/domain/zomato";
+import type { ZomatoSettings } from "@masalapos/domain/zomato";
 import { apiFetch } from "./api";
 import { paiseToRupees } from "./money";
 import type { Order } from "./types";

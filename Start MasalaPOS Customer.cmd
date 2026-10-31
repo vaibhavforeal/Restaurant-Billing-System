@@ -7,7 +7,7 @@ if not exist "%~dp0node_modules\electron\dist\electron.exe" (
   exit /b 1
 )
 if not exist "%~dp0build\desktop\commercial\main.js" (
-  echo Customer build missing. Configure FORKFLOW_LICENSE_PUBLIC_KEY and run npm run build:commercial.
+  echo Customer build missing. Configure MASALAPOS_LICENSE_PUBLIC_KEY and run npm run build:commercial.
   pause
   exit /b 1
 )

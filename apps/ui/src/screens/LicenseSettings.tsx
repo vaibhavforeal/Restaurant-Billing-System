@@ -1,5 +1,5 @@
 ﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@forkflow/domain";
+import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@masalapos/domain";
 import { moduleSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
 import { isUnreachable, readLicenseCopy, saveLicenseCopy } from "../offline-cache";
@@ -38,9 +38,9 @@ function useLicenseStatus(): LicenseContextValue {
     let pending: ReturnType<typeof setTimeout> | undefined;
     const changed = () => { clearTimeout(pending); pending = setTimeout(() => { void refresh(); }, 80); };
     const timer = setInterval(() => { void refresh(); }, 30_000);
-    window.addEventListener("forkflow:license-changed", changed); window.addEventListener("focus", changed);
+    window.addEventListener("masalapos:license-changed", changed); window.addEventListener("focus", changed);
     return () => { mounted.current = false; sequence.current++; clearTimeout(pending); clearInterval(timer);
-      window.removeEventListener("forkflow:license-changed", changed); window.removeEventListener("focus", changed); };
+      window.removeEventListener("masalapos:license-changed", changed); window.removeEventListener("focus", changed); };
   }, [refresh]);
   return { status, error, refresh };
 }
@@ -109,7 +109,7 @@ export function LicenseSettings() {
     lock.current = true; setBusy(true); setError(""); setMessage("");
     try {
       await action();
-      if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("forkflow:license-changed")); }
+      if (mounted.current && update) { await Promise.all([...(status?.mode === "commercial" ? [reload()] : []), refreshStatus()]); window.dispatchEvent(new Event("masalapos:license-changed")); }
     } catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : "Request failed"); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
@@ -125,7 +125,7 @@ export function LicenseSettings() {
   }
   const timezone = status?.timezone;
   const online = status?.mode === "commercial" && status.onlineActivation;
-  // Customer ID and Order ID from ForkFlow's setup card: the first activation, or moving to another order (a trial becoming paid).
+  // Customer ID and Order ID from MasalaPOS's setup card: the first activation, or moving to another order (a trial becoming paid).
   const enrollForm = <form className="license-device-form" onSubmit={(e) => { e.preventDefault(); void run(async () => {
     const result = await apiFetch<{ customer: { name: string }; order: { code: string } }>("/api/license/enroll", { method: "POST", body: JSON.stringify(codes), signal: AbortSignal.timeout(30_000) });
     setCodes({ customerId: "", orderId: "" }); setMessage(`Activated with order ${result.order.code} for ${result.customer.name}.`);
@@ -155,9 +155,9 @@ export function LicenseSettings() {
       </div>
       <p role={status.canOperate ? "status" : "alert"}>{status.message}</p>
       {online && !status.plan && <div className="license-section"><h3>Activate this counter</h3>
-        <p className="license-help">Enter the Customer ID and Order ID from the setup card ForkFlow gave you. This computer needs the internet for this step.</p>{enrollForm}</div>}
+        <p className="license-help">Enter the Customer ID and Order ID from the setup card MasalaPOS gave you. This computer needs the internet for this step.</p>{enrollForm}</div>}
       {status.plan && <p className="license-help">{moduleSummary(status.modules)}<br />Offline grace ends: {dateTime(status.graceUntil, timezone)}. Times use {timezone} on the restaurant server.<br />
-        To renew or change your plan, contact ForkFlow{status.customerCode ? ` and quote Customer ID ${status.customerCode}` : ""}. {online ? "The renewed licence arrives here on its own." : "ForkFlow sends the renewed licence as a file to import below."}</p>}
+        To renew or change your plan, contact MasalaPOS{status.customerCode ? ` and quote Customer ID ${status.customerCode}` : ""}. {online ? "The renewed licence arrives here on its own." : "MasalaPOS sends the renewed licence as a file to import below."}</p>}
       <details className="license-identity"><summary>Activation details</summary>
         {status.customerCode && <p>Customer ID: <code>{status.customerCode}</code></p>}
         {status.orderCode && <p>Order ID: <code>{status.orderCode}</code></p>}
@@ -165,7 +165,7 @@ export function LicenseSettings() {
         <p className="license-help">Download these details for your license provider when activating or renewing.</p>
         <button disabled={busy} onClick={() => { void run(async () => {
           const request = await apiFetch<ActivationRequest>("/api/license/activation-request");
-          downloadText(JSON.stringify(request, null, 2) + "\n", `forkflow-activation-${request.installationId}.json`, "application/json;charset=utf-8");
+          downloadText(JSON.stringify(request, null, 2) + "\n", `masalapos-activation-${request.installationId}.json`, "application/json;charset=utf-8");
           setMessage("Activation request downloaded.");
         }, false); }}>Download activation request</button>
         {online && status.plan && <><h3>Use a different Order ID</h3>

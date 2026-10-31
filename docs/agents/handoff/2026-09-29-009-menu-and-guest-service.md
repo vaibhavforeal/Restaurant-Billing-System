@@ -61,10 +61,10 @@ reload and return to the Tables screen. The final complete run passed.
 ## Desktop refresh
 
 Existing data directory:
-`C:\Users\AR\AppData\Roaming\forkflow-desktop\data`.
+`C:\Users\AR\AppData\Roaming\masalapos-desktop\data`.
 
 Verified pre-update backup:
-`backups/forkflow-pre-update-1790667026012-d0285d0c-5004-46cd-b4ab-7a2cda2d0a7b.db`.
+`backups/masalapos-pre-update-1790667026012-d0285d0c-5004-46cd-b4ab-7a2cda2d0a7b.db`.
 
 Startup migrated schema 9 to **11**. SQLite quick-check and foreign-key checks
 passed. Preserved baseline counts: users 1, products 0, orders 1, order_items 0,
@@ -72,7 +72,7 @@ bills 0, stock_items 0, stock_moves 0. No QA catalog entries, guests, service
 requests, or payments were added to the user's desktop data.
 
 The standard Electron launcher is running in exec session **78996**, with the
-native ForkFlow POS window open. Browser verification at port 4100 confirmed
+native MasalaPOS POS window open. Browser verification at port 4100 confirmed
 the sign-in screen, current UI assets, no page errors, and authenticated staff
 routes. This is the refreshed development app; no installer was produced.
 

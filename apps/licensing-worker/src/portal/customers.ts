@@ -1,4 +1,4 @@
-import { parseVendorCode } from "@forkflow/domain/vendor-codes";
+import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { z } from "zod";
 import { activityPage } from "./activity.js";
 import type { CustomerDetail, CustomerSummary } from "./api-types.js";

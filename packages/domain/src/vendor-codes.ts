@@ -1,4 +1,4 @@
-// Customer IDs and Order IDs that the ForkFlow Portal issues and a counter asks for at setup. Shared by the licensing Worker,
+// Customer IDs and Order IDs that the MasalaPOS Portal issues and a counter asks for at setup. Shared by the licensing Worker,
 // the counter server and its UI, so a typo is caught before anything goes over the network. WebCrypto-free and DOM-free.
 
 /** Crockford base32: no I, L, O or U, so a code read over the phone has no look-alikes. */

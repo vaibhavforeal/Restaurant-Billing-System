@@ -1,4 +1,4 @@
-import { ComboPickError, effectiveGstRate, resolveComboPicks, uuidv7, type Database, type PriceTier } from "@forkflow/domain";
+import { ComboPickError, effectiveGstRate, resolveComboPicks, uuidv7, type Database, type PriceTier } from "@masalapos/domain";
 import { httpError } from "./http-error.js";
 import { rowPrice, type PriceRow } from "./pricing.js";
 import { readGstSettings } from "./gst-settings.js";

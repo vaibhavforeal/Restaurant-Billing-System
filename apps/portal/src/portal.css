@@ -1,9 +1,9 @@
-/* ForkFlow Portal. Style: framed sheet (tasteskill app sheet, seed 928215718), brand kept from the POS app.
+/* MasalaPOS Portal. Style: framed sheet (tasteskill app sheet, seed 928215718), brand kept from the POS app.
    The chrome is one tinted L (sidebar + top bar, no rule between them); the work sits on a white sheet inset 8px from the window's
-   right and bottom edges with a 1px edge, 16px corners and no shadow. The ForkFlow red is data's hue and the selected tab's underline;
+   right and bottom edges with a 1px edge, 16px corners and no shadow. The MasalaPOS red is data's hue and the selected tab's underline;
    the one primary action per screen is near-black. Grid: 24px sheet padding, one 16px gutter everywhere. */
 :root {
-  --chrome: #f6f5f5;          /* one low-chroma step of the ForkFlow red's hue */
+  --chrome: #f6f5f5;          /* one low-chroma step of the MasalaPOS red's hue */
   --surface: #ffffff;
   --raised: #f7f7f7;          /* inner wells, hover rows */
   --active: #ebe8e8;          /* the active nav pill */
@@ -13,7 +13,7 @@
   --text: #16171a;
   --muted: #5f6368;
   --faint: #6b6b6b;
-  --accent: #b92335;          /* ForkFlow red: data, the selected tab, focus */
+  --accent: #b92335;          /* MasalaPOS red: data, the selected tab, focus */
   --primary: #1d1f20; --primary-ink: #ffffff;
   --positive: #247b50; --negative: #c4242a; --warning: #92400e;
   --pill-positive-bg: #dcfae5; --pill-positive-ink: #04250e;

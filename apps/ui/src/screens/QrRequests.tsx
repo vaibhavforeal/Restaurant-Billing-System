@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import type { GuestRequest, QrTable } from "@forkflow/domain";
+import type { GuestRequest, QrTable } from "@masalapos/domain";
 import { apiFetch, session } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
@@ -284,7 +284,7 @@ export function QrTableManager({ disabled, onBusyChange }: { disabled: boolean; 
         <label>Guest menu link<input ref={linkInput} readOnly value={code.url} onFocus={(event) => event.target.select()} /></label>
         <div className="qr-card-actions"><a href={code.url} target="_blank" rel="noreferrer">Open menu</a><button disabled={busy} onClick={() => void copyLink()}>Copy link</button><button disabled={busy} onClick={printCode}>Print QR code</button></div>
       </div></div>}
-      {code && createPortal(<div className="qr-print-sheet" aria-hidden="true"><p>ForkFlow · Guest menu</p><h1>{table.name}</h1>{table.area && <p>{table.area}</p>}<img src={code.qr} alt="" width={280} height={280} /><h2>Scan for the menu</h2><p>Connect to the restaurant’s Wi-Fi, then scan this code.</p><p>Ask a member of staff if you need help.</p></div>, document.body)}
+      {code && createPortal(<div className="qr-print-sheet" aria-hidden="true"><p>MasalaPOS · Guest menu</p><h1>{table.name}</h1>{table.area && <p>{table.area}</p>}<img src={code.qr} alt="" width={280} height={280} /><h2>Scan for the menu</h2><p>Connect to the restaurant’s Wi-Fi, then scan this code.</p><p>Ask a member of staff if you need help.</p></div>, document.body)}
     </>}
     {!loading && tables.length === 0 && <p>Add a table in Manage tables to create its guest menu QR code.</p>}
   </section>;

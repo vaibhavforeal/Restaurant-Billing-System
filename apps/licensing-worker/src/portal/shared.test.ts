@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLANS } from "@forkflow/domain/licensing";
+import { PLANS } from "@masalapos/domain/licensing";
 import { buyerState, computeTotals, draftLines, formatPaise, parseRupees, PLAN_DEVICES, roleCan, seesOnlyOwn } from "./shared.js";
 
 const settings = { invoice: { sac: "997331", gstRateBp: 1800 }, extraDevicePaise: 50_000 };
@@ -24,9 +24,9 @@ describe("portal shared rules", () => {
   it("drafts an order's lines: licence per outlet or renewed counter, extra devices, extras; a trial has none", () => {
     const base = { kind: "new" as const, plan: "basic" as const, termMonths: 12, outlets: 2, maxDevices: 3, pricePerOutletPaise: 900_000, discountPaise: 10_000, extras: [], installationIds: [] };
     expect(draftLines(base, settings).map((l) => [l.description, l.quantity, l.unitPricePaise, l.discountPaise])).toEqual([
-      ["ForkFlow Basic licence, 1 year, per outlet", 2, 900_000, 10_000], ["Extra devices beyond the plan's 2, 1 year", 2, 50_000, 0],
+      ["MasalaPOS Basic licence, 1 year, per outlet", 2, 900_000, 10_000], ["Extra devices beyond the plan's 2, 1 year", 2, 50_000, 0],
     ]);
-    expect(draftLines({ ...base, kind: "renewal", outlets: 0, maxDevices: 2, installationIds: ["a", "b", "c"] }, settings)[0]).toMatchObject({ description: "ForkFlow Basic licence renewal, 1 year, per outlet", quantity: 3 });
+    expect(draftLines({ ...base, kind: "renewal", outlets: 0, maxDevices: 2, installationIds: ["a", "b", "c"] }, settings)[0]).toMatchObject({ description: "MasalaPOS Basic licence renewal, 1 year, per outlet", quantity: 3 });
     expect(draftLines({ ...base, kind: "trial" }, settings)).toEqual([]);
   });
 

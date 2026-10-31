@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import type { PaymentMode } from "@forkflow/domain";
-import { receiptGstMode } from "@forkflow/domain/gst";
+import type { PaymentMode } from "@masalapos/domain";
+import { receiptGstMode } from "@masalapos/domain/gst";
 import { ApiError, apiFetch } from "./api";
 import type { Order } from "./types";
 import { uuid } from "./uuid";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "@forkflow/domain";
+import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "@masalapos/domain";
 import { uuid } from "../uuid";
 import { GuestServices } from "./GuestServices";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
@@ -23,7 +23,7 @@ function retainEarlierRequests(requests: SavedRequest[]) {
   const retained = new Set([...active, ...finished]);
   return requests.filter((request) => retained.has(request));
 }
-const storageKey = (token: string) => `forkflow.guest.v1.${token}`;
+const storageKey = (token: string) => `masalapos.guest.v1.${token}`;
 const hexToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 function localPhoto(value: string | null) {
   if (!value) return null;
@@ -318,7 +318,7 @@ function GuestMenuContent({ token }: { token: string }) {
 
   return <main className="guest-menu">
     <header className="guest-menu-header"><div className="guest-menu-header-inner">
-      <span className="guest-menu-brand" aria-hidden="true">F</span>
+      <span className="guest-menu-brand" aria-hidden="true">M</span>
       <div><p className="guest-menu-kicker">Welcome to your table</p><h1>{menu?.restaurantName ?? "Restaurant menu"}</h1></div>
       {menu && <span className="guest-menu-table">{menu.table.name}{menu.table.area && <small>{menu.table.area}</small>}</span>}
     </div></header>

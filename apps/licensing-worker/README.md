@@ -1,11 +1,11 @@
-# ForkFlow licensing service and portal
+# MasalaPOS licensing service and portal
 
 A Cloudflare Worker with a D1 database. It does four jobs:
 
-- **`POST /v1/enroll`** activates a counter. At setup (or later from Settings > Plan and devices) the restaurant types the **Customer ID** and **Order ID** from ForkFlow's setup card. The order must belong to that customer and be paid, approved on credit, or a trial. The counter takes one of the order's seats and gets the order's licence; the term counts from that moment.
+- **`POST /v1/enroll`** activates a counter. At setup (or later from Settings > Plan and devices) the restaurant types the **Customer ID** and **Order ID** from MasalaPOS's setup card. The order must belong to that customer and be paid, approved on credit, or a trial. The counter takes one of the order's seats and gets the order's licence; the term counts from that moment.
 - **`POST /v1/activate`** is every counter's hourly check. It hands back a newer licence when there is one (a renewal, a module change, a staff adjustment). It records when the counter was last seen and which version it runs. There are no automatic trials any more: a counter that has not enrolled gets `{ "license": null, "enrolled": false }`, and nothing is written.
 - **`POST /webhooks/razorpay`** turns a paid Razorpay **payment link** into a recorded payment. When that payment completes its order, the order is fulfilled: licences extended, tax invoice issued, other open links cancelled.
-- **`/portal`** is the ForkFlow Portal: the web app staff use for leads, customers, orders, payments, GST invoices, counters, renewals, support tickets and reports. It is served from Workers Static Assets with its API under `/portal/api`. How staff use it is in `docs/operations/vendor-portal.md`.
+- **`/portal`** is the MasalaPOS Portal: the web app staff use for leads, customers, orders, payments, GST invoices, counters, renewals, support tickets and reports. It is served from Workers Static Assets with its API under `/portal/api`. How staff use it is in `docs/operations/vendor-portal.md`.
 
 The counter app never talks to Razorpay. It only asks this service for a licence, and it verifies the Ed25519 signature with the public key baked into its build, exactly as it does for a licence imported by hand.
 
@@ -19,7 +19,7 @@ Nothing under `apps/server`, `apps/ui`, `packages/domain` or `packages/core` imp
 An installation id alone is not proof of who is asking: it appears in activation requests and licence files that get emailed around. So each counter also holds a secret.
 
 - On first start the counter generates 32 random bytes (64 lowercase hex characters) and stores them in `installation.json` next to the installation id, in its data folder. Back this file up with the rest of the data folder.
-- The counter sends it in the `X-ForkFlow-Installation-Secret` header on `POST /v1/enroll` and `POST /v1/activate`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
+- The counter sends it in the `X-MasalaPOS-Installation-Secret` header on `POST /v1/enroll` and `POST /v1/activate`. A request without a well-formed secret gets `401 { "error": "unauthorized" }` and nothing is written.
 - Trust on first use: the Worker stores only the SHA-256 of the secret (`installations.secret_hash`). A counter's row is created when it first enrols with a valid Customer ID and Order ID, so a stranger guessing installation ids gets nothing. Every later request must present the same secret, or it gets `401` and changes nothing. The secret is never logged or echoed.
 - **Re-pairing a counter** (the restaurant restored or replaced `installation.json`, so the counter now holds a different secret for the same installation id): in the portal, open the customer's **Counters** tab, then the counter, then **Reset pairing**. Support or an admin can do this. The next check-in from that counter claims it again. Do it only for a counter you have verified is the customer's; until the counter checks in, whoever asks first becomes its owner.
 - **A counter activated offline** (from an activation request file, in the portal) has no secret stored yet. Its first check-in claims it the same way.
@@ -51,7 +51,7 @@ An installation id alone is not proof of who is asking: it appears in activation
 | | Test | Production |
 | --- | --- | --- |
 | Deploy | `npx wrangler deploy --env test` | `npx wrangler deploy` |
-| Database | `forkflow-licensing-test` | `forkflow-licensing` |
+| Database | `masalapos-licensing-test` | `masalapos-licensing` |
 | Razorpay keys | test mode | live mode |
 | Signing key (`LICENSE_SIGNING_KEY`) | `license-test-private.pem` | `license-private.pem` |
 | Counter builds that use it | test builds (test public key) | production builds (production public key) |
@@ -63,8 +63,8 @@ Wrangler does not inherit secrets or rate limits between environments, so every 
 
 ```powershell
 cd apps\licensing-worker
-npx wrangler d1 create forkflow-licensing-test
-npx wrangler d1 create forkflow-licensing
+npx wrangler d1 create masalapos-licensing-test
+npx wrangler d1 create masalapos-licensing
 ```
 
 Each command prints a `database_id`. Put it in `wrangler.jsonc` in place of `<set by wrangler d1 create>` (the top-level `d1_databases` entry is production, the one under `env.test` is test). Do not commit a local-run id or one from someone else's account.
@@ -72,8 +72,8 @@ Each command prints a `database_id`. Put it in `wrangler.jsonc` in place of `<se
 ## 2. Apply the migrations
 
 ```powershell
-npx wrangler d1 migrations apply forkflow-licensing-test --env test --remote
-npx wrangler d1 migrations apply forkflow-licensing --remote
+npx wrangler d1 migrations apply masalapos-licensing-test --env test --remote
+npx wrangler d1 migrations apply masalapos-licensing --remote
 ```
 
 Run this again whenever a new file appears under `migrations/`, before deploying the Worker that needs it. `0004` to `0007` add the portal: staff, customers, orders, payments, invoices, leads, follow-ups and tickets. They also drop the old self-serve subscription tables.
@@ -104,7 +104,7 @@ The Worker serves the portal from `apps/portal/dist`, so build it before every d
 
 ```powershell
 cd ..\..
-npm.cmd run build -w @forkflow/portal
+npm.cmd run build -w @masalapos/portal
 cd apps\licensing-worker
 ```
 
@@ -115,7 +115,7 @@ npx wrangler deploy --env test
 npx wrangler deploy
 ```
 
-Wrangler prints the Worker's URL (`https://forkflow-licensing-test.<account>.workers.dev` for the test environment, or a custom domain you attach). The counter requires HTTPS. The portal is at `https://<worker-url>/portal/`.
+Wrangler prints the Worker's URL (`https://masalapos-licensing-test.<account>.workers.dev` for the test environment, or a custom domain you attach). The counter requires HTTPS. The portal is at `https://<worker-url>/portal/`.
 
 **A separate hostname for the portal is worth it.** For example, attach `portal.<your-domain>` and `licence.<your-domain>` to the same Worker. Staff cookies then live on a host that counters and Razorpay never use. Point counter builds at the licence hostname.
 
@@ -126,15 +126,15 @@ The test Worker is only for test runs. Afterwards, take it off the internet: del
 Staff accounts live in D1. The first admin is created from your PC, so the password never travels to the Worker in clear and no bootstrap secret is needed:
 
 ```powershell
-node --import tsx tools\portal-create-admin.ts you@forkflow.in "Your Name"
+node --import tsx tools\portal-create-admin.ts you@masalapos.in "Your Name"
 ```
 
 It asks for the password twice (not shown on screen, at least 10 characters) and prints a `wrangler d1 execute` command with the hashed password. Run that command from `apps\licensing-worker`:
-- For the test Worker, use `forkflow-licensing-test` with `--env test`.
+- For the test Worker, use `masalapos-licensing-test` with `--env test`.
 - For `wrangler dev`, use `--local` instead of `--remote`.
 
 Sign in at `/portal/`. Then go to **Settings** and fill in:
-- the seller details: ForkFlow's legal name, GSTIN, address and state;
+- the seller details: MasalaPOS's legal name, GSTIN, address and state;
 - the invoice wording;
 - the price list.
 
@@ -160,38 +160,38 @@ The service URL is baked into commercial builds next to the public key, like the
 Production builds (the ones you ship) embed the production public key and the production Worker's URL:
 
 ```powershell
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
-$env:FORKFLOW_LICENSE_SERVICE_URL = 'https://<production-worker-url>'
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+$env:MASALAPOS_LICENSE_SERVICE_URL = 'https://<production-worker-url>'
 npm.cmd run package:commercial
 ```
 
 Test builds (never given to a restaurant) embed the **test** public key and the test Worker's URL:
 
 ```powershell
-$env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-test-public.pem' -Raw
-$env:FORKFLOW_LICENSE_SERVICE_URL = 'https://<test-worker-url>'
+$env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-test-public.pem' -Raw
+$env:MASALAPOS_LICENSE_SERVICE_URL = 'https://<test-worker-url>'
 npm.cmd run package:commercial
 ```
 
 Clear both variables (or open a new terminal) between a test build and a production build.
 
-A build without `FORKFLOW_LICENSE_SERVICE_URL` never contacts the service. Setup then goes straight to the admin step, and the licence comes as a file from the portal (**Activate a counter without internet** on the order). When running the server from source, set the same variable; plain `http://127.0.0.1` is accepted there, never in a packaged build.
+A build without `MASALAPOS_LICENSE_SERVICE_URL` never contacts the service. Setup then goes straight to the admin step, and the licence comes as a file from the portal (**Activate a counter without internet** on the order). When running the server from source, set the same variable; plain `http://127.0.0.1` is accepted there, never in a packaged build.
 
 A counter asks for its licence when the server starts, every hour, and when an admin presses **Check for renewal** in Settings > Plan and devices. Billing never depends on the answer.
 
 ## Running it locally
 
 ```powershell
-npm.cmd run build -w @forkflow/portal
+npm.cmd run build -w @masalapos/portal
 cd apps\licensing-worker
-npx wrangler d1 migrations apply forkflow-licensing --local
+npx wrangler d1 migrations apply masalapos-licensing --local
 npx wrangler dev --port 8799
 ```
 
-Use port 8799. Another local service already uses 8787 on the ForkFlow build PC.
+Use port 8799. Another local service already uses 8787 on the MasalaPOS build PC.
 - `wrangler dev` reads `.dev.vars`, which holds the secrets above under the same names. Use a throwaway signing key and dummy Razorpay values.
 - Create the first admin with `tools/portal-create-admin.ts` and `--local`.
-- For work on the portal screens, run `npm.cmd run dev -w @forkflow/portal` too. Vite serves the app with hot reload and passes `/portal/api` to the Worker on 8799.
+- For work on the portal screens, run `npm.cmd run dev -w @masalapos/portal` too. Vite serves the app with hot reload and passes `/portal/api` to the Worker on 8799.
 
 Both `.dev.vars` and `.wrangler/` are gitignored; keep it that way. Never commit `.dev.vars`, a key, or a `database_id` from a local run.
 

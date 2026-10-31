@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { webCryptoSigner } from "@forkflow/license-issuer";
+import { webCryptoSigner } from "@masalapos/license-issuer";
 import type { Env } from "./env.js";
 import { getInstallation } from "./store.js";
 import { seedCustomer, seedOrder } from "./testing/fixtures.js";

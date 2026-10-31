@@ -22,7 +22,7 @@ beforeEach(async () => {
   env = testEnv(keys.privatePem);
   admin = await as(env, "admin");
   await admin.ok("PUT", "/settings", {
-    seller: { legalName: "ForkFlow Technologies LLP", gstin: "", address: "", city: "Pune", stateCode: "27", pincode: "", email: "", phone: "" },
+    seller: { legalName: "MasalaPOS Technologies LLP", gstin: "", address: "", city: "Pune", stateCode: "27", pincode: "", email: "", phone: "" },
     invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800, bankDetails: "", terms: "" }, prices: [], extraDevicePaise: 0, trialDays: 7,
   });
 });
@@ -48,12 +48,12 @@ describe("a real counter against the portal", () => {
     try {
       // Setup: the IDs typed the way people type them, then the admin.
       expect((await counter.inject({ url: "/api/needs-setup" })).json()).toEqual({ needsSetup: true, activation: "online", licensed: false });
-      const activated = await counter.inject({ method: "POST", url: "/api/setup/activate", headers: { "x-forkflow-device": DEVICE },
+      const activated = await counter.inject({ method: "POST", url: "/api/setup/activate", headers: { "x-masalapos-device": DEVICE },
         payload: { customerId: customer.code.toLowerCase(), orderId: first.code.replace(/-/g, " ") } });
       expect(activated.statusCode, activated.body).toBe(200);
       expect(activated.json()).toMatchObject({ customer: { name: "Spice Route" }, order: { code: first.code, plan: "basic", trial: false } });
-      const setup = await counter.inject({ method: "POST", url: "/api/setup", headers: { "x-forkflow-device": DEVICE }, payload: { restaurantName: "Spice Route", adminName: "Meera", pin: "1234" } });
-      const headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": DEVICE };
+      const setup = await counter.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": DEVICE }, payload: { restaurantName: "Spice Route", adminName: "Meera", pin: "1234" } });
+      const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": DEVICE };
       const status = (await counter.inject({ url: "/api/license", headers })).json();
       expect(status).toMatchObject({ state: "active", canOperate: true, plan: "basic", maxDevices: 3, customerCode: customer.code, orderCode: first.code, expiresAt: addMonths(T0, 12) });
       expect(status.modules.kds).toBe(true);

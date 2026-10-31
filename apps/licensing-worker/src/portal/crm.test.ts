@@ -17,7 +17,7 @@ beforeEach(async () => {
   env = testEnv(keys.privatePem);
   admin = await as(env, "admin", { name: "Asha" });
   await admin.ok("PUT", "/settings", {
-    seller: { legalName: "ForkFlow Technologies LLP", gstin: "", address: "", city: "Pune", stateCode: "27", pincode: "", email: "", phone: "" },
+    seller: { legalName: "MasalaPOS Technologies LLP", gstin: "", address: "", city: "Pune", stateCode: "27", pincode: "", email: "", phone: "" },
     invoice: { prefix: "FF", sac: "997331", gstRateBp: 1800, bankDetails: "", terms: "" }, prices: [], extraDevicePaise: 0, trialDays: 7,
   });
 });
@@ -162,7 +162,7 @@ describe("renewals, home and reports", () => {
   it("report the money, the pipeline, renewals, trials and support for the period, a rep seeing only theirs", async () => {
     const ritu = await as(env, "sales", { name: "Ritu" }), kabir = await as(env, "sales", { name: "Kabir" }), accounts = await as(env, "accounts");
     const mine = await customer(ritu, "Spice Route"), theirs = await customer(kabir, "Udupi Grand");
-    // Spice Route tried ForkFlow for a week before buying.
+    // Spice Route tried MasalaPOS for a week before buying.
     vi.setSystemTime(T0 - 7 * DAY_MS);
     await orderFor(await signIn(env, ritu.staff), mine, { kind: "trial" });
     vi.setSystemTime(T0);

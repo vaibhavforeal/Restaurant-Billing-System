@@ -1,4 +1,4 @@
-import { parseVendorCode } from "@forkflow/domain/vendor-codes";
+import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import type { SearchHit } from "./api-types.js";
 import { path, type Route } from "./context.js";
 import { json } from "./http.js";

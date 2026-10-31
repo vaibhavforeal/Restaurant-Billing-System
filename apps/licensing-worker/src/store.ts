@@ -1,5 +1,5 @@
-import type { Plan } from "@forkflow/domain/licensing";
-import { ModuleOverridesSchema, type ModuleId, type ModuleOverrides } from "@forkflow/domain/modules";
+import type { Plan } from "@masalapos/domain/licensing";
+import { ModuleOverridesSchema, type ModuleId, type ModuleOverrides } from "@masalapos/domain/modules";
 import type { D1Like, D1StatementLike } from "./env.js";
 
 export interface InstallationRow {

@@ -1,5 +1,5 @@
-import { parseVendorCode } from "@forkflow/domain/vendor-codes";
-import { ActivationRequest, readClaims } from "@forkflow/license-issuer";
+import { parseVendorCode } from "@masalapos/domain/vendor-codes";
+import { ActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
 import { issueLicense, type Deps } from "./issue.js";
 import { activationBlocker, orderById, orderByCodes, orderTerms, type LicensingOrder } from "./orders.js";
@@ -15,15 +15,15 @@ const Enroll = z.object({ activation: ActivationRequest, customerId: z.string().
 
 /** Plain words a counter can show as they are; the `error` code is for its logic and tests. */
 const REFUSALS = {
-  not_found: [404, "Check the Customer ID and Order ID. They are on the setup card ForkFlow gave you."],
-  order_not_ready: [409, "This order isn't confirmed yet. Contact ForkFlow."],
-  order_cancelled: [409, "This order was cancelled. Contact ForkFlow."],
-  not_paid: [409, "This order hasn't been paid yet. Pay the ForkFlow invoice, or contact ForkFlow."],
+  not_found: [404, "Check the Customer ID and Order ID. They are on the setup card MasalaPOS gave you."],
+  order_not_ready: [409, "This order isn't confirmed yet. Contact MasalaPOS."],
+  order_cancelled: [409, "This order was cancelled. Contact MasalaPOS."],
+  not_paid: [409, "This order hasn't been paid yet. Pay the MasalaPOS invoice, or contact MasalaPOS."],
   renewal_order: [409, "This Order ID renews outlets that are already set up. Use the Order ID from your first purchase or trial."],
-  seats_full: [409, "Every outlet on this order is already set up. Contact ForkFlow to move it to this computer or add an outlet."],
-  other_customer: [409, "This computer is registered to another ForkFlow customer. Contact ForkFlow."],
-  already_licensed: [409, "This computer already has a paid ForkFlow licence; a trial can't replace it."],
-  mismatch: [409, "This computer's licence doesn't match ForkFlow's records. Contact ForkFlow support."],
+  seats_full: [409, "Every outlet on this order is already set up. Contact MasalaPOS to move it to this computer or add an outlet."],
+  other_customer: [409, "This computer is registered to another MasalaPOS customer. Contact MasalaPOS."],
+  already_licensed: [409, "This computer already has a paid MasalaPOS licence; a trial can't replace it."],
+  mismatch: [409, "This computer's licence doesn't match MasalaPOS's records. Contact MasalaPOS support."],
 } as const;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const refuse = (error: keyof typeof REFUSALS) => json({ error, message: REFUSALS[error][1] }, REFUSALS[error][0]);

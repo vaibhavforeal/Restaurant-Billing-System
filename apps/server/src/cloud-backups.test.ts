@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { MIGRATIONS, migrate, openDb, type Database } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { Backups, verifyBackup } from "./backups.js";
 import { CloudBackups, type CloudBackupConnection, type CloudBackupProvider } from "./cloud-backups.js";
 import { buildServer } from "./server.js";
@@ -21,8 +21,8 @@ function provider() {
   };
 }
 function fixture(adapter?: CloudBackupProvider) {
-  const folder = mkdtempSync(join(tmpdir(), "forkflow-cloud-test-"));
-  const db = openDb(join(folder, "forkflow.db")); migrate(db, MIGRATIONS);
+  const folder = mkdtempSync(join(tmpdir(), "masalapos-cloud-test-"));
+  const db = openDb(join(folder, "masalapos.db")); migrate(db, MIGRATIONS);
   let now = Date.now();
   const backups = new Backups(db, folder, () => now++);
   const worker = new CloudBackups(backups, adapter, () => now);
@@ -95,7 +95,7 @@ describe("verified cloud upload queue", () => {
     expect(verifyBackup(input.path)).toBe(MIGRATIONS.length);
     expect(input.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(input.idempotencyKey).toBe(snapshot.name);
-    expect(input.folderName).toBe("ForkFlow Backups");
+    expect(input.folderName).toBe("MasalaPOS Backups");
     expect(f.worker.status()).toMatchObject({ pendingCount: 0, lastUploadedName: snapshot.name, lastError: null });
     expect(adapter.prune).toHaveBeenCalledWith(expect.objectContaining({ retentionDays: 30, account: input.account }));
     await f.worker.process(); expect(adapter.upload).toHaveBeenCalledTimes(1);

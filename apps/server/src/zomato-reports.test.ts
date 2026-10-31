@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 import { auth, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshApp>;

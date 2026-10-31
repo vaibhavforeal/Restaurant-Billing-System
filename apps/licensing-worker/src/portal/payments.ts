@@ -141,7 +141,7 @@ export const paymentRoutes: Route[] = [
     let link;
     try {
       link = await razorpay.createPaymentLink({
-        amountPaise: owing, referenceId, expireBy, description: `ForkFlow order ${order.code}`,
+        amountPaise: owing, referenceId, expireBy, description: `MasalaPOS order ${order.code}`,
         customer: { name: customer.name, email: customer.email, contact }, notes: { orderId: order.id, orderCode: order.code },
       });
     } catch (error) {
