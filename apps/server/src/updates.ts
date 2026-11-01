@@ -1,11 +1,11 @@
-import { UPDATE_CHANNELS, isToServer, type ToDesktop, type UpdateChannel, type UpdateStatus } from "@masalapos/domain";
+import { UPDATE_CHANNELS, isToServer, type RemoteToDesktop, type ToDesktop, type UpdateChannel, type UpdateStatus } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 
 /** The message port to the Electron shell that owns the updater. Absent when the server runs without the desktop app. */
 export interface UpdateBridge {
-  send(message: ToDesktop): void;
+  send(message: ToDesktop | RemoteToDesktop): void;
   onMessage(listener: (message: unknown) => void): void;
 }
 

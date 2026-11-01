@@ -9,6 +9,7 @@ import { LicenseSettings } from "./LicenseSettings";
 import { KeyboardSettings } from "./KeyboardSettings";
 import { OrderTypes } from "./OrderTypes";
 import { UpdateSettings } from "./UpdateSettings";
+import { SupportSettings } from "../support";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 import { Icon } from "../Icon";
 import { initialSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId } from "../settings-sections";
@@ -328,6 +329,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {active === "shortcuts" && <KeyboardSettings />}
       {active === "order-types" && <OrderTypes />}
       {active === "updates" && <UpdateSettings />}
+      {active === "support" && <SupportSettings />}
       {/* Profile section */}
       {active === "profile" && <div className="panel">
 

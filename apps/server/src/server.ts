@@ -43,6 +43,7 @@ import { PrintQueue } from "./print/queue.js";
 import { readProfile } from "./print/profile.js";
 import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discovery.js";
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
+import { registerSupport, type SupportOptions } from "./support.js";
 import { provideModuleAllowances, registerModules } from "./modules.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
 import { registerIntegrations } from "./integrations.js";
@@ -67,6 +68,8 @@ export interface ServerOptions {
   updateBridge?: UpdateBridge;
   /** The running app version, shown in Settings → Updates. */
   appVersion?: string;
+  /** Tests replace the support channel's live connection. */
+  support?: Pick<SupportOptions, "connect" | "log">;
 }
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
@@ -142,6 +145,13 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerAuth(app, opts.demo ?? false);
   registerWs(app, opts.authTimeoutMs);
   registerLicensing(app);
+  registerSupport(app, {
+    ...(opts.licensing?.serviceUrl && opts.licensing.installationSecret
+      ? { serviceUrl: opts.licensing.serviceUrl, installationId: opts.licensing.installationId, installationSecret: opts.licensing.installationSecret } : {}),
+    ...(opts.updateBridge ? { desktop: opts.updateBridge } : {}),
+    ...(opts.licensing?.fetch ? { fetch: opts.licensing.fetch } : {}),
+    ...opts.support,
+  });
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);

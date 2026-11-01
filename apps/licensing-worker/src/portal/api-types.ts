@@ -180,3 +180,37 @@ export interface ReportData {
   trials: { started: number; converted: number };
   tickets: { opened: number; resolved: number; medianHoursToResolve: number | null; openByPriority: Record<string, number> };
 }
+
+export type ChatStatus = "waiting" | "active" | "closed";
+/** `staff` is set on staff messages; `customer` messages come from the restaurant, `system` ones from the service. */
+export interface ChatMessage { id: number; author: "customer" | "staff" | "system"; staff: Ref | null; body: string; createdAt: number }
+export interface ChatSummary {
+  id: string; number: number; status: ChatStatus; customer: Ref; installation: { id: string; name: string } | null;
+  visitorName: string | null; visitorPhone: string | null; assignee: Ref | null; ticket: { id: string; number: number } | null;
+  createdAt: number; lastMessageAt: number; closedAt: number | null;
+  lastMessage: { author: ChatMessage["author"]; body: string } | null;
+}
+export interface ChatDetail extends ChatSummary {
+  messages: ChatMessage[];
+  /** The counter's POS has its live connection open, so remote access can be requested. */
+  counterOnline: boolean;
+  remoteSessions: RemoteSession[];
+}
+
+export type RemoteMode = "view" | "control";
+export type RemoteStatus = "requested" | "denied" | "expired" | "approved" | "active" | "ended";
+export interface RemoteSession {
+  origin: "in_app" | "connector"; elevated: boolean; adminPrompts: boolean; expiresAt: number | null;
+  id: string; status: RemoteStatus; reason: string; modeRequested: RemoteMode; mode: RemoteMode | null;
+  installation: { id: string; name: string } | null; customer: Ref | null; chatId: string | null; requestedBy: Ref; approvedByName: string | null;
+  requestedAt: number; answeredAt: number | null; startedAt: number | null; endedAt: number | null; endReason: string | null;
+}
+/** The viewer's connection details: ICE servers with short-lived TURN credentials. */
+export interface RemoteViewerSetup { session: RemoteSession; iceServers: Array<{ urls: string[]; username?: string; credential?: string }> }
+
+/** What the restaurant's chat page sees: no staff surnames, no other counters. */
+export interface VisitorMessage { id: number; author: ChatMessage["author"]; name: string | null; body: string; createdAt: number }
+export interface VisitorChat {
+  outletName: string; customerName: string;
+  chat: { id: string; number: number; status: ChatStatus; visitorName: string | null; agentName: string | null; messages: VisitorMessage[] } | null;
+}

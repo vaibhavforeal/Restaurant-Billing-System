@@ -26,6 +26,10 @@ export const PERMISSIONS = {
   "tickets.read": ["admin", "sales", "support"],
   "tickets.write": ["admin", "support"],
   "reports.read": ["admin", "sales", "accounts", "support"],
+  /** Answer restaurants in Live chat. */
+  "support.chat": ["admin", "support"],
+  /** Ask a counter for remote access to its PC (it still has to be allowed at the PC). */
+  "support.remote": ["admin", "support"],
 } as const satisfies Record<string, readonly Role[]>;
 export type Permission = keyof typeof PERMISSIONS;
 export const roleCan = (role: Role, permission: Permission): boolean => (PERMISSIONS[permission] as readonly Role[]).includes(role);

@@ -1,0 +1,18 @@
+let buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]
+rule private_encrypted_buckets {
+  %buckets {
+    DeletionPolicy == 'Retain'
+    UpdateReplacePolicy == 'Retain'
+    Properties.PublicAccessBlockConfiguration.BlockPublicAcls == true
+    Properties.PublicAccessBlockConfiguration.IgnorePublicAcls == true
+    Properties.PublicAccessBlockConfiguration.BlockPublicPolicy == true
+    Properties.PublicAccessBlockConfiguration.RestrictPublicBuckets == true
+    Properties.BucketEncryption.ServerSideEncryptionConfiguration[*].ServerSideEncryptionByDefault.SSEAlgorithm == 'AES256'
+  }
+}
+rule signed_origin_and_private_stubs {
+  Resources.OriginAccess.Properties.OriginAccessControlConfig.SigningBehavior == 'always'
+  Resources.Distribution.Properties.DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy == 'https-only'
+  Resources.Distribution.Properties.DistributionConfig.CacheBehaviors[*].TrustedKeyGroups !empty
+  Resources.Artifacts.Properties.VersioningConfiguration.Status == 'Enabled'
+}

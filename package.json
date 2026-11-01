@@ -11,8 +11,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:packaging": "node --test tools/desktop-packaging.test.mjs",
-    "typecheck": "tsc --noEmit && npm run typecheck -w @masalapos/ui && npm run typecheck -w @masalapos/portal",
+    "test:packaging": "node --test tools/desktop-packaging.test.mjs tools/connector-packaging.test.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/desktop/tsconfig.renderer.json && npm run typecheck -w @masalapos/ui && npm run typecheck -w @masalapos/portal && npm run typecheck -w @masalapos/connector",
     "dev": "concurrently -k -n server,ui npm:dev:server npm:dev:ui",
     "dev:server": "tsx watch apps/server/src/main.ts",
     "dev:ui": "npm run dev -w @masalapos/ui",
@@ -29,9 +29,15 @@
     "package:win": "npm run package:commercial",
     "release:stable": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --publish always",
     "release:patch": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --publish always -c.publish.releaseType=prerelease",
-    "package:dir": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --dir"
+    "package:dir": "npm run build:commercial && electron-builder --config electron-builder.yml --win --x64 --dir",
+    "build:connector": "node tools/build-connector.mjs",
+    "build:connector:dev": "node tools/build-connector.mjs --dev",
+    "publish:connector": "node tools/publish-connector.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudfront": "^3.1161.0",
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/credential-providers": "^3.1161.0",
     "@types/node": "^22.10.2",
     "@types/proper-lockfile": "^4.1.4",
     "@types/qrcode": "^1.5.6",

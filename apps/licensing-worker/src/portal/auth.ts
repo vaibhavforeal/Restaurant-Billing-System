@@ -72,7 +72,7 @@ export async function signIn(deps: Deps, env: Env, request: Request): Promise<Re
 }
 
 /** The signed-in staff member, or null when there is no live session (expired, idle too long, or the account was deactivated). */
-export async function currentUser(deps: Deps, request: Request): Promise<{ user: StaffUser; tokenHash: string } | null> {
+export async function currentUser(deps: Pick<Deps, "db" | "now">, request: Request): Promise<{ user: StaffUser; tokenHash: string } | null> {
   const token = sessionToken(request);
   if (!token) return null;
   const tokenHash = await sha256Hex(token), now = deps.now();

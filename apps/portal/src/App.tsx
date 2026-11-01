@@ -11,6 +11,9 @@ import { Lead, Leads } from "./screens/Leads";
 import { Renewals } from "./screens/Renewals";
 import { Reports } from "./screens/Reports";
 import { Ticket, Tickets } from "./screens/Tickets";
+import { LiveChat, useChatAlerts } from "./screens/LiveChat";
+import { RemoteViewer } from "./screens/RemoteViewer";
+import { portalLive } from "./live";
 import { Activity } from "./screens/Activity";
 import { Customer } from "./screens/Customer";
 import { Customers } from "./screens/Customers";
@@ -54,6 +57,7 @@ const WORK: NavItem[] = [
   { to: "/orders", label: "Orders", icon: "orders", permission: "orders.read" },
   { to: "/invoices", label: "Invoices", icon: "invoices", permission: "orders.read" },
   { to: "/renewals", label: "Renewals", icon: "renewals", permission: "customers.read" },
+  { to: "/chats", label: "Live chat", icon: "chat", permission: "support.chat" },
   { to: "/tickets", label: "Support", icon: "tickets", permission: "tickets.read" },
   { to: "/reports", label: "Reports", icon: "reports", permission: "reports.read" },
 ];
@@ -72,7 +76,12 @@ function Shell({ user, onSignedOut, onUser }: { user: StaffUser; onSignedOut: ()
   const first = work[0]?.to ?? admin[0]?.to ?? "/account";
   useEffect(() => { if (path === "/" || path === "") navigate(first, true); }, [path, first]);
   const current = (to: string) => path === to || path.startsWith(`${to}/`);
-  const nav = (item: NavItem) => <Link key={item.to} to={item.to} className="nav-item" aria-current={current(item.to) ? "page" : undefined}><Icon name={item.icon} />{item.label}</Link>;
+  // Support roles keep a live connection for chat and remote sessions; it ends with the session.
+  const live = roleCan(user.role, "support.chat") || roleCan(user.role, "support.remote");
+  useEffect(() => { if (!live) return; portalLive.start(); return () => portalLive.stop(); }, [live]);
+  const waiting = useChatAlerts(roleCan(user.role, "support.chat"), path);
+  const nav = (item: NavItem) => <Link key={item.to} to={item.to} className="nav-item" aria-current={current(item.to) ? "page" : undefined}><Icon name={item.icon} />{item.label}
+    {item.to === "/chats" && waiting > 0 && <span className="count badge" aria-label={`${waiting} waiting`}>{waiting}</span>}</Link>;
   return <div className={`app${menuOpen ? " menu-open" : ""}`}>
     <aside className="sidebar" aria-label="Portal navigation">
       <div className="brand"><Mark /><div>MasalaPOS Portal<small>Sales, licences and support</small></div></div>
@@ -102,6 +111,9 @@ function route(path: string, search: URLSearchParams, user: StaffUser, onUser: (
   if (match("/renewals", path) && can("customers.read")) return <Renewals me={user} />;
   if (match("/tickets", path) && can("tickets.read")) return <Tickets me={user} />;
   if ((m = match("/tickets/:id", path)) && can("tickets.read")) return <Ticket key={m["id"]} id={m["id"]!} me={user} />;
+  if (match("/chats", path) && can("support.chat")) return <LiveChat me={user} />;
+  if ((m = match("/chats/:id", path)) && can("support.chat")) return <LiveChat me={user} chatId={m["id"]!} />;
+  if ((m = match("/remote/:id", path)) && can("support.remote")) return <RemoteViewer key={m["id"]} id={m["id"]!} me={user} />;
   if (match("/reports", path) && can("reports.read")) return <Reports />;
   if (match("/customers", path) && can("customers.read")) return <Customers me={user} />;
   if ((m = match("/customers/:id", path)) && can("customers.read")) return <Customer key={m["id"]} id={m["id"]!} me={user} />;

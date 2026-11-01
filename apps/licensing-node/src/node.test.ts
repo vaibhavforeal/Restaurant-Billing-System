@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { WebSocket } from "ws";
+import type { LiveHub } from "../../licensing-worker/src/live/types.js";
 import worker from "../../licensing-worker/src/index.js";
 import type { Env } from "../../licensing-worker/src/env.js";
 import { createApp, type Fetcher } from "./app.js";
@@ -157,5 +159,66 @@ describe("readSecret", () => {
     expect(readSecret({ X_FILE: file }, "X")).toBe("whsec_123");
     expect(readSecret({ X: "direct", X_FILE: file }, "X")).toBe("direct");
     expect(readSecret({}, "X")).toBeUndefined();
+  });
+});
+
+describe("live sockets", () => {
+  const env = {} as Env;
+  const noFetch: Fetcher = { fetch: async () => new Response("no") };
+
+  /** A server whose hub records what it sees; `authorize` lets in requests carrying x-ok and names them by it. */
+  async function liveServer() {
+    const events: string[] = [];
+    let sockets: Array<{ send(text: string): void; close(code?: number): void }> = [];
+    const hub = {
+      connect: (peer: { kind: string }, socket: { send(text: string): void; close(code?: number): void }) => {
+        sockets.push(socket);
+        events.push(`open:${peer.kind}`);
+        return { onMessage: (text: string) => { events.push(`msg:${text}`); socket.send(`echo:${text}`); }, onClose: () => events.push("close") };
+      },
+    } as unknown as LiveHub;
+    const authorize = async (request: Request) => {
+      seenOrigins.push(new URL(request.url).origin);
+      return request.headers.get("x-ok") ? { kind: "counter", installationId: "i", customerId: "c" } as const : null;
+    };
+    const seenOrigins: string[] = [];
+    const server = createApp(noFetch, env, { publicOrigin: "https://portal.example", live: { hub, authorize, paths: ["/v1/counter/live"] } }).listen(0, "127.0.0.1");
+    await new Promise((resolve) => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+    return { events, seenOrigins, sockets: () => sockets, url: (path: string) => `ws://127.0.0.1:${port}${path}`, close: () => new Promise((resolve) => server.close(resolve)) };
+  }
+  const refusal = (ws: WebSocket) => new Promise<number>((resolve) => ws.once("unexpected-response", (_req, res) => resolve(res.statusCode ?? 0)));
+
+  it("refuses unknown paths and unauthorised peers before upgrading", async () => {
+    const s = await liveServer();
+    expect(await refusal(new WebSocket(s.url("/elsewhere"), { headers: { "x-ok": "1" } }))).toBe(404);
+    expect(await refusal(new WebSocket(s.url("/v1/counter/live")))).toBe(403);
+    expect(s.seenOrigins).toEqual(["https://portal.example"]);
+    expect(s.events).toEqual([]);
+    await s.close();
+  });
+
+  it("connects an authorised peer, carries text both ways, reports the close, and closing the server ends it", async () => {
+    const s = await liveServer();
+    const ws = new WebSocket(s.url("/v1/counter/live"), { headers: { "x-ok": "1" } });
+    await new Promise((resolve) => ws.once("open", resolve));
+    const reply = new Promise<string>((resolve) => ws.once("message", (data) => resolve(data.toString())));
+    ws.send("hello");
+    expect(await reply).toBe("echo:hello");
+    const closed = new Promise((resolve) => ws.once("close", resolve));
+    await s.close();
+    await closed;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(s.events).toEqual(["open:counter", "msg:hello", "close"]);
+  });
+
+  it("closes a socket that sends binary", async () => {
+    const s = await liveServer();
+    const ws = new WebSocket(s.url("/v1/counter/live"), { headers: { "x-ok": "1" } });
+    await new Promise((resolve) => ws.once("open", resolve));
+    const code = new Promise<number>((resolve) => ws.once("close", (c) => resolve(c)));
+    ws.send(Buffer.from([1, 2, 3]));
+    expect(await code).toBe(1003);
+    await s.close();
   });
 });

@@ -1,3 +1,4 @@
+import { connectorRoute } from "./connector/routes.js";
 import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
@@ -6,6 +7,7 @@ import { handleEnroll } from "./enroll.js";
 import { razorpayFor } from "./portal/payments.js";
 import { portalRoute } from "./portal/router.js";
 import { SECRET_HEADER } from "./secret.js";
+import { handleSupportLink, supportRoute } from "./support/visitor.js";
 import { handleWebhook } from "./webhook.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -26,7 +28,7 @@ function signerFor(env: Env): Promise<SignerPair> {
 async function rateLimited(request: Request, env: Env): Promise<boolean> {
   try { return !(await env.LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success; }
   catch (error) {
-    console.error("licensing-worker: rate limiter unavailable:", error instanceof Error ? error.message : "unknown error");
+    console.error("licensing-worker: rate limiter unavailable:", error instanceof Error ? error.name : "unknown error");
     return false;
   }
 }
@@ -40,7 +42,13 @@ async function route(request: Request, env: Env): Promise<Response> {
   const { method } = request;
   const deps = async (): Promise<Deps> => ({ db: env.DB, signer: await signerFor(env), now: Date.now, uuid: () => crypto.randomUUID() });
 
+  if (url.pathname === "/support/connector" || url.pathname.startsWith("/support/connector-runtime/") || url.pathname.startsWith("/v1/connector/")) return connectorRoute(request, env, await deps());
   if (url.pathname === "/portal" || url.pathname.startsWith("/portal/")) return portalRoute(request, env, await deps());
+  if (url.pathname === "/support" || url.pathname.startsWith("/support/")) return supportRoute(request, env, await deps());
+  if (method === "POST" && url.pathname === "/v1/support/link") {
+    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    return handleSupportLink(await deps(), request, request.headers.get(SECRET_HEADER));
+  }
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);
@@ -62,7 +70,7 @@ export default {
     try { return await route(request, env); }
     catch (error) {
       // The message only: request bodies and secrets never reach the log.
-      console.error("licensing-worker: unhandled error:", error instanceof Error ? error.message : "unknown error");
+      console.error("licensing-worker: unhandled error:", error instanceof Error ? error.name : "unknown error");
       return json({ error: "internal" }, 500);
     }
   },

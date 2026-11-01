@@ -72,7 +72,7 @@ describe("routing", () => {
     expect(await getInstallation(env.DB, installationId)).toBeNull();
   });
 
-  it("a failing rate limiter fails open and logs only a fixed message and the error text", async () => {
+  it("a failing rate limiter fails open and logs only a fixed message and the error class", async () => {
     const logged: unknown[][] = [];
     vi.spyOn(console, "error").mockImplementation((...args) => { logged.push(args); });
     env.LIMITER = { limit: async () => { throw new Error("internal error; reference = abc"); } };
@@ -80,7 +80,7 @@ describe("routing", () => {
     const activate = await send("POST", "/v1/activate", activationRequest(), withSecret({ "cf-connecting-ip": "203.0.113.9", "x-secret": "hunter2" }));
     expect(await activate.json()).toEqual({ license: licence, enrolled: true });
     expect(logged).toHaveLength(2);
-    expect(logged[0]).toEqual(["licensing-worker: rate limiter unavailable:", "internal error; reference = abc"]);
+    expect(logged[0]).toEqual(["licensing-worker: rate limiter unavailable:", "Error"]);
     expect(JSON.stringify(logged)).not.toMatch(/203\.0\.113\.9|hunter2|ff1\./);
   });
 

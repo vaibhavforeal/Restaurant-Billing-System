@@ -7,6 +7,7 @@ import { startupDocument } from "../../ui/src/startup-screen.js";
 import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
 import { createUpdater, type AutoUpdaterLike } from "./updater.js";
 import { isToDesktop } from "../../../packages/domain/src/updates.js";
+import { isRemoteToDesktop } from "../../../packages/domain/src/remote-support.js";
 
 declare const __MASALAPOS_DEMO__: boolean;
 declare const __MASALAPOS_COMMERCIAL__: boolean;
@@ -91,7 +92,16 @@ else {
     }, 5000);
     // The server relays Settings -> Updates; the shell answers with the updater's status.
     child.on("message", (data: unknown) => {
-      if (!isToDesktop(data) || server !== child) return;
+      if (server !== child) return;
+      // Remote support: the server only sends a start for a session someone at this PC has just allowed.
+      if (isRemoteToDesktop(data)) {
+        if (data.type === "connector-open") {
+          const url = new URL(data.url);
+          if (url.protocol === "https:" && url.hostname === "portal.billnroll.in" && url.pathname === "/support/connector") void shell.openExternal(url.href);
+        } else if (data.type === "remote-start") child.postMessage({type:"remote-state",sessionId:data.sessionId,state:"stopped",reason:"This version uses Support Connector. Ask support to send a connector link."});
+        return;
+      }
+      if (!isToDesktop(data)) return;
       if (data.type === "restore") {
         // Settings staged and verified this file and the admin confirmed it on this PC; accept only that folder.
         const staged = resolve(data.path), incoming = resolve(dataDir, "restore-incoming") + sep;
@@ -176,7 +186,7 @@ else {
   }
   app.on("second-instance", showWindow);
   app.whenReady().then(async () => {
-    window = new BrowserWindow({ width: 1280, height: 800, show: false, backgroundColor: "#f6f7f9", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+    window = new BrowserWindow({ width: 1280, height: 800, show: false, backgroundColor: "#f6f7f9", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: join(here, "preload.cjs") } });
     if (demo) {
       window.setAutoHideMenuBar(false);
       Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Demo", submenu: [

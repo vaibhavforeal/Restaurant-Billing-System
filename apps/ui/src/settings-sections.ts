@@ -1,6 +1,6 @@
 import type { IconName } from "./Icon";
 
-export type SettingsSectionId = "profile" | "order-types" | "printers" | "jobs" | "backups" | "plan" | "updates" | "shortcuts";
+export type SettingsSectionId = "profile" | "order-types" | "printers" | "jobs" | "backups" | "plan" | "updates" | "shortcuts" | "support";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: string; blurb: string; icon: IconName }> = [
   { id: "profile", title: "Restaurant profile", blurb: "Name, GST, bill style and UPI", icon: "marketplace" },
@@ -11,6 +11,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: st
   { id: "plan", title: "Plan & devices", blurb: "Licence, plan and registered devices", icon: "badge" },
   { id: "updates", title: "Updates", blurb: "Version, update channel and installing", icon: "refresh" },
   { id: "shortcuts", title: "Keyboard shortcuts", blurb: "Counter hotkeys", icon: "keyboard" },
+  { id: "support", title: "Help & support", blurb: "Chat with MasalaPOS, remote access", icon: "help" },
 ];
 
 /** The card grid is the landing view; only a deep link (e.g. from Marketplace) opens a section directly. */
