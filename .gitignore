@@ -35,3 +35,18 @@ output/
 
 # Google OAuth client downloaded from Cloud console (Drive backups); never commit
 client_secret_*.json
+
+# Local research / reverse-engineering material (kept on disk, never part of the app)
+/Reference/
+/Apktool-src/
+/apktool/
+Frame-*.webm
+Frame-*.webm.md
+
+# Python and tool caches
+__pycache__/
+*.pyc
+.hallmark/
+
+# Claude Code local session logs (settings.local.json is ignored above)
+.claude/sessions/

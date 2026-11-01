@@ -1,6 +1,6 @@
-.cloud-backups { margin: 0; padding: 24px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.cloud-backups { margin: 0; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
 .cloud-backup-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px; }
-.cloud-backup-heading h3 { margin: 0; font-size: 16px; }
+.cloud-backup-heading h3 { margin: 0; font-size: var(--text-base); }
 .cloud-backup-state { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .cloud-backup-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin: 16px 0; }
 .cloud-backup-fields label { display: grid; gap: 8px; min-width: 0; }
@@ -25,4 +25,4 @@
 .system-settings .cloud-backup-state.connected { color: var(--pos-success); }
 .system-settings .cloud-backup-state.reconnect_required { color: var(--pos-warning); }
 .system-settings .cloud-backup-prefs fieldset { min-width: 0; border: 0; padding: 0; }
-.system-settings .cloud-backup-fields input { min-height: 38px; }
+.system-settings .cloud-backup-fields input { min-height: var(--control); }
