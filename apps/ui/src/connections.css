@@ -1,22 +1,22 @@
-.system-view-switch { display: flex; gap: 24px; border-bottom: 1px solid var(--line); }
+.system-view-switch { display: flex; gap: var(--space-6); border-bottom: 1px solid var(--line); }
 html[data-theme] .system-view-switch button { border: 0; border-radius: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px 4px; color: var(--muted); font-size: 13px; }
 html[data-theme] .system-view-switch button[aria-pressed="true"] { border-bottom-color: var(--pos-accent); color: var(--pos-accent); }
-.connection-network-note { display: flex; gap: 12px; align-items: center; padding: 16px 20px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 22px; }
+.connection-network-note { display: flex; gap: var(--space-6); align-items: center; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); margin-bottom: var(--space-6); }
 .connection-network-note > svg { color: var(--muted); }
 .connection-network-note p { margin: 0; }
-.connection-device-picker { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
-html[data-theme] .connection-device-picker button { flex: 1 1 180px; justify-content: flex-start; padding: 18px; gap: 14px; background: var(--surface); text-align: left; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); }
+.connection-device-picker { display: flex; flex-wrap: wrap; gap: var(--space-6); margin-bottom: var(--space-6); }
+html[data-theme] .connection-device-picker button { flex: 1 1 180px; justify-content: flex-start; padding: var(--space-6); gap: var(--space-6); background: var(--surface); text-align: left; border: 1px solid var(--line); border-radius: var(--radius-panel); color: var(--ink); }
 html[data-theme] .connection-device-picker button[aria-pressed="true"] { background: var(--pos-accent-soft); border-color: var(--pos-accent); }
 .connection-device-picker button > svg:first-child { color: var(--pos-accent); }
 .connection-device-picker button > svg:last-child { margin-left: auto; color: var(--muted); }
 .connection-device-picker span { display: grid; gap: 5px; }
 .connection-device-picker strong { font-size: 13px; }
 .connection-device-picker small { font-size: 12px; color: var(--muted); font-weight: 400; }
-.connection-setup { padding: 26px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.connection-setup > .system-section-heading { margin-bottom: 24px; }
+.connection-setup { padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
+.connection-setup > .system-section-heading { margin-bottom: var(--space-6); }
 .connection-code-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
-.connection-code { display: flex; gap: 28px; align-items: center; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 8px; }
-.connection-code img { display: block; flex: 0 0 auto; width: 180px; height: 180px; padding: 8px; border-radius: 6px; background: #fff; }
+.connection-code { display: flex; gap: var(--space-8); align-items: center; min-width: 0; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.connection-code img { display: block; flex: 0 0 auto; width: 180px; height: 180px; max-width: 100%; padding: 8px; border-radius: 6px; background: #fff; }
 .connection-code > div { min-width: 0; }
 .connection-address-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
 .connection-code a, .connection-code code { font-size: 14px; overflow-wrap: anywhere; }
@@ -36,10 +36,9 @@ html[data-theme] .connection-device-picker button[aria-pressed="true"] { backgro
 .connection-link-list span { color: var(--muted); font-size: 12px; }
 @media (max-width: 650px) {
   .connection-device-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  html[data-theme] .connection-device-picker button { flex-direction: column; align-items: flex-start; padding: 14px 12px; gap: 10px; }
+  html[data-theme] .connection-device-picker button { flex-direction: column; align-items: flex-start; padding: var(--space-6); gap: var(--space-4); }
   .connection-device-picker button > svg:last-child { display: none; }
-  .connection-network-note { padding: 14px; align-items: flex-start; }
-  .connection-setup { padding: 18px; }
-  .connection-code { flex-direction: column; align-items: flex-start; padding: 16px; gap: 18px; }
+  .connection-network-note { align-items: flex-start; }
+  .connection-code { flex-direction: column; align-items: flex-start; gap: var(--space-6); }
   .connection-code img { align-self: center; }
 }
