@@ -55,8 +55,15 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
   define: { __MASALAPOS_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __MASALAPOS_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial),
     // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
     __MASALAPOS_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __MASALAPOS_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
-  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)$/ }, (args) => ({ path: join(root, "packages", args.path.split("/")[1], "src/index.ts") })); } }],
+  // Workspace packages are bundled from source, including subpath imports (@masalapos/domain/vendor-codes): the installer ships no copy of them.
+  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)(\/[a-z0-9-]+)?$/ }, (args) => {
+    const [, pkg, sub] = args.path.split("/");
+    return { path: join(root, "packages", pkg, "src", `${sub ?? "index"}.ts`) };
+  }); } }],
 });
+// The installer has no workspace packages: an import of one left in the bundle means a server that cannot start.
+const leftover = readFileSync(join(stage, "server/main.mjs"), "utf8").match(/from\s*["']@masalapos\/[^"']*["']/g);
+if (leftover) throw new Error(`The server bundle still imports workspace packages: ${[...new Set(leftover)].join(", ")}`);
 await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater", "koffi"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) } });
 // Preloads run sandboxed, so they are CommonJS; the remote-support sharing page is a plain browser script.
 for (const [entry, out] of [["preload.ts", "preload.cjs"], ["remote/agent-preload.ts", "remote-agent-preload.cjs"], ["remote/banner-preload.ts", "remote-banner-preload.cjs"]]) {
