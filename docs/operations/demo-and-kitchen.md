@@ -2,15 +2,15 @@
 
 ## Start a customer demo
 
-Install `dist/demo/ForkFlow-Demo-Setup-0.7.0.exe`, or double-click
-`Start ForkFlow Demo.cmd` from this workspace. Demo runs on port **4110** and
-stores its database in `%APPDATA%\forkflow-demo\data`. It has a separate app
+Install `dist/demo/MasalaPOS-Demo-Setup-0.7.0.exe`, or double-click
+`Start MasalaPOS Demo.cmd` from this workspace. Demo runs on port **4110** and
+stores its database in `%APPDATA%\masalapos-demo\data`. It has a separate app
 identity and can run alongside the ordinary POS on port 4100.
 
 The licensed customer app is built separately with `npm run package:commercial`
-and appears in `dist/commercial/ForkFlow-Setup-0.7.0.exe`. It requires your public
+and appears in `dist/commercial/MasalaPOS-Setup-0.7.0.exe`. It requires your public
 license verification key during the build, then a signed customer license during
-activation. Use `Start ForkFlow Customer.cmd` for its workspace build. Demo never
+activation. Use `Start MasalaPOS Customer.cmd` for its workspace build. Demo never
 becomes the licensed app; install the customer edition for the real restaurant.
 See [customer builds and activation](commercial-licensing.md).
 
@@ -35,15 +35,15 @@ selected by the demo launcher. Database archives remain available for inspection
 ## Connect a Windows kitchen display
 
 1. Keep the main POS or Demo app running.
-2. Install `dist/kitchen/ForkFlow-Kitchen-Setup-0.7.0.exe`, or run
-   `Start ForkFlow Kitchen.cmd` from this workspace.
+2. Install `dist/kitchen/MasalaPOS-Kitchen-Setup-0.7.0.exe`, or run
+   `Start MasalaPOS Kitchen.cmd` from this workspace.
 3. Enter the main PC's address. For a demo on this same PC, use
    **http://127.0.0.1:4110**. On another PC, use the main PC's LAN address,
    such as `http://192.168.1.20:4110` for Demo or port `4100` for the normal POS.
 4. Sign in with a **Kitchen** staff PIN created on the main POS. Use **4567**
    with the sample demo restaurant.
 
-The address is saved in `%APPDATA%\forkflow-kitchen\connection.json` and is
+The address is saved in `%APPDATA%\masalapos-kitchen\connection.json` and is
 reused on launch. **Kitchen → Connect to a different POS** changes it. **F11**
 toggles full screen. This app runs no database or POS server of its own.
 It connects to the selected POS for sign-in, tickets and all saved actions.

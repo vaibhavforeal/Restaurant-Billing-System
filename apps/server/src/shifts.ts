@@ -1,4 +1,4 @@
-import { CashMovementCreate, DayClose, ShiftClose, ShiftOpen, localDateKey, uuidv7, type Database } from "@forkflow/domain";
+import { CashMovementCreate, DayClose, ShiftClose, ShiftOpen, localDateKey, uuidv7, type Database } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";

@@ -1,4 +1,4 @@
-import { OrderTypeChange, OrderTypeCreate, OrderTypeUpdate, uuidv7, type Database, type OrderTypeKind } from "@forkflow/domain";
+import { OrderTypeChange, OrderTypeCreate, OrderTypeUpdate, uuidv7, type Database, type OrderTypeKind } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";

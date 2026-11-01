@@ -23,7 +23,7 @@ const products: Array<{ id: string; name: string }> = [];
 const stocks: Array<{ id: string; name: string }> = [];
 app.get("/__qa/recipes", async () => ({ products, stocks, basic: grant("basic", 2), pro: grant("pro", 3) }));
 app.addHook("onClose", () => db.close());
-const headers = { "x-forkflow-device": "a".repeat(64), authorization: "" };
+const headers = { "x-masalapos-device": "a".repeat(64), authorization: "" };
 const setup = await app.inject({ method: "POST", url: "/api/setup", headers, payload: { restaurantName: "Recipe QA Cafe", adminName: "Test Admin", pin: "1234" } });
 if (setup.statusCode !== 201) throw new Error(setup.body);
 headers.authorization = `Bearer ${setup.json().token}`;

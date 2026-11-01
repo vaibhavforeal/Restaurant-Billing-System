@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill } from "@forkflow/domain";
+import { uuidv7, type Bill } from "@masalapos/domain";
 import { auth, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("CRM & Loyalty as a Marketplace add-on", () => {

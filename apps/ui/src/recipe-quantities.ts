@@ -1,4 +1,4 @@
-import type { StockUnit } from "@forkflow/domain";
+import type { StockUnit } from "@masalapos/domain";
 
 export interface RecipeDraftRow {
   key: string;

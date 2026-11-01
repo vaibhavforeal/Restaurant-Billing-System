@@ -1,4 +1,4 @@
-# ForkFlow E2E Gate
+# MasalaPOS E2E Gate
 
 ## Zomato desk
 
@@ -169,7 +169,7 @@ fixture afterwards.
 
 ## Captain PWA
 
-Build with `npm run build -w @forkflow/ui`, then start
+Build with `npm run build -w @masalapos/ui`, then start
 `node --import tsx tools/e2e/captain-server.mts`. This creates an in-memory
 restaurant with a fake printer on `http://127.0.0.1:4139/captain/`, never the
 real POS database. Staff PINs: admin 1234, waiter 3456, cashier 2345, kitchen 4567.
@@ -218,22 +218,27 @@ Playwright MCP browser if agent-browser is not installed: navigate to the server
 add the fixtures file and the script with `page.addScriptTag({ path })`, then
 `waitForFunction` on `window.__licenseChecks`.
 
-The fake service requires the `X-ForkFlow-Installation-Secret` header on
-`/v1/activate` and `/v1/subscribe-sessions` and serves the Worker's real checkout
-page at `/subscribe?session=<token>` (the token is `fixtures.sessionToken`). Before
-running `licensing.js`, navigate a tab to that page and run
-`tools/e2e/licensing-expired-link.js` there (wait for
-`window.__licenseExpiredLinkChecks`, 3 checks): it submits the form and requires the
-form to disappear and the expired copy to show when the payment request answers 401.
+The fake service requires the `X-MasalaPOS-Installation-Secret` header on
+`/v1/activate` and `/v1/enroll`. Enroll accepts only the fixture Customer ID and
+Order ID (`fixtures.customerCode`, `fixtures.orderCode`). At setup, choose
+**No internet? Set up now and activate later**, so the script starts on an
+unactivated counter.
 
-Require 40 passing checks: the Subscribe and Manage plan buttons (busy state,
-session link sent to a new tab, failed request, blocked-tab fallback link, desktop-app one-click open),
-a cashier being refused a checkout session, the installation secret staying out of
-responses, activation request download, file limits, signatures, verified previews, interrupted activation and safe retry,
-device registration, remote rename/removal, downgrade impact, stale previews,
-already-installed grants, upgrades, history, failed-refresh recovery,
-Check for renewal installing a trial and then a paid renewal, the up-to-date and
-unreachable-service messages, and billing pages loading with the service down.
+Require 33 passing checks:
+- activation with a Customer ID and Order ID, and an unknown order activating nothing;
+- a cashier or an unauthenticated caller being refused activation;
+- the installation secret staying out of responses;
+- the activation request download;
+- file limits, signatures and verified previews;
+- an interrupted activation and its safe retry;
+- device registration, remote rename and removal;
+- downgrade impact, stale previews and already-installed grants;
+- upgrades and history, and recovery after a failed refresh;
+- Check for renewal installing a trial;
+- **Use a different Order ID** moving that trial to the paid order;
+- a renewal from the service;
+- the up-to-date and unreachable-service messages;
+- billing pages loading with the service down.
 
 Set the printed `clock-offset.txt` to `10800000` (ASCII text). This advances only
 the test license clock by three hours; never change the PC's system time. Set the
@@ -326,7 +331,7 @@ Get-Content -Raw -Encoding utf8 tools/e2e/m10-takeaway.js |
   .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session takeaway-qa eval --stdin
 ```
 
-The gate persists its own phase under `forkflow.qa.m10.takeaway`. When it returns
+The gate persists its own phase under `masalapos.qa.m10.takeaway`. When it returns
 `reload-required`, reload that browser page and run the same script again.
 Four real page reloads exercise cart, create, bill, and settlement recovery.
 Require a final `status: passed`; failures return their completed assertions
@@ -401,9 +406,9 @@ Run the scripts sequentially in the same browser session, waiting for each resul
 
 ```powershell
 Get-Content -Raw -Encoding utf8 tools/e2e/m8-qr.js |
-  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m8 eval --stdin
+  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m8 eval --stdin
 Get-Content -Raw -Encoding utf8 tools/e2e/m8-qr-review.js |
-  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m8 eval --stdin
+  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m8 eval --stdin
 ```
 
 The first gate checks QR generation/print-sheet selection, guest isolation,
@@ -416,7 +421,7 @@ scanning still require a deployment check.
 
 ## M7 recipe gate
 
-Build the UI with `npm run build -w @forkflow/ui`, then start
+Build the UI with `npm run build -w @masalapos/ui`, then start
 `node --import tsx tools/e2e/recipes-server.mts`. It uses an in-memory database,
 signed Pro/Basic licenses and a fake printer. Open `http://127.0.0.1:4155`, sign in
 as admin **1234**, and register the browser when prompted. Cashier PIN is **2345**.
@@ -453,17 +458,17 @@ Browser-based acceptance test for M3a (orders/KOT) and M3s (table splits).
 
 1. **Build the UI production bundle** (the server serves the production build):
    ```bash
-   npm run build -w @forkflow/ui
+   npm run build -w @masalapos/ui
    ```
 
-2. **Start the ForkFlow server with a fresh scratch database**:
+2. **Start the MasalaPOS server with a fresh scratch database**:
    ```bash
-   FORKFLOW_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
+   MASALAPOS_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
    ```
 
    Example (Git Bash on Windows):
    ```bash
-   FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+   MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
    ```
 
    The server will initialize a fresh DB on first run. To re-run the gate from scratch, delete the scratch directory and restart the server.
@@ -514,7 +519,7 @@ agent-browser and complete setup/sign in as an admin.
 ```powershell
 # Substitute your installed agent-browser executable if different.
 Get-Content -Raw -Encoding utf8 tools/e2e/m4-billing.js |
-  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m4 eval --stdin
+  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m4 eval --stdin
 ```
 
 The gate uses DOM events in the real browser (works around native-click issues
@@ -529,7 +534,7 @@ signed into agent-browser against a scratch database:
 
 ```powershell
 Get-Content -Raw -Encoding utf8 tools/e2e/m5-inventory.js |
-  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m5 eval --stdin
+  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m5 eval --stdin
 ```
 
 The gate creates menu fixtures through the API, then exercises stock creation,
@@ -549,7 +554,7 @@ admin, starting on Home (not Settings), then run:
 
 ```powershell
 Get-Content -Raw -Encoding utf8 tools/e2e/m6-resilience.js |
-  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session forkflow-m6 eval --stdin
+  .\.e2e-scratch\qa\node_modules\.bin\agent-browser.cmd --session masalapos-m6 eval --stdin
 ```
 
 The gate checks manual backup/download, LAN QR and shortcut generation, draft
@@ -558,9 +563,9 @@ for kitchen send, bill issue and settlement. It restores the original browser
 fetch function after fault injection. With a LAN interface it reports 12 checks.
 Run the M4 and M5 gates as checkout/stock regression checks.
 
-For packaged-runtime QA, set `FORKFLOW_DATA_DIR` to an absolute scratch folder,
-`FORKFLOW_PORT` to an unused port, and `FORKFLOW_DISABLE_AUTOSTART=1` before
-launching `dist/installer/win-unpacked/ForkFlow.exe --remote-debugging-port=4122`.
+For packaged-runtime QA, set `MASALAPOS_DATA_DIR` to an absolute scratch folder,
+`MASALAPOS_PORT` to an unused port, and `MASALAPOS_DISABLE_AUTOSTART=1` before
+launching `dist/installer/win-unpacked/MasalaPOS.exe --remote-debugging-port=4122`.
 Connect agent-browser to 4122. Check the rendered setup flow, complete setup,
 verify SQLite-backed API calls and backup creation, terminate only its identified
 utility server child and check that a new health instance ID appears. Quit the
@@ -609,10 +614,10 @@ then add the gate with `page.addScriptTag({ path })` and wait for its result glo
 when the real download starts: first run
 `const real = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) return; return real.call(this); }`
 in the page, then add the gate. The gate still captures and checks each blob.
-`kitchen-app.js` also needs a page with no POS session: remove `forkflow.token` from
+`kitchen-app.js` also needs a page with no POS session: remove `masalapos.token` from
 local storage first. `demo-kitchen.js` and `kitchen-app.js` expect the demo on port 4110; while
-the ForkFlow Demo app holds it, run a scratch demo from source on 4112 (set
-`globalThis.__FORKFLOW_DEMO__ = true`, then import `apps/server/src/main.ts` with
-`FORKFLOW_PORT=4112` and a scratch `FORKFLOW_DATA_DIR`) and run copies of the two scripts
+the MasalaPOS Demo app holds it, run a scratch demo from source on 4112 (set
+`globalThis.__MASALAPOS_DEMO__ = true`, then import `apps/server/src/main.ts` with
+`MASALAPOS_PORT=4112` and a scratch `MASALAPOS_DATA_DIR`) and run copies of the two scripts
 with the port rewritten.
 

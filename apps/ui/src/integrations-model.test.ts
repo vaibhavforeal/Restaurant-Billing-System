@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IntegrationInfo } from "@forkflow/domain/integrations";
+import type { IntegrationInfo } from "@masalapos/domain/integrations";
 import { canToggle, isEnabled, navTabVisible, nextList, statusLabel } from "./integrations-model";
 
 const zomato: IntegrationInfo = { id: "zomato", name: "Zomato", description: "", category: "delivery", status: "available", setupPage: "zomato", enabled: true, licensed: true, updatedAt: 1 };
@@ -28,7 +28,7 @@ describe("integrations model", () => {
     expect(canToggle(swiggy, true)).toBe(false);
   });
 
-  it("treats an add-on ForkFlow has not included as off and labels it Not included", () => {
+  it("treats an add-on MasalaPOS has not included as off and labels it Not included", () => {
     expect(isEnabled([{ ...kds, enabled: true, licensed: false }], "kds")).toBe(false);
     expect(isEnabled([{ ...kds, enabled: true }], "kds")).toBe(true);
     expect(statusLabel({ ...kds, licensed: false })).toBe("Not included");

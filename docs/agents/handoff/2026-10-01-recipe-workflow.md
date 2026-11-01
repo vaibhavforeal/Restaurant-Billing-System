@@ -32,6 +32,6 @@ The reusable fixture is tools/e2e/recipes-server.mts on port 4155 with an
 in-memory database and fake printer. Restart it before the main gate because
 license revisions are monotonic. All recipe QA servers were stopped. Recipe
 documentation and screenshots were updated. Built UI assets were copied into
-build/desktop/app/ui for the existing Start ForkFlow.cmd launcher, with matching
+build/desktop/app/ui for the existing Start MasalaPOS.cmd launcher, with matching
 index hashes. The running restaurant was not restarted, and installers were
 not repackaged; the launcher shows the redesign on its next load.

@@ -10,7 +10,7 @@
     throw new Error("Timed out: " + label);
   };
   const nativeFetch = window.fetch.bind(window);
-  const headers = { authorization: "Bearer " + localStorage.getItem("forkflow.token"), "x-forkflow-device": localStorage.getItem("forkflow.device.v1") };
+  const headers = { authorization: "Bearer " + localStorage.getItem("masalapos.token"), "x-masalapos-device": localStorage.getItem("masalapos.device.v1") };
   const api = async path => {
     const response = await nativeFetch(path, { headers });
     if (!response.ok) throw new Error(path + ": " + response.status);
@@ -19,7 +19,7 @@
   const button = name => [...document.querySelectorAll("button")].find(e => e.textContent.trim() === name);
   const click = async name => { (await wait(() => { const b = button(name); return b && !b.disabled && b; }, name)).click(); await pause(); };
   const kotButton = () => document.querySelector('[data-shortcut="F9"]');
-  const queues = () => Object.keys(localStorage).filter(key => key.startsWith("forkflow.queue.v2.")).map(key => JSON.parse(localStorage.getItem(key)));
+  const queues = () => Object.keys(localStorage).filter(key => key.startsWith("masalapos.queue.v2.")).map(key => JSON.parse(localStorage.getItem(key)));
   const openTable = async name => {
     if (document.querySelector(".order-screen")) await click("← Tables");
     else if (!document.querySelector(".table-card")) await click("tables");
@@ -44,7 +44,7 @@
     await openTable(firstTable);
     const orderAtTable = async name => (await api("/api/orders")).orders.find(o => o.tableName === name);
     const first = await orderAtTable(firstTable);
-    const draftKey = `forkflow.draft.${user.id}.${first.id}`;
+    const draftKey = `masalapos.draft.${user.id}.${first.id}`;
     check(kotButton().disabled, "Empty order disables KOT");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "F9", bubbles: true })); await pause();
     check(sends.length === 0 && queues().length === 0, "Empty F9 creates no request or saved-action error");

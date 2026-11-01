@@ -61,3 +61,14 @@
 @media (max-width: 950px) { .product-editor-layout { grid-template-columns: minmax(0, 1fr); } .product-photo-editor { max-width: 420px; } .product-variant-inputs { grid-template-columns: repeat(4, minmax(0, 150px)); } .product-variant-name { grid-column: 1 / -1; max-width: 300px; } }
 @media (max-width: 650px) { .product-editor-fields { grid-template-columns: minmax(0, 1fr); } .product-variant-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .product-variant-name { max-width: none; } .product-editor-layout { gap: 20px; } }
 @media (max-width: 650px) { .product-prices-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .product-metadata-grid { grid-template-columns: minmax(0, 1fr); } }
+.combo-slots-editor { margin: 26px 0; border-top: 1px solid var(--line); padding-top: 22px; display: grid; gap: 14px; }
+.combo-slots-editor h3 { margin: 0; display: flex; align-items: center; }
+.combo-slot-editor { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+.combo-slot-editor legend { padding: 0 6px; font-weight: 700; }
+.combo-slot-settings { display: grid; grid-template-columns: minmax(160px, 1fr) auto repeat(2, minmax(90px, 130px)); gap: 12px; align-items: end; }
+.product-editor .combo-slot-fixed { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.combo-option-editor { display: grid; grid-template-columns: minmax(180px, 1fr) 80px 110px auto; gap: 10px; align-items: end; }
+.combo-slot-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+@media (max-width: 760px) {
+  .combo-slot-settings, .combo-option-editor { grid-template-columns: 1fr 1fr; }
+}

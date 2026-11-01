@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoSettings, type ZomatoReconciliation,
-  type ZomatoReconciliationRow, type ZomatoImportKind, type ZomatoImportPreview } from "@forkflow/domain/zomato";
+  type ZomatoReconciliationRow, type ZomatoImportKind, type ZomatoImportPreview } from "@masalapos/domain/zomato";
 import { apiFetch } from "../api";
 import { connectWs } from "../ws";
 import { downloadText } from "../download";
@@ -134,7 +134,7 @@ function ZomatoImport({ restaurantId, onImported }: { restaurantId: string; onIm
     finally { lock.current = false; setBusy(false); }
   }
   return <section className="panel zomato-import" aria-label="Import Zomato records"><h3>Import orders and settlements</h3>
-    <p className="muted">Map your Zomato exports to the ForkFlow template. Amounts are INR with two decimals. These templates are not Zomato's export format.</p>
+    <p className="muted">Map your Zomato exports to the MasalaPOS template. Amounts are INR with two decimals. These templates are not Zomato's export format.</p>
     {!restaurantId && <p>Save a restaurant ID in Marketplace, Zomato settings before importing.</p>}
     <fieldset disabled={busy || !restaurantId} className="zomato-fields">
       <div className="zomato-toolbar"><label>Import type<select value={kind} onChange={e => { setKind(e.target.value as ZomatoImportKind); replaceCsv(""); if (file.current) file.current.value = ""; }}><option value="orders">Order history</option><option value="settlements">Settlement entries</option></select></label>

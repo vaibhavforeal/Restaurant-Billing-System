@@ -7,7 +7,7 @@ export function billStyleGallery(): string {
     ["compact", "Compact", "Space-saving sans serif", "Tighter spacing and a clear hierarchy for busy counters."],
   ];
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Restaurant bill styles · ForkFlow</title><style>
+  <title>Restaurant bill styles · MasalaPOS</title><style>
     *{box-sizing:border-box}body{margin:0;background:#eeeee9;color:#202820;font:14px/1.5 Arial,sans-serif}
     main{max-width:1060px;margin:auto;padding:36px 28px 48px}header{max-width:720px}.eyebrow{text-transform:uppercase;letter-spacing:2px;font-size:11px;font-weight:bold;color:#51604f}
     h1{font-size:36px;line-height:1.1;letter-spacing:-1.4px;margin:10px 0 14px}p{margin:0;color:#515a51}
@@ -20,7 +20,7 @@ export function billStyleGallery(): string {
     a{color:#244c30;font-weight:bold;font-size:12px;text-underline-offset:3px}:focus-visible{outline:3px solid #61834f;outline-offset:3px}
     footer{margin-top:32px;border-top:1px solid #c9cec4;padding-top:16px;font-size:12px;color:#515a51}
     @media(max-width:760px){main{padding:24px 16px}.grid{grid-template-columns:1fr}h1{font-size:31px}.controls{gap:12px}label{flex:1;min-width:0}select{min-width:0;width:100%}small{font-size:10px}}
-  </style></head><body><main><header><div class="eyebrow">ForkFlow · Print collection</div><h1>A bill for every kind of table.</h1>
+  </style></head><body><main><header><div class="eyebrow">MasalaPOS · Print collection</div><h1>A bill for every kind of table.</h1>
   <p>Four restaurant bill styles, with the same clear item details, accurate totals and payment information. Choose yours in the app under <strong>Settings → Bill style → Save</strong>.</p></header>
   <div class="controls"><label>Bill sample<select id="tax"><option value="gst">Tax invoice · Includes GST</option><option value="supply">Bill of supply · no GST, GSTIN set</option><option value="plain">Restaurant bill · no GST</option></select></label>
   <label>Print format<select id="format"><option value="">Preview / A4 PDF</option><option value="-80mm">80 mm thermal</option><option value="-58mm">58 mm thermal</option></select></label></div>

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 import { freshAppWithFakeSink, setupAdmin, createUser, auth } from "./test-helpers.js";
 let app: FastifyInstance, token: string;
 beforeEach(async () => { ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app)); });

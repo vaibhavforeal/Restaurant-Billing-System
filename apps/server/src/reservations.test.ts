@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MIGRATIONS, migrate, openDb, uuidv7, type Reservation } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, uuidv7, type Reservation } from "@masalapos/domain";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 import { localMinute } from "./reservation-rules.js";
 

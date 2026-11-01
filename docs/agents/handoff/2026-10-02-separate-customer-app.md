@@ -5,13 +5,13 @@ They subsequently authorized creating new licensing keys for the first release.
 
 ## Result
 
-- Demo remains `in.forkflow.demo`, `%APPDATA%/forkflow-demo/data`, port 4110,
+- Demo remains `in.masalapos.demo`, `%APPDATA%/masalapos-demo/data`, port 4110,
   resettable samples, demo PINs and simulated thermal printing.
-- Customer retains `in.forkflow.pos` and its existing data location/port 4100.
+- Customer retains `in.masalapos.pos` and its existing data location/port 4100.
   It now stages independently in `build/desktop/commercial` and packages into
   `dist/commercial`. It starts with restaurant setup and signed license activation.
 - Internal development continues in `build/desktop/app`; its launcher is not a
-  customer distribution. New `Start ForkFlow Customer.cmd` opens the licensed stage.
+  customer distribution. New `Start MasalaPOS Customer.cmd` opens the licensed stage.
 - `package:win` aliases `package:commercial`; `package:dir` also requires licensing.
 - Release preflight requires an Ed25519 public key, rejects private keys and stage
   overrides, and prevents development from overwriting Demo/Customer/Kitchen stages.
@@ -23,7 +23,7 @@ They subsequently authorized creating new licensing keys for the first release.
 ## Keys
 
 Keys were generated outside the repository in:
-`C:\Users\AR\.forkflow-licensing\keys\2026-10-02-e4ae2caa`
+`C:\Users\AR\.masalapos-licensing\keys\2026-10-02-e4ae2caa`
 
 `license-public.pem` is embedded in the customer build. `license-private.pem`
 remains operator-only, with protected Windows folder permissions granting access
@@ -57,9 +57,9 @@ disposable scratch installation was used only for verification.
 
 ## Deliverables
 
-- `dist/demo/ForkFlow-Demo-Setup-0.6.4.exe` — 110054171 bytes
-- `dist/commercial/ForkFlow-Setup-0.6.4.exe` — 110054360 bytes
-- `Start ForkFlow Demo.cmd` and `Start ForkFlow Customer.cmd`
+- `dist/demo/MasalaPOS-Demo-Setup-0.6.4.exe` — 110054171 bytes
+- `dist/commercial/MasalaPOS-Setup-0.6.4.exe` — 110054360 bytes
+- `Start MasalaPOS Demo.cmd` and `Start MasalaPOS Customer.cmd`
 
 Older `dist/installer` artifacts were preserved but are not customer releases.
 The existing working tree has extensive changes from earlier work; none were

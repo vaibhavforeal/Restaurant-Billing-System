@@ -213,7 +213,7 @@ it("costs a dish and flags missing ingredients", () => {
 - Modify: `apps/server/src/costing.ts`, `apps/server/src/costing.test.ts`
 
 **Interfaces:**
-- Consumes: `dishCost`, `preGstPaise`, `priceForTier` (`@forkflow/domain/pricing`), `StockCost`, `DishCost` (Task 2); `costs` preHandler (Task 4).
+- Consumes: `dishCost`, `preGstPaise`, `priceForTier` (`@masalapos/domain/pricing`), `StockCost`, `DishCost` (Task 2); `costs` preHandler (Task 4).
 - Produces:
   - `GET /api/costing/stock` → `{ items: StockCost[]; totalValuePaise: number }` — `valuePaise = moveCostPaise(stockMilli(qty), cost)` (null when unknown; negative stock gives negative value); total sums known values of active items.
   - `GET /api/costing/dishes` → `{ dishes: DishCost[]; taxInclusive: boolean }` — one row per active product without variants, or per active variant (name `"Product · Variant"`); recipe links are the product's; `prices` for tiers `non_ac`, `ac`, `takeaway` via `priceForTier` on the variant (or product) row; `costPercent = round(cost * 1000 / preGst) / 10` and `marginPaise = preGst − cost`, both `null` when cost is `null` or `preGst === 0`.
@@ -234,7 +234,7 @@ it("costs a dish and flags missing ingredients", () => {
 - Modify: `packages/domain/src/costing.ts` (+ tests), `apps/server/src/costing.ts` (+ tests)
 
 **Interfaces:**
-- Consumes: `reportRange` (`apps/server/src/sales-reports.ts`), `OperationalReport`, `ReportTable` (`@forkflow/domain/operational-reports`).
+- Consumes: `reportRange` (`apps/server/src/sales-reports.ts`), `OperationalReport`, `ReportTable` (`@masalapos/domain/operational-reports`).
 - Produces:
   - Domain: `ProfitLine { categoryName: string; name: string; qty: number; revenuePaise: number; costPaise: number | null; saleMoves: number }` and `buildProfitReport(input: { from: string; to: string; today: string; timezone: string; generatedAt: number; lines: ProfitLine[]; wastage: { costPaise: number; unknownCount: number }; adjustments: { costPaise: number; unknownCount: number } }): Omit<OperationalReport, "kind"> & { kind: "profit" }`.
     - Line status: `saleMoves === 0` → no recipe; `costPaise === null` → cost unknown; else costed.
@@ -268,7 +268,7 @@ it("costs a dish and flags missing ingredients", () => {
 - [ ] **Step 1: Write failing tests** for the three helpers, including `formatUnitCost(2_340, "ml") === "₹0.0234/ml"`, `rupeesPerUnitToMilliPaise("320") === 32_000_000`, `rupeesPerUnitToMilliPaise("0") === null`, `perUnitHint("340", "10", "kg") === "= ₹34.00/kg"`, `perUnitHint("340", "0", "kg") === null`.
 - [ ] **Step 2: Run** `npm run test -- apps/ui/src/stock-costs.test.ts` (or `npx vitest run apps/ui/src/stock-costs.test.ts`) → FAIL. **Step 3: Implement** helpers.
 - [ ] **Step 4: Wire the screen:** stock table columns "Avg cost" and "Stock value" plus a total line; "Receive stock" gains **Amount paid (₹, incl. GST)** (optional) with the hint, sent as `costPaise` via `rupeesToPaise`; item detail gains **Set unit cost** (₹ per unit + note) with its own `clientRef`/in-flight guard like the existing movement form; history shows a Cost column and interleaves "Unit cost set" rows by `createdAt`. Refresh costs on `stock.changed`.
-- [ ] **Step 5: Run** `npx vitest run apps/ui` and `npm run typecheck -w @forkflow/ui` → PASS.
+- [ ] **Step 5: Run** `npx vitest run apps/ui` and `npm run typecheck -w @masalapos/ui` → PASS.
 - [ ] **Step 6: Commit** — `feat(ui): ingredient costs in inventory`.
 
 ---
@@ -302,7 +302,7 @@ it("costs a dish and flags missing ingredients", () => {
 
 - [ ] **Step 1: Write failing test** in `operational-report.test.ts`: `operationalCell(48, { key: "p", label: "Food cost", format: "percent" }, "UTC")` → `"48.0%"`; CSV cell `"48.0"`; `null` → `""` (existing null behaviour).
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement** the changes under Interfaces; App passes `canSeeCosts={user.role === "admin"}`.
-- [ ] **Step 4: Run** `npx vitest run apps/ui`, UI typecheck, and `npm run build -w @forkflow/ui` → PASS.
+- [ ] **Step 4: Run** `npx vitest run apps/ui`, UI typecheck, and `npm run build -w @masalapos/ui` → PASS.
 - [ ] **Step 5: Commit** — `feat(ui): food cost and profit report`.
 
 ---
@@ -315,6 +315,6 @@ it("costs a dish and flags missing ingredients", () => {
 
 - [ ] **Step 1: Write `docs/operations/costing.md`:** what weighted average means with the paneer example; GST-inclusive entry; setting starting costs; reading Dish costing; reading the profit report and its exclusions; admin + Pro only; behaviour after downgrade; costs before go-live are unknown.
 - [ ] **Step 2: Update** the overview, README and recipes guide as listed.
-- [ ] **Step 3: Full checks:** `npx tsc --noEmit -p .`, `npm run typecheck -w @forkflow/ui`, `npx vitest run` (only the two known `captain-https.test.ts` failures), `npm run build -w @forkflow/ui`, `npm run test:packaging`.
-- [ ] **Step 4: Browser check** with a disposable database: set `FORKFLOW_DATA_DIR` to `.e2e-scratch/costing`, `npm run dev`, then as admin: create a stock item, set a starting cost, receive stock with an amount paid, link it to a dish, order → send → accept → bill, open Dish costing and Food cost & profit, export CSV. Sign in as a cashier and confirm no cost column, tab or report appears. Record what was checked.
+- [ ] **Step 3: Full checks:** `npx tsc --noEmit -p .`, `npm run typecheck -w @masalapos/ui`, `npx vitest run` (only the two known `captain-https.test.ts` failures), `npm run build -w @masalapos/ui`, `npm run test:packaging`.
+- [ ] **Step 4: Browser check** with a disposable database: set `MASALAPOS_DATA_DIR` to `.e2e-scratch/costing`, `npm run dev`, then as admin: create a stock item, set a starting cost, receive stock with an amount paid, link it to a dish, order → send → accept → bill, open Dish costing and Food cost & profit, export CSV. Sign in as a cashier and confirm no cost column, tab or report appears. Record what was checked.
 - [ ] **Step 5: Commit** — `docs: inventory costing guide and overview`.

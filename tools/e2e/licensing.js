@@ -15,24 +15,16 @@
   const post = (path, body) => originalFetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const messageIs = (text) => panel().querySelector('.license-message')?.textContent === text;
   const alertHas = (text) => [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes(text));
-  // window.open is stubbed throughout: each call records a fake tab (its URL, target, the location it is later sent to and what is written into its document), returns null while `blocked`, or throws while `throwing`.
-  const tabs = [], sessionUrl = 'http://127.0.0.1:4129/subscribe?session=' + fixtures.sessionToken, originalOpen = window.open;
-  let blocked = false, throwing = false;
-  window.open = (url, target) => {
-    if (throwing) throw new Error('window.open is not allowed');
-    if (blocked) return null;
-    const tab = { url, target, closed: false, opener: 'page', location: { href: '' }, document: { title: '', body: { textContent: '' } }, close() { this.closed = true; } }; tabs.push(tab); return tab;
-  };
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
-  const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' });
+  const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' });
   const api = async (path, method = 'GET', body, as = headers()) => {
     const res = await originalFetch('/api' + path, { method, headers: as, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (res.status === 204) return {};
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };
   const registerOther = async (credential, name) => {
-    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-forkflow-device': credential, 'content-type': 'application/json' });
-    const as = { authorization: 'Bearer ' + login.token, 'x-forkflow-device': credential, 'content-type': 'application/json' };
+    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
+    const as = { authorization: 'Bearer ' + login.token, 'x-masalapos-device': credential, 'content-type': 'application/json' };
     await api('/license/devices', 'POST', { name }, as); return as;
   };
   URL.createObjectURL = function (blob) { const url = originalUrl.call(this, blob); blobs.set(url, blob); return url; };
@@ -42,44 +34,16 @@
     await wait(() => panel() && !button('Refresh plan').disabled);
     check((await api('/license')).state === 'unactivated' && !!button('Back up now'), 'Unactivated installation provides activation and backup recovery');
     check((await originalFetch('/api/products', { headers: headers() })).status === 403, 'Commercial operations require activation');
-    check(!!button('Subscribe') && !button('Manage plan') && !panel().querySelector('a[href*="installation="]'), 'Subscribe is a button; no payment link carries the installation id');
-    // The held request shows the busy state; the first Subscribe also makes the counter register with the fake service (404 then retry).
-    let releaseSession = () => {}, onSession = null;
-    const sessionGate = new Promise((r) => { releaseSession = r; });
-    window.fetch = (...args) => String(args[0]) === '/api/license/subscribe-session' && onSession ? onSession(args) : originalFetch(...args);
-    onSession = async (args) => { await sessionGate; return originalFetch(...args); };
-    await click('Subscribe'); await wait(() => tabs.length === 1 && !!button('Opening payment page…'));
-    check(button('Opening payment page…').disabled && button('Refresh plan').disabled && tabs[0].location.href === '' && tabs[0].url === '' && !tabs[0].closed,
-      'While the session link is fetched the button reads Opening payment page… and is disabled, and the new tab is not navigated');
-    check(tabs[0].document.title === 'Opening payment page…' && tabs[0].document.body.textContent === 'Opening payment page…',
-      'The blank tab says Opening payment page… while the session link is fetched');
-    releaseSession(); await wait(() => tabs[0].location.href !== '' && !!button('Subscribe') && !button('Subscribe').disabled);
-    check(tabs[0].location.href === sessionUrl && tabs[0].opener === null && tabs[0].target === '_blank' && !tabs[0].closed,
-      'Subscribe sends a new tab to the Worker checkout page with a session link and detaches its opener');
-    onSession = async () => new Response(JSON.stringify({ error: "Couldn't reach the licensing service. Check the internet connection and try again." }), { status: 503, headers: { 'content-type': 'application/json' } });
-    await click('Subscribe'); await wait(() => alertHas("Couldn't reach the licensing service. Check the internet connection and try again."));
-    check(tabs.length === 2 && tabs[1].closed && tabs[1].location.href === '' && !button('Subscribe').disabled, 'A failed session request closes the new tab and shows the message');
-    onSession = null; blocked = true;
-    await click('Subscribe'); await wait(() => !!link('Open payment page'));
-    const fallback = link('Open payment page');
-    check(tabs.length === 2 && fallback.href === sessionUrl && fallback.target === '_blank' && fallback.rel === 'noopener noreferrer' && panel().innerText.includes("The payment page didn't open automatically.") && !panel().innerText.includes('blocked'),
-      'A blocked tab falls back to an Open payment page link with neutral copy and the session URL');
-    // The ForkFlow desktop app has an Electron user agent: no blank tab, window.open is called once with the session URL (the shell sends it to the system browser).
-    const realAgent = navigator.userAgent; blocked = false;
-    Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => realAgent + ' Electron/33.0.0' });
-    const before = tabs.length; await click('Subscribe');
-    await wait(() => tabs.length === before + 1 && !!button('Subscribe') && !button('Subscribe').disabled);
-    check(tabs.length === before + 1 && tabs[before].url === sessionUrl && tabs[before].target === '_blank' && !tabs.slice(before).some((t) => t.url === '') && !link('Open payment page'),
-      'In the desktop app Subscribe opens the session URL in one window.open call with no blank tab and no fallback link');
-    throwing = true; await click('Subscribe'); await wait(() => !!link('Open payment page'));
-    check(tabs.length === before + 1 && link('Open payment page').href === sessionUrl, 'In the desktop app a window.open that throws falls back to the Open payment page link');
-    throwing = false; delete navigator.userAgent; check(navigator.userAgent === realAgent, 'The desktop stub is removed again');
-    window.fetch = originalFetch;
+    check(!button('Subscribe') && !button('Manage plan') && !!button('Activate'), 'An unactivated counter offers activation with a Customer ID and Order ID, and no checkout');
+    await set(input('Customer ID'), fixtures.customerCode.replace('FC-', '').toLowerCase()); await set(input('Order ID'), 'FO-0000-000');
+    await click('Activate'); await wait(() => alertHas('Check the Customer ID and Order ID'));
+    check((await api('/license')).state === 'unactivated', 'An Order ID the licensing service does not know activates nothing');
+    await set(input('Customer ID'), ''); await set(input('Order ID'), '');
     document.querySelector('.license-identity').open = true;
     await click('Download activation request'); await wait(() => downloads.length === 1);
     const request = JSON.parse(await downloads[0].text);
     check(request.installationId === fixtures.installationId && request.currentRevision === 0 && !('envelope' in request), 'Activation request download contains this installation and no signed grant');
-    check(![JSON.stringify(request), JSON.stringify(await api('/license')), sessionUrl].some((text) => text.includes(fixtures.installationSecret)), 'The installation secret appears in neither the activation request nor the license status');
+    check(![JSON.stringify(request), JSON.stringify(await api('/license'))].some((text) => text.includes(fixtures.installationSecret)), 'The installation secret appears in neither the activation request nor the license status');
     await choose('x'.repeat(16385)); await wait(() => alertHas('16 KB'));
     check(!input('Signed license').value, 'Oversized license files are rejected before upload');
     await choose('ff1.bad.bad'); await click('Preview license'); await wait(() => alertHas('License is invalid'));
@@ -108,10 +72,12 @@
     await wait(() => document.body.innerText.includes('Dashboard'));
     check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
     await api('/users', 'POST', { name: 'QA Cashier', pin: '2468', role: 'cashier' });
-    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' });
-    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-forkflow-device': headers()['x-forkflow-device'], 'content-type': 'application/json' };
-    check((await originalFetch('/api/license/subscribe-session', { method: 'POST', headers: asCashier })).status === 403 && (await originalFetch('/api/license/subscribe-session', { method: 'POST' })).status === 401,
-      'A cashier or an unauthenticated caller cannot create a checkout session');
+    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' });
+    const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' };
+    const codes = JSON.stringify({ customerId: fixtures.customerCode, orderId: fixtures.orderCode });
+    check((await originalFetch('/api/license/enroll', { method: 'POST', headers: asCashier, body: codes })).status === 403
+      && (await originalFetch('/api/license/enroll', { method: 'POST', headers: { 'content-type': 'application/json' }, body: codes })).status === 401,
+      'A cashier or an unauthenticated caller cannot activate the counter');
     document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     await registerOther('b'.repeat(64), 'Kitchen'); const phoneHeaders = await registerOther('c'.repeat(64), 'Waiter phone');
     await click('Refresh plan'); await wait(() => panel().innerText.includes('Waiter phone'));
@@ -145,17 +111,21 @@
     check(!alertHas('Device list unavailable'), 'Device management recovers after a failed refresh');
     const history = (await api('/license/history')).events;
     check(history.some((e) => e.kind === 'device_removed') && history.some((e) => e.kind === 'device_renamed') && history.every((e) => e.actorName === 'QA Admin'), 'History records activation and device changes with the acting administrator');
-    check(!!button('Manage plan') && !button('Subscribe') && !panel().innerText.includes('Pro trial'), 'A paid plan offers Manage plan instead of Subscribe');
-    const manageTab = tabs.length; await click('Manage plan'); await wait(() => tabs.length === manageTab + 1 && tabs[manageTab].location.href !== '');
-    check(tabs[manageTab].location.href === sessionUrl && tabs[manageTab].opener === null, 'Manage plan opens the checkout page through a session link too');
+    check(!button('Manage plan') && !button('Subscribe') && panel().innerText.includes('To renew or change your plan, contact MasalaPOS'), 'A paid plan points to MasalaPOS for renewals instead of a checkout');
     await post('/__fake-service/queue', { licenses: [fixtures.trialFromService] });
-    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && panel().innerText.includes('Pro trial — ends'));
-    check((await api('/license')).revision === 4 && !!button('Subscribe') && !button('Manage plan'), 'Check for renewal installs the licence the service has queued and a trial offers Subscribe');
+    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && panel().innerText.includes('Trial — ends'));
+    check((await api('/license')).revision === 4 && !button('Subscribe'), 'Check for renewal installs the trial licence the service has queued');
+    document.querySelector('.license-identity').open = true;
+    await set(input('Customer ID'), fixtures.customerCode); await set(input('Order ID'), fixtures.orderCode); await click('Activate');
+    await wait(() => messageIs('Activated with order ' + fixtures.orderCode + ' for Spice Route.') && !panel().innerText.includes('Trial — ends'));
+    const activated = await api('/license');
+    check(activated.revision === 5 && activated.customerCode === fixtures.customerCode && activated.orderCode === fixtures.orderCode && panel().innerText.includes('Customer ID: ' + fixtures.customerCode),
+      'Use a different Order ID moves the trial to the paid order and shows both IDs');
     await post('/__fake-service/queue', { licenses: [fixtures.renewalFromService] });
-    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.') && !panel().innerText.includes('Pro trial') && !!button('Manage plan'));
-    check((await api('/license')).revision === 5 && (await api('/license/history')).events.some((e) => e.actorName === 'Automatic renewal'), 'A paid renewal replaces the trial and is recorded as automatic');
+    await click('Check for renewal'); await wait(() => messageIs('A new licence was installed.'));
+    check((await api('/license')).revision === 6 && (await api('/license/history')).events.some((e) => e.actorName === 'Automatic renewal'), 'A renewal from the service is installed and recorded as automatic');
     await click('Check for renewal'); await wait(() => messageIs('Your licence is up to date.'));
-    check((await api('/license')).revision === 5, 'Nothing queued means the licence is up to date');
+    check((await api('/license')).revision === 6, 'Nothing queued means the licence is up to date');
     check((await post('/__fake-service/stop', {})).ok, 'The fake licensing service can be stopped');
     await click('Check for renewal'); await wait(() => messageIs("Couldn't reach the licensing service. Billing continues on your current licence."));
     check((await api('/license')).canOperate && (await originalFetch('/api/products', { headers: headers() })).status === 200, 'An unreachable service leaves billing on the current licence');
@@ -164,5 +134,5 @@
     document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     window.__licenseChecks = { status: 'passed', checks };
     return window.__licenseChecks;
-  } finally { release(); window.open = originalOpen; window.fetch = originalFetch; URL.createObjectURL = originalUrl; HTMLAnchorElement.prototype.click = originalClick; window.confirm = originalConfirm; window.alert = originalAlert; }
+  } finally { release(); window.fetch = originalFetch; URL.createObjectURL = originalUrl; HTMLAnchorElement.prototype.click = originalClick; window.confirm = originalConfirm; window.alert = originalAlert; }
 })();

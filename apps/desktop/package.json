@@ -1,5 +1,5 @@
 {
-  "name": "@forkflow/desktop",
+  "name": "@masalapos/desktop",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,6 +13,7 @@
     "electron": "^43.4.0"
   },
   "dependencies": {
-    "electron-updater": "^6.8.11"
+    "electron-updater": "^6.8.11",
+    "koffi": "2.16.3"
   }
 }

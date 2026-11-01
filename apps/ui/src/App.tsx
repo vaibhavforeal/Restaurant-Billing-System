@@ -7,7 +7,7 @@ import { Kitchen } from "./screens/Kitchen";
 import { Login } from "./screens/Login";
 import { OrderScreen } from "./screens/OrderScreen";
 import { Settings } from "./screens/Settings";
-import { Setup } from "./screens/Setup";
+import { Setup, type SetupActivation } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
 import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
@@ -16,7 +16,7 @@ import { Inventory } from "./screens/Inventory";
 import { IntegrationOff, Marketplace, ModuleOff } from "./screens/Marketplace";
 import { IntegrationsProvider, useIntegrations } from "./integrations";
 import { ModulesProvider, useModules } from "./modules";
-import type { ModuleId } from "@forkflow/domain/modules";
+import type { ModuleId } from "@masalapos/domain/modules";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { LicenseGate } from "./screens/LicenseSettings";
 import { NavigationGuardContext, type NavigationGuard } from "./navigation-guard";
@@ -33,6 +33,7 @@ import { listenForAndroidBack } from "./android-back";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
+import { RemoteConsent } from "./support";
 import "./compact-workspace.css";
 import { CurrentUserProvider, userCan } from "./permissions";
 import { connectWs } from "./ws";
@@ -40,7 +41,7 @@ import { isUnreachable, readSignedIn, saveSignedIn } from "./offline-cache";
 
 type State =
   | { kind: "loading" }
-  | { kind: "setup" }
+  | { kind: "setup"; activation: SetupActivation; licensed: boolean }
   | { kind: "login" }
   | { kind: "offline" }
   | { kind: "in"; user: User; page: Page };
@@ -125,9 +126,9 @@ function StaffApp() {
 
     void (async () => {
       try {
-        const { needsSetup, demo } = await apiFetch<{ needsSetup: boolean; demo?: boolean }>("/api/needs-setup");
+        const { needsSetup, demo, activation = "none", licensed = true } = await apiFetch<{ needsSetup: boolean; demo?: boolean; activation?: SetupActivation; licensed?: boolean }>("/api/needs-setup");
         setDemo(!!demo);
-        if (needsSetup) return setState({ kind: "setup" });
+        if (needsSetup) return setState({ kind: "setup", activation, licensed });
         if (session.token) {
           try {
             const { user } = await apiFetch<{ user: User }>("/api/me");
@@ -158,7 +159,7 @@ function StaffApp() {
     case "loading":
       return <StartupScreen />;
     case "setup":
-      return <Setup onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
+      return <Setup activation={state.activation} licensed={state.licensed} onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
     case "login":
       return <><DemoBanner demo={demo} login /><Login captain={captainEntry} onLogin={enter} /></>;
     case "offline":
@@ -177,6 +178,8 @@ function StaffApp() {
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
+          {/* Outside the licence gate: support must reach a counter whose licence stopped billing. */}
+          <RemoteConsent user={user} />
           <LicenseGate key={user.id} user={user}>
           <ConnectionStatus key={user.id} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
           <QrNotifications key={user.id} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>

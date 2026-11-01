@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin, wsAuth } from "./test-helpers.js";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {

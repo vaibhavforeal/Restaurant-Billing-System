@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useRef, useState } from "react";
-import { CATALOG_CSV_LIMIT, type CatalogImportPreview } from "@forkflow/domain/catalog-csv";
+import { CATALOG_CSV_LIMIT, type CatalogImportPreview } from "@masalapos/domain/catalog-csv";
 import { catalogTemplateCsv } from "../catalog-template";
 import { apiFetch } from "../api";
 import { paiseToRupees } from "../money";
@@ -56,7 +56,7 @@ export function CatalogTransfer({ busy, run, onImported }: {
         download(result.csv, result.filename);
       }, "transfer"); }}>Export CSV</button>
       <button disabled={busy} onClick={() => input.current?.click()}>Import CSV</button><InfoTip>All categories · Prices in rupees · Preview before saving</InfoTip>
-      <button disabled={busy} onClick={() => download(catalogTemplateCsv(), "forkflow-items-template.csv")}>Download template</button>
+      <button disabled={busy} onClick={() => download(catalogTemplateCsv(), "masalapos-items-template.csv")}>Download template</button>
       <input ref={input} type="file" accept=".csv,text/csv" aria-label="Choose item CSV" hidden disabled={busy}
         onChange={(e) => { chooseFile(e.target.files?.[0]); e.target.value = ""; }} />
       {busy && <span role="status">Working…</span>}

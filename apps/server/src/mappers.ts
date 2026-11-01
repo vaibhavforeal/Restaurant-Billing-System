@@ -1,4 +1,4 @@
-import { orderStockWarnings, type Database } from "@forkflow/domain";
+import { orderStockWarnings, type Database } from "@masalapos/domain";
 import { orderTableLabel } from "./table-label.js";
 import { currentTier, spendableBalance } from "./loyalty.js";
 
@@ -7,7 +7,7 @@ export interface OrderRow {
   captain_name?: string | null;
   id: string;
   client_ref: string;
-  price_tier: import("@forkflow/domain").PriceTier;
+  price_tier: import("@masalapos/domain").PriceTier;
   type: "dine_in" | "parcel" | "zomato";
   zomato_order_id?: string | null;
   zomato_status?: "preparing" | "ready" | "picked_up" | null;
@@ -40,6 +40,8 @@ export interface OrderItemRow {
   cancel_reason: string | null;
   kot_id: string | null;
   cancelled_by: string | null;
+  /** Set on an item inside a combo: the combo's own line. */
+  parent_item_id: string | null;
 }
 
 export interface KotRow {
@@ -66,6 +68,7 @@ export function orderItemJson(r: OrderItemRow) {
     note: r.note,
     cancelReason: r.cancel_reason,
     kotId: r.kot_id,
+    parentItemId: r.parent_item_id,
   };
 }
 

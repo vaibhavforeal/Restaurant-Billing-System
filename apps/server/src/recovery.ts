@@ -9,7 +9,7 @@ import { atomicJson, verifyBackup, syncFile } from "./backups.js";
  */
 export function restoreDatabase(dataDir: string, source?: string): string | null {
   const journal = join(dataDir, "restore-pending.json");
-  const live = join(dataDir, "forkflow.db");
+  const live = join(dataDir, "masalapos.db");
   const staged = join(dataDir, "restore-staged.db");
   if (source) {
     if (existsSync(journal)) throw new Error("An interrupted restore must finish first");
@@ -26,7 +26,7 @@ export function restoreDatabase(dataDir: string, source?: string): string | null
   if (state.phase === "archive") {
     verifyBackup(staged);
     for (const suffix of ["", "-wal", "-shm", "-journal"]) {
-      const from = live + suffix, to = join(state.archive, "forkflow.db" + suffix);
+      const from = live + suffix, to = join(state.archive, "masalapos.db" + suffix);
       if (existsSync(from)) {
         if (existsSync(to)) throw new Error("Recovery archive collision; contact support");
         renameSync(from, to);

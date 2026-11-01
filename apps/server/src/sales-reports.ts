@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey } from "@forkflow/domain";
+import { localDateKey } from "@masalapos/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { requireModule } from "./modules.js";

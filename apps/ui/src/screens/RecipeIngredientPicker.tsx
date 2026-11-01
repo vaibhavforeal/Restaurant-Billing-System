@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useRef, useState } from "react";
-import type { StockItem, StockUnit } from "@forkflow/domain";
+import type { StockItem, StockUnit } from "@masalapos/domain";
 import { apiFetch } from "../api";
 import { uuid } from "../uuid";
 import { WorkspaceDialog } from "../WorkspaceDialog";

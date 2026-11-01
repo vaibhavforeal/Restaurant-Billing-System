@@ -51,7 +51,7 @@ export function KitchenApp() {
     <footer className="kitchen-start">Main POS: {location.host}<KitchenInstall /></footer>
   </>;
   return <div className="kitchen-app"><DemoBanner demo={demo} />
-    <header className="kitchen-app-header"><div><strong>ForkFlow Kitchen</strong><small>Main POS: {location.host}</small></div>
+    <header className="kitchen-app-header"><div><strong>MasalaPOS Kitchen</strong><small>Main POS: {location.host}</small></div>
       <div className="actions"><span>{user.name}</span><ThemeToggle /><KitchenInstall />
         <button disabled={busy} onClick={() => void logout()}>Sign out</button></div></header>
     <LicenseGate user={user}><main id="main-content" className="kitchen-app-main"><Kitchen standalone onBusyChange={setBusy} /></main></LicenseGate>

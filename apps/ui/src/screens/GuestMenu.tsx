@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "@forkflow/domain";
+import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "@masalapos/domain";
 import { uuid } from "../uuid";
 import { GuestServices } from "./GuestServices";
+import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
+import { comboExtraPaise } from "../combo-cart";
 import "../guest-menu.css";
 
 type MenuProduct = GuestMenuData["products"][number];
-type CartItem = GuestSubmission["items"][number] & { key: string; name: string; pricePaise: number };
+type CartItem = GuestSubmission["items"][number] & { key: string; name: string; pricePaise: number; contents?: string[] };
 type SavedRequest = { submission: GuestSubmission; receipt: GuestReceipt | null };
 type SavedState = { version: 1; cart: CartItem[]; menuVersion: string | null; reviewRequired: boolean; request: SavedRequest | null; history: SavedRequest[]; historyTruncated: boolean };
 const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(paise / 100);
@@ -21,7 +23,7 @@ function retainEarlierRequests(requests: SavedRequest[]) {
   const retained = new Set([...active, ...finished]);
   return requests.filter((request) => retained.has(request));
 }
-const storageKey = (token: string) => `forkflow.guest.v1.${token}`;
+const storageKey = (token: string) => `masalapos.guest.v1.${token}`;
 const hexToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 function localPhoto(value: string | null) {
   if (!value) return null;
@@ -44,7 +46,8 @@ function readSaved(token: string): SavedState {
     if (!value || value.version !== 1 || !Array.isArray(value.cart) || value.cart.length > 30 ||
       value.cart.some((item) => typeof item.key !== "string" || typeof item.productId !== "string" ||
         (item.variantId !== null && typeof item.variantId !== "string") || typeof item.name !== "string" ||
-        !Number.isSafeInteger(item.pricePaise) || !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 20 || typeof item.note !== "string")) return emptyState();
+        !Number.isSafeInteger(item.pricePaise) || !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 20 || typeof item.note !== "string" ||
+        (item.comboPicks !== undefined && (!Array.isArray(item.comboPicks) || item.comboPicks.some((id) => typeof id !== "string"))))) return emptyState();
     if (value.request && !validRequest(value.request)) return emptyState();
     const history = Array.isArray(value.history) ? value.history.filter((request) => validRequest(request) && request.receipt?.status === "accepted") : [];
     const retained = retainEarlierRequests(history);
@@ -73,6 +76,12 @@ function reconcileCart(cart: CartItem[], menu: GuestMenuData): CartItem[] {
     if (!product || product.isSoldOut) return [];
     const variant = product.variants.find((candidate) => candidate.id === item.variantId);
     if ((item.variantId !== null && !variant) || (item.variantId === null && product.variants.length > 0)) return [];
+    // A combo stays only while its picks still fit its slots; its price follows the current extras.
+    if (product.combo || item.comboPicks) {
+      const chosen = product.combo ? comboChoice(product.combo, item.comboPicks ?? []) : null;
+      if (!chosen) return [];
+      return [{ ...item, name: product.name, pricePaise: product.pricePaise + chosen.extraPaise, contents: chosen.items.map((held) => held.qty > 1 ? `${held.qty} × ${held.name}` : held.name) }];
+    }
     return [{ ...item, name: variant ? `${product.name} (${variant.name})` : product.name, pricePaise: variant?.pricePaise ?? product.pricePaise }];
   });
 }
@@ -100,6 +109,8 @@ function GuestMenuContent({ token }: { token: string }) {
   const mounted = useRef(true);
   const menuLoadId = useRef(0);
   const cartRef = useRef<HTMLElement>(null);
+  /** The combo whose items the guest is choosing. */
+  const [picking, setPicking] = useState<{ product: MenuProduct; picks: string[] } | null>(null);
 
   function save(next: SavedState) {
     savedRef.current = next;
@@ -202,17 +213,29 @@ function GuestMenuContent({ token }: { token: string }) {
     return () => { active = false; timers.forEach((timer) => window.clearTimeout(timer)); };
   }, [historyPollKey, token]);
 
-  function add(product: MenuProduct, variantId: string | null) {
+  function add(product: MenuProduct, variantId: string | null, comboPicks?: string[]) {
     if (!menu?.orderingAvailable || product.isSoldOut || savedRef.current.request || sendingRef.current || needsRefresh) return;
+    if (product.combo && !comboPicks) {
+      // A combo with only fixed items needs no choosing.
+      if (comboPickProblem(product.combo, []) === null) add(product, null, []);
+      else setPicking({ product, picks: [] });
+      return;
+    }
     const current = savedRef.current;
     const variant = product.variants.find((candidate) => candidate.id === variantId);
     if (variantId && !variant) return;
-    const existing = current.cart.find((item) => item.productId === product.id && item.variantId === variantId && !item.note);
+    const chosen = product.combo ? comboChoice(product.combo, comboPicks ?? []) : null;
+    if (product.combo && !chosen) return;
+    const samePicks = (item: CartItem) => JSON.stringify([...item.comboPicks ?? []].sort()) === JSON.stringify([...comboPicks ?? []].sort());
+    const existing = current.cart.find((item) => item.productId === product.id && item.variantId === variantId && !item.note && samePicks(item));
     if (existing && existing.qty >= 20) { setError("You can add up to 20 of an item. Please ask staff for larger orders."); return; }
     if (!existing && current.cart.length >= 30) { setError("A request can contain up to 30 menu selections. Please ask staff for a larger order."); return; }
     const cart = existing ? current.cart.map((item) => item.key === existing.key ? { ...item, qty: item.qty + 1 } : item)
-      : [...current.cart, { key: uuid(), productId: product.id, variantId, qty: 1, note: "", name: variant ? `${product.name} (${variant.name})` : product.name, pricePaise: variant?.pricePaise ?? product.pricePaise }];
+      : [...current.cart, { key: uuid(), productId: product.id, variantId, qty: 1, note: "", name: variant ? `${product.name} (${variant.name})` : product.name,
+        pricePaise: (variant?.pricePaise ?? product.pricePaise) + (chosen?.extraPaise ?? 0),
+        ...(chosen ? { comboPicks: comboPicks!, contents: chosen.items.map((item) => item.qty > 1 ? `${item.qty} × ${item.name}` : item.name) } : {}) }];
     save({ ...current, cart, menuVersion: menu.menuVersion });
+    setPicking(null);
     setError(""); setNotice(`Added ${product.name} to your request.`);
   }
 
@@ -233,7 +256,7 @@ function GuestMenuContent({ token }: { token: string }) {
     }
     const submission = previous.request?.submission ?? {
       clientRef: uuid(), receiptToken: hexToken(), menuVersion: menu!.menuVersion,
-      items: previous.cart.map(({ productId, variantId, qty, note }) => ({ productId, variantId, qty, note: note.trim() })),
+      items: previous.cart.map(({ productId, variantId, qty, note, comboPicks }) => ({ productId, variantId, qty, note: note.trim(), ...(comboPicks ? { comboPicks } : {}) })),
     };
     const frozen: SavedState = { ...previous, request: { submission, receipt: null } };
     // Store the immutable request before sending: a lost response or reload must reuse its identity.
@@ -295,7 +318,7 @@ function GuestMenuContent({ token }: { token: string }) {
 
   return <main className="guest-menu">
     <header className="guest-menu-header"><div className="guest-menu-header-inner">
-      <span className="guest-menu-brand" aria-hidden="true">F</span>
+      <span className="guest-menu-brand" aria-hidden="true">M</span>
       <div><p className="guest-menu-kicker">Welcome to your table</p><h1>{menu?.restaurantName ?? "Restaurant menu"}</h1></div>
       {menu && <span className="guest-menu-table">{menu.table.name}{menu.table.area && <small>{menu.table.area}</small>}</span>}
     </div></header>
@@ -336,6 +359,7 @@ function GuestMenuContent({ token }: { token: string }) {
             {!saved.cart.length ? <p className="guest-menu-cart-empty">Your table is ready. Add a dish to get started.</p> : <>
               <ul className="guest-menu-cart-items">{saved.cart.map((item) => <li key={item.key}>
                 <div className="guest-menu-cart-item-heading"><h3>{item.name}</h3><strong>{money(item.pricePaise * item.qty)}</strong></div>
+                {item.contents && <small className="guest-menu-combo-contents">{item.contents.join(", ")}</small>}
                 <small>{money(item.pricePaise)} each</small>
                 <div className="guest-menu-quantity"><button aria-label={`Decrease ${item.name}`} disabled={locked} onClick={() => editItem(item.key, { qty: item.qty - 1 })}>−</button><span aria-label={`Quantity for ${item.name}`}>{item.qty}</span><button aria-label={`Increase ${item.name}`} disabled={locked || item.qty >= 20} onClick={() => editItem(item.key, { qty: item.qty + 1 })}>+</button><button className="guest-menu-remove" disabled={locked} onClick={() => editItem(item.key, { qty: 0 })} aria-label={`Remove ${item.name}`}>Remove</button></div>
                 <label className="guest-menu-item-note">Instructions for {item.name}<textarea rows={2} maxLength={200} placeholder="Optional: less spicy, no onions…" value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
@@ -349,6 +373,18 @@ function GuestMenuContent({ token }: { token: string }) {
       </>}
       <footer className="guest-menu-footer">No tax is added to menu prices. For allergies or special requirements, please speak with our team.</footer>
     </div>
+    {picking?.product.combo && (() => {
+      const groups = picking.product.combo!;
+      const problem = comboPickProblem(groups, picking.picks);
+      return <div className="guest-combo-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setPicking(null); }}>
+        <section className="guest-combo-sheet" role="dialog" aria-modal="true" aria-label={`Choose your ${picking.product.name}`}>
+          <div className="guest-combo-heading"><div><p className="guest-menu-kicker">Make it yours</p><h2>{picking.product.name}</h2></div><button onClick={() => setPicking(null)}>Close</button></div>
+          <ComboChoices groups={groups} picks={picking.picks} money={money} disabled={locked} onChange={(picks) => setPicking({ ...picking, picks })} />
+          <div className="guest-combo-footer"><p role="status">{problem ?? "All set"}</p>
+            <button className="guest-menu-primary" disabled={locked || problem !== null} onClick={() => add(picking.product, null, picking.picks)}>Add · {money(picking.product.pricePaise + comboExtraPaise(groups, picking.picks))}</button></div>
+        </section>
+      </div>;
+    })()}
     {menu?.orderingAvailable && saved.cart.length > 0 && !receipt && <button className="guest-menu-cart-shortcut" onClick={() => { cartRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); cartRef.current?.focus({ preventScroll: true }); }}><span>View request · {count} item{count === 1 ? "" : "s"}</span><strong>{money(subtotal)}</strong></button>}
   </main>;
 }
@@ -363,6 +399,8 @@ function ProductCard({ product, orderingAvailable, locked, onAdd }: { product: M
     <div className={`guest-menu-diet${product.isVeg ? "" : " guest-menu-nonveg"}`}><span aria-hidden="true">●</span>{product.isVeg ? "Vegetarian" : "Non-vegetarian"}</div>
     <h3>{product.name}</h3>
     {product.description && <p className="guest-menu-product-description">{product.description}</p>}
+    {product.combo && <p className="guest-menu-combo-contents">{product.combo.map((group) => group.options.length === 1 || group.minPicks >= group.options.length
+      ? group.options.map((option) => option.name).join(" + ") : `${group.name}: choose ${group.maxPicks === 1 ? "1" : `up to ${group.maxPicks}`}`).join(" · ")}</p>}
     {product.isSoldOut && <p className="guest-menu-soldout">Sold out</p>}
     {product.variants.length > 0 && <label className="guest-menu-variant">Choose an option<select value={variantId ?? ""} onChange={(event) => setVariantId(event.target.value)} aria-label={`Option for ${product.name}`}>{product.variants.map((item) => <option key={item.id} value={item.id}>{item.name} · {money(item.pricePaise)}</option>)}</select></label>}
     <div className="guest-menu-product-bottom"><strong>{money(variant?.pricePaise ?? product.pricePaise)}</strong>{orderingAvailable && <button disabled={locked || product.isSoldOut} onClick={() => onAdd(product, variantId)} aria-label={`Add ${product.name}${variant ? `, ${variant.name}` : ""}`}>Add <span aria-hidden="true">+</span></button>}</div>
@@ -392,7 +430,7 @@ function ReceiptCard({ receipt, error, onNew, orderingAvailable }: { receipt: Gu
       <ul>{preparation.items.map((item, index) => <li key={`${index}:${item.name}`}><span>{item.qty} × {item.name}</span><span className={`guest-menu-preparation-state guest-menu-preparation-${item.state}`}>{PREPARATION_LABELS[item.state]}</span></li>)}</ul>
       {preparation.hasChanges && <p className="guest-menu-small">Our team updated some items or quantities. Please check with staff for details and your final bill.</p>}
     </div>}
-    <details><summary>View request · {money(receipt.subtotalPaise)}</summary><ul className="guest-menu-receipt-items">{receipt.items.map((item, index) => <li key={`${item.productId}:${item.variantId}:${index}`}><span><strong>{item.qty} × {item.name}</strong>{item.note && <small>{item.note}</small>}</span><span>{money(item.qty * item.pricePaise)}</span></li>)}</ul><p className="guest-menu-small">Menu subtotal · No tax is added to menu prices. Pay at the restaurant.</p></details>
+    <details><summary>View request · {money(receipt.subtotalPaise)}</summary><ul className="guest-menu-receipt-items">{receipt.items.map((item, index) => <li key={`${item.productId}:${item.variantId}:${index}`}><span><strong>{item.qty} × {item.name}</strong>{item.contents && <small>{item.contents.join(", ")}</small>}{item.note && <small>{item.note}</small>}</span><span>{money(item.qty * item.pricePaise)}</span></li>)}</ul><p className="guest-menu-small">Menu subtotal · No tax is added to menu prices. Pay at the restaurant.</p></details>
     {receipt.status !== "pending" && orderingAvailable && <button onClick={onNew}>{receipt.status === "accepted" ? "Order more" : "Start a new request"}</button>}
   </section>;
 }

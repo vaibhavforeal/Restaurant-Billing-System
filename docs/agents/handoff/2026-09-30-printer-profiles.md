@@ -34,7 +34,7 @@ Screenshots are under `output/printer-profiles`.
 The normal build stage was locked by an existing Electron instance. After the
 standard rebuild encountered that lock, missing generated files were restored
 from the successful isolated build without replacing surviving files. The live
-app was not stopped or switched to the new build. `FORKFLOW_BUILD_STAGE` now
+app was not stopped or switched to the new build. `MASALAPOS_BUILD_STAGE` now
 supports a validated alternate stage name under `build/desktop`.
 
 The workspace already contained extensive uncommitted work before this change;

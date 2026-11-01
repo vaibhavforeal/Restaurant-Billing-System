@@ -1,0 +1,39 @@
+/* Get support, the remote-access consent prompt, the in-session strip, and Settings → Help & support. */
+.sidebar .support-link { text-transform: none; }
+
+.support-dialog { width: min(440px, calc(100vw - 24px)); }
+.support-dialog p { font-size: 14px; line-height: 20px; }
+.support-dialog-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+.remote-consent { width: min(520px, calc(100vw - 24px)); border-top: 4px solid var(--pos-danger, #c4242a); }
+.remote-consent form { display: grid; gap: 12px; }
+.remote-consent p, .remote-consent li, .remote-consent label { font-size: 14px; line-height: 20px; }
+.remote-consent-reason { margin: 0; padding: 10px 12px; border-left: 3px solid var(--line); background: #f6f6f6; border-radius: 4px; font-size: 14px; }
+.remote-consent-points { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--pos-muted, #5f6368); }
+.remote-consent-pin { display: grid; gap: 4px; font-weight: 600; }
+.remote-consent-pin input { max-width: 200px; font-size: 16px !important; letter-spacing: 0.2em; }
+.remote-consent-error { color: var(--pos-danger, #c4242a); }
+.remote-consent-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.remote-consent .remote-consent-actions button { min-height: 40px; padding: 8px 14px; font-size: 14px; font-weight: 600; }
+.remote-consent .remote-consent-actions .primary { background: var(--pos-primary, #1d1f20); color: var(--pos-on-primary, #fff); border-color: transparent; }
+.remote-consent-timer { color: var(--pos-muted, #5f6368); font-size: 12px !important; text-align: right; }
+
+.remote-strip { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #fdecec; color: #7a1414; border-bottom: 1px solid #f3c6c6; font-size: 14px; }
+.remote-strip span:nth-child(2) { flex: 1; }
+.remote-strip button { min-height: 32px; padding: 4px 14px; border-radius: 6px; border: 1px solid #c4242a; background: #c4242a; color: #fff; font-weight: 600; cursor: pointer; }
+.remote-dot { width: 10px; height: 10px; border-radius: 50%; background: #c4242a; animation: remote-pulse 1.4s ease-in-out infinite; }
+@keyframes remote-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .remote-dot { animation: none; } }
+
+.support-settings { display: grid; gap: 16px; }
+.support-settings .panel { display: grid; gap: 10px; }
+.support-settings h4 { margin: 0; font-size: 16px; }
+.support-settings h5 { margin: 8px 0 0; font-size: 14px; }
+.support-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.support-row .primary { display: inline-flex; align-items: center; gap: 8px; }
+.support-online { color: var(--pos-muted, #5f6368); font-size: 13px; }
+.support-online.on { color: var(--pos-success, #247b50); }
+.support-toggle { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.support-log { width: 100%; border-collapse: collapse; font-size: 13px; }
+.support-log th, .support-log td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.support-log th { color: var(--pos-muted, #5f6368); font-weight: 600; }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MIGRATIONS, migrate, openDb, uuidv7 } from "@forkflow/domain";
+import { MIGRATIONS, migrate, openDb, uuidv7 } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { auth, createUser, setupAdmin } from "./test-helpers.js";

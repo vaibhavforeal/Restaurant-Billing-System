@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { StockItem, StockMove, StockUnit } from "@forkflow/domain";
+import type { StockItem, StockMove, StockUnit } from "@masalapos/domain";
 import { apiFetch, session, type User } from "../api";
 import type { Product } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
-import type { StockCost, StockCostChange } from "@forkflow/domain";
+import type { StockCost, StockCostChange } from "@masalapos/domain";
 import { formatMovementCost, formatUnitCost, amountPaidToPaise, mergeCostChanges, mergeHistory, stockValueSummary } from "../stock-costs";
 import { PerUnitHint, SetUnitCostForm } from "./StockCostControls";
 import { RecipeEditor } from "./RecipeEditor";

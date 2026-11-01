@@ -1,5 +1,5 @@
 import net from "node:net";
-import { networkPrinterAddress } from "@forkflow/domain";
+import { networkPrinterAddress } from "@masalapos/domain";
 import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
@@ -81,7 +81,7 @@ async function sendToNetwork(connection: string, bytes: Buffer): Promise<void> {
 }
 
 async function sendToWindows(printerName: string, bytes: Buffer): Promise<void> {
-  const directory = await fs.mkdtemp(join(tmpdir(), "forkflow-print-"));
+  const directory = await fs.mkdtemp(join(tmpdir(), "masalapos-print-"));
   const bytesPath = join(directory, "payload.bin");
   const scriptPath = join(directory, "send.ps1");
   try {
@@ -131,7 +131,7 @@ public class RawPrinterHelper {
         }
         try {
             DOCINFO di = new DOCINFO();
-            di.pDocName = "ForkFlow Print Job";
+            di.pDocName = "MasalaPOS Print Job";
             di.pDataType = "RAW";
             if (StartDocPrinter(hPrinter, 1, ref di) == 0) {
                 throw new Exception("NOTSENT: StartDocPrinter failed");
@@ -159,8 +159,8 @@ public class RawPrinterHelper {
 }
 "@
 
-$bytes = [System.IO.File]::ReadAllBytes($env:FORKFLOW_PRINT_PAYLOAD)
-$printerName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:FORKFLOW_PRINT_NAME))
+$bytes = [System.IO.File]::ReadAllBytes($env:MASALAPOS_PRINT_PAYLOAD)
+$printerName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:MASALAPOS_PRINT_NAME))
 try {
     [RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)
 } catch {
@@ -176,7 +176,7 @@ try {
       "powershell.exe",
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
       { timeout: 15000, windowsHide: true, env: { ...process.env,
-        FORKFLOW_PRINT_PAYLOAD: bytesPath, FORKFLOW_PRINT_NAME: Buffer.from(printerName, "utf8").toString("base64") } },
+        MASALAPOS_PRINT_PAYLOAD: bytesPath, MASALAPOS_PRINT_NAME: Buffer.from(printerName, "utf8").toString("base64") } },
       (err, stdout, stderr) => {
         if (err) {
           reject(windowsFailure(err, stderr));

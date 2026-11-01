@@ -10,7 +10,7 @@
   const loaded = () => root() && button("Export analytics CSV", root()) && !button("Export analytics CSV", root()).disabled;
   const nativeFetch = window.fetch, nativeCreate = URL.createObjectURL, nativeClick = HTMLAnchorElement.prototype.click;
   const api = async (query = "") => {
-    const res = await nativeFetch("/api/reports/analytics" + query, { headers: { authorization: "Bearer " + localStorage.getItem("forkflow.token"), "x-forkflow-device": localStorage.getItem("forkflow.device.v1") } });
+    const res = await nativeFetch("/api/reports/analytics" + query, { headers: { authorization: "Bearer " + localStorage.getItem("masalapos.token"), "x-masalapos-device": localStorage.getItem("masalapos.device.v1") } });
     if (!res.ok) throw new Error("Fixture API " + res.status); return (await res.json()).report;
   };
   const money = (n) => "₹" + (n / 100).toFixed(2);

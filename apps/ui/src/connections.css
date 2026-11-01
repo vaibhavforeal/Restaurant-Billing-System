@@ -1,0 +1,44 @@
+.system-view-switch { display: flex; gap: var(--space-6); border-bottom: 1px solid var(--line); }
+html[data-theme] .system-view-switch button { border: 0; border-radius: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px 4px; color: var(--muted); font-size: 13px; }
+html[data-theme] .system-view-switch button[aria-pressed="true"] { border-bottom-color: var(--pos-accent); color: var(--pos-accent); }
+.connection-network-note { display: flex; gap: var(--space-6); align-items: center; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); margin-bottom: var(--space-6); }
+.connection-network-note > svg { color: var(--muted); }
+.connection-network-note p { margin: 0; }
+.connection-device-picker { display: flex; flex-wrap: wrap; gap: var(--space-6); margin-bottom: var(--space-6); }
+html[data-theme] .connection-device-picker button { flex: 1 1 180px; justify-content: flex-start; padding: var(--space-6); gap: var(--space-6); background: var(--surface); text-align: left; border: 1px solid var(--line); border-radius: var(--radius-panel); color: var(--ink); }
+html[data-theme] .connection-device-picker button[aria-pressed="true"] { background: var(--pos-accent-soft); border-color: var(--pos-accent); }
+.connection-device-picker button > svg:first-child { color: var(--pos-accent); }
+.connection-device-picker button > svg:last-child { margin-left: auto; color: var(--muted); }
+.connection-device-picker span { display: grid; gap: 5px; }
+.connection-device-picker strong { font-size: 13px; }
+.connection-device-picker small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.connection-setup { padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
+.connection-setup > .system-section-heading { margin-bottom: var(--space-6); }
+.connection-code-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
+.connection-code { display: flex; gap: var(--space-8); align-items: center; min-width: 0; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.connection-code img { display: block; flex: 0 0 auto; width: 180px; height: 180px; max-width: 100%; padding: 8px; border-radius: 6px; background: #fff; }
+.connection-code > div { min-width: 0; }
+.connection-address-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.connection-code a, .connection-code code { font-size: 14px; overflow-wrap: anywhere; }
+.connection-code .backup-actions { margin-top: 18px; }
+.connection-code p { margin: 12px 0 0; max-width: 420px; font-size: 12px; }
+.system-settings .connection-footnote { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12px; }
+.connection-step { display: flex; gap: 14px; margin: 24px 0 16px; }
+.connection-step > span { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: var(--pos-accent-soft); color: var(--pos-accent); font-size: 12px; font-weight: 700; }
+.connection-step p { margin: 0; }
+.connection-step a { display: inline-block; margin-top: 10px; }
+.connection-certificate { margin-top: 20px; }
+.connection-certificate code { display: block; overflow-wrap: anywhere; color: var(--ink); margin-top: 5px; }
+.connection-instructions { padding-left: 20px; line-height: 1.8; color: var(--muted); }
+.connection-instructions li { padding: 4px 0 4px 6px; }
+.connection-link-list { list-style: none; padding: 0; margin: 16px 0 24px; }
+.connection-link-list li { display: grid; gap: 6px; padding: 14px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.connection-link-list span { color: var(--muted); font-size: 12px; }
+@media (max-width: 650px) {
+  .connection-device-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  html[data-theme] .connection-device-picker button { flex-direction: column; align-items: flex-start; padding: var(--space-6); gap: var(--space-4); }
+  .connection-device-picker button > svg:last-child { display: none; }
+  .connection-network-note { align-items: flex-start; }
+  .connection-code { flex-direction: column; align-items: flex-start; gap: var(--space-6); }
+  .connection-code img { align-self: center; }
+}

@@ -6,8 +6,8 @@ tablet/browser support.
 
 Implemented:
 
-- Separate `build/desktop/demo`, application ID `in.forkflow.demo`, data directory
-  `%APPDATA%/forkflow-demo/data`, fixed port 4110. Compile-time demo flag; ordinary
+- Separate `build/desktop/demo`, application ID `in.masalapos.demo`, data directory
+  `%APPDATA%/masalapos-demo/data`, fixed port 4110. Compile-time demo flag; ordinary
   restaurant builds keep their original data selection and licensing behavior.
 - Sample seed through business APIs: 4 roles, 14 dishes, 8 tables, 5 ingredients,
   6 recipes, 8 paid bills and 3 open kitchen orders. Printing uses a fake sink.
@@ -38,16 +38,16 @@ Validation:
   restarted demo, and read-only verified 4 users, 8 paid bills, 3 open orders,
   3 active KOTs and SQLite integrity `ok`. Connected Kitchen returned to login.
 - Both installers built successfully. Their critical ASAR files byte-match the
-  tested staging files; no forkflow.db is included. A later combined command to
+  tested staging files; no masalapos.db is included. A later combined command to
   stop staged apps and launch packaged executables was rejected by automatic
   approval review with `blocked by policy`. No retry of that shutdown. Packaged
   binaries were verified by content comparison instead of a second launch.
 
 Deliverables:
 
-- `dist/demo/ForkFlow-Demo-Setup-0.6.4.exe` (110043879 bytes)
-- `dist/kitchen/ForkFlow-Kitchen-Setup-0.6.4.exe` (99585099 bytes)
-- `Start ForkFlow Demo.cmd`, `Start ForkFlow Kitchen.cmd`
+- `dist/demo/MasalaPOS-Demo-Setup-0.6.4.exe` (110043879 bytes)
+- `dist/kitchen/MasalaPOS-Kitchen-Setup-0.6.4.exe` (99585099 bytes)
+- `Start MasalaPOS Demo.cmd`, `Start MasalaPOS Kitchen.cmd`
 
 Current running demo stage was launched with PID 15964 / renderer CDP 9239;
 Kitchen stage PID 15768 / CDP 9240. These were left running after the rejected

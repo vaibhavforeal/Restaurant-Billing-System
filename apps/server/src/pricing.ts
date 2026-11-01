@@ -1,4 +1,4 @@
-import { priceForTier, type PriceTier, type Database } from "@forkflow/domain";
+import { priceForTier, type PriceTier, type Database } from "@masalapos/domain";
 
 export interface PriceRow {
   price_paise: number;

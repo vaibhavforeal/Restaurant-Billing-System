@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { LicenseClaims } from "@forkflow/domain/licensing";
+import { LicenseClaims } from "@masalapos/domain/licensing";
 import { verifyLicenseSignature } from "../../core/src/signed-license.js";
 import { buildClaims, encodeEnvelope, parseActivationRequest, webCryptoSigner } from "./index.js";
 
 const now = Date.UTC(2026, 9, 10, 10, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 const installationId = "44444444-4444-4444-8444-444444444444";
-const request = parseActivationRequest(JSON.stringify({ format: "forkflow-activation-request", version: 1, installationId, licenseId: null,
+const request = parseActivationRequest(JSON.stringify({ format: "masalapos-activation-request", version: 1, installationId, licenseId: null,
   organizationId: null, outletId: null, currentRevision: 0, generatedAt: now, verificationKeyFingerprint: "a".repeat(64) }));
 const terms = { plan: "pro" as const, expiresAt: now + 30 * DAY, graceUntil: now + 37 * DAY };
 
@@ -45,5 +45,18 @@ describe("buildClaims", () => {
     expect(trial.expiresAt).toBe(now + 14 * DAY);
     expect(trial.graceUntil).toBe(trial.expiresAt);
     expect("trial" in buildClaims(request, terms, now)).toBe(false);
+  });
+
+  it("sells extra devices and names the portal customer and order; without them the plan's devices apply and no codes appear", () => {
+    const sold = buildClaims(request, { ...terms, plan: "basic", maxDevices: 4, customerCode: "FC-7K3M-9QX", orderCode: "FO-2X8H-PD4" }, now);
+    expect(sold).toMatchObject({ plan: "basic", maxDevices: 4, customerCode: "FC-7K3M-9QX", orderCode: "FO-2X8H-PD4" });
+    const plain = buildClaims(request, terms, now);
+    expect(plain.maxDevices).toBe(5);
+    expect("customerCode" in plain || "orderCode" in plain).toBe(false);
+  });
+
+  it("accepts an activation request that reports the app version and restaurant name", () => {
+    const parsed = parseActivationRequest(JSON.stringify({ ...request, appVersion: "0.7.0", outletName: "Spice Route" }));
+    expect(parsed).toMatchObject({ appVersion: "0.7.0", outletName: "Spice Route" });
   });
 });

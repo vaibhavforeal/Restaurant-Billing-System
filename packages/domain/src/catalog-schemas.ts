@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ComboDefinition } from "./combos.js";
 
 /** Indian GST slabs — a fixed vocabulary so a typo like 0.05 or 7 cannot land in the DB. */
 export const GST_RATES = [0, 5, 12, 18, 28] as const;
@@ -55,6 +56,14 @@ export const ProductCreate = z.object({
   description: z.string().trim().max(500).default(""),
   isSoldOut: z.boolean().default(false),
   photo: Photo.optional(),
+  /** A combo is sold as one line and holds the items in its slots; it has no variants or kitchen station of its own. */
+  kind: z.enum(["item", "combo"]).default("item"),
+  combo: ComboDefinition.optional(),
+}).superRefine((p, ctx) => {
+  if (p.kind === "combo" && !p.combo) ctx.addIssue({ code: "custom", path: ["combo"], message: "Add at least one slot to the combo" });
+  if (p.kind === "combo" && p.variants.length) ctx.addIssue({ code: "custom", path: ["variants"], message: "A combo has no variants" });
+  if (p.kind === "combo" && p.kotStationId) ctx.addIssue({ code: "custom", path: ["kotStationId"], message: "A combo's items go to their own kitchen stations" });
+  if (p.kind === "item" && p.combo) ctx.addIssue({ code: "custom", path: ["combo"], message: "Only a combo has slots" });
 });
 export type ProductCreateInput = z.infer<typeof ProductCreate>;
 
@@ -72,5 +81,7 @@ export const ProductUpdate = z.object({
   description: z.string().trim().max(500).optional(),
   isSoldOut: z.boolean().optional(),
   photo: Photo.optional(),
+  /** Replaces a combo's slots. */
+  combo: ComboDefinition.optional(),
 });
 export type ProductUpdateInput = z.infer<typeof ProductUpdate>;

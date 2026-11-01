@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill } from "@forkflow/domain";
+import { uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 import { sweepAllExpiry } from "./loyalty.js";
 

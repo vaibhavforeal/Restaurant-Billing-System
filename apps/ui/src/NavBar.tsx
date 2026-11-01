@@ -7,6 +7,7 @@ import { navTabVisible } from "./integrations-model";
 import { readPreference, useShortcutLabels } from "./pos-shortcuts";
 import { STAFF_TABS, staffTabVisible } from "./integrations-model";
 import { userCan } from "./permissions";
+import { GetSupportButton } from "./support";
 
 export type Page =
   | { name: "home" }
@@ -71,7 +72,7 @@ export function NavBar({
   return (
     <nav className="sidebar" aria-label="Main navigation">
       <Brand />
-      {user.role !== "kitchen" && <button className="pos-new-order" {...shortcutProps("new_order")} title={shortcut("new_order", "New order")} onClick={() => onNavigate({ name: user.role !== "waiter" && readPreference("forkflow.order-type") === "parcel" ? "takeaway" : "tables" })}><Icon name="plus" size={16} /><span>New</span></button>}
+      {user.role !== "kitchen" && <button className="pos-new-order" {...shortcutProps("new_order")} title={shortcut("new_order", "New order")} onClick={() => onNavigate({ name: user.role !== "waiter" && readPreference("masalapos.order-type") === "parcel" ? "takeaway" : "tables" })}><Icon name="plus" size={16} /><span>New</span></button>}
       <div className="nav-items">
       {tabs.map((t) => (
         <button
@@ -88,6 +89,7 @@ export function NavBar({
         </button>
       ))}
       </div>
+      <GetSupportButton />
       <ThemeToggle />
       <div className="sidebar-footer"><span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div></div>
       <button className="nav-item logout" onClick={() => void logout()} title="Log out" aria-label="Log out">

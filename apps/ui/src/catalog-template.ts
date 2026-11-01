@@ -1,4 +1,4 @@
-import { CATALOG_CSV_COLUMNS, catalogCsv } from "@forkflow/domain/catalog-csv";
+import { CATALOG_CSV_COLUMNS, catalogCsv } from "@masalapos/domain/catalog-csv";
 
 /** Sample rows of the downloadable item template. gst_rate is blank so a copied row uses the restaurant default rate, not a pinned override. */
 export const CATALOG_TEMPLATE_ROWS: string[][] = [

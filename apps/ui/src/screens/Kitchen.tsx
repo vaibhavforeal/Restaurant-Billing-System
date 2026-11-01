@@ -50,10 +50,10 @@ export function Kitchen({ standalone = false, onBusyChange }: { standalone?: boo
     const ageInterval = setInterval(() => setTick((t) => t + 1), 30000);
     const refreshInterval = setInterval(() => { if (!offRef.current) void reload(); }, 15000);
     const licenseChanged = () => void reload().catch(() => {});
-    window.addEventListener("forkflow:license-changed", licenseChanged);
+    window.addEventListener("masalapos:license-changed", licenseChanged);
     return () => {
       reloadRevision.current++;
-      window.removeEventListener("forkflow:license-changed", licenseChanged);
+      window.removeEventListener("masalapos:license-changed", licenseChanged);
       dispose();
       clearInterval(ageInterval);
       clearInterval(refreshInterval);

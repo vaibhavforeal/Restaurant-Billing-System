@@ -11,6 +11,7 @@ const paths = {
   users: "M15 21v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v3M9 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm8-7a3.5 3.5 0 0 1 0 7m1 4a4 4 0 0 1 3 4v3",
   settings: "m9 3-1 3-3 1-2 3 2 2-1 3 2 3 3-1 3 2 3-2 3 1 2-3-1-3 2-2-2-3-3-1-1-3H9Zm3 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
   logout: "M9 4H4v16h5m5-13 5 5-5 5M9 12h11",
+  help: "M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z",
   arrow: "M5 12h14m-6-6 6 6-6 6",
   plus: "M12 5v14M5 12h14",
   search: "M21 21l-5-5m-6 2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z",
@@ -23,6 +24,10 @@ const paths = {
   keyboard: "M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10",
   printer: "M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z",
   cloud: "M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9.5 4 4 0 0 1 17 18H7Z",
+  download: "M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5",
+  monitor: "M3 4h18v13H3zM8 21h8m-4-4v4",
+  tablet: "M5 2h14v20H5zM11 18h2",
+  folder: "M3 6V4h6l2 3h10v13H3V6Z",
   customers: "M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10Z",
   badge: "m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z",
 } as const;
@@ -30,6 +35,11 @@ export type IconName = keyof typeof paths;
 export function Icon({ name, size = 20, style }: { name: IconName; size?: number; style?: CSSProperties }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}><path d={paths[name]} /></svg>;
 }
-export function Brand() {
-  return <div className="brand"><span className="brand-mark"><Icon name="catalog" size={22} /></span><span>ForkFlow</span></div>;
+export function Brand({ tagline = false }: { tagline?: boolean }) {
+  return <div className={`brand${tagline ? " brand-with-tagline" : ""}`}>
+    <span className="brand-mark" aria-hidden="true"><Icon name="catalog" size={22} /></span>
+    <span className="brand-copy"><span className="brand-name"><span className="brand-masala">Masala</span>POS</span>
+      {tagline && <span className="brand-tagline">A little masala. A lot of business.</span>}
+    </span>
+  </div>;
 }

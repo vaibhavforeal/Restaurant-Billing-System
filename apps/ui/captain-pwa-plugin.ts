@@ -7,7 +7,7 @@ import { captainWorker } from "./captain-worker.ts";
 export function captainPwa(): Plugin {
   let publicDir = "";
   return {
-    name: "forkflow-captain-pwa", apply: "build", enforce: "post",
+    name: "masalapos-captain-pwa", apply: "build", enforce: "post",
     configResolved(config) { publicDir = config.publicDir; },
     generateBundle(_options, bundle) {
       const assets = Object.keys(bundle).filter((file) => /\.(js|css)$/.test(file)).map((file) => "/" + file).sort();

@@ -178,7 +178,7 @@ activate and check audio after opening the app. Normal clicks and keyboard use
 also activate browser audio where permitted.
 
 Choose **Enable desktop alerts** in the same inbox and allow the browser prompt
-to receive system notifications while ForkFlow is in the background. If already
+to receive system notifications while MasalaPOS is in the background. If already
 allowed, they work automatically. Blocked notifications must be allowed in the
 browser/system settings. In-app alerts remain available regardless of that
 permission. The app must stay open and signed in; these are not push messages

@@ -10,7 +10,7 @@
     if (!button) throw new Error('Missing button: ' + text);
     button.click(); await pause();
   };
-  const headers = { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
+  const headers = { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body, extra = {}) => {
     const res = await fetch('/api' + path, { method, headers: { ...headers, ...extra }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const data = await res.json(); if (!res.ok) throw new Error(path + ': ' + JSON.stringify(data)); return data;
@@ -58,7 +58,7 @@
     await wait(() => document.querySelector('dialog[open]')?.textContent.includes('Accept & open order'), 'Global review opens the pending inbox');
     check(document.querySelector('dialog[open]').textContent.includes(tables[0].name), 'Review opens the actual submitted request');
     document.querySelector('.qr-notification-controls input').click(); await pause();
-    check(localStorage.getItem('forkflow.qr-sound.v1') === 'off', 'Mute preference is saved on this device');
+    check(localStorage.getItem('masalapos.qr-sound.v1') === 'off', 'Mute preference is saved on this device');
     await click('Close', document.querySelector('dialog[open]'));
     const second = await submit();
     await wait(() => document.querySelector('.qr-notification-banner')?.textContent.includes('2 QR orders waiting'), 'Second request arrives');

@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Money is INTEGER **paise**; timestamps INTEGER Unix ms via `Date.now()`; ids `uuidv7()` from `@forkflow/domain`.
+- Money is INTEGER **paise**; timestamps INTEGER Unix ms via `Date.now()`; ids `uuidv7()` from `@masalapos/domain`.
 - DB snake_case → API camelCase; booleans real in JSON. No DELETE endpoints — `is_active` flags and status transitions only.
 - **Table status is derived from orders, never stored** (spec §3): `open` order → `occupied`, `billed` order → `billed`, else `free`.
 - **Item snapshots at punch time** (spec §3): `name_snapshot` (product name, or `Product (Variant)`), `price_paise_snapshot` (variant price if variant else product price), `gst_rate_snapshot` (product GST rate).
@@ -36,7 +36,7 @@
 
 **Interfaces:**
 - Consumes: `Migration` interface from `./migrate.js`; `Database` type from `./db.js`.
-- Produces: `migration002` (used by MIGRATIONS array); `nextSequence(db: Database, name: string): number` (used by Tasks 7 for KOT numbering); `localDateKey(ms: number): string` (used by Task 7 for per-day KOT sequences). All exported from `@forkflow/domain`.
+- Produces: `migration002` (used by MIGRATIONS array); `nextSequence(db: Database, name: string): number` (used by Tasks 7 for KOT numbering); `localDateKey(ms: number): string` (used by Task 7 for per-day KOT sequences). All exported from `@masalapos/domain`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -458,7 +458,7 @@ EOF
 - Test: `apps/server/src/ws.test.ts`
 
 **Interfaces:**
-- Consumes: `Database` from `@forkflow/domain`; `AuthedUser` from `./auth.js`.
+- Consumes: `Database` from `@masalapos/domain`; `AuthedUser` from `./auth.js`.
 - Produces: `registerWs(app: FastifyInstance): void` (decorates `app.broadcast(event, data)`); `sessionUser(db: Database, token: string): AuthedUser | null` exported from auth.ts (shared lookup).
 - Route: `GET /api/ws` (websocket upgrade, query param `?token=...`); missing/invalid token → close code 4401 "unauthenticated".
 
@@ -475,8 +475,8 @@ Edit `apps/server/package.json`:
   "dependencies": {
     "@fastify/static": "^10.1.3",
     "@fastify/websocket": "^11.3.0",
-    "@forkflow/core": "*",
-    "@forkflow/domain": "*",
+    "@masalapos/core": "*",
+    "@masalapos/domain": "*",
     "fastify": "^5.11.3",
     "zod": "^4.4.3"
   }
@@ -616,7 +616,7 @@ Then replace the `userForToken` implementation (originally lines 45-57) with:
 Add the `Database` import at the top of auth.ts (if not already present):
 
 ```ts
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 ```
 
 - [ ] **Step 5: Implement ws.ts**
@@ -711,7 +711,7 @@ EOF
 - Test: `apps/server/src/tables.test.ts`
 
 **Interfaces:**
-- Consumes: `TableCreate`, `TableUpdate` from `@forkflow/domain`; `httpError` from `./http-error.js`; test helpers from `./test-helpers.js`.
+- Consumes: `TableCreate`, `TableUpdate` from `@masalapos/domain`; `httpError` from `./http-error.js`; test helpers from `./test-helpers.js`.
 - Produces: `registerTables(app: FastifyInstance): void`.
 - Routes: `GET /api/tables` (gate `tables.read`) → `{tables: Table[]}` ordered `sort_order, name`; `POST /api/tables` (gate `tables.manage`) → 201 `{table}`; `PATCH /api/tables/:id` (gate `tables.manage`) → `{table}` / 404 / 409 `"table has an open order"` when deactivating a table with an open/billed order.
 - Table shape: `{id, name, area: string|null, sortOrder, isActive, status: "free"|"occupied"|"billed", openOrderId: string|null}`.
@@ -729,7 +729,7 @@ EOF
 ```ts
 import { afterEach, describe, expect, it } from "vitest";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {
@@ -873,7 +873,7 @@ Expected: FAIL — routes don't exist (404s where tests expect 200/201).
 `apps/server/src/tables.ts`:
 
 ```ts
-import { TableCreate, TableUpdate, uuidv7 } from "@forkflow/domain";
+import { TableCreate, TableUpdate, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 
@@ -1018,7 +1018,7 @@ EOF
 - Test: `apps/server/src/orders.test.ts`
 
 **Interfaces:**
-- Consumes: `OrderCreate` from `@forkflow/domain`; `httpError` from `./http-error.js`; test helpers from `./test-helpers.js`.
+- Consumes: `OrderCreate` from `@masalapos/domain`; `httpError` from `./http-error.js`; test helpers from `./test-helpers.js`.
 - Produces: `registerOrders(app: FastifyInstance): void` — Task 6 **extends this same file** with item operations.
 - Routes: `POST /api/orders` (gate `orders.create`) → 201 `{order}` / 200 idempotent; dine_in checks: 400 `unknown table` / 409 `table is not active` / 409 `table occupied`; broadcasts `order.updated` + `table.changed` (if dine_in). `GET /api/orders` (gate `orders.read`) → `{orders: Order[]}` (open only). `GET /api/orders/:id` (gate `orders.read`) → `{order}` / 404.
 
@@ -1217,7 +1217,7 @@ Expected: FAIL — routes don't exist (404s where tests expect 201/200).
 `apps/server/src/orders.ts`:
 
 ```ts
-import { OrderCreate, uuidv7 } from "@forkflow/domain";
+import { OrderCreate, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 
@@ -1411,7 +1411,7 @@ EOF
 - Test: `apps/server/src/orders.test.ts` (append new describe blocks)
 
 **Interfaces:**
-- Consumes: `OrderItemsAdd`, `OrderItemUpdate`, `ItemCancel` from `@forkflow/domain`; `can`, `roleFor` from `@forkflow/core` + `@forkflow/domain`; everything Task 5 built.
+- Consumes: `OrderItemsAdd`, `OrderItemUpdate`, `ItemCancel` from `@masalapos/domain`; `can`, `roleFor` from `@masalapos/core` + `@masalapos/domain`; everything Task 5 built.
 - Produces routes (all under `registerOrders` in orders.ts):
   - `POST /api/orders/:id/items` (gate `orders.update`) → 200 `{order}`; 404 / 409 `order is not open`; 400 reference checks (`unknown product` / `product is not active` / `unknown variant` / `variant is not active` / `variant does not belong to product`); snapshots `name_snapshot` (variant: `${product.name} (${variant.name})` else product.name), `price_paise_snapshot` (variant ? variant.price_paise : product.price_paise), `gst_rate_snapshot`; clientRef dedup; broadcast `order.updated`.
   - `PATCH /api/order-items/:id` (gate `orders.update`) → 200 `{order}`; 404 / 409 `item is not pending`; broadcast `order.updated`.
@@ -1800,11 +1800,11 @@ Expected: Task 5's describe block PASS, the new blocks FAIL (routes missing).
 
 - [ ] **Step 3: Implement**
 
-Extend `apps/server/src/orders.ts`. Replace the existing `import { OrderCreate, uuidv7 } from "@forkflow/domain";` line with:
+Extend `apps/server/src/orders.ts`. Replace the existing `import { OrderCreate, uuidv7 } from "@masalapos/domain";` line with:
 
 ```ts
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor } from "@forkflow/domain";
-import { can } from "@forkflow/core";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor } from "@masalapos/domain";
+import { can } from "@masalapos/core";
 ```
 
 Add inside `registerOrders`, after the GET /:id route:
@@ -2020,7 +2020,7 @@ EOF
 - Test: `apps/server/src/kots.test.ts`
 
 **Interfaces:**
-- Consumes: `nextSequence`, `localDateKey` from `@forkflow/domain`; everything from orders.ts.
+- Consumes: `nextSequence`, `localDateKey` from `@masalapos/domain`; everything from orders.ts.
 - Produces: `registerKots(app: FastifyInstance): void`.
 - Routes:
   - `POST /api/orders/:id/send` (gate `kots.create`) → 200 `{order, kots: KotWithContext[]}`; 404 / 409 `order is not open` / 409 `nothing to send`; groups pending items by station (non-null `kot_station_id` from CURRENT products row), per station: `kot_no = nextSequence(db, "kot:" + localDateKey(Date.now()))` INSIDE transaction, INSERT kots, UPDATE items SET status='sent', kot_id; broadcasts `kot.created` (per KOT) + `order.updated` + `table.changed` (if dine_in).
@@ -2034,7 +2034,7 @@ EOF
 ```ts
 import { afterEach, describe, expect, it } from "vitest";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {
@@ -2458,7 +2458,7 @@ Expected: FAIL — routes don't exist.
 `apps/server/src/kots.ts`:
 
 ```ts
-import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
+import { nextSequence, localDateKey, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 
@@ -2952,7 +2952,7 @@ export function NavBar({
 
   return (
     <nav style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #ddd", fontFamily: "system-ui" }}>
-      <strong style={{ marginRight: 8 }}>ForkFlow</strong>
+      <strong style={{ marginRight: 8 }}>MasalaPOS</strong>
       {tabs.map((t) => (
         <button
           key={t.label}
@@ -3101,7 +3101,7 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
 
 - [ ] **Step 7: Verify**
 
-Run: `npm run typecheck` → clean. Run: `npm run build -w @forkflow/ui` → builds. Run: `npm test` → green (all baseline + M2 tests still pass).
+Run: `npm run typecheck` → clean. Run: `npm run build -w @masalapos/ui` → builds. Run: `npm test` → green (all baseline + M2 tests still pass).
 
 - [ ] **Step 8: Commit**
 
@@ -3363,7 +3363,7 @@ Replace the tables placeholder line:
 
 - [ ] **Step 3: Verify**
 
-Run: `npm run typecheck` → clean. Run: `npm run build -w @forkflow/ui` → builds. Run: `npm test` → green.
+Run: `npm run typecheck` → clean. Run: `npm run build -w @masalapos/ui` → builds. Run: `npm test` → green.
 
 - [ ] **Step 4: Commit**
 
@@ -3392,7 +3392,7 @@ EOF
 
 **Interfaces:**
 - Consumes: `apiFetch`, `ApiError`, `User` from `../api`; `connectWs` from `../ws`; `paiseToRupees` from `../money`; `Category`, `Product`, `Order`, `OrderItem` from `../types`.
-- Produces: `OrderScreen({ user, orderId, onBack })` component. Loads order + categories + products; WS reload on `order.updated` (matching id) / `table.changed`; draft cart in `localStorage["forkflow.draft." + orderId]` (JSON array of `{clientRef, productId, variantId, name, pricePaise, qty, note}`; clientRef = `crypto.randomUUID()` at add time so punch retries dedupe); product grid by category tab (active products in active categories; product with active variants → inline variant buttons); cart ops qty +/-, note via `window.prompt`, remove; **Punch** → POST items then clear draft; punched list with status chips; cancel: pending → `confirm()` then POST cancel; sent → visible only when `user.role === "admin" || user.role === "cashier"`, `window.prompt` reason (required); **Send to kitchen** → POST send, surface 409 messages; **Cancel order** → visible only when no sent items, `confirm()` then POST; totals footer = sum over non-cancelled items of pricePaise*qty (display only, `paiseToRupees`).
+- Produces: `OrderScreen({ user, orderId, onBack })` component. Loads order + categories + products; WS reload on `order.updated` (matching id) / `table.changed`; draft cart in `localStorage["masalapos.draft." + orderId]` (JSON array of `{clientRef, productId, variantId, name, pricePaise, qty, note}`; clientRef = `crypto.randomUUID()` at add time so punch retries dedupe); product grid by category tab (active products in active categories; product with active variants → inline variant buttons); cart ops qty +/-, note via `window.prompt`, remove; **Punch** → POST items then clear draft; punched list with status chips; cancel: pending → `confirm()` then POST cancel; sent → visible only when `user.role === "admin" || user.role === "cashier"`, `window.prompt` reason (required); **Send to kitchen** → POST send, surface 409 messages; **Cancel order** → visible only when no sent items, `confirm()` then POST; totals footer = sum over non-cancelled items of pricePaise*qty (display only, `paiseToRupees`).
 
 - [ ] **Step 1: Implement OrderScreen.tsx**
 
@@ -3423,7 +3423,7 @@ export function OrderScreen({ user, orderId, onBack }: { user: User; orderId: st
   const [draft, setDraft] = useState<DraftItem[]>([]);
   const [error, setError] = useState("");
 
-  const draftKey = `forkflow.draft.${orderId}`;
+  const draftKey = `masalapos.draft.${orderId}`;
 
   async function reload() {
     const [o, c, p] = await Promise.all([
@@ -3696,7 +3696,7 @@ Replace the order placeholder line:
 
 - [ ] **Step 3: Verify**
 
-Run: `npm run typecheck` → clean. Run: `npm run build -w @forkflow/ui` → builds. Run: `npm test` → green.
+Run: `npm run typecheck` → clean. Run: `npm run build -w @masalapos/ui` → builds. Run: `npm test` → green.
 
 - [ ] **Step 4: Commit**
 
@@ -3837,7 +3837,7 @@ Replace the kitchen placeholder line:
 
 - [ ] **Step 3: Verify**
 
-Run: `npm run typecheck` → clean. Run: `npm run build -w @forkflow/ui` → builds. Run: `npm test` → green (all baseline + M2 + new M3a tests pass).
+Run: `npm run typecheck` → clean. Run: `npm run build -w @masalapos/ui` → builds. Run: `npm test` → green (all baseline + M2 + new M3a tests pass).
 
 - [ ] **Step 4: Commit**
 
@@ -3866,7 +3866,7 @@ EOF
 ```bash
 npm test            # all green (72 baseline + this plan's new domain/server tests)
 npm run typecheck   # clean
-npm run build -w @forkflow/ui
+npm run build -w @masalapos/ui
 ```
 
 - [ ] **Step 2: Scripted API round trip against the production serving path**
@@ -3874,14 +3874,14 @@ npm run build -w @forkflow/ui
 Run the real server on a scratch data dir (NEVER the real `./data`):
 
 ```bash
-FORKFLOW_DATA_DIR=./data-m3a-check npx tsx apps/server/src/main.ts &
+MASALAPOS_DATA_DIR=./data-m3a-check npx tsx apps/server/src/main.ts &
 ```
 
 With `TOKEN` from `POST /api/setup`, exercise: `POST /api/tables` → `POST /api/orders` (dine_in, clientRef; repeat same clientRef → same order id back) → `POST /api/orders/:id/items` (one stationed product w/ variant, one no-station product; repeat same body → item count unchanged) → `POST /api/orders/:id/send` (expect 1 KOT, kotNo 1) → `GET /api/kots` (ticket present, tableName set) → `POST /api/kots/:id/done` → `GET /api/kots` (empty) → `GET /api/tables` (status occupied). Then kill the server (port-check + PowerShell Stop-Process — the tsx wrapper leaves a node child) and delete `data-m3a-check/` (file-level rm + rmdir).
 
 - [ ] **Step 3: Real-browser click-through (controller/human — inject/curl is NOT browser-equivalent)**
 
-`FORKFLOW_DATA_DIR=<scratch>` server + built UI on :4100, then in a real browser: setup → Tables → admin "Manage tables" add two tables with areas → tap a free table → OrderScreen: punch a variant product and a no-station product (draft survives a reload before punching) → Send to kitchen → Kitchen page: ticket appears (WS live), items listed, mark Done → back to Tables (occupied) → cancel-sent flow as admin (reason prompt; waiter must not see the button) → cancel remaining pending items → cancel order → table free again → New parcel order round trip → create a waiter user (Users screen), log in as waiter: sees home+tables tabs only; kitchen-role user lands directly on the Kitchen board.
+`MASALAPOS_DATA_DIR=<scratch>` server + built UI on :4100, then in a real browser: setup → Tables → admin "Manage tables" add two tables with areas → tap a free table → OrderScreen: punch a variant product and a no-station product (draft survives a reload before punching) → Send to kitchen → Kitchen page: ticket appears (WS live), items listed, mark Done → back to Tables (occupied) → cancel-sent flow as admin (reason prompt; waiter must not see the button) → cancel remaining pending items → cancel order → table free again → New parcel order round trip → create a waiter user (Users screen), log in as waiter: sees home+tables tabs only; kitchen-role user lands directly on the Kitchen board.
 
 - [ ] **Step 4: Finish the branch**
 

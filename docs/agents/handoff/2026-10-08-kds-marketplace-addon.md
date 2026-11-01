@@ -60,12 +60,12 @@ What exists now:
   - **Kitchen route:** `KitchenRoute` in `App.tsx` shows `IntegrationOff` while
     KDS is off.
   - **Kitchen board (`Kitchen.tsx`):** shows "Kitchen Display is turned off" on
-    `kds_off`. It reloads on `integrations.changed`, `forkflow:license-changed` and
+    `kds_off`. It reloads on `integrations.changed`, `masalapos:license-changed` and
     reconnect.
   - **Licence screens:** list "Kitchen Display: included / not included"
     (`license-features.ts`).
   - **Live refresh:** licence changes refresh the Marketplace live
-    (`integrations.tsx` listens to `forkflow:license-changed`).
+    (`integrations.tsx` listens to `masalapos:license-changed`).
 - **Acceptance removal:**
   - Removed from the billing check, order JSON (`kitchenAcceptanceRequired`), the
     settings API and schema, `BillingPanel`, and the Settings checkbox.
@@ -126,8 +126,8 @@ fixed:
 | The error handler dropped every error code except `menu_changed`, so clients couldn't tell "KDS off" from any other 403. | Added `kds_off` to the allow-list; `ApiError` now carries `code`. |
 | Many kitchen tests broke once KDS defaulted to off. | `enableIntegration(app, "kds")` after admin setup; a new `commercialApp(plan)` test helper creates a real signed Basic or Pro installation. |
 | `tools/e2e/demo-kitchen.js` tested only the removed acceptance block. | Rewrote it: KDS on in the demo, an open KOT, billing works straight away, and billing doesn't complete the ticket. |
-| Port 4110, which the demo e2e expects, was held by the user's own ForkFlow Demo Electron app (old build). | Left it running. Started a scratch demo from source on 4112 (`globalThis.__FORKFLOW_DEMO__ = true`, then import `apps/server/src/main.ts` with `FORKFLOW_PORT=4112` and a scratch `FORKFLOW_DATA_DIR`). Injected copies of the scripts with the port rewritten. |
-| Review: a licence change didn't refresh the Marketplace, nav or board. | Listen for `forkflow:license-changed` in `IntegrationsProvider` and `Kitchen.tsx`. |
+| Port 4110, which the demo e2e expects, was held by the user's own MasalaPOS Demo Electron app (old build). | Left it running. Started a scratch demo from source on 4112 (`globalThis.__MASALAPOS_DEMO__ = true`, then import `apps/server/src/main.ts` with `MASALAPOS_PORT=4112` and a scratch `MASALAPOS_DATA_DIR`). Injected copies of the scripts with the port rewritten. |
+| Review: a licence change didn't refresh the Marketplace, nav or board. | Listen for `masalapos:license-changed` in `IntegrationsProvider` and `Kitchen.tsx`. |
 | Review: **View licence** landed at the top of Settings. | Root cause: Settings returns "Loading settings…" until its data arrives, so the open-and-scroll effect ran before the `<details>` existed. Fixed with dependencies `[section, loaded]`, declared after the `loaded` state to avoid a temporal-dead-zone error. Found by reading the component's hooks from the React fiber in the browser. |
 | Committing two intertwined uncommitted features (dashboard/Marketplace and KDS overlap in about 18 files) as separate commits that each build. | Backed up the final state with checksums; reversed only the KDS edits with an anchor-checked script; restored KDS-only files to `HEAD`; verified the result matched the pre-KDS baseline (824 passed); committed; restored the backup and checked it byte-for-byte; then committed KDS. |
 | A shell heredoc broke on a script with mixed quotes. | Wrote the script with the file-writing tool instead. |

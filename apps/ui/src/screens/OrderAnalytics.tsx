@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useEffect, useState } from "react";
-import type { AnalyticsOrderType, OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import type { AnalyticsOrderType, OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { apiFetch } from "../api";
 import { downloadText } from "../download";
 import { SegmentedControl } from "../PosControls";
@@ -38,7 +38,7 @@ export function OrderAnalytics({ initialPeriod, onPeriodChange }: { initialPerio
   function exportReport() {
     if (!report || loading) return;
     try {
-      downloadText(analyticsCsv(report, ranking), `forkflow-analytics-${report.orderType}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
+      downloadText(analyticsCsv(report, ranking), `masalapos-analytics-${report.orderType}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
       setMessage("Analytics CSV downloaded. Amounts are in rupees.");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not export analytics"); }
   }

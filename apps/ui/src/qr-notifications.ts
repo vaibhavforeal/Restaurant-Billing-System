@@ -1,4 +1,4 @@
-import type { GuestRequest } from "@forkflow/domain";
+import type { GuestRequest } from "@masalapos/domain";
 
 /** Keep IDs until expiry so reconnects and repeated snapshots never ring twice. */
 export class QrArrivalTracker {

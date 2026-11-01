@@ -4,7 +4,7 @@
 // Uses real UI actions; APIs only prepare fixtures and inspect persisted results.
 (async () => {
   if (location.origin !== 'http://127.0.0.1:4121') throw new Error('Disposable http://127.0.0.1:4121 only');
-  const stateKey = 'forkflow.qa.m10.takeaway';
+  const stateKey = 'masalapos.qa.m10.takeaway';
   const state = JSON.parse(localStorage.getItem(stateKey) || 'null') || { phase: 'normal', checks: [], orders: [], bills: [] };
   if (state.phase === 'complete') return { status: 'passed', passed: state.checks.length, checks: state.checks, orders: state.orders, bills: state.bills };
   if (window.__m10NeedsReload === state.phase) return { status: 'reload-required', nextPhase: state.phase, message: 'Reload this disposable page before resuming.' };
@@ -54,14 +54,14 @@
     const choice = await wait(() => [...rail.querySelectorAll('button')].find(b => b.textContent.trim() === state.category.name && !b.disabled), 'category ' + state.category.name);
     choice.click(); await pause();
   }
-  const headers = { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' };
+  const headers = { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body) => {
     const response = await nativeFetch('/api' + path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const result = await response.json();
     if (!response.ok) throw new Error(path + ': ' + JSON.stringify(result));
     return result;
   };
-  const queues = () => Object.keys(localStorage).filter(key => key.startsWith('forkflow.queue.v2.')).map(key => JSON.parse(localStorage.getItem(key)));
+  const queues = () => Object.keys(localStorage).filter(key => key.startsWith('masalapos.queue.v2.')).map(key => JSON.parse(localStorage.getItem(key)));
   const reloadNext = phase => {
     state.phase = phase; save(); window.__m10NeedsReload = phase; keepFault = true;
     return { status: 'reload-required', nextPhase: phase, passed: state.checks.length, checks: state.checks };
@@ -83,7 +83,7 @@
   const savedTakeaway = () => JSON.parse(localStorage.getItem(takeawayKey) || 'null');
   const currentOrder = async () => (await api('/orders/' + savedTakeaway().orderId)).order;
   const currentBill = async () => (await api('/orders/' + savedTakeaway().orderId + '/bill')).bill;
-  const draftKey = id => `forkflow.draft.${state.userId}.${id}`;
+  const draftKey = id => `masalapos.draft.${state.userId}.${id}`;
   const draft = id => JSON.parse(localStorage.getItem(draftKey(id)) || '[]');
   async function home() {
     await closeBilling();
@@ -96,7 +96,7 @@
     await wait(() => document.querySelector('.order-screen [role=group][aria-label="Menu categories"]') && savedTakeaway()?.orderId, 'quick takeaway menu');
     await showPane('cart');
     await wait(() => button('Pay'), 'quick takeaway cart');
-    await wait(() => localStorage.getItem('forkflow.generation'), 'checked server generation');
+    await wait(() => localStorage.getItem('masalapos.generation'), 'checked server generation');
     return savedTakeaway().orderId;
   }
   async function next() {
@@ -138,8 +138,8 @@
   try {
     const { user } = await api('/me');
     if (user.role !== 'admin') throw new Error('Registered disposable admin session required');
-    state.userId = user.id; takeawayKey = 'forkflow.draft.takeaway.' + user.id;
-    await wait(() => localStorage.getItem('forkflow.generation'), 'server generation');
+    state.userId = user.id; takeawayKey = 'masalapos.draft.takeaway.' + user.id;
+    await wait(() => localStorage.getItem('masalapos.generation'), 'server generation');
     if (state.phase === 'normal') {
       if (!window.__m10BasicLicense) throw new Error('Seed window.__m10BasicLicense from the disposable :4121 fixture first');
       if (queues().length) throw new Error('Disposable test browser must begin without queued requests');
@@ -179,7 +179,7 @@
       await next(); await add(state.water); await checkout(); await paid('upi');
       await next(); await add(state.meal); await checkout(); await paid('card');
       await api('/license', 'PUT', { license: window.__m10BasicLicense });
-      window.dispatchEvent(new Event('forkflow:license-changed'));
+      window.dispatchEvent(new Event('masalapos:license-changed'));
       check((await api('/license')).plan === 'basic', 'Basic plan activated for normal takeaway coverage');
       await next(); await add(state.water); await checkout(); await paid('cash');
       check(true, 'Basic completes quick takeaway billing');

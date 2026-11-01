@@ -59,7 +59,7 @@ printer name and copy number. A retry resends only that copy.
   paper**, then either **Retry this copy** or **Mark as already printed**.
 
 Jobs survive server restarts. Never-started jobs resume; interrupted writes are
-held for review. A restore performed through ForkFlow's recovery system changes
+held for review. A restore performed through MasalaPOS's recovery system changes
 the recovery generation, which also holds queued jobs from the restored backup
 for review. Do not manually replace the live database outside that recovery
 flow. Successful history is capped at 100 entries during queue processing.
@@ -99,7 +99,7 @@ database and never sends bytes to physical printers.
 The desktop build for this change is staged at `build/desktop/printer-preview`.
 The running desktop app was not restarted or switched to that build. To prepare
 an isolated stage while another desktop instance is open, set
-`FORKFLOW_BUILD_STAGE=printer-preview` before running `npm run build:desktop`.
+`MASALAPOS_BUILD_STAGE=printer-preview` before running `npm run build:desktop`.
 Stage names are restricted to letters, digits and hyphens under `build/desktop`.
 
 Verification result: 423 tests passed across 58 files; server and UI TypeScript

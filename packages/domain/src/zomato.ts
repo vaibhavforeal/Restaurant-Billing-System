@@ -1,4 +1,4 @@
-/** ForkFlow's internal contract. These are NOT Zomato's private wire schemas. */
+/** MasalaPOS's internal contract. These are NOT Zomato's private wire schemas. */
 export const ZOMATO_STATUSES = ["received", "confirmed", "preparing", "ready", "picked_up", "delivered", "rejected", "cancelled"] as const;
 export type ZomatoOrderStatus = typeof ZOMATO_STATUSES[number];
 export interface ZomatoSettings {

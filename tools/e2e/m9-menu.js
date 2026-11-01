@@ -5,7 +5,7 @@
   if (location.origin !== 'http://127.0.0.1:4120') throw new Error('Use only the disposable menu QA server on 127.0.0.1:4120');
   const checks = [], writes = [], declined = [], alerts = [];
   const originalFetch = window.fetch, originalConfirm = window.confirm, originalAlert = window.alert;
-  const token = localStorage.getItem('forkflow.token'), device = localStorage.getItem('forkflow.device.v1');
+  const token = localStorage.getItem('masalapos.token'), device = localStorage.getItem('masalapos.device.v1');
   if (!token || !device) throw new Error('Sign in as a registered Pro administrator before this gate');
   const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
   const pause = (ms = 75) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,7 +31,7 @@
     await pause();
   };
   const fill = (scope, label, value) => fillElement(() => field(scope, label), value, label);
-  const headers = { authorization: 'Bearer ' + token, 'x-forkflow-device': device, 'content-type': 'application/json' };
+  const headers = { authorization: 'Bearer ' + token, 'x-masalapos-device': device, 'content-type': 'application/json' };
   const api = async (path, method = 'GET', body) => {
     const response = await originalFetch.call(window, '/api' + path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const result = response.status === 204 ? null : await response.json();
@@ -150,7 +150,7 @@
     await click(document, 'tables');
     check(Boolean(editor()) && field(editor(), 'Menu description').value === dirtyDescription, 'Declining navigation preserves unsaved description and photo draft');
     await click(document, 'Log out');
-    check(Boolean(editor()) && localStorage.getItem('forkflow.token') === token && (await api('/me')).user.role === 'admin', 'Declining logout preserves the product draft and staff session');
+    check(Boolean(editor()) && localStorage.getItem('masalapos.token') === token && (await api('/me')).user.role === 'admin', 'Declining logout preserves the product draft and staff session');
     await click(editor(), 'Close');
     check(Boolean(editor()) && declined.length === 3 && writes.length === beforeDraft, 'Closing a dirty product also requests confirmation and performs no write');
     window.confirm = () => true; await click(editor(), 'Close');

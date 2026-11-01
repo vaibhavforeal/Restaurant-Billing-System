@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openDb, MIGRATIONS, migrate } from "@forkflow/domain";
+import { openDb, MIGRATIONS, migrate } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { auth, setupAdmin, wsAuth, createUser } from "./test-helpers.js";
 import type { FastifyInstance } from "fastify";

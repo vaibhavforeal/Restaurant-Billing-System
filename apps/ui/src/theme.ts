@@ -1,5 +1,5 @@
 export type Theme = "light" | "dark";
-export const THEME_STORAGE_KEY = "forkflow.theme.v1";
+export const THEME_STORAGE_KEY = "masalapos.theme.v1";
 
 export function readTheme(): Theme {
   try {

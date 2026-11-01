@@ -1,4 +1,4 @@
-import { customReportProblem, customReportSource, filterOpsFor, isNumericField, type CustomFilterOp, type CustomReportConfigValue } from "@forkflow/domain/custom-reports";
+import { customReportProblem, customReportSource, filterOpsFor, isNumericField, type CustomFilterOp, type CustomReportConfigValue } from "@masalapos/domain/custom-reports";
 
 /** What the builder edits. Filter values stay as text while typing; money is typed in rupees and saved in paise. */
 export interface CustomDraft {

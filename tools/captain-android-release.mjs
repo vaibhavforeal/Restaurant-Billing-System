@@ -15,7 +15,7 @@ export function stageCaptainAndroid(apkFolder, uiFolder, version) {
   const bytes = readFileSync(join(apkFolder, apk.outputFile));
   const target = join(uiFolder, "captain", "android");
   mkdirSync(target, { recursive: true });
-  writeFileSync(join(target, "ForkFlow-Captain.apk"), bytes);
+  writeFileSync(join(target, "MasalaPOS-Captain.apk"), bytes);
   writeFileSync(join(target, "version.json"), JSON.stringify({
     versionCode: apk.versionCode, versionName: apk.versionName, sha256: createHash("sha256").update(bytes).digest("hex").toUpperCase(),
   }));

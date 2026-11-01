@@ -11,8 +11,8 @@
   const button = text => [...document.querySelectorAll("button")].find(b => b.textContent.trim() === text);
   const api = async (path, method = "GET", body) => {
     const response = await fetch(path, { method, headers: {
-      authorization: `Bearer ${localStorage.getItem("forkflow.token")}`,
-      "x-forkflow-device": localStorage.getItem("forkflow.device.v1"), "content-type": "application/json",
+      authorization: `Bearer ${localStorage.getItem("masalapos.token")}`,
+      "x-masalapos-device": localStorage.getItem("masalapos.device.v1"), "content-type": "application/json",
     }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, ...await response.json() };
   };

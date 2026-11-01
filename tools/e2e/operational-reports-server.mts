@@ -2,7 +2,7 @@
 import { freshAppWithFakeSink, setupAdmin, createUser, auth } from "../../apps/server/src/test-helpers.js";
 import fastifyStatic from "@fastify/static";
 import { resolve } from "node:path";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 
 const { app } = freshAppWithFakeSink();
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist") });

@@ -1,0 +1,22 @@
+appId: in.masalapos.support
+productName: MasalaPOS Support
+directories:
+  app: build/connector/app
+  output: dist/connector
+electronVersion: 43.4.0
+npmRebuild: false
+asar: true
+asarUnpack:
+  - node_modules/koffi/**/*
+extraFiles:
+  - from: apps/connector/src/recovery.ps1
+    to: recovery.ps1
+files:
+  - "**/*"
+  - "!**/*.map"
+win:
+  target:
+    - target: zip
+      arch: [x64]
+  requestedExecutionLevel: asInvoker
+  artifactName: connector-${version}.zip

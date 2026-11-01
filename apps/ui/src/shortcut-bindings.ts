@@ -1,5 +1,5 @@
-export const SHORTCUT_STORAGE_KEY = "forkflow.shortcuts.v1";
-export const SHORTCUT_CHANGED_EVENT = "forkflow:shortcuts-changed";
+export const SHORTCUT_STORAGE_KEY = "masalapos.shortcuts.v1";
+export const SHORTCUT_CHANGED_EVENT = "masalapos:shortcuts-changed";
 export const SHORTCUT_ACTIONS = [
   { id: "new_order", label: "New order", key: "F2", description: "Open the last-used order entry screen." },
   { id: "tables", label: "Tables", key: "F3", description: "Return to Tables & orders." },

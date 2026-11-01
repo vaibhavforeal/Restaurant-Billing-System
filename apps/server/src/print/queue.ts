@@ -1,4 +1,4 @@
-import { uuidv7, openDb, migrate, MIGRATIONS, type Database } from "@forkflow/domain";
+import { uuidv7, openDb, migrate, MIGRATIONS, type Database } from "@masalapos/domain";
 import { PrintOutcomeUnknown, type SinkSend, type PrinterTarget } from "./sinks.js";
 
 export interface PrintJobJson {

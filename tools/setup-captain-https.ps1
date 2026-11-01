@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)][string]$ServerAddress,
-  [string]$DataDirectory = (Join-Path $env:APPDATA 'forkflow-desktop\data'),
+  [string]$DataDirectory = (Join-Path $env:APPDATA 'masalapos-desktop\data'),
   [ValidateRange(1, 65535)][int]$Port = 4443,
   [switch]$Renew,
   [switch]$OpenFirewall
@@ -37,7 +37,7 @@ if ($Renew -and (Test-Path -LiteralPath $captainConfig)) {
   if (-not $captainAuthority -or -not $captainAuthority.HasPrivateKey) { throw 'The original restaurant CA private key is unavailable in this Windows account. Restore it or plan a new certificate setup on every tablet.' }
   if ($captainAuthority.NotAfter -lt [DateTime]::Now.AddDays(366)) { throw 'The restaurant CA expires within a year. Plan replacement and tablet trust setup before renewal.' }
 } else {
-  $captainAuthority = New-SelfSignedCertificate -Type Custom -Subject 'CN=ForkFlow Restaurant Captain CA' -CertStoreLocation 'Cert:\CurrentUser\My' -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -KeyUsage CertSign,CRLSign,DigitalSignature -TextExtension @('2.5.29.19={critical}{text}ca=1&pathlength=0') -NotBefore ([DateTime]::Now.AddMinutes(-5)) -NotAfter ([DateTime]::Now.AddYears(3))
+  $captainAuthority = New-SelfSignedCertificate -Type Custom -Subject 'CN=MasalaPOS Restaurant Captain CA' -CertStoreLocation 'Cert:\CurrentUser\My' -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -KeyUsage CertSign,CRLSign,DigitalSignature -TextExtension @('2.5.29.19={critical}{text}ca=1&pathlength=0') -NotBefore ([DateTime]::Now.AddMinutes(-5)) -NotAfter ([DateTime]::Now.AddYears(3))
 }
 $captainSan = @('DNS=localhost', 'IPAddress=127.0.0.1', ('IPAddress=' + $ServerAddress)) | Select-Object -Unique
 $captainLeaf = New-SelfSignedCertificate -Type Custom -Subject ('CN=' + $ServerAddress) -Signer $captainAuthority -CertStoreLocation 'Cert:\CurrentUser\My' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -KeyUsage DigitalSignature,KeyEncipherment -TextExtension @(('2.5.29.17={text}' + ($captainSan -join '&')), '2.5.29.37={text}1.3.6.1.5.5.7.3.1', '2.5.29.19={critical}{text}ca=0') -NotBefore ([DateTime]::Now.AddMinutes(-5)) -NotAfter ([DateTime]::Now.AddDays(365))
@@ -62,7 +62,7 @@ $captainSettings = [ordered]@{
 [IO.File]::WriteAllText(($captainConfig + '.tmp'), ($captainSettings | ConvertTo-Json), $captainUtf8)
 Move-Item -LiteralPath ($captainConfig + '.tmp') -Destination $captainConfig -Force
 if ($OpenFirewall) {
-  $captainFirewallName = 'ForkFlow Captain HTTPS ' + $Port
+  $captainFirewallName = 'MasalaPOS Captain HTTPS ' + $Port
   if (-not (Get-NetFirewallRule -DisplayName $captainFirewallName -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -DisplayName $captainFirewallName -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow -Profile Private -RemoteAddress LocalSubnet | Out-Null
   }
@@ -74,5 +74,5 @@ Write-Output ('Captain HTTPS configured: https://' + $ServerAddress + ':' + $Por
 Write-Output ('Public tablet trust certificate: ' + (Join-Path $captainFolder 'restaurant-ca.cer'))
 Write-Output ('CA SHA-256: ' + $captainFingerprint)
 Write-Output ('Server certificate expires: ' + $captainLeaf.NotAfter.ToString('yyyy-MM-dd'))
-Write-Output 'Restart ForkFlow, then trust ONLY restaurant-ca.cer on the tablets. Private PFX/password files stay on the POS PC.'
+Write-Output 'Restart MasalaPOS, then trust ONLY restaurant-ca.cer on the tablets. Private PFX/password files stay on the POS PC.'
 Write-Output 'This script does not install a trusted root on this PC or expose the POS to the internet.'

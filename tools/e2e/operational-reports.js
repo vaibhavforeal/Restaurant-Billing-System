@@ -19,7 +19,7 @@
       setValue(document.querySelector('[aria-label="Detailed report"]'), kind);
       await wait(() => button("Export CSV") && !button("Export CSV").disabled && document.querySelector(".operational-report table"));
       const dates = [...document.querySelectorAll('.operational-report input[type="date"]')].map((e) => e.value);
-      const response = await originalFetch(`/api/reports/operations/${kind}?from=${dates[0]}&to=${dates[1]}`, { headers: { authorization: `Bearer ${localStorage.getItem("forkflow.token")}` } });
+      const response = await originalFetch(`/api/reports/operations/${kind}?from=${dates[0]}&to=${dates[1]}`, { headers: { authorization: `Bearer ${localStorage.getItem("masalapos.token")}` } });
       const { report } = await response.json();
       assert(response.ok, `${kind}: API loaded`);
       const regions = [...document.querySelectorAll('.operational-report [role="region"]')];

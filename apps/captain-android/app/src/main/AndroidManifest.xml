@@ -39,7 +39,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="forkflow-captain" android:host="pair" />
+                <data android:scheme="masalapos-captain" android:host="pair" />
             </intent-filter>
         </activity>
 

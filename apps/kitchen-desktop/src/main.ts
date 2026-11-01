@@ -5,8 +5,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "
 import { kitchenAddress } from "./server-address.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-app.setName("ForkFlow Kitchen");
-app.setPath("userData", join(app.getPath("appData"), "forkflow-kitchen"));
+app.setName("MasalaPOS Kitchen");
+app.setPath("userData", join(app.getPath("appData"), "masalapos-kitchen"));
 const config = join(app.getPath("userData"), "connection.json");
 const connectionPage = pathToFileURL(join(here, "connect.html")).href;
 let window: BrowserWindow;
@@ -25,7 +25,7 @@ async function showConnection(error = "") {
 async function connect(address: string) {
   const url = kitchenAddress(address);
   const response = await fetch(new URL("/api/health", url), { signal: AbortSignal.timeout(5000), redirect: "error" });
-  if (!response.ok || (await response.json() as { ok?: boolean }).ok !== true) throw new Error("The address did not respond as a ForkFlow POS server.");
+  if (!response.ok || (await response.json() as { ok?: boolean }).ok !== true) throw new Error("The address did not respond as a MasalaPOS server.");
   target = url;
   await window.loadURL(url);
   saveAddress(url);
@@ -34,7 +34,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", () => { window?.show(); window?.focus(); });
   app.whenReady().then(async () => {
-    window = new BrowserWindow({ width: 1280, height: 800, title: "ForkFlow Kitchen", show: false, webPreferences: { preload: join(here, "preload.cjs"), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+    window = new BrowserWindow({ width: 1280, height: 800, title: "MasalaPOS Kitchen", show: false, webPreferences: { preload: join(here, "preload.cjs"), sandbox: true, contextIsolation: true, nodeIntegration: false } });
     window.once("ready-to-show", () => window.show());
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event, url) => { if (url !== target) event.preventDefault(); });

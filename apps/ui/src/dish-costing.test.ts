@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DishCost } from "@forkflow/domain";
+import type { DishCost } from "@masalapos/domain";
 import { COSTING_PRO_NOTE, costingPriceNote, formatTierPrice, sortDishes } from "./dish-costing";
 
 function dish(name: string, category: string, nonAcPercent: number | null, status: DishCost["status"] = nonAcPercent === null ? "incomplete" : "complete"): DishCost {

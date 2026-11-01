@@ -18,7 +18,7 @@
     await new Promise((r) => setTimeout(r, 70));
   };
   const api = async (path, method = 'GET', body) => {
-    const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const response = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const json = await response.json(); if (!response.ok) throw new Error(`${path}: ${JSON.stringify(json)}`); return json;
   };
   const suffix = Date.now(); const name = `Gate ingredient ${suffix}`;

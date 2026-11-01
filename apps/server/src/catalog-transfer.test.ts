@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { CATALOG_CSV_COLUMNS, catalogCsv, parseCatalogCsv, uuidv7 } from "@forkflow/domain";
+import { CATALOG_CSV_COLUMNS, catalogCsv, parseCatalogCsv, uuidv7 } from "@masalapos/domain";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshApp>;

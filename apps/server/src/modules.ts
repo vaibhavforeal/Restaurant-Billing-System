@@ -1,12 +1,12 @@
 import {
   MODULE_IDS, ModuleToggle, isModuleId, moduleDef, resolveModuleStates,
   type Database, type ModuleId, type ModuleInfo, type ModuleMap,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { httpError } from "./http-error.js";
 
 /**
- * Module controls on the counter. The ForkFlow owner's allowances come from the signed licence (every module in development
+ * Module controls on the counter. The MasalaPOS owner's allowances come from the signed licence (every module in development
  * builds); the restaurant's own on/off switches live in `integration_state`, keyed by module id. Without a switch row a
  * service or back-office module is on as soon as it is allowed, while an add-on (Zomato, Kitchen Display, CRM & Loyalty)
  * waits until the restaurant switches it on, since each needs setting up first.
@@ -53,7 +53,7 @@ export function requireModule(app: FastifyInstance, id: ModuleId): preHandlerHoo
  */
 export function setModuleEnabled(app: FastifyInstance, id: ModuleId, enabled: boolean, actorId: string): boolean {
   const state = moduleState(app.db, id);
-  if (enabled && !state.allowed) throw httpError(403, `${state.name} is not included for this restaurant. Contact ForkFlow to add it.`);
+  if (enabled && !state.allowed) throw httpError(403, `${state.name} is not included for this restaurant. Contact MasalaPOS to add it.`);
   const changed = app.db.transaction(() => {
     // A repeat of the current value writes nothing, so updated_at/updated_by keep recording the last real change.
     if (moduleState(app.db, id).enabled === enabled) return false;

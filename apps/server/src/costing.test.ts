@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { localDateKey, uuidv7, type OperationalReport, type StockItem, type StockMove, type StockCostChange } from "@forkflow/domain";
+import { localDateKey, uuidv7, type OperationalReport, type StockItem, type StockMove, type StockCostChange } from "@masalapos/domain";
 import { freshApp, setupAdmin, auth, createUser } from "./test-helpers.js";
 
 describe("stock costing", () => {

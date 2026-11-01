@@ -2,7 +2,7 @@ import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
-  type Bill, type LicenseClaims, type RecipeUpdateInput, type StockItem, type StockLink, type StockUnit, planModules } from "@forkflow/domain";
+  type Bill, type LicenseClaims, type RecipeUpdateInput, type StockItem, type StockLink, type StockUnit, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP } from "./test-helpers.js";
@@ -10,7 +10,7 @@ import { SETUP } from "./test-helpers.js";
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const apps: FastifyInstance[] = [];
-type Headers = { authorization: string; "x-forkflow-device": string };
+type Headers = { authorization: string; "x-masalapos-device": string };
 type Recipe = { links: StockLink[]; version: number };
 type Ingredient = RecipeUpdateInput["ingredients"][number];
 type Order = { id: string; items: Array<{ id: string; status: string; variantId: string | null }> };
@@ -29,9 +29,9 @@ async function fixture() {
   let app = buildServer({ db, sinkSend: makeFakeSink().send, licensing: { publicKey, installationId } });
   apps.push(app);
   const device = "a".repeat(64);
-  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
-  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const request = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
@@ -101,7 +101,7 @@ async function fixture() {
     expect(created.statusCode, created.body).toBe(201);
     const login = await request("POST", "/api/login", { pin: "2345" });
     expect(login.statusCode, login.body).toBe(200);
-    return { authorization: `Bearer ${login.json().token}`, "x-forkflow-device": device };
+    return { authorization: `Bearer ${login.json().token}`, "x-masalapos-device": device };
   }
   async function restart() {
     await app.close(); apps.splice(apps.indexOf(app), 1);

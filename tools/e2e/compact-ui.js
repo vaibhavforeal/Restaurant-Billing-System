@@ -15,7 +15,7 @@
     return Object.fromEntries(names.map(name => { const e = document.querySelector(name); return [name, e && visible(e) ? { client: e.clientHeight, scroll: e.scrollHeight, overflow: e.scrollHeight > e.clientHeight + 1 } : null]; }));
   };
   const after = location.port === "4137";
-  const key = "forkflow.qa.compact";
+  const key = "masalapos.qa.compact";
   const saved = JSON.parse(localStorage.getItem(key) || "null");
   if (!saved) {
     if (button("Takeaway")) await click("Takeaway");
@@ -49,7 +49,7 @@
     await click(after ? "Pay & print · F10" : "Issue bill & record cash payment");
     await wait(() => scope().querySelector(".billing-paid"), "recorded payment");
     await wait(() => scope().querySelector(".billing-print-status")?.textContent.includes("done"), "receipt printed");
-    const headers = { authorization: "Bearer " + localStorage.getItem("forkflow.token") };
+    const headers = { authorization: "Bearer " + localStorage.getItem("masalapos.token") };
     const bills = await fetch("/api/bills?status=paid", { headers }).then(r => r.json());
     const bill = bills.bills.find(b => b.discountNote === "Fixture discount");
     check(bill, "Paid bill persisted");

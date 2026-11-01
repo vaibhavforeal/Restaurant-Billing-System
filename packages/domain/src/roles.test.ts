@@ -1,4 +1,4 @@
-import { can } from "@forkflow/core";
+import { can } from "@masalapos/core";
 import { describe, expect, it } from "vitest";
 import { roleFor } from "./roles.js";
 

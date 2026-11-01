@@ -24,7 +24,7 @@
   await click("Remove Crispy corn"); await click("Undo");
   await click("Send to kitchen");
   await wait(() => document.querySelector(".captain-message")?.textContent.includes("Sent to kitchen"), "KOT acknowledgement");
-  const headers = { authorization: "Bearer " + localStorage.getItem("forkflow.token"), "x-forkflow-device": localStorage.getItem("forkflow.device.v1") };
+  const headers = { authorization: "Bearer " + localStorage.getItem("masalapos.token"), "x-masalapos-device": localStorage.getItem("masalapos.device.v1") };
   const orders = await fetch("/api/orders", { headers }).then(r => r.json());
   const order = orders.orders.find(o => o.tableName === "T01");
   check(order.items.length === 4, "Four saved rows without duplicates");
@@ -43,6 +43,6 @@
   for (const key of await caches.keys()) { for (const request of await (await caches.open(key)).keys()) cached.push(new URL(request.url).pathname); }
   check(!cached.some(path => path.startsWith("/api/")), "No API data cached by PWA");
   const result = { orderId: order.id, kotId: order.kots[0].id, itemRows: order.items.length, kitchenRows: 3, subtotalPaise: 63000, printed: true, waiterBillingDenied: true, workerScope: registration.scope, cachedAssets: cached.length };
-  localStorage.setItem("forkflow.qa.captain", JSON.stringify(result));
+  localStorage.setItem("masalapos.qa.captain", JSON.stringify(result));
   return result;
 })();

@@ -26,6 +26,7 @@ export const RESTAURANT_RECEIPT_CSS = `
   th,td{vertical-align:top;text-align:right;overflow-wrap:anywhere}
   .items th{border-block:1px dotted #555;padding:6px 0;font-size:14px}
   .items td{padding:6px 0;font-size:14px}
+  .items .combo-contents{display:block;font-size:11px;color:#555}
   .items th:first-child,.items td:first-child{width:45%;text-align:left;padding-right:10px}
   .items th:nth-child(2),.items td:nth-child(2){width:9%}
   .items th:nth-child(3),.items td:nth-child(3){width:22%;padding-inline:5px}

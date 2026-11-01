@@ -1,4 +1,4 @@
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 
 // A link is active only while its order is open or billed; settled/cancelled orders release their linked tables.
 export function activeLinkedTableNames(db: Database, orderId: string): string[] {

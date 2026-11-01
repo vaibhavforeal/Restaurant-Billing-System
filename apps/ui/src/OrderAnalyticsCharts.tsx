@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { reportMoney } from "./sales-report";
 
 const shortDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" });

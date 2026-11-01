@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DishCost } from "@forkflow/domain";
-import { PRICE_TIER_LABELS } from "@forkflow/domain/pricing";
-import type { GstMode } from "@forkflow/domain/gst";
+import type { DishCost } from "@masalapos/domain";
+import { PRICE_TIER_LABELS } from "@masalapos/domain/pricing";
+import type { GstMode } from "@masalapos/domain/gst";
 import { apiFetch } from "../api";
 import { COSTING_PRO_NOTE, costingPriceNote, formatTierPrice, sortDishes } from "../dish-costing";
 import { formatMovementCost } from "../stock-costs";

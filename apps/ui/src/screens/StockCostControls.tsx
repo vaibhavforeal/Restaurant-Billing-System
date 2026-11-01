@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { StockItem } from "@forkflow/domain";
+import type { StockItem } from "@masalapos/domain";
 import { apiFetch } from "../api";
 import { formatUnitCost, perUnitHint, rupeesPerUnitToMilliPaise } from "../stock-costs";
 import { uuid } from "../uuid";

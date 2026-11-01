@@ -15,15 +15,15 @@
     for (;;) { const value = await predicate(); if (value) return value; if (Date.now() > until) throw new Error('Timed out: ' + label); await sleep(40); }
   };
   const nativeFetch = window.fetch;
-  const device = localStorage.getItem('forkflow.device.v1');
+  const device = localStorage.getItem('masalapos.device.v1');
   const call = async (method, path, token, body) => {
-    const headers = { authorization: 'Bearer ' + token, 'x-forkflow-device': device };
+    const headers = { authorization: 'Bearer ' + token, 'x-masalapos-device': device };
     if (body !== undefined) headers['content-type'] = 'application/json';
     const r = await nativeFetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: r.status, json: await r.json().catch(() => null) };
   };
-  const ownToken = localStorage.getItem('forkflow.token');
-  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forkflow-device': device }, body: JSON.stringify({ pin }) })).json()).token;
+  const ownToken = localStorage.getItem('masalapos.token');
+  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin }) })).json()).token;
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const newButtons = () => [...document.querySelectorAll('button')].filter(b => /^\+?\s*New$/.test(b.textContent.trim()) && (b.classList.contains('zomato-desk-new') || b.closest('.tables-zomato') || /zomato/i.test(b.getAttribute('aria-label') ?? '')));
   const zomatoHeadings = () => [...document.querySelectorAll('h1, h2, h3, h4, [role="heading"]')].filter(h => /zomato/i.test(h.textContent));

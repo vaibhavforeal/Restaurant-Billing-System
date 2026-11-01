@@ -5,7 +5,7 @@
 
 ## 1. Goal
 
-The Kitchen Display System (the `/kitchen` ticket board, the ForkFlow Kitchen desktop app and the in-app Kitchen tab) becomes a paid add-on that an administrator turns on or off from the Marketplace, next to Zomato. The KDS only views tickets: the kitchen sees what to cook and clears finished tickets with **Done**. Billing never depends on the kitchen.
+The Kitchen Display System (the `/kitchen` ticket board, the MasalaPOS Kitchen desktop app and the in-app Kitchen tab) becomes a paid add-on that an administrator turns on or off from the Marketplace, next to Zomato. The KDS only views tickets: the kitchen sees what to cook and clears finished tickets with **Done**. Billing never depends on the kitchen.
 
 Success means:
 
@@ -87,7 +87,7 @@ Switching KDS uses the existing `integrations.changed` event, which every authen
 
 ### Marketplace — `screens/Marketplace.tsx`, `marketplace.css`
 
-- Header: "Connect ForkFlow to delivery platforms and add-ons".
+- Header: "Connect MasalaPOS to delivery platforms and add-ons".
 - `categoryLabel` adds `kitchen: "Kitchen"`.
 - KDS card:
   - Licensed: normal switch with Disabled/Enabled status.

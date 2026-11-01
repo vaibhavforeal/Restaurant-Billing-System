@@ -44,7 +44,7 @@ Clear the M3a acceptance gate that blocked M3b, then plan and execute M3b (print
 ## Files in flight
 
 - Nothing uncommitted/unpushed/stashed. `main` checked out. Both SDD workspaces deleted (git is the record).
-- `.e2e-scratch/` (gitignored) still holds the superseded morning-session gate script + scratch DB; `D:/scratch/forkflow-gate*` dirs hold gate scratch DBs — all disposable.
+- `.e2e-scratch/` (gitignored) still holds the superseded morning-session gate script + scratch DB; `D:/scratch/masalapos-gate*` dirs hold gate scratch DBs — all disposable.
 - `data/` still does not exist — no one has run the app for real.
 
 ## Failed attempts
@@ -67,7 +67,7 @@ Clear the M3a acceptance gate that blocked M3b, then plan and execute M3b (print
 
 ## What a fresh agent would otherwise rediscover
 
-- **Gate run recipe**: `npm run build -w @forkflow/ui` → `FORKFLOW_DATA_DIR="D:/scratch/<fresh>" npx tsx apps/server/src/main.ts` (background) → `PYTHONIOENCODING=utf-8 <hermes-python> tools/e2e/gate.py` with `GATE_LAN=http://192.168.180.24:4100`. KOT-number assertions require a FRESH DB. Stop the server via netstat-PID + `powershell Stop-Process`, never the task wrapper.
+- **Gate run recipe**: `npm run build -w @masalapos/ui` → `MASALAPOS_DATA_DIR="D:/scratch/<fresh>" npx tsx apps/server/src/main.ts` (background) → `PYTHONIOENCODING=utf-8 <hermes-python> tools/e2e/gate.py` with `GATE_LAN=http://192.168.180.24:4100`. KOT-number assertions require a FRESH DB. Stop the server via netstat-PID + `powershell Stop-Process`, never the task wrapper.
 - **`PRAGMA foreign_keys=OFF` is a no-op inside a transaction; `defer_foreign_keys=ON` is the in-transaction tool** (see migration 004's comment).
 - **Snapshot convention** (first in repo): tests snapshot `renderBytes(buffer)` via `toMatchSnapshot()`; `__snapshots__/*.snap` are committed. renderBytes is command-aware (per-command parameter counts) — extend its maps if EscPos grows new commands.
 - **Fresh installs have zero printers**; the seeded 'Kitchen' station has `printer_id = NULL` until assigned in Settings — send-to-kitchen silently skips printing then (kitchen display is the fallback).

@@ -64,7 +64,7 @@ The existing native app stays running; **Ctrl+R** loads the updated UI. This
 preserves the user's current editing session until they choose to refresh.
 
 Verified pre-update backup in the existing desktop data folder:
-`backups/forkflow-pre-update-1790668924976-258e339f-3d48-439b-8ce0-af379bf1fff5.db`.
+`backups/masalapos-pre-update-1790668924976-258e339f-3d48-439b-8ce0-af379bf1fff5.db`.
 SQLite integrity and foreign-key checks passed at schema 11. The user's current
 counts were preserved: users 1, products 1, orders 2, order_items 0, bills 0,
 stock_items 0, stock_moves 0. QA data was isolated from the desktop.

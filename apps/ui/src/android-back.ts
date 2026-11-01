@@ -11,5 +11,5 @@ export function androidBack(openDialogs: ArrayLike<Pick<HTMLDialogElement, "disp
 }
 
 export function listenForAndroidBack(navigate: () => boolean) {
-  (window as Window & { forkflowBack?: () => boolean }).forkflowBack = () => androidBack(document.querySelectorAll<HTMLDialogElement>("dialog[open]"), navigate);
+  (window as Window & { masalaposBack?: () => boolean }).masalaposBack = () => androidBack(document.querySelectorAll<HTMLDialogElement>("dialog[open]"), navigate);
 }

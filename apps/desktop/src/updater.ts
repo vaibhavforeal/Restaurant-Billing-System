@@ -15,7 +15,7 @@ export interface AutoUpdaterLike {
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
 /**
- * Downloads updates in the background and installs them only when asked (Settings → Restart & update), or when ForkFlow
+ * Downloads updates in the background and installs them only when asked (Settings → Restart & update), or when MasalaPOS
  * is next quit. Patch also takes GitHub pre-releases (hotfix builds). Switching back to stable never downgrades:
  * the installation stays on its patch version until a newer stable release is out.
  */

@@ -2,7 +2,7 @@ import type { D1Like } from "./env.js";
 import { claimSecretStatement, getInstallation, type InstallationRow } from "./store.js";
 
 // The per-installation secret: 32 random bytes as 64 lowercase hex characters. The Worker keeps only its SHA-256; it is never logged or echoed.
-export const SECRET_HEADER = "x-forkflow-installation-secret";
+export const SECRET_HEADER = "x-masalapos-installation-secret";
 
 const SECRET_FORMAT = /^[a-f0-9]{64}$/;
 export const isWellFormedSecret = (value: string | null): value is string => value !== null && SECRET_FORMAT.test(value);

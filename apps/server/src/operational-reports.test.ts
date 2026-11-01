@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { localDateKey, uuidv7, type OperationalReport, appendStockMove } from "@forkflow/domain";
+import { localDateKey, uuidv7, type OperationalReport, appendStockMove } from "@masalapos/domain";
 import { freshAppWithFakeSink, setupAdmin, createUser, auth, enableIntegration } from "./test-helpers.js";
 
 describe("operational reports", () => {

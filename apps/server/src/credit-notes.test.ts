@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { uuidv7, type Bill, type BillCreditNote, type PayMode } from "@forkflow/domain";
+import { uuidv7, type Bill, type BillCreditNote, type PayMode } from "@masalapos/domain";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 import { loadBillCredit, resolveApprover } from "./credit-notes.js";
 

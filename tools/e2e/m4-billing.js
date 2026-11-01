@@ -26,7 +26,7 @@
     await new Promise((resolve) => setTimeout(resolve, 60));
   };
   const api = async (path, method = 'GET', body) => {
-    const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const r = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const data = await r.json(); if (!r.ok) throw new Error(`${path}: ${JSON.stringify(data)}`); return data;
   };
   const suffix = Date.now();
@@ -58,7 +58,7 @@
   await mode('included');
   const included = await checkout();
   check(included.totalPaise === 10500 && included.cgstPaise === 250 && included.receipt.gstMode === 'included', 'GST-included bill totals correct');
-  await payMode(1, 'Cash'); await fill('Amount 1', '50'); await click('Add payment method');
+  await payMode(1, 'Cash'); await fill('Amount 1', '50'); await click('Split payment');
   await waitFor(() => field('Amount 2'), 'second payment'); await payMode(2, 'UPI');
   check(field('Amount 2').value === '55.00', 'Remaining balance fills second payment');
   await click('Settle bill'); await waitFor(() => document.body.innerText.includes('PAID:') || document.body.innerText.includes('Paid:'), 'paid receipt');

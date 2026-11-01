@@ -4,7 +4,7 @@ export function CaptainInstall() {
   const pwa = useCaptainPwa();
   const android = captainAndroid();
   if (android) return <section className="captain-install" aria-label="Captain app">
-    <h3>ForkFlow Captain for Android {android.version()}</h3>
+    <h3>MasalaPOS Captain for Android {android.version()}</h3>
     <p>Connected to <code>{android.server()}</code>. Orders and kitchen confirmation need the POS connection.</p>
     <button onClick={() => android.changeServer()}>Change POS server</button>
   </section>;

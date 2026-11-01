@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OrderAnalyticsReport } from "@forkflow/domain/operational-reports";
+import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
 import { analyticsCsv, analyticsMetrics, averageOrder, orderShare, rankedItems } from "./order-analytics";
 
 const report: OrderAnalyticsReport = {

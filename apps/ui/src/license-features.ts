@@ -1,4 +1,4 @@
-import { MODULES, type ModuleMap } from "@forkflow/domain/modules";
+import { MODULES, type ModuleMap } from "@masalapos/domain/modules";
 
 /** Which modules a licence includes, in catalogue order, e.g. for the active plan or a licence preview. */
 export function moduleSummary(modules: ModuleMap): string {

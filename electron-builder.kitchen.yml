@@ -1,5 +1,5 @@
-appId: in.forkflow.kitchen
-productName: ForkFlow Kitchen
+appId: in.masalapos.kitchen
+productName: MasalaPOS Kitchen
 directories:
   app: build/desktop/kitchen
   output: dist/kitchen
@@ -12,7 +12,7 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/desktop/icon.ico
-  artifactName: "ForkFlow-Kitchen-Setup-${version}.${ext}"
+  artifactName: "MasalaPOS-Kitchen-Setup-${version}.${ext}"
 nsis:
   oneClick: false
   perMachine: false

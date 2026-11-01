@@ -58,7 +58,7 @@ function checkOrder(order: Order, saved: SavedTakeaway) {
 // Holding releases only the current shortcut. The order, cart draft, and saved
 // requests remain available when the staff member reopens it from the order list.
 export function releaseHeldTakeaway(userId: string, orderId: string) {
-  const key = `forkflow.draft.takeaway.${userId}`;
+  const key = `masalapos.draft.takeaway.${userId}`;
   const saved = readSaved(key);
   if (saved?.orderId !== orderId) return;
   try {
@@ -84,7 +84,7 @@ export function QuickTakeaway({ user, onBack, onOpenOrder }: {
 }
 
 function TakeawayStart({ user, onBack, onReady }: { user: User; onBack: () => void; onReady: (order: Order) => void }) {
-  const key = `forkflow.draft.takeaway.${user.id}`;
+  const key = `masalapos.draft.takeaway.${user.id}`;
   const lock = useRef(false);
   const mounted = useRef(false);
   const [pending, setPending] = useState(true);
@@ -112,7 +112,7 @@ function TakeawayStart({ user, onBack, onReady }: { user: User; onBack: () => vo
       // Check the restore generation before replaying an ambiguous create. The
       // shared connection queue archives this draft prefix after a restore.
       let previousGeneration: string | null;
-      try { previousGeneration = localStorage.getItem("forkflow.generation"); }
+      try { previousGeneration = localStorage.getItem("masalapos.generation"); }
       catch { throw new TakeawayRecoveryError("Device storage is unavailable. Enable browser storage before opening a takeaway."); }
       const { generation } = await apiFetch<{ generation: string }>("/api/system/generation");
       if (!mounted.current) return;

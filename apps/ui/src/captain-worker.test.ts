@@ -27,9 +27,9 @@ function worker(entry: "captain" | "kitchen" = "captain") {
 }
 describe("Captain service worker boundaries", () => {
   it("isolates Kitchen caches and never caches tickets or Captain navigation", async () => {
-    const w = worker("kitchen"); w.cache("forkflow-captain-existing"); w.cache("forkflow-kitchen-old");
+    const w = worker("kitchen"); w.cache("masalapos-captain-existing"); w.cache("masalapos-kitchen-old");
     await w.lifecycle("install"); await w.lifecycle("activate");
-    expect([...w.stores.keys()].sort()).toEqual(["forkflow-captain-existing", "forkflow-kitchen-test"]);
+    expect([...w.stores.keys()].sort()).toEqual(["masalapos-captain-existing", "masalapos-kitchen-test"]);
     expect(w.request("/api/kots")).toBeUndefined();
     expect(w.request("/api/kots/one/accept", "POST")).toBeUndefined();
     expect(w.request("/captain/", "GET", "navigate")).toBeUndefined();
@@ -38,7 +38,7 @@ describe("Captain service worker boundaries", () => {
   });
   it("caches only the shell and declared build assets, never forcing a live order update", async () => {
     const w = worker(); await w.lifecycle("install");
-    expect([...w.stores.get("forkflow-captain-test")!.keys()].sort()).toEqual(["/assets/app-v1.css", "/assets/app-v1.js", "/captain/"]);
+    expect([...w.stores.get("masalapos-captain-test")!.keys()].sort()).toEqual(["/assets/app-v1.css", "/assets/app-v1.js", "/captain/"]);
     expect(w.skipWaiting).not.toHaveBeenCalled();
   });
   it("does not intercept API reads, writes, guest navigation or external resources", () => {
@@ -58,11 +58,11 @@ describe("Captain service worker boundaries", () => {
     w.fetch.mockClear();
     expect(await (await w.request("/captain/", "GET", "navigate"))!.text()).toBe("shell-v1");
     expect(w.fetch).not.toHaveBeenCalled();
-    expect(await (await w.cache("forkflow-captain-test").match("/captain/"))!.text()).toBe("shell-v1");
+    expect(await (await w.cache("masalapos-captain-test").match("/captain/"))!.text()).toBe("shell-v1");
   });
   it("removes only old Captain caches when activation is safe", async () => {
-    const w = worker(); w.cache("forkflow-captain-old"); w.cache("other-app"); await w.lifecycle("install"); await w.lifecycle("activate");
-    expect([...w.stores.keys()].sort()).toEqual(["forkflow-captain-test", "other-app"]); expect(w.claim).toHaveBeenCalledOnce();
+    const w = worker(); w.cache("masalapos-captain-old"); w.cache("other-app"); await w.lifecycle("install"); await w.lifecycle("activate");
+    expect([...w.stores.keys()].sort()).toEqual(["masalapos-captain-test", "other-app"]); expect(w.claim).toHaveBeenCalledOnce();
   });
   it("rejects an incomplete download instead of activating a broken offline shell", async () => {
     const w = worker(); w.fetch.mockResolvedValue(new Response("not found", { status: 404 }));

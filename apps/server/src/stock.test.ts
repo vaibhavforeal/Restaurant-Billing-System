@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type StockItem, type Bill } from "@forkflow/domain";
+import { uuidv7, type StockItem, type Bill } from "@masalapos/domain";
 import { freshAppWithFakeSink, setupAdmin, auth, createUser } from "./test-helpers.js";
 
 describe("inventory", () => {

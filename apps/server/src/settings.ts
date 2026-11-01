@@ -1,4 +1,4 @@
-import { SettingsUpdate, type GstMode, type ReceiptStyle } from "@forkflow/domain";
+import { SettingsUpdate, type GstMode, type ReceiptStyle } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 
 interface SettingsRow {

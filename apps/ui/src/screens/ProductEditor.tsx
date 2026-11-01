@@ -5,6 +5,7 @@ import { paiseToRupees, rupeesToPaise } from "../money";
 import { useNavigationGuard } from "../navigation-guard";
 import { prepareProductPhoto } from "../product-photo";
 import type { Category, Product, Station, Variant } from "../types";
+import { ComboSlotsEditor, slotsFromGroups, slotsToGroups } from "./ComboSlotsEditor";
 import "../product-editor.css";
 
 const optionalPrice = (value: number | null | undefined) => value == null ? "" : paiseToRupees(value);
@@ -12,10 +13,15 @@ const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zoma
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
-export function ProductEditor({ product, defaultCategoryId, categories, stations, defaultGstRate, onDone }: {
-  product: Product | null; defaultCategoryId: string | null; categories: Category[];
+export function ProductEditor({ product, kind = "item", products = [], defaultCategoryId, categories, stations, defaultGstRate, onDone }: {
+  product: Product | null; /** What a new product is; a saved one keeps its own kind. */ kind?: "item" | "combo";
+  /** The catalog, for choosing what goes in a combo. */ products?: Product[]; defaultCategoryId: string | null; categories: Category[];
   stations: Station[]; /** The restaurant's default GST rate, which an item without its own rate uses. */ defaultGstRate: number; onDone: () => void;
 }) {
+  const isCombo = (product?.kind ?? kind) === "combo";
+  const noun = isCombo ? "combo" : "product";
+  const [slots, setSlots] = useState(() => slotsFromGroups(product?.combo));
+  const [slotsChanged, setSlotsChanged] = useState(false);
   const initial = useRef({ name: product?.name ?? "", description: product?.description ?? "",
     categoryId: product?.categoryId ?? defaultCategoryId ?? "", price: product ? paiseToRupees(product.pricePaise) : "",
     acPrice: optionalPrice(product?.acPricePaise), takeawayPrice: optionalPrice(product?.takeawayPricePaise), zomatoPrice: optionalPrice(product?.zomatoPricePaise),
@@ -50,12 +56,12 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
   const preview = photoChange === undefined ? currentPhoto : photoChange;
   const dirty = name !== initial.name || description !== initial.description || categoryId !== initial.categoryId ||
     acPrice !== initial.acPrice || takeawayPrice !== initial.takeawayPrice || zomatoPrice !== initial.zomatoPrice || price !== initial.price || gstRate !== initial.gstRate || isVeg !== initial.isVeg || stationId !== initial.stationId ||
-    isActive !== initial.isActive || isSoldOut !== initial.isSoldOut || photoChange !== undefined ||
+    isActive !== initial.isActive || isSoldOut !== initial.isSoldOut || photoChange !== undefined || slotsChanged ||
     (!product && variants.length > 0) || newVariant.name !== "" || newVariant.price !== "" || newVariant.acPrice !== "" || newVariant.takeawayPrice !== "" || newVariant.zomatoPrice !== "";
 
   function canLeave() {
-    if (lock.current) { window.alert("Wait for the photo or product changes to finish saving before leaving."); return false; }
-    return !dirty || window.confirm("Discard your unsaved product changes?");
+    if (lock.current) { window.alert(`Wait for the photo or ${noun} changes to finish saving before leaving.`); return false; }
+    return !dirty || window.confirm(`Discard your unsaved ${noun} changes?`);
   }
   useNavigationGuard(canLeave);
   useEffect(() => {
@@ -96,10 +102,13 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
     const pricePaise = rupeesToPaise(price);
     if (!name.trim() || pricePaise === null || !categoryId) { setError("Name, category, and a valid price are required."); return; }
     if (editingVariantId || newVariant.name.trim() || newVariant.price.trim() || newVariant.acPrice.trim() || newVariant.takeawayPrice.trim() || newVariant.zomatoPrice.trim()) { setError("Add the draft variant or clear its name and price before saving the product."); return; }
+    const combo = isCombo ? slotsToGroups(slots) : null;
+    if (combo && "error" in combo) { setError(combo.error); return; }
     void run("product", async () => {
       const base = { ...servicePrices(acPrice, takeawayPrice, zomatoPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate: gstRate === "" ? null : Number(gstRate), isVeg,
-        kotStationId: stationId || null, isSoldOut, ...(photoChange === undefined ? {} : { photo: photoChange }) };
+        kotStationId: isCombo ? null : stationId || null, isSoldOut, ...(photoChange === undefined ? {} : { photo: photoChange }), ...(combo ? { combo: combo.groups } : {}) };
       if (product) await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ ...base, isActive }) });
+      else if (isCombo) await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, kind: "combo" }) });
       else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise, zomatoPricePaise: variant.zomatoPricePaise ?? null })) }) });
       lock.current = false; onDone();
     });
@@ -140,15 +149,15 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
   }
 
   return <section className="product-editor panel" aria-label="Product editor">
-    <div className="product-editor-heading"><h2>{product ? `Edit: ${product.name}` : "New product"}</h2><span role="status">{dirty ? "Unsaved changes" : ""}</span></div>
+    <div className="product-editor-heading"><h2>{product ? `Edit: ${product.name}` : isCombo ? "New combo" : "New product"}</h2><span role="status">{dirty ? "Unsaved changes" : ""}</span></div>
     <form onSubmit={(event) => { event.preventDefault(); save(); }}>
       <div className="product-editor-layout"><div className="product-editor-fields">
-        <label className="product-field-wide">Product name<input required value={name} disabled={busy !== null} onChange={(event) => setName(event.target.value)} /></label>
+        <label className="product-field-wide">{isCombo ? "Combo name" : "Product name"}<input required value={name} disabled={busy !== null} onChange={(event) => setName(event.target.value)} /></label>
         <details className="product-field-wide"><summary>Description (optional)</summary><label className="product-field-wide">Menu description<textarea maxLength={500} rows={4} value={description} disabled={busy !== null} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the dish, its ingredients, or how it is served." /><small>{description.length}/500 characters · Shown on the guest menu.</small></label></details>
         <div className="product-field-wide product-metadata-grid">
           <label>Category<select required value={categoryId} disabled={busy !== null} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.isActive ? "" : " (inactive)"}</option>)}</select></label>
           <label>GST rate<select value={gstRate} disabled={busy !== null} onChange={(event) => setGstRate(event.target.value)}><option value="">Restaurant default ({defaultGstRate}%)</option>{GST_RATES.map((rate) => <option key={rate} value={String(rate)}>{rate}%</option>)}</select></label>
-          <label>Kitchen station<select value={stationId} disabled={busy !== null} onChange={(event) => setStationId(event.target.value)}><option value="">No KOT station</option>{stationId && !stations.some((station) => station.id === stationId) && <option value={stationId}>Current inactive station</option>}{stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}</select></label>
+          {!isCombo && <label>Kitchen station<select value={stationId} disabled={busy !== null} onChange={(event) => setStationId(event.target.value)}><option value="">No KOT station</option>{stationId && !stations.some((station) => station.id === stationId) && <option value={stationId}>Current inactive station</option>}{stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}</select></label>}
         </div>
         <div className="product-field-wide product-prices-grid">
           <label>Non-AC price (₹)<input required inputMode="decimal" value={price} disabled={busy !== null} onChange={(event) => setPrice(event.target.value)} /></label>
@@ -169,7 +178,8 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
         {photoChange === null && <p role="status" className="product-editor-help">The photo will be removed when saved.</p>}
       </div></section></div>
 
-      <details className="product-variants" aria-label="Product variants"><summary>Variants (portions) <InfoTip>{product ? "Changes to variants are saved immediately. Other product details use Save product below." : "Variants will be saved with the new product."}</InfoTip></summary><div className="pos-section-body">
+      {isCombo ? <ComboSlotsEditor slots={slots} products={products.filter((value) => value.id !== product?.id)} disabled={busy !== null} onChange={(next) => { setSlots(next); setSlotsChanged(true); }} />
+      : <details className="product-variants" aria-label="Product variants"><summary>Variants (portions) <InfoTip>{product ? "Changes to variants are saved immediately. Other product details use Save product below." : "Variants will be saved with the new product."}</InfoTip></summary><div className="pos-section-body">
 
         {variants.map((variant) => <div className="product-variant-row" key={variant.id}><span>{variant.name} · Non-AC ₹{paiseToRupees(variant.pricePaise)} · AC ₹{paiseToRupees(variant.acPricePaise ?? variant.pricePaise)} · Takeaway ₹{paiseToRupees(variant.takeawayPricePaise ?? variant.pricePaise)} · Zomato ₹{paiseToRupees(variant.zomatoPricePaise ?? variant.takeawayPricePaise ?? variant.pricePaise)}{!variant.isActive && <small>Inactive</small>}</span><button type="button" disabled={busy !== null || editingVariantId !== null || Object.values(newVariant).some(Boolean)} onClick={() => { setEditingVariantId(variant.id); setNewVariant({ name: variant.name, price: paiseToRupees(variant.pricePaise), acPrice: optionalPrice(variant.acPricePaise), takeawayPrice: optionalPrice(variant.takeawayPricePaise), zomatoPrice: optionalPrice(variant.zomatoPricePaise) }); }}>Edit prices</button><button type="button" disabled={busy !== null || editingVariantId === variant.id} onClick={() => toggleVariant(variant)}>{product ? variant.isActive ? "Deactivate" : "Activate" : "Remove"}</button></div>)}
         <div className="product-variant-inputs">
@@ -180,9 +190,9 @@ export function ProductEditor({ product, defaultCategoryId, categories, stations
           <label><span>Zomato (₹) <InfoTip>Leave blank to use the variant's Takeaway price. Blank AC and Takeaway prices use its Non-AC price.</InfoTip></span><input aria-label="Variant Zomato price (₹)" inputMode="decimal" value={newVariant.zomatoPrice} placeholder="Use Takeaway" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, zomatoPrice: event.target.value })} /></label>
           <div className="product-variant-actions"><button type="button" disabled={busy !== null} onClick={addVariant}>{editingVariantId ? "Save variant" : "Add variant"}</button>{editingVariantId && <button type="button" disabled={busy !== null} onClick={() => { setEditingVariantId(null); setNewVariant(emptyVariant); }}>Cancel variant edit</button>}</div>
         </div>
-      </div></details>
+      </div></details>}
       {error && <p className="error-message" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
-      <div className="product-editor-actions"><button className="primary" disabled={busy !== null}>{busy === "product" ? "Saving product…" : "Save product"}</button><button type="button" disabled={busy !== null} onClick={() => { if (canLeave()) onDone(); }}>{product ? "Close" : "Cancel"}</button></div>
+      <div className="product-editor-actions"><button className="primary" disabled={busy !== null}>{busy === "product" ? `Saving ${noun}…` : `Save ${noun}`}</button><button type="button" disabled={busy !== null} onClick={() => { if (canLeave()) onDone(); }}>{product ? "Close" : "Cancel"}</button></div>
     </form>
   </section>;
 }

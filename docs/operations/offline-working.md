@@ -1,6 +1,6 @@
 # Working offline
 
-Counters and captain tablets reach the ForkFlow server (the hub) over the
+Counters and captain tablets reach the MasalaPOS server (the hub) over the
 restaurant network. When that link drops, staff keep working. Each action is
 saved on the device and sent to the hub when the link returns. The hub applies
 each action exactly once.
@@ -77,9 +77,9 @@ in again.
 ## For support
 
 - **Where actions are kept:** in the browser's local storage on each device.
-  - `forkflow.queue.v2.*` holds saved actions.
-  - `forkflow.queue-result.v2.*` holds outcomes, kept for 24 hours.
-  - `forkflow.cache.v1.*` holds offline copies.
+  - `masalapos.queue.v2.*` holds saved actions.
+  - `masalapos.queue-result.v2.*` holds outcomes, kept for 24 hours.
+  - `masalapos.cache.v1.*` holds offline copies.
 - **How repeats are recognised:** the hub matches each action's reference, so
   sending the same action twice changes nothing. For a new order, the device
   chooses its id. For items sent to the kitchen, the device names them by the

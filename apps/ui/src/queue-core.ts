@@ -55,8 +55,8 @@ export interface QueueResult {
 /** How a send failed: the hub was not reached (try again later) or it refused the request (needs review). */
 export interface SendFailure { status?: number; message: string }
 
-export const ENTRY_PREFIX = "forkflow.queue.v2.";
-export const RESULT_PREFIX = "forkflow.queue-result.v2.";
+export const ENTRY_PREFIX = "masalapos.queue.v2.";
+export const RESULT_PREFIX = "masalapos.queue-result.v2.";
 export const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 30_000;
 

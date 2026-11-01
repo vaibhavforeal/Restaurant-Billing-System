@@ -18,7 +18,7 @@
     element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true })); await delay();
   };
   const api = async (path, method = 'GET', payload) => {
-    const response = await originalFetch.call(window, `/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('forkflow.token')}`, 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' }, ...(payload === undefined ? {} : { body: JSON.stringify(payload) }) });
+    const response = await originalFetch.call(window, `/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}`, 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' }, ...(payload === undefined ? {} : { body: JSON.stringify(payload) }) });
     const body = await response.json(); if (!response.ok) throw new Error(`${path}: ${response.status} ${JSON.stringify(body)}`); return body;
   };
   const fixture = await (await originalFetch('/__qa/recipes')).json();
@@ -109,12 +109,12 @@
     await api(`/order-items/${order.items[0].id}/cancel`, 'POST', { reason: 'Recipe workflow verification' });
     const reversed = (await api('/stock-items')).items;
     check(recipeAtSale.links.every(link => reversed.find(item => item.id === link.stockItemId).qty === beforeBalances.find(item => item.id === link.stockItemId).qty), 'Cancellation after recipe edit restores original deduction quantities');
-    await api('/license', 'PUT', { license: fixture.basic }); window.dispatchEvent(new Event('forkflow:license-changed'));
+    await api('/license', 'PUT', { license: fixture.basic }); window.dispatchEvent(new Event('masalapos:license-changed'));
     await wait(() => document.querySelector('.recipe-access-note')?.textContent.includes('view-only'), 'Basic multi ingredient lock');
     check(quantity(1).disabled && !button('Save recipe'), 'Basic retains readable multi-ingredient recipes without edit controls');
     await choose(other.name); await fill(quantity(1), '125'); await save();
     check(writes.at(-1).path.endsWith('/stock-links') && writes.at(-1).body.qtyPerSale === 0.125 && button('Add ingredient').disabled, 'Basic single ingredient uses the existing stock-link API');
-    await api('/license', 'PUT', { license: fixture.pro }); window.dispatchEvent(new Event('forkflow:license-changed'));
+    await api('/license', 'PUT', { license: fixture.pro }); window.dispatchEvent(new Event('masalapos:license-changed'));
     await wait(() => !document.querySelector('.recipe-access-note'), 'Pro upgrade');
     failLoad = true; await click(dish.name); await wait(() => button('Retry loading recipe'), 'load error');
     check(!quantity(1), 'Failed initial load has retry without an editable stale recipe');

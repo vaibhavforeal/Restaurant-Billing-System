@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GuestRequest } from "@forkflow/domain";
+import type { GuestRequest } from "@masalapos/domain";
 import { QrArrivalTracker, startQrMonitor } from "./qr-notifications";
 
 const request = (id: string, expiresAt = Date.now() + 60_000) => ({ id, expiresAt }) as GuestRequest;

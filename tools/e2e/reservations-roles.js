@@ -10,7 +10,7 @@
   const set = async (el, value) => { Object.getOwnPropertyDescriptor(el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); await tick(); };
   const input = (name) => [...document.querySelectorAll('.reservations-dialog label')].find((el) => el.textContent.startsWith(name))?.querySelector('input,select');
   const api = async (path, method = 'GET', body) => {
-    const res = await fetch('/api' + path, { method, headers: { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const res = await fetch('/api' + path, { method, headers: { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const result = await res.json(); if (!res.ok) throw new Error(JSON.stringify(result)); return result;
   };
   const login = async (pin) => {

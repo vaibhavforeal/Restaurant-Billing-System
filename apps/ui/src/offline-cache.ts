@@ -5,7 +5,7 @@ import type { Category, Order, Product, TableInfo } from "./types";
  * Last-known copies of what a counter was looking at, so staff can keep working while the hub is unreachable. Each copy
  * is per signed-in person and replaced on every successful load; the hub stays the source of truth.
  */
-const PREFIX = "forkflow.cache.v1.";
+const PREFIX = "masalapos.cache.v1.";
 export interface CatalogCache { categories: Category[]; products: Product[]; captains: Array<{ id: string; name: string }>; at: number }
 
 function write(key: string, value: unknown): void {

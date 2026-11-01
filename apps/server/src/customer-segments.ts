@@ -1,7 +1,7 @@
 import {
   SEGMENT_CSV_COLUMNS, SegmentFilter, SegmentSave, addMonths, catalogCsv, localDateKey, matchesSegment, tierFor, uuidv7,
   type Database, type SavedSegment, type SegmentCustomer, type SegmentFilterValue,
-} from "@forkflow/domain";
+} from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";

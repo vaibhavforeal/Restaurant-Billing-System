@@ -1,5 +1,5 @@
-import { hashPassword, verifyPassword } from "@forkflow/core";
-import { ADMIN_ONLY_PERMISSIONS, PERMISSION_AREAS, PermissionOverridesSchema, UserCreate, UserUpdate, effectivePermissions, normaliseOverrides, roleDefaults, uuidv7, type RoleName } from "@forkflow/domain";
+import { hashPassword, verifyPassword } from "@masalapos/core";
+import { ADMIN_ONLY_PERMISSIONS, PERMISSION_AREAS, PermissionOverridesSchema, UserCreate, UserUpdate, effectivePermissions, normaliseOverrides, roleDefaults, uuidv7, type RoleName } from "@masalapos/domain";
 import { z } from "zod";
 import { permissionOverrides } from "./auth.js";
 import type { FastifyInstance } from "fastify";

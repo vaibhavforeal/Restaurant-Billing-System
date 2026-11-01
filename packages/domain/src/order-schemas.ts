@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ComboPicks } from "./combos.js";
 
 const Name = z.string().trim().min(1);
 const ClientRef = z.string().min(8).max(64);
@@ -58,6 +59,8 @@ export const OrderItemsAdd = z.object({
         variantId: z.string().min(1).nullable().default(null),
         qty: z.number().int().min(1).max(99),
         note: z.string().trim().max(200).optional(),
+        /** The options chosen for a combo's slots. */
+        comboPicks: ComboPicks.optional(),
       }),
     )
     .min(1),

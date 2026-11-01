@@ -9,7 +9,7 @@ import verifyDesktopPackage from "./verify-desktop-package.mjs";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
-const env = { FORKFLOW_LICENSE_PUBLIC_KEY: publicKey };
+const env = { MASALAPOS_LICENSE_PUBLIC_KEY: publicKey };
 
 test("demo and licensed customer builds have different stages and licensing", () => {
   const demo = desktopBuildConfig(["--demo"], env);
@@ -26,49 +26,49 @@ test("demo and licensed customer builds have different stages and licensing", ()
 
 test("customer builds reject missing, private and non-Ed25519 keys", () => {
   for (const value of [undefined, "", "  "]) {
-    assert.throws(() => desktopBuildConfig(["--commercial"], { FORKFLOW_LICENSE_PUBLIC_KEY: value }), /require FORKFLOW_LICENSE_PUBLIC_KEY/);
+    assert.throws(() => desktopBuildConfig(["--commercial"], { MASALAPOS_LICENSE_PUBLIC_KEY: value }), /require MASALAPOS_LICENSE_PUBLIC_KEY/);
   }
   const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  assert.throws(() => desktopBuildConfig(["--commercial"], { FORKFLOW_LICENSE_PUBLIC_KEY: privateKey }), /Only the public/);
+  assert.throws(() => desktopBuildConfig(["--commercial"], { MASALAPOS_LICENSE_PUBLIC_KEY: privateKey }), /Only the public/);
   const ecKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ type: "spki", format: "pem" }).toString();
-  assert.throws(() => desktopBuildConfig(["--commercial"], { FORKFLOW_LICENSE_PUBLIC_KEY: ecKey }), /Ed25519/);
-  assert.throws(() => desktopBuildConfig(["--commercial"], { FORKFLOW_LICENSE_PUBLIC_KEY: "not a key" }));
+  assert.throws(() => desktopBuildConfig(["--commercial"], { MASALAPOS_LICENSE_PUBLIC_KEY: ecKey }), /Ed25519/);
+  assert.throws(() => desktopBuildConfig(["--commercial"], { MASALAPOS_LICENSE_PUBLIC_KEY: "not a key" }));
 });
 
 test("only customer builds carry the licensing service URL, and it must be HTTPS", () => {
-  const withUrl = { ...env, FORKFLOW_LICENSE_SERVICE_URL: "https://license.example.com" };
+  const withUrl = { ...env, MASALAPOS_LICENSE_SERVICE_URL: "https://license.example.com" };
   assert.equal(desktopBuildConfig(["--commercial"], withUrl).serviceUrl, "https://license.example.com");
   assert.equal(desktopBuildConfig(["--commercial"], env).serviceUrl, "");
   assert.equal(desktopBuildConfig(["--demo"], withUrl).serviceUrl, "");
   assert.equal(desktopBuildConfig([], withUrl).serviceUrl, "");
   for (const url of ["http://license.example.com", "http://127.0.0.1:8787", "license.example.com", "https://"]) {
-    assert.throws(() => desktopBuildConfig(["--commercial"], { ...env, FORKFLOW_LICENSE_SERVICE_URL: url }), /Licensing service URL must use HTTPS/);
+    assert.throws(() => desktopBuildConfig(["--commercial"], { ...env, MASALAPOS_LICENSE_SERVICE_URL: url }), /Licensing service URL must use HTTPS/);
   }
   // Ambient settings never break a build that does not use them.
-  assert.equal(desktopBuildConfig(["--demo"], { ...env, FORKFLOW_LICENSE_SERVICE_URL: "http://example.com" }).serviceUrl, "");
+  assert.equal(desktopBuildConfig(["--demo"], { ...env, MASALAPOS_LICENSE_SERVICE_URL: "http://example.com" }).serviceUrl, "");
 });
 
 test("release stages cannot be redirected or overwritten by development builds", () => {
   assert.throws(() => desktopBuildConfig(["--demo", "--commercial"], env), /separate products/);
   for (const stage of ["demo", "commercial", "kitchen"]) {
-    assert.throws(() => desktopBuildConfig([], { FORKFLOW_BUILD_STAGE: stage }), /cannot overwrite/);
+    assert.throws(() => desktopBuildConfig([], { MASALAPOS_BUILD_STAGE: stage }), /cannot overwrite/);
   }
   for (const edition of ["demo", "commercial"]) {
-    assert.throws(() => desktopBuildConfig([`--${edition}`], { ...env, FORKFLOW_BUILD_STAGE: "app" }), /must use/);
+    assert.throws(() => desktopBuildConfig([`--${edition}`], { ...env, MASALAPOS_BUILD_STAGE: "app" }), /must use/);
   }
-  assert.throws(() => desktopBuildConfig([], { FORKFLOW_BUILD_STAGE: "../data" }), /Invalid build stage/);
-  assert.equal(desktopBuildConfig([], { FORKFLOW_BUILD_STAGE: "printer-preview" }).stageName, "printer-preview");
+  assert.throws(() => desktopBuildConfig([], { MASALAPOS_BUILD_STAGE: "../data" }), /Invalid build stage/);
+  assert.equal(desktopBuildConfig([], { MASALAPOS_BUILD_STAGE: "printer-preview" }).stageName, "printer-preview");
 });
 
 function fixture(t, edition) {
-  const appDir = mkdtempSync(join(tmpdir(), "forkflow-package-test-"));
+  const appDir = mkdtempSync(join(tmpdir(), "masalapos-package-test-"));
   t.after(() => rmSync(appDir, { recursive: true, force: true }));
   const config = desktopBuildConfig([`--${edition}`], env);
   const info = { edition: config.edition, version: "1.0.0", verificationKeyFingerprint: config.verificationKeyFingerprint };
   const writeInfo = (changes = {}) => writeFileSync(join(appDir, "build-info.json"), JSON.stringify({ ...info, ...changes }));
   writeInfo();
-  writeFileSync(join(appDir, "package.json"), JSON.stringify({ name: edition === "demo" ? "forkflow-demo" : "forkflow-desktop", version: "1.0.0" }));
-  const context = { packager: { info: { appDir }, config: { appId: edition === "demo" ? "in.forkflow.demo" : "in.forkflow.pos" } } };
+  writeFileSync(join(appDir, "package.json"), JSON.stringify({ name: edition === "demo" ? "masalapos-demo" : "masalapos-desktop", version: "1.0.0" }));
+  const context = { packager: { info: { appDir }, config: { appId: edition === "demo" ? "in.masalapos.demo" : "in.masalapos.pos" } } };
   return { context, writeInfo, appDir };
 }
 
@@ -98,7 +98,7 @@ test("installer guard rejects legacy stages and customer builds without a key", 
 
 test("ships the Captain Android app only when it was built for this release", async () => {
   const { stageCaptainAndroid } = await import("./captain-android-release.mjs");
-  const folder = mkdtempSync(join(tmpdir(), "forkflow-captain-apk-"));
+  const folder = mkdtempSync(join(tmpdir(), "masalapos-captain-apk-"));
   try {
     const apks = join(folder, "apk"), ui = join(folder, "ui");
     assert.match(stageCaptainAndroid(apks, ui, "1.2.3"), /not built/);
@@ -108,7 +108,7 @@ test("ships the Captain Android app only when it was built for this release", as
     assert.match(stageCaptainAndroid(apks, ui, "1.2.4"), /Skipping/);
     assert.equal(existsSync(join(ui, "captain/android")), false);
     stageCaptainAndroid(apks, ui, "1.2.3");
-    assert.equal(readFileSync(join(ui, "captain/android/ForkFlow-Captain.apk"), "utf8"), "apk bytes");
+    assert.equal(readFileSync(join(ui, "captain/android/MasalaPOS-Captain.apk"), "utf8"), "apk bytes");
     assert.deepEqual(JSON.parse(readFileSync(join(ui, "captain/android/version.json"), "utf8")), {
       versionCode: 1002003, versionName: "1.2.3", sha256: createHash("sha256").update("apk bytes").digest("hex").toUpperCase(),
     });

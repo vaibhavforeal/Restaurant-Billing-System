@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ModuleId, ModuleInfo } from "@forkflow/domain/modules";
+import type { ModuleId, ModuleInfo } from "@masalapos/domain/modules";
 import { apiFetch, session } from "./api";
 import { readModulesCopy, saveModulesCopy } from "./offline-cache";
 import { connectWs } from "./ws";
@@ -7,7 +7,7 @@ import { connectWs } from "./ws";
 interface ModulesValue {
   modules: ModuleInfo[];
   ready: boolean;
-  /** The module works now: allowed by ForkFlow, switched on here and its dependencies active. False until loaded. */
+  /** The module works now: allowed by MasalaPOS, switched on here and its dependencies active. False until loaded. */
   isActive(id: ModuleId): boolean;
   setEnabled(id: ModuleId, enabled: boolean): Promise<void>;
   refresh(): void;
@@ -22,7 +22,7 @@ export function useModules(): ModulesValue {
 
 /**
  * One shared copy of the module states, for every signed-in role. It reloads when a module changes, when the licence changes
- * (the ForkFlow owner's allowances arrive in it) and on reconnect. Until the first load everything reads as inactive, and a
+ * (the MasalaPOS owner's allowances arrive in it) and on reconnect. Until the first load everything reads as inactive, and a
  * failed reload keeps the last known states.
  */
 export function ModulesProvider({ children }: { children: ReactNode }) {
@@ -46,13 +46,13 @@ export function ModulesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void load();
     const reload = () => void load();
-    window.addEventListener("forkflow:license-changed", reload);
+    window.addEventListener("masalapos:license-changed", reload);
     const dispose = connectWs({
       onEvent: (event) => { if (event === "modules.changed" || event === "integrations.changed") reload(); },
       onStatus: (connected) => { if (connected) reload(); },
       onAuthFail: () => session.clear(),
     });
-    return () => { window.removeEventListener("forkflow:license-changed", reload); dispose(); };
+    return () => { window.removeEventListener("masalapos:license-changed", reload); dispose(); };
   }, [load]);
 
   const setEnabled = useCallback(async (id: ModuleId, enabled: boolean) => {

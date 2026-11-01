@@ -1,0 +1,12 @@
+{
+  "name": "@masalapos/remote-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "koffi": "2.16.3"
+  }
+}

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CATALOG_CSV_COLUMNS, CATALOG_CSV_LIMIT, GST_RATES, catalogCsv, parseCatalogCsv, uuidv7, type CatalogImportPreview } from "@forkflow/domain";
+import { CATALOG_CSV_COLUMNS, CATALOG_CSV_LIMIT, GST_RATES, catalogCsv, parseCatalogCsv, uuidv7, type CatalogImportPreview } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
@@ -21,7 +21,9 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
   const snapshot = () => ({
     categories: app.db.prepare("SELECT id, name, sort_order, is_active FROM categories ORDER BY id").all() as Category[],
     stations: app.db.prepare("SELECT id, name, is_active FROM kot_stations ORDER BY id").all() as Station[],
-    items: app.db.prepare(`SELECT ${itemColumns} FROM products ORDER BY id`).all() as Item[],
+    // Combos hold slots a CSV row cannot describe, so they are edited in the catalog only.
+    items: app.db.prepare(`SELECT ${itemColumns} FROM products WHERE kind = 'item' ORDER BY id`).all() as Item[],
+    combos: app.db.prepare("SELECT id, category_id, name FROM products WHERE kind = 'combo' ORDER BY id").all() as Array<{ id: string; category_id: string; name: string }>,
     variants: app.db.prepare("SELECT id, product_id, name, price_paise, is_active, ac_price_paise, takeaway_price_paise, zomato_price_paise FROM variants ORDER BY id").all() as Variant[],
   });
 
@@ -42,7 +44,7 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
       for (const v of variants.get(p.id) ?? []) rows.push([...base, v.id, v.name, rupees(v.price_paise), String(!!v.is_active), ...service, optional(v.ac_price_paise), optional(v.takeaway_price_paise), optional(p.zomato_price_paise), optional(v.zomato_price_paise)]);
     }
     reply.header("Cache-Control", "no-store");
-    return { filename: `forkflow-items-${new Date().toISOString().slice(0, 10)}.csv`, csv: catalogCsv(rows) };
+    return { filename: `masalapos-items-${new Date().toISOString().slice(0, 10)}.csv`, csv: catalogCsv(rows) };
   });
 
   function plan(csv: string) {
@@ -96,6 +98,9 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
       }
       const itemName = name(v.name, "name");
       const itemId = id(v.item_id, "item_id");
+      if (data.combos.some((c) => c.id === itemId || (!itemId && c.category_id === category.id && normalized(c.name) === normalized(itemName)))) {
+        return fail(`${itemName} is a combo. Edit combos in the catalog, not by import.`);
+      }
       const existing = itemId ? data.items.find((p) => p.id === itemId)
         : unique(data.items.filter((p) => p.category_id === category.id && normalized(p.name) === normalized(itemName)), "item name");
       // An ID-less row can also refer to a new item already seen earlier in this file.

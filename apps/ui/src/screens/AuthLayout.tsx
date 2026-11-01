@@ -3,5 +3,5 @@ import { Brand } from "../Icon";
 import { ThemeToggle } from "../ThemeToggle";
 
 export function AuthLayout({ children }: { children: ReactNode }) {
-  return <div className="auth-shell"><main className="auth-card"><div className="auth-brand-row"><Brand /><ThemeToggle /></div>{children}</main></div>;
+  return <div className="auth-shell"><main className="auth-card"><div className="auth-brand-row"><Brand tagline /><ThemeToggle /></div>{children}</main></div>;
 }

@@ -19,7 +19,7 @@
   const metrics = () => [...document.querySelectorAll('.sales-metric > strong')].map(e => e.textContent);
   const nativeFetch = window.fetch, nativeUrl = URL.createObjectURL, nativeClick = HTMLAnchorElement.prototype.click;
   const api = async path => {
-    const r = await nativeFetch(path, { headers: { authorization: 'Bearer ' + localStorage.getItem('forkflow.token'), 'x-forkflow-device': localStorage.getItem('forkflow.device.v1') } });
+    const r = await nativeFetch(path, { headers: { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1') } });
     if (!r.ok) throw new Error('Fixture API: ' + r.status); return r.json();
   };
   let nextBlob;
@@ -142,7 +142,7 @@
     check(thirty.daily.length === 30 && metrics()[1] === money(thirty.collections.totalPaise), '30-day preset reconciles');
     check(document.querySelectorAll('.sales-report-table tbody tr').length === 30, 'Report contains all selected dates');
     const salesCsv = await captureExport('Export sales CSV');
-    check(salesCsv.filename === `forkflow-sales-${thirtyFrom}-to-${initial.today}.csv` && salesCsv.text.includes('"TOTAL"') && salesCsv.text.includes((thirty.sales.totalPaise / 100).toFixed(2)), 'Sales CSV uses displayed dates and exact totals');
+    check(salesCsv.filename === `masalapos-sales-${thirtyFrom}-to-${initial.today}.csv` && salesCsv.text.includes('"TOTAL"') && salesCsv.text.includes((thirty.sales.totalPaise / 100).toFixed(2)), 'Sales CSV uses displayed dates and exact totals');
     check(document.querySelector('.workspace').scrollHeight <= document.querySelector('.workspace').clientHeight, 'Long report scrolls inside table at 1280×720');
     const table = document.querySelector('.sales-report-table'); table.scrollTop = table.scrollHeight;
     check(getComputedStyle(table.querySelector('thead th')).position === 'sticky' && getComputedStyle(table.querySelector('tfoot td')).position === 'sticky', 'Report header and totals remain sticky');
@@ -154,7 +154,7 @@
     await wait(() => document.querySelector('.pos-report-grid'));
     check(document.querySelector('.legacy-screen input').value === thirtyFrom, 'Daily row opens unchanged Day-end/GST for selected date');
     const dayCsv = await captureExport('Export CSV');
-    check(dayCsv.filename === `forkflow-day-end-${thirtyFrom}.csv`, 'Existing day-end CSV remains available');
+    check(dayCsv.filename === `masalapos-day-end-${thirtyFrom}.csv`, 'Existing day-end CSV remains available');
     await click('Sales'); await setPeriod('2020-01-01', '2020-01-03'); await wait(loaded);
     check(metrics().every(v => v === '₹0.00' || v === '0') && document.querySelectorAll('.sales-report-table tbody tr').length === 3, 'Empty periods show zero totals and complete daily rows');
     await click('Day-end / GST'); await wait(() => document.querySelector('.pos-report-grid'));

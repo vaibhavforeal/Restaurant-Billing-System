@@ -1,6 +1,6 @@
 # Restaurant rollout checklist
 
-Use this before a restaurant relies on ForkFlow for real service. It checks what the automated tests cannot: a clean Windows install, the restaurant network, real printers, phones and tablets, and recovery from power or hardware problems.
+Use this before a restaurant relies on MasalaPOS for real service. It checks what the automated tests cannot: a clean Windows install, the restaurant network, real printers, phones and tablets, and recovery from power or hardware problems.
 
 Work through it on the actual restaurant hardware, top to bottom. Tick each box only when you saw the **Expect** result. Write down anything that differs in the [record sheet](#9-record-sheet) at the end. Skip sections for equipment the restaurant doesn't have (for example Bluetooth printers), and mark them "n/a".
 
@@ -14,12 +14,12 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 
 - [ ] **Build a fresh installer.** The installer in `dist/commercial` is from 2 October 2026 and does not contain later work (inventory costing, table move and merge, review fixes). From the repository root in PowerShell:
   ```powershell
-  $env:FORKFLOW_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
+  $env:MASALAPOS_LICENSE_PUBLIC_KEY = Get-Content 'C:\secure\license-public.pem' -Raw
   npm.cmd run package:commercial
   ```
-  **Expect:** `dist/commercial/ForkFlow-Setup-<version>.exe` with today's date.
+  **Expect:** `dist/commercial/MasalaPOS-Setup-<version>.exe` with today's date.
 - [ ] **Version number.** The current version is 0.7.0. For each later release, raise `version` in `package.json` before building. A new version number is what triggers the automatic pre-update backup on their PC.
-- [ ] **Kitchen client** (only if the kitchen uses a Windows PC): `npm.cmd run package:kitchen` → `dist/kitchen/ForkFlow-Kitchen-Setup-<version>.exe`.
+- [ ] **Kitchen client** (only if the kitchen uses a Windows PC): `npm.cmd run package:kitchen` → `dist/kitchen/MasalaPOS-Kitchen-Setup-<version>.exe`.
 - [ ] Copy the installer(s) and a signed license file for this restaurant to a USB stick.
 
 ### Equipment
@@ -38,11 +38,11 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 ## 1. Clean install on the main PC
 
 - [ ] Run the installer on the main PC. **Expect:** Windows shows an "unknown publisher" (SmartScreen) warning because the installer is not code-signed yet. Choose **More info → Run anyway**. Write down that the warning appeared.
-- [ ] Finish the install with the default folder. **Expect:** a ForkFlow desktop shortcut; ForkFlow opens to restaurant setup.
+- [ ] Finish the install with the default folder. **Expect:** a MasalaPOS desktop shortcut; MasalaPOS opens to restaurant setup.
 - [ ] Complete setup: restaurant name and administrator PIN. **Expect:** you reach the license screen.
 - [ ] Import the license file. **Expect:** plan shows Basic or Pro correctly; this PC registers as a device.
-- [ ] Close the window. **Expect:** ForkFlow stays in the system tray; the tray menu has **Open data and backups** and **Quit**.
-- [ ] Restart Windows. **Expect:** ForkFlow starts by itself after login (tray icon present).
+- [ ] Close the window. **Expect:** MasalaPOS stays in the system tray; the tray menu has **Open data and backups** and **Quit**.
+- [ ] Restart Windows. **Expect:** MasalaPOS starts by itself after login (tray icon present).
 
 ---
 
@@ -59,8 +59,8 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 
 - [ ] In the router, **reserve the main PC's IP address** (DHCP reservation). Write it down: `______________`.
 - [ ] Set the main PC's Windows network to **Private**.
-- [ ] From another device on the restaurant Wi-Fi, open `http://<main-PC-IP>:4100`. **Expect:** the ForkFlow login screen loads.
-  - If it doesn't load: check the device is on the staff network, not guest Wi-Fi (guest networks often block devices from seeing each other), and that the Windows Defender Firewall inbound rule **"ForkFlow POS LAN"** (added by the installer, port 4100, Private networks) exists and is enabled. The rule only applies on Private networks, so the step above matters.
+- [ ] From another device on the restaurant Wi-Fi, open `http://<main-PC-IP>:4100`. **Expect:** the MasalaPOS login screen loads.
+  - If it doesn't load: check the device is on the staff network, not guest Wi-Fi (guest networks often block devices from seeing each other), and that the Windows Defender Firewall inbound rule **"MasalaPOS LAN"** (added by the installer, port 4100, Private networks) exists and is enabled. The rule only applies on Private networks, so the step above matters.
 - [ ] Restart the router. **Expect:** after it comes back, the same address still works (the reservation held).
 
 ---
@@ -99,13 +99,13 @@ For each check, open **Settings → Print jobs** afterwards and note the job sta
 
 ## 5. Captain app on phones and tablets
 
-Phones need HTTPS to install the Captain app. Do this on the main PC, from the folder ForkFlow was built in (or a copy of `tools\setup-captain-https.ps1`):
+Phones need HTTPS to install the Captain app. Do this on the main PC, from the folder MasalaPOS was built in (or a copy of `tools\setup-captain-https.ps1`):
 
 - [ ] Run in PowerShell (use the reserved IP from section 3):
   ```powershell
   .\tools\setup-captain-https.ps1 -ServerAddress <main-PC-IP> -OpenFirewall
   ```
-  Restart ForkFlow.
+  Restart MasalaPOS.
 - [ ] **Settings → Backups & connections → Captain tablets** shows an HTTPS address, a QR code and a certificate expiry date.
 - [ ] Install the restaurant certificate on each phone/tablet (download it from that settings panel; never copy the `.pfx` or password files). Android: Settings → Security → Install certificate → CA certificate. iPad: open the file, install the profile, then enable it under General → About → Certificate Trust Settings.
 - [ ] Open `https://<main-PC-IP>:4443/captain/`. **Expect:** no certificate warning; captain login appears.
@@ -149,9 +149,9 @@ Run a short mock service with real staff roles and printers. Check each **Expect
 ## 8. Power, network and recovery
 
 - [ ] **Unplug the main PC's network cable** (or turn its Wi-Fi off) for a minute during an open order, then reconnect. **Expect:** captain/kitchen devices reconnect; no order or item lost.
-- [ ] **Restart the main PC** with orders open. **Expect:** ForkFlow comes back by itself; open orders are still there; print jobs that were mid-print show **Check paper**.
+- [ ] **Restart the main PC** with orders open. **Expect:** MasalaPOS comes back by itself; open orders are still there; print jobs that were mid-print show **Check paper**.
 - [ ] **Backups:** Settings → Backups → **Back up now**, then set a **second backup folder** (USB drive or another disk). **Expect:** a backup file appears in both places.
-- [ ] **Restore drill:** from the tray menu, restore yesterday's or the just-made backup. **Expect:** ForkFlow restarts, staff must sign in again, data matches the backup. *(Do this only after the test data is no longer needed, or before real data exists.)*
+- [ ] **Restore drill:** from the tray menu, restore yesterday's or the just-made backup. **Expect:** MasalaPOS restarts, staff must sign in again, data matches the backup. *(Do this only after the test data is no longer needed, or before real data exists.)*
 - [ ] Note where the data folder is (tray → **Open data and backups**) and tell the owner.
 
 ---
@@ -172,7 +172,7 @@ Fill in one row per problem. Anything in the **Severity: Blocker** category must
 | --- | --- |
 | Restaurant | |
 | Date | |
-| ForkFlow version | |
+| MasalaPOS version | |
 | Printers tested (model, connection) | |
 | Devices tested (model, browser/app) | |
 | Tested by | |

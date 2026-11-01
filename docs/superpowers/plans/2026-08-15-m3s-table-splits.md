@@ -40,7 +40,7 @@
 - Test: No test file changes required; full suite proves refactor correctness
 
 **Interfaces:**
-- Consumes: `Database` from `@forkflow/domain`
+- Consumes: `Database` from `@masalapos/domain`
 - Produces: `OrderRow`, `OrderItemRow`, `KotRow` interfaces; `orderItemJson`, `kotJson`, `kotWithContextJson`, `loadOrderJson` functions exported from `apps/server/src/mappers.ts`
 
 **Proof of correctness:** This is a PURE refactor — zero behavior change. Proof: all 120 existing tests pass UNCHANGED (no test file edits). A smoke test in mappers.test.ts validates `loadOrderJson` null-case.
@@ -81,7 +81,7 @@ Expected: FAIL — module not found.
 `apps/server/src/mappers.ts`:
 
 ```ts
-import type { Database } from "@forkflow/domain";
+import type { Database } from "@masalapos/domain";
 
 export interface OrderRow {
   id: string;
@@ -196,8 +196,8 @@ Delete lines 6-78 (the `OrderRow`, `OrderItemRow`, `KotRow` interfaces and `toOr
 Add import at top (after line 4):
 
 ```ts
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor } from "@forkflow/domain";
-import { can } from "@forkflow/core";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor } from "@masalapos/domain";
+import { can } from "@masalapos/core";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson, orderItemJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -236,7 +236,7 @@ Delete lines 5-62 (the duplicated interfaces and serializers).
 Add import at top (after line 3):
 
 ```ts
-import { nextSequence, localDateKey, uuidv7 } from "@forkflow/domain";
+import { nextSequence, localDateKey, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
@@ -309,7 +309,7 @@ EOF
 
 **Interfaces:**
 - Consumes: `Migration` from `./migrate.js`; `Database` from `./db.js`
-- Produces: `migration003` (registered in MIGRATIONS); `nextSplitLabel(db: Database, tableId: string): string | null` (exported from `@forkflow/domain`)
+- Produces: `migration003` (registered in MIGRATIONS); `nextSplitLabel(db: Database, tableId: string): string | null` (exported from `@masalapos/domain`)
 
 ### Steps
 
@@ -612,7 +612,7 @@ EOF
 - Test: full suite runs green
 
 **Interfaces:**
-- Consumes: `nextSplitLabel` from `@forkflow/domain`; `OrderRow` gains `split_label: string | null`
+- Consumes: `nextSplitLabel` from `@masalapos/domain`; `OrderRow` gains `split_label: string | null`
 - Produces: Order JSON shape gains `splitLabel: string | null` and `tableName: string | null`; KOT context JSON gains `splitLabel: string | null`
 
 ### Steps
@@ -699,7 +699,7 @@ export function kotWithContextJson(
 In `apps/server/src/orders.ts`, add the import for `nextSplitLabel` (top of file, after line 1):
 
 ```ts
-import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@forkflow/domain";
+import { OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, uuidv7, roleFor, nextSplitLabel } from "@masalapos/domain";
 ```
 
 Replace the dine_in occupied check (originally lines 113-116) with the new label-picking transaction. The full `if (body.type === "dine_in")` block (lines 106-117) becomes:
@@ -1358,7 +1358,7 @@ Branch: `m3s-table-splits` (branch-in-place, NO worktree).
 - Screens refetch on WS reconnect via `onStatus(true)`.
 - WS event vocabulary FROZEN: `order.updated` `kot.created` `kot.updated` `table.changed`. No new events.
 - Baseline: 120 tests green at `b863f15`. Every task ends with full suite green.
-- UI verification: `npm run typecheck` (includes `tsc --noEmit && npm run typecheck -w @forkflow/ui`) + `npx vitest run` full suite.
+- UI verification: `npm run typecheck` (includes `tsc --noEmit && npm run typecheck -w @masalapos/ui`) + `npx vitest run` full suite.
 - Exact UI strings are contractual (see each task).
 
 ---
@@ -1628,12 +1628,12 @@ Expected: All 143 tests pass (from Task 4). No new tests in this task (UI compon
 
 Build the UI production bundle first:
 ```bash
-npm run build -w @forkflow/ui
+npm run build -w @masalapos/ui
 ```
 
 Start the dev server (or use a scratch server):
 ```bash
-FORKFLOW_DATA_DIR=<scratch> npx tsx apps/server/src/main.ts
+MASALAPOS_DATA_DIR=<scratch> npx tsx apps/server/src/main.ts
 ```
 
 In a browser:
@@ -1929,8 +1929,8 @@ Expected: All 143 tests pass (from Task 4).
 
 Build the UI bundle first (the server serves `apps/ui/dist` — without a rebuild the smoke runs against the Task 5-era bundle and the new header/button are absent), then start the server (scratch DB):
 ```bash
-npm run build -w @forkflow/ui
-FORKFLOW_DATA_DIR="<scratch>" npx tsx apps/server/src/main.ts
+npm run build -w @masalapos/ui
+MASALAPOS_DATA_DIR="<scratch>" npx tsx apps/server/src/main.ts
 ```
 
 In a browser:
@@ -2022,7 +2022,7 @@ mkdir -p tools/e2e
 Create `tools/e2e/gate.py` with the following content (full file):
 
 ```python
-# ForkFlow e2e gate — click-through acceptance test for M3a (orders/KOT) + M3s (splits).
+# MasalaPOS e2e gate — click-through acceptance test for M3a (orders/KOT) + M3s (splits).
 # Run: python tools/e2e/gate.py
 # Requires: Python 3.10+, playwright, chromium installed.
 # Assumes: FRESH scratch DB (KOT numbers are per-day sequences).
@@ -2081,7 +2081,7 @@ def main():
         try:
             step("Setup: first-run admin on scratch DB")
             page1.goto(BASE)
-            expect(page1.get_by_role("heading", name="Set up ForkFlow")).to_be_visible()
+            expect(page1.get_by_role("heading", name="Set up MasalaPOS")).to_be_visible()
             page1.get_by_placeholder("Restaurant name").fill("Testaurant")
             page1.get_by_placeholder("Your name (admin)").fill("Admin")
             page1.get_by_placeholder("Admin PIN (4-6 digits)").fill("111111")
@@ -2363,7 +2363,7 @@ if __name__ == "__main__":
 Create `tools/e2e/README.md` with the following content:
 
 ```markdown
-# ForkFlow E2E Gate
+# MasalaPOS E2E Gate
 
 Browser-based acceptance test for M3a (orders/KOT) and M3s (table splits).
 
@@ -2380,17 +2380,17 @@ Browser-based acceptance test for M3a (orders/KOT) and M3s (table splits).
 
 1. **Build the UI production bundle** (the server serves the production build):
    ```bash
-   npm run build -w @forkflow/ui
+   npm run build -w @masalapos/ui
    ```
 
-2. **Start the ForkFlow server with a fresh scratch database**:
+2. **Start the MasalaPOS server with a fresh scratch database**:
    ```bash
-   FORKFLOW_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
+   MASALAPOS_DATA_DIR=<path-to-scratch-dir> npx tsx apps/server/src/main.ts
    ```
 
    Example (Git Bash on Windows):
    ```bash
-   FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+   MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
    ```
 
    The server will initialize a fresh DB on first run. To re-run the gate from scratch, delete the scratch directory and restart the server.
@@ -2441,17 +2441,17 @@ Expected: All type checks pass (Tasks 5 & 6 changes are committed and clean).
 The server serves the production build from `apps/ui/dist`, so we must build it before running the gate:
 
 ```bash
-npm run build -w @forkflow/ui
+npm run build -w @masalapos/ui
 ```
 
 Expected: Build succeeds, output in `apps/ui/dist`.
 
-- [ ] **Step 6: Start the ForkFlow server with a fresh scratch DB**
+- [ ] **Step 6: Start the MasalaPOS server with a fresh scratch DB**
 
 In a separate terminal (Git Bash on Windows):
 
 ```bash
-FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
 ```
 
 (Adjust the path to a scratch directory. Delete it between runs to reset the DB. Use forward slashes and quotes on Windows.)
@@ -2538,14 +2538,14 @@ Expected: Commit shows the two new files in `tools/e2e/`; typecheck clean; 143 t
 
 Delete the scratch directory (sandbox-compliant delete):
 ```bash
-rm -r "D:/scratch/forkflow-gate"
+rm -r "D:/scratch/masalapos-gate"
 ```
 
-(If directory is not empty, delete files first: `rm "D:/scratch/forkflow-gate"/*` then `rmdir "D:/scratch/forkflow-gate"`.)
+(If directory is not empty, delete files first: `rm "D:/scratch/masalapos-gate"/*` then `rmdir "D:/scratch/masalapos-gate"`.)
 
 Restart the server:
 ```bash
-FORKFLOW_DATA_DIR="D:/scratch/forkflow-gate" npx tsx apps/server/src/main.ts
+MASALAPOS_DATA_DIR="D:/scratch/masalapos-gate" npx tsx apps/server/src/main.ts
 ```
 
 Re-run the gate:

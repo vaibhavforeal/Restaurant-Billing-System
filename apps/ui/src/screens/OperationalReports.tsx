@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { OPERATIONAL_REPORTS, type OperationalReport, type OperationalReportKind } from "@forkflow/domain/operational-reports";
+import { OPERATIONAL_REPORTS, type OperationalReport, type OperationalReportKind } from "@masalapos/domain/operational-reports";
 import { apiFetch } from "../api";
 import { SalesPeriodControls } from "../SalesReportControls";
 import { recentPeriod, type ReportPeriod } from "../sales-report";
@@ -31,7 +31,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
   function exportReport() {
     if (!report || loading) return;
     try {
-      downloadText(operationalCsv(report), `forkflow-${kind}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
+      downloadText(operationalCsv(report), `masalapos-${kind}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
       setMessage("CSV downloaded. Amounts are in rupees.");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not export report"); }
   }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { CUSTOM_REPORT_SOURCES, uuidv7, type CustomReportConfigInput, type OperationalReport } from "@forkflow/domain";
+import { CUSTOM_REPORT_SOURCES, uuidv7, type CustomReportConfigInput, type OperationalReport } from "@masalapos/domain";
 import { freshApp, setupAdmin, createUser, auth } from "./test-helpers.js";
 
 describe("custom reports", () => {

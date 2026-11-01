@@ -23,12 +23,15 @@ export const LicenseClaims = z.object({
   plan: z.enum(["basic", "pro"]),
   maxDevices: z.number().int().min(1).max(100),
   features: z.object({ recipes: z.boolean(), qrOrdering: z.boolean().default(false), kds: z.boolean().default(false) }).strict(),
-  /** What the ForkFlow owner allows this restaurant to use: the plan's defaults with the owner's choices applied. */
+  /** What the MasalaPOS owner allows this restaurant to use: the plan's defaults with the owner's choices applied. */
   modules: ModuleMapSchema,
   issuedAt: z.number().int().nonnegative().max(8_640_000_000_000_000),
   expiresAt: z.number().int().positive().max(8_640_000_000_000_000),
   graceUntil: z.number().int().positive().max(8_640_000_000_000_000),
   trial: z.boolean().optional(),
+  /** The MasalaPOS Portal's Customer ID and the Order ID these terms come from, shown on the counter for support calls. */
+  customerCode: z.string().min(1).max(20).optional(),
+  orderCode: z.string().min(1).max(20).optional(),
 }).strict().refine((c) => c.issuedAt < c.expiresAt && c.expiresAt <= c.graceUntil,
   "License dates must be ordered: issued, expires, grace");
 export type LicenseClaims = z.infer<typeof LicenseClaims>;
@@ -52,8 +55,11 @@ export interface LicenseStatus {
   revision: number | null;
   registeredDevices: number;
   trial: boolean;
-  /** Whether an administrator can start checkout (this build has a licensing service); the checkout URL itself is minted per click. */
-  subscriptionAvailable: boolean;
+  /** The MasalaPOS Portal's Customer ID and Order ID from the installed licence, for support calls. */
+  customerCode: string | null;
+  orderCode: string | null;
+  /** Whether this build talks to the licensing service, so it can activate with a Customer ID and Order ID and check for renewals. */
+  onlineActivation: boolean;
 }
 export interface LicensedDevice {
   id: string; name: string; createdAt: number; current: boolean; allowed: boolean;
@@ -72,7 +78,9 @@ export interface LicenseEvent {
 }
 export interface LicenseHistory { events: LicenseEvent[]; nextBefore: number | null }
 export interface ActivationRequest {
-  format: "forkflow-activation-request"; version: 1; installationId: string;
+  format: "masalapos-activation-request"; version: 1; installationId: string;
   licenseId: string | null; organizationId: string | null; outletId: string | null;
   currentRevision: number; generatedAt: number; verificationKeyFingerprint: string;
+  /** Reported so MasalaPOS support can see which version and restaurant a counter is; neither affects the licence. */
+  appVersion?: string; outletName?: string;
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7 } from "@forkflow/domain";
+import { uuidv7 } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 type Fake = ReturnType<typeof freshAppWithFakeSink>["fake"];

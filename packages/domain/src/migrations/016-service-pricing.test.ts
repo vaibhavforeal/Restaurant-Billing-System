@@ -17,7 +17,7 @@ it("upgrades existing prices and order snapshots without repricing and can rerun
       INSERT INTO order_items (id, order_id, product_id, name_snapshot, price_paise_snapshot, gst_rate_snapshot, qty) VALUES ('i', 'o', 'p', 'Meal', 9000, 5, 1);`);
     const before = db.prepare("SELECT * FROM order_items").all();
     migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
-    expect(db.prepare("SELECT * FROM order_items").all()).toEqual(before.map((row: any) => ({ ...row, cancelled_at: null })));
+    expect(db.prepare("SELECT * FROM order_items").all()).toEqual(before.map((row: any) => ({ ...row, cancelled_at: null, parent_item_id: null })));
     expect(db.prepare("SELECT price_paise, ac_price_paise, takeaway_price_paise FROM products").get()).toEqual({ price_paise: 10000, ac_price_paise: null, takeaway_price_paise: null });
     expect(db.prepare("SELECT price_paise, ac_price_paise FROM variants").get()).toEqual({ price_paise: 6000, ac_price_paise: null });
     expect(db.prepare("SELECT price_tier FROM dining_tables").get()).toEqual({ price_tier: "non_ac" });

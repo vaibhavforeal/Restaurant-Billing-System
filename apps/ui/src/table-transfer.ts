@@ -37,7 +37,7 @@ export function mergeTargets(orders: Order[], currentOrderId: string): MergeGrou
   for (const order of orders) {
     if (order.id === currentOrderId || order.type !== "dine_in" || order.status !== "open" || order.mergedInto) continue;
     const tableLabel = order.tableLabel ?? order.tableName ?? "Table";
-    const active = order.items.filter((item) => item.status !== "cancelled");
+    const active = order.items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
     const count = active.reduce((sum, item) => sum + item.qty, 0);
     const total = active.reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
     const group = groups.get(tableLabel) ?? { tableLabel, options: [] };

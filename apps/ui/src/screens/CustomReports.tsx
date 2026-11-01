@@ -1,6 +1,6 @@
 import { InfoTip } from "../InfoTip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CUSTOM_FILTER_OP_LABELS, CUSTOM_REPORT_SOURCES, customReportSource, filterOpsFor, type CustomReport, type CustomReportSource, type SavedCustomReport } from "@forkflow/domain/custom-reports";
+import { CUSTOM_FILTER_OP_LABELS, CUSTOM_REPORT_SOURCES, customReportSource, filterOpsFor, type CustomReport, type CustomReportSource, type SavedCustomReport } from "@masalapos/domain/custom-reports";
 import { apiFetch } from "../api";
 import { SalesPeriodControls } from "../SalesReportControls";
 import { recentPeriod, type ReportPeriod } from "../sales-report";
@@ -71,7 +71,7 @@ export function CustomReports({ canManage, initialPeriod, onPeriodChange }: { ca
   }
   function exportCsv() {
     if (!report) return;
-    downloadText(operationalCsv(report), `forkflow-${(name.trim() || "custom-report").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "custom-report"}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
+    downloadText(operationalCsv(report), `masalapos-${(name.trim() || "custom-report").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "custom-report"}-${report.from}-to-${report.to}.csv`, "text/csv;charset=utf-8");
     setMessage("CSV downloaded. Amounts are in rupees.");
   }
   function move(index: number, by: -1 | 1) {

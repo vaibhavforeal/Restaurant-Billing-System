@@ -23,7 +23,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   FakeSocket.all = [];
   store.clear();
-  store.set("forkflow.token", "t1");
+  store.set("masalapos.token", "t1");
   vi.stubGlobal("WebSocket", FakeSocket);
   vi.stubGlobal("location", { protocol: "http:", host: "pos.local", pathname: "/" });
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
@@ -89,7 +89,7 @@ describe("shared websocket", () => {
 
   it("opens a fresh socket when the signed-in token has changed", () => {
     connectWs(handlers());
-    store.set("forkflow.token", "t2");
+    store.set("masalapos.token", "t2");
     connectWs(handlers());
     expect(FakeSocket.all).toHaveLength(2);
     expect(FakeSocket.all[0]!.closed).toBe(true);

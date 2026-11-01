@@ -1,4 +1,4 @@
-import type { Role } from "@forkflow/core";
+import type { Role } from "@masalapos/core";
 
 export type RoleName = "admin" | "cashier" | "waiter" | "kitchen";
 

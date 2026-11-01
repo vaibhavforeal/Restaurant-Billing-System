@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type ModuleInfo } from "@forkflow/domain";
+import { uuidv7, type ModuleInfo } from "@masalapos/domain";
 import { auth, commercialApp, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("module controls", () => {
@@ -62,7 +62,7 @@ describe("module controls", () => {
     // Not allowed: switching on is refused, switching off is fine.
     const refused = await request("PATCH", "/api/modules/reservations", { enabled: true });
     expect(refused.statusCode).toBe(403);
-    expect(refused.json().error).toBe("Reservations is not included for this restaurant. Contact ForkFlow to add it.");
+    expect(refused.json().error).toBe("Reservations is not included for this restaurant. Contact MasalaPOS to add it.");
     expect((await request("PATCH", "/api/modules/reservations", { enabled: false })).statusCode).toBe(200);
     const blocked = await request("POST", "/api/reservations", { customerName: "Asha", phone: "9876543210", partySize: 2, startsAt: Date.now() + 86_400_000 });
     expect(blocked.statusCode).toBe(403);

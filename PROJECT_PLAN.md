@@ -5,7 +5,7 @@
 > [the current licensing and cloud architecture](docs/operations/commercial-licensing.md).
 > The original Phase 0 sync implementation described below was retired.
 
-> Working name: **ForkFlow** (placeholder — rename freely)
+> Working name: **MasalaPOS** (placeholder — rename freely)
 > A next-generation, AI-native restaurant POS & billing platform. **We are not cloning PetPooja — we are making a product that is easier to adopt and smarter to run.** PetPooja's feature list is our floor, not our finish line. An offline-first hybrid SQLite + PostgreSQL data architecture and an AI co-pilot are the moat.
 
 **Status:** Phase 0 (foundations) built — see [`README.md`](./README.md). Phase 1 next.
@@ -356,7 +356,7 @@ Every transactional table carries: `id (uuidv7)`, `org_id`, `outlet_id`, `create
 ## 11. Proposed Repo Structure (Phase 0/1)
 
 ```
-forkflow/
+masalapos/
 ├─ apps/
 │  ├─ pos/            # Next.js UI (POS) + Tauri shell (terminal)
 │  ├─ kds/            # Kitchen Display (Phase 2)
@@ -383,7 +383,7 @@ forkflow/
 2. **Sync engine:** adopt **PowerSync/ElectricSQL** (faster to ship) vs. **custom outbox+CDC** (max control)?
 3. **Primary region/compliance:** India-first (GST, e-way bill, UPI, ₹) or multi-region from the start?
 4. **AI autonomy default:** ship Autopilot features as approve-first (recommended) or let power users enable full auto?
-5. **Product name** (ForkFlow is a placeholder).
+5. **Product name** (MasalaPOS is a placeholder).
 
 ---
 

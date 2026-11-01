@@ -1,7 +1,7 @@
 /** Build-time only: the worker owns the Captain shell, never restaurant data. */
 export function captainWorker(version: string, assets: string[], entry: "captain" | "kitchen" = "captain"): string {
   return `
-const CACHE = ${JSON.stringify(`forkflow-${entry}-` + version)};
+const CACHE = ${JSON.stringify(`masalapos-${entry}-` + version)};
 const SHELL = ${JSON.stringify(`/${entry}/`)};
 const ASSETS = ${JSON.stringify(assets)};
 const STATIC = new Set(ASSETS);
@@ -19,7 +19,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     for (const name of await caches.keys()) {
-      if (name.startsWith(${JSON.stringify(`forkflow-${entry}-`)}) && name !== CACHE) await caches.delete(name);
+      if (name.startsWith(${JSON.stringify(`masalapos-${entry}-`)}) && name !== CACHE) await caches.delete(name);
     }
     await self.clients.claim();
   })());

@@ -1,7 +1,7 @@
 /** Generate deterministic samples from the production receipt renderers. */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { calculateBill, RECEIPT_STYLES, type Bill } from "@forkflow/domain";
+import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
 import { receiptHtml, receiptSlip } from "../apps/server/src/print/receipt.js";
 import { billStyleGallery } from "./bill-style-gallery.js";
 
@@ -21,7 +21,7 @@ const bill: Bill = {
   ...totals, id: "preview-bill", billNo: 1042, orderId: "preview-order", status: "paid",
   createdAt: new Date(2026, 9, 9, 13, 42).getTime(), discountNote: "Loyalty discount",
   refundState: "none", creditNotes: [], refundedQty: {},
-  receipt: { restaurantName: "ForkFlow Kitchen", address: "12 Market Road, Indiranagar\nBengaluru, Karnataka 560038",
+  receipt: { restaurantName: "MasalaPOS Kitchen", address: "12 Market Road, Indiranagar\nBengaluru, Karnataka 560038",
     gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", gstMode: "included",
     receiptFooter: "Thank you for dining with us. See you again!\nSample bill - for layout preview only.",
     orderType: "dine_in", tableName: "T04", splitLabel: "B", items },

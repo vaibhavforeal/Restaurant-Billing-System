@@ -19,15 +19,15 @@ for (const edition of ["demo", "commercial"]) {
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
   const stage = join(root, "build/desktop", edition);
-  const env = { ...process.env, FORKFLOW_DATA_DIR: join(scratch, edition), FORKFLOW_PORT: String(port),
-    FORKFLOW_UI_DIR: join(stage, "ui"), FORKFLOW_LICENSE_PUBLIC_KEY: "", FORKFLOW_APP_VERSION: "distribution-smoke" };
-  delete env.FORKFLOW_RESTORE;
+  const env = { ...process.env, MASALAPOS_DATA_DIR: join(scratch, edition), MASALAPOS_PORT: String(port),
+    MASALAPOS_UI_DIR: join(stage, "ui"), MASALAPOS_LICENSE_PUBLIC_KEY: "", MASALAPOS_APP_VERSION: "distribution-smoke" };
+  delete env.MASALAPOS_RESTORE;
   const child = spawn(process.execPath, [join(stage, "server/main.mjs")], { cwd: root, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let logs = "";
   child.stdout.on("data", (data) => { logs = (logs + data).slice(-6000); });
   child.stderr.on("data", (data) => { logs = (logs + data).slice(-6000); });
   const base = `http://127.0.0.1:${port}`;
-  const headers = { "content-type": "application/json", "x-forkflow-device": "d".repeat(64) };
+  const headers = { "content-type": "application/json", "x-masalapos-device": "d".repeat(64) };
   const api = (path, method = "GET", body) => fetch(base + path, { method, headers,
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(5000) });
   try {

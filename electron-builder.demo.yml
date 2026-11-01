@@ -1,10 +1,10 @@
 extends: ./electron-builder.yml
-appId: in.forkflow.demo
-productName: ForkFlow Demo
+appId: in.masalapos.demo
+productName: MasalaPOS Demo
 directories:
   app: build/desktop/demo
   output: dist/demo
 win:
-  artifactName: "ForkFlow-Demo-Setup-${version}.${ext}"
+  artifactName: "MasalaPOS-Demo-Setup-${version}.${ext}"
 nsis:
   include: tools/installer-demo.nsh

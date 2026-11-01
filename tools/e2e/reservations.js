@@ -21,8 +21,8 @@
   const originalFetch = window.fetch, originalConfirm = window.confirm, originalAlert = window.alert;
   const api = async (path, method = 'GET', body) => {
     const res = await originalFetch('/api' + path, { method, headers: {
-      authorization: 'Bearer ' + localStorage.getItem('forkflow.token'),
-      'x-forkflow-device': localStorage.getItem('forkflow.device.v1'), 'content-type': 'application/json',
+      authorization: 'Bearer ' + localStorage.getItem('masalapos.token'),
+      'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json',
     }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };

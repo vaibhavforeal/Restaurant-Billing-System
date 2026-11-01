@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_CSV_COLUMNS } from "@forkflow/domain/catalog-csv";
+import { CATALOG_CSV_COLUMNS } from "@masalapos/domain/catalog-csv";
 import { CATALOG_TEMPLATE_ROWS } from "./catalog-template";
 
 describe("item CSV template", () => {

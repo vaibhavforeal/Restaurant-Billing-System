@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, PLANS, migrate, openDb, type LicenseClaims, type ServiceReceipt, type ServiceSubmission, planModules } from "@forkflow/domain";
+import { MIGRATIONS, PLANS, migrate, openDb, type LicenseClaims, type ServiceReceipt, type ServiceSubmission, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { SETUP } from "./test-helpers.js";
@@ -9,7 +9,7 @@ import { SETUP } from "./test-helpers.js";
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const apps: FastifyInstance[] = [];
-type Headers = { authorization: string; "x-forkflow-device": string };
+type Headers = { authorization: string; "x-masalapos-device": string };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -23,15 +23,15 @@ async function fixture() {
   let app = buildServer({ db, sinkSend: makeFakeSink().send, licensing: { publicKey, installationId, now: () => licenseNow } });
   apps.push(app);
   const device = "a".repeat(64);
-  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-forkflow-device": device } });
+  const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
-  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-forkflow-device": device };
+  const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const api = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
   const claims: LicenseClaims = { version: 1, installationId, licenseId: randomUUID(), organizationId: randomUUID(), outletId: randomUUID(),
     revision: 1, plan: "pro", features: PLANS.pro.features, modules: planModules("pro"), maxDevices: PLANS.pro.maxDevices,
     issuedAt: licenseNow - 1000, expiresAt: licenseNow + 600_000, graceUntil: licenseNow + 1_200_000 };
-  /** A licence for `plan`; `features` narrows the modules, as when the ForkFlow owner leaves QR ordering out. */
+  /** A licence for `plan`; `features` narrows the modules, as when the MasalaPOS owner leaves QR ordering out. */
   async function activate(plan: "basic" | "pro", revision: number, features: { recipes?: boolean; qrOrdering?: boolean; kds?: boolean } = PLANS[plan].features) {
     const modules = { ...planModules(plan), recipes: features.recipes === true, qrOrdering: features.qrOrdering === true, kds: features.kds === true };
     const next = { ...claims, plan, revision, features: { recipes: modules.recipes, qrOrdering: modules.qrOrdering, kds: modules.kds }, modules, maxDevices: PLANS[plan].maxDevices };
@@ -71,7 +71,7 @@ async function fixture() {
     expect(created.statusCode, created.body).toBe(201);
     const loggedIn = await api("POST", "/api/login", { pin });
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
-    return { authorization: `Bearer ${loggedIn.json().token}`, "x-forkflow-device": device };
+    return { authorization: `Bearer ${loggedIn.json().token}`, "x-masalapos-device": device };
   }
   async function restart() {
     await app.close(); apps.splice(apps.indexOf(app), 1);

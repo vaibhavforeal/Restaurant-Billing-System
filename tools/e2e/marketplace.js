@@ -12,16 +12,16 @@
     while (!predicate()) { if (Date.now() > until) throw new Error('Timed out: ' + label); await sleep(40); }
   };
   const nativeFetch = window.fetch;
-  const device = localStorage.getItem('forkflow.device.v1');
+  const device = localStorage.getItem('masalapos.device.v1');
   const call = async (method, path, token, body, rawBody) => {
-    const headers = { authorization: 'Bearer ' + token, 'x-forkflow-device': device };
+    const headers = { authorization: 'Bearer ' + token, 'x-masalapos-device': device };
     if (body !== undefined || rawBody !== undefined) headers['content-type'] = 'application/json';
     const r = await nativeFetch(path, { method, headers, body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)) });
     return { status: r.status, cache: r.headers.get('cache-control'), json: await r.json().catch(() => null) };
   };
-  const ownToken = localStorage.getItem('forkflow.token');
+  const ownToken = localStorage.getItem('masalapos.token');
   // A second counter: an admin session obtained through the API, never touching this browser's own session.
-  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forkflow-device': device }, body: JSON.stringify({ pin }) })).json()).token;
+  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin }) })).json()).token;
   const adminToken = await login('1234');
   const setZomato = async enabled => { const r = await call('PATCH', '/api/integrations/zomato', adminToken, { enabled }); if (r.status !== 200) throw new Error('Fixture PATCH failed: ' + r.status); };
   const setKds = async enabled => { const r = await call('PATCH', '/api/integrations/kds', adminToken, { enabled }); if (r.status !== 200) throw new Error('Fixture KDS PATCH failed: ' + r.status); };
@@ -163,7 +163,7 @@
       };
       try {
         await goto('marketplace'); await wait(() => card('Kitchen Display (KDS)'), 'KDS card');
-        window.dispatchEvent(new Event('forkflow:license-changed'));
+        window.dispatchEvent(new Event('masalapos:license-changed'));
         await wait(() => pill('Kitchen Display (KDS)') === 'Pro plan', 'KDS locked after a licence change');
         check(sw('Kitchen Display (KDS)').disabled && card('Kitchen Display (KDS)').textContent.includes('Upgrade to Pro to use the Kitchen Display'), 'A licence change refreshes the Marketplace live: KDS is locked without the plan');
         [...card('Kitchen Display (KDS)').querySelectorAll('button')].find(b => b.textContent === 'View licence').click();
@@ -171,7 +171,7 @@
         await wait(() => plan() && plan().getBoundingClientRect().top < innerHeight && plan().getBoundingClientRect().bottom > 0, 'Plan & devices open and in view');
         check(true, 'View licence opens Plan & devices');
       } finally { unlicensed = false; window.fetch = countingFetch; }
-      window.dispatchEvent(new Event('forkflow:license-changed'));
+      window.dispatchEvent(new Event('masalapos:license-changed'));
       await goto('marketplace'); await wait(() => pill('Kitchen Display (KDS)') === 'Disabled' && !sw('Kitchen Display (KDS)').disabled, 'KDS unlocked again');
       check(true, 'Restoring the licence unlocks the KDS switch live');
     } else if (me.role === 'cashier') {

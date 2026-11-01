@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { StockCostChange, StockMove } from "@forkflow/domain";
+import type { StockCostChange, StockMove } from "@masalapos/domain";
 import { amountPaidToPaise, formatMovementCost, formatUnitCost, mergeCostChanges, mergeHistory, perUnitHint, rupeesPerUnitToMilliPaise, stockValueSummary } from "./stock-costs";
 
 describe("formatUnitCost", () => {
