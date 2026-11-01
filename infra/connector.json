@@ -1,0 +1,658 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "MasalaPOS Support Connector artifacts served from private S3 through CloudFront; session-specific stub downloads require signed URLs.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    },
+    "com.aws.cloudformation.Context": {
+      "must": [
+        "Do not enable restaurant distribution before signed release and physical-PC acceptance.",
+        "Do not log URL query strings: stub filenames carry one-time invitations."
+      ],
+      "ref": [
+        "docs/operations/connector-release.md"
+      ]
+    }
+  },
+  "Parameters": {
+    "CdnPublicKey": {
+      "Type": "String",
+      "Description": "PEM public key for CloudFront signed stub URLs",
+      "MinLength": 100,
+      "MaxLength": 4096
+    },
+    "CdnKeyParameter": {
+      "Type": "String",
+      "Default": "/masalapos/connector/cdn-signing-key",
+      "AllowedPattern": "/[A-Za-z0-9/_-]+",
+      "Description": "Existing SSM SecureString containing the CDN private key"
+    }
+  },
+  "Resources": {
+    "Artifacts": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Immutable versioned connector payloads; portal never proxies binaries",
+          "must": [
+            "Block direct public access",
+            "Retain release history"
+          ]
+        }
+      },
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "IgnorePublicAcls": true,
+          "BlockPublicPolicy": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        }
+      }
+    },
+    "OriginAccess": {
+      "Type": "AWS::CloudFront::OriginAccessControl",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Always sign S3 requests; no website origin",
+          "must": []
+        }
+      },
+      "Properties": {
+        "OriginAccessControlConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-oac"
+          },
+          "OriginAccessControlOriginType": "s3",
+          "SigningBehavior": "always",
+          "SigningProtocol": "sigv4"
+        }
+      }
+    },
+    "PublicKey": {
+      "Type": "AWS::CloudFront::PublicKey",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Only public CDN signing material is in this stack",
+          "must": []
+        }
+      },
+      "Properties": {
+        "PublicKeyConfig": {
+          "CallerReference": {
+            "Fn::Sub": "${AWS::StackName}-key"
+          },
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-key"
+          },
+          "EncodedKey": {
+            "Ref": "CdnPublicKey"
+          }
+        }
+      }
+    },
+    "KeyGroup": {
+      "Type": "AWS::CloudFront::KeyGroup",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Restrict stub downloads to portal-issued signed URLs",
+          "must": []
+        }
+      },
+      "Properties": {
+        "KeyGroupConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-signers"
+          },
+          "Items": [
+            {
+              "Ref": "PublicKey"
+            }
+          ]
+        }
+      }
+    },
+    "RuntimeCache": {
+      "Type": "AWS::CloudFront::CachePolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime keys are immutable and carry no session data",
+          "must": []
+        }
+      },
+      "Properties": {
+        "CachePolicyConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-runtime"
+          },
+          "DefaultTTL": 86400,
+          "MaxTTL": 31536000,
+          "MinTTL": 0,
+          "ParametersInCacheKeyAndForwardedToOrigin": {
+            "CookiesConfig": {
+              "CookieBehavior": "none"
+            },
+            "HeadersConfig": {
+              "HeaderBehavior": "none"
+            },
+            "QueryStringsConfig": {
+              "QueryStringBehavior": "none"
+            },
+            "EnableAcceptEncodingGzip": false
+          }
+        }
+      }
+    },
+    "StubCache": {
+      "Type": "AWS::CloudFront::CachePolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Different invitation filenames must never share a cache entry",
+          "must": [
+            "Include disposition override in cache key and forward to S3"
+          ]
+        }
+      },
+      "Properties": {
+        "CachePolicyConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-stub"
+          },
+          "DefaultTTL": 120,
+          "MaxTTL": 120,
+          "MinTTL": 0,
+          "ParametersInCacheKeyAndForwardedToOrigin": {
+            "CookiesConfig": {
+              "CookieBehavior": "none"
+            },
+            "HeadersConfig": {
+              "HeaderBehavior": "none"
+            },
+            "QueryStringsConfig": {
+              "QueryStringBehavior": "whitelist",
+              "QueryStrings": [
+                "response-content-disposition"
+              ]
+            },
+            "EnableAcceptEncodingGzip": false
+          }
+        }
+      }
+    },
+    "Headers": {
+      "Type": "AWS::CloudFront::ResponseHeadersPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Downloads are attachments and should not leak referral URLs",
+          "must": []
+        }
+      },
+      "Properties": {
+        "ResponseHeadersPolicyConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-headers"
+          },
+          "SecurityHeadersConfig": {
+            "ContentTypeOptions": {
+              "Override": true
+            },
+            "FrameOptions": {
+              "FrameOption": "DENY",
+              "Override": true
+            },
+            "ReferrerPolicy": {
+              "ReferrerPolicy": "no-referrer",
+              "Override": true
+            },
+            "StrictTransportSecurity": {
+              "AccessControlMaxAgeSec": 31536000,
+              "IncludeSubdomains": true,
+              "Override": true
+            },
+            "ContentSecurityPolicy": {
+              "ContentSecurityPolicy": "default-src 'none'; frame-ancestors 'none'",
+              "Override": true
+            }
+          }
+        }
+      }
+    },
+    "Distribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Offload all connector binaries; built-in metrics monitor bytes and errors",
+          "must": [
+            "Only stub path requires a trusted signing key",
+            "Do not enable legacy access logs containing queries"
+          ]
+        }
+      },
+      "Properties": {
+        "DistributionConfig": {
+          "Enabled": true,
+          "Comment": "MasalaPOS Support Connector",
+          "HttpVersion": "http2and3",
+          "IPV6Enabled": true,
+          "PriceClass": "PriceClass_All",
+          "Origins": [
+            {
+              "Id": "artifacts",
+              "DomainName": {
+                "Fn::GetAtt": [
+                  "Artifacts",
+                  "RegionalDomainName"
+                ]
+              },
+              "OriginAccessControlId": {
+                "Ref": "OriginAccess"
+              },
+              "S3OriginConfig": {
+                "OriginAccessIdentity": ""
+              }
+            }
+          ],
+          "DefaultCacheBehavior": {
+            "TargetOriginId": "artifacts",
+            "ViewerProtocolPolicy": "https-only",
+            "AllowedMethods": [
+              "GET",
+              "HEAD"
+            ],
+            "CachedMethods": [
+              "GET",
+              "HEAD"
+            ],
+            "CachePolicyId": {
+              "Ref": "RuntimeCache"
+            },
+            "ResponseHeadersPolicyId": {
+              "Ref": "Headers"
+            },
+            "Compress": false
+          },
+          "CacheBehaviors": [
+            {
+              "PathPattern": "staging/*/stub/*",
+              "TargetOriginId": "artifacts",
+              "ViewerProtocolPolicy": "https-only",
+              "AllowedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachePolicyId": {
+                "Ref": "StubCache"
+              },
+              "ResponseHeadersPolicyId": {
+                "Ref": "Headers"
+              },
+              "TrustedKeyGroups": [
+                {
+                  "Ref": "KeyGroup"
+                }
+              ],
+              "Compress": false
+            },
+            {
+              "PathPattern": "stub/*",
+              "TargetOriginId": "artifacts",
+              "ViewerProtocolPolicy": "https-only",
+              "AllowedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachePolicyId": {
+                "Ref": "StubCache"
+              },
+              "ResponseHeadersPolicyId": {
+                "Ref": "Headers"
+              },
+              "TrustedKeyGroups": [
+                {
+                  "Ref": "KeyGroup"
+                }
+              ],
+              "Compress": false
+            },
+            {
+              "PathPattern": "staging/*",
+              "TargetOriginId": "artifacts",
+              "ViewerProtocolPolicy": "https-only",
+              "AllowedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachePolicyId": {
+                "Ref": "RuntimeCache"
+              },
+              "ResponseHeadersPolicyId": {
+                "Ref": "Headers"
+              },
+              "TrustedKeyGroups": [
+                {
+                  "Ref": "KeyGroup"
+                }
+              ],
+              "Compress": false
+            }
+          ],
+          "ViewerCertificate": {
+            "CloudFrontDefaultCertificate": true
+          }
+        }
+      }
+    },
+    "BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Only this distribution can retrieve artifact objects",
+          "must": []
+        }
+      },
+      "Properties": {
+        "Bucket": {
+          "Ref": "Artifacts"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CloudFrontRead",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudfront.amazonaws.com"
+              },
+              "Action": "s3:GetObject",
+              "Resource": {
+                "Fn::Sub": "${Artifacts.Arn}/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+                  },
+                  "AWS:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "RequireTLS",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "Artifacts",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${Artifacts.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "PortalKeyReader": {
+      "Type": "AWS::IAM::User",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Lightsail has no instance profile; this identity can only retrieve the CDN signing parameter",
+          "must": [
+            "No S3 or CloudFront write permissions",
+            "Create/rotate credentials separately; never embed them in source"
+          ]
+        }
+      },
+      "Properties": {
+        "Policies": [
+          {
+            "PolicyName": "ReadConnectorCdnKey",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "ssm:GetParameter",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${CdnKeyParameter}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Logs": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Private CDN access logs omit query strings and cookies",
+          "must": [
+            "Never serve logs through the artifact CDN"
+          ]
+        }
+      },
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "IgnorePublicAcls": true,
+          "BlockPublicPolicy": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireAccessLogs",
+              "Status": "Enabled",
+              "ExpirationInDays": 30
+            }
+          ]
+        }
+      }
+    },
+    "LogsPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "Logs"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DeliveryAclCheck",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "delivery.logs.amazonaws.com"
+              },
+              "Action": "s3:GetBucketAcl",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Logs",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:delivery-source:masalapos-connector"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "DeliveryWrite",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "delivery.logs.amazonaws.com"
+              },
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${Logs.Arn}/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  },
+                  "s3:x-amz-acl": "bucket-owner-full-control"
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:delivery-source:masalapos-connector"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "RequireTLS",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "Logs",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${Logs.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "Bucket": {
+      "Description": "Artifact upload bucket",
+      "Value": {
+        "Ref": "Artifacts"
+      }
+    },
+    "DistributionId": {
+      "Description": "CloudFront distribution",
+      "Value": {
+        "Ref": "Distribution"
+      }
+    },
+    "CdnUrl": {
+      "Description": "HTTPS artifact origin",
+      "Value": {
+        "Fn::Sub": "https://${Distribution.DomainName}"
+      }
+    },
+    "CdnKeyId": {
+      "Description": "CloudFront key-pair identifier",
+      "Value": {
+        "Ref": "PublicKey"
+      }
+    },
+    "CdnKeyParameter": {
+      "Description": "Private-key parameter name",
+      "Value": {
+        "Ref": "CdnKeyParameter"
+      }
+    },
+    "PortalKeyReader": {
+      "Description": "SSM-only portal identity",
+      "Value": {
+        "Ref": "PortalKeyReader"
+      }
+    },
+    "LogBucket": {
+      "Description": "Private query-free CDN access log destination",
+      "Value": {
+        "Ref": "Logs"
+      }
+    }
+  }
+}

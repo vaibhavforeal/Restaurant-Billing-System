@@ -6,6 +6,7 @@ export interface IceServer { urls: string[]; username?: string; credential?: str
 
 /** Server → desktop shell. */
 export type RemoteToDesktop =
+  | { type: "connector-open"; sessionId: string; url: string }
   /** Start sharing: `agentUrl` is the one-time wss:// address of the session's signalling socket. */
   | { type: "remote-start"; sessionId: string; agentUrl: string; mode: RemoteMode; iceServers: IceServer[]; agentName: string; maxMs: number }
   | { type: "remote-stop"; sessionId: string; reason: string };
@@ -20,6 +21,7 @@ const isMode = (v: unknown): v is RemoteMode => v === "view" || v === "control";
 
 export function isRemoteToDesktop(value: unknown): value is RemoteToDesktop {
   if (!isObject(value) || typeof value["sessionId"] !== "string") return false;
+  if (value["type"] === "connector-open") return typeof value["url"] === "string" && /^https:\/\/[^/]+\/support\/connector\?t=[A-Za-z0-9_-]{43}$/.test(value["url"]);
   if (value["type"] === "remote-stop") return typeof value["reason"] === "string";
   return value["type"] === "remote-start" && typeof value["agentUrl"] === "string" && /^wss?:\/\//.test(value["agentUrl"]) && isMode(value["mode"])
     && Array.isArray(value["iceServers"]) && typeof value["agentName"] === "string" && typeof value["maxMs"] === "number";

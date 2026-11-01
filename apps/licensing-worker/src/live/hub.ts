@@ -4,6 +4,7 @@
 import { z } from "zod";
 import type { D1Like, Env } from "../env.js";
 import { roleCan } from "../portal/shared.js";
+import { chatMessages, insertMessageStatement, lastMessageId, publishChat, toVisitorMessage, touchChatStatement } from "../support/chats.js";
 import { firstName } from "../support/chats.js";
 import { answerRemote, endAllOpen, endRemote, remoteSession, startRemote, sweepRemote, type RemoteDeps } from "../support/remote.js";
 import type { Connection, LiveEvent, LiveHub, LiveSocket, Peer } from "./types.js";
@@ -26,7 +27,9 @@ const CounterMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remote.answer"), sessionId: z.string().uuid(), decision: z.enum(["deny", "view", "control"]), approvedBy: z.string().trim().min(1).max(80) }),
   z.object({ type: z.literal("remote.end"), sessionId: z.string().uuid(), reason: z.string().trim().min(1).max(120).optional() }),
 ]);
+const ConnectorChat = z.object({ type: z.literal("chat.send"), body: z.string().trim().min(1).max(2000) }).strict();
 const AgentMessage = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("ping") }),
   z.object({ type: z.literal("remote.signal"), data: z.record(z.string(), z.unknown()) }),
   z.object({ type: z.literal("remote.end"), reason: z.string().trim().min(1).max(120).optional() }),
 ]);
@@ -39,6 +42,7 @@ export class SupportHub implements LiveHub {
   private readonly staff = new Map<LiveSocket, StaffPeer>();
   private readonly visitors = new Map<string, Set<LiveSocket>>();
   private readonly counters = new Map<string, LiveSocket>();
+  private readonly connectorChats = new Map<string, Set<LiveSocket>>();
   private readonly agents = new Map<string, LiveSocket>();
   private readonly viewers = new Map<string, Set<LiveSocket>>();
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -51,7 +55,7 @@ export class SupportHub implements LiveHub {
   /** Ends whatever a previous run left open, then sweeps every `everyMs`. */
   async start(everyMs = 5_000): Promise<void> {
     await endAllOpen(this.remote, "The support service restarted");
-    this.timer = setInterval(() => void this.sweep().catch((e) => this.log(`live: sweep failed: ${e instanceof Error ? e.message : "unknown"}`)), everyMs);
+    this.timer = setInterval(() => void this.sweep().catch((e) => this.log(`live: sweep failed: ${e instanceof Error ? e.name : "unknown"}`)), everyMs);
     (this.timer as { unref?: () => void }).unref?.();
   }
   stop(): void { if (this.timer) clearInterval(this.timer); this.timer = null; }
@@ -77,12 +81,13 @@ export class SupportHub implements LiveHub {
       const now = this.deps.now();
       if (now - windowStart > BURST.windowMs) { windowStart = now; count = 0; }
       if (++count > BURST.messages) { socket.close(4008, "Too many messages"); return; }
-      handle(text).catch((e) => this.log(`live: ${peer.kind} message failed: ${e instanceof Error ? e.message : "unknown"}`));
+      handle(text).catch((e) => this.log(`live: ${peer.kind} message failed: ${e instanceof Error ? e.name : "unknown"}`));
     };
     switch (peer.kind) {
       case "staff": return this.connectStaff(peer, socket, guard);
       case "visitor": return this.connectVisitor(peer, socket, guard);
       case "counter": return this.connectCounter(peer, socket, guard);
+      case "connector": return this.connectAgent(peer, socket, guard);
       case "agent": return this.connectAgent(peer, socket, guard);
     }
   }
@@ -143,6 +148,15 @@ export class SupportHub implements LiveHub {
     this.counters.set(peer.installationId, socket);
     if (previous) previous.close(4000, "Replaced by a newer connection");
     this.toStaff({ type: "counter.online", installationId: peer.installationId, online: true });
+    // Replay durable connector history after an offline counter or service restart.
+    void (async () => {
+      const rows = await this.deps.db.prepare("SELECT id FROM remote_sessions WHERE installation_id = ? AND origin = 'connector' ORDER BY requested_at, id").bind(peer.installationId).all<{ id: string }>();
+      for (const row of rows.results) {
+        if (this.counters.get(peer.installationId) !== socket) return;
+        const session = await remoteSession(this.deps.db, row.id);
+        if (session) send(socket, { type: "connector.history", session });
+      }
+    })().catch(() => this.log("live: connector history sync failed"));
     return {
       onMessage: guard(async (text) => {
         const message = parse(CounterMessage, text);
@@ -150,7 +164,7 @@ export class SupportHub implements LiveHub {
         if (message.type === "ping") { send(socket, { type: "pong" }); return; }
         if (message.type === "remote.answer") { await answerRemote(this.remote, peer.installationId, message); return; }
         const session = await remoteSession(this.deps.db, message.sessionId);
-        if (session?.installation.id === peer.installationId) await endRemote(this.remote, message.sessionId, message.reason ?? "Stopped at the PC");
+        if (session?.installation?.id === peer.installationId) await endRemote(this.remote, message.sessionId, message.reason ?? "Stopped at the PC");
       }),
       onClose: () => {
         if (this.counters.get(peer.installationId) !== socket) return;
@@ -160,28 +174,48 @@ export class SupportHub implements LiveHub {
     };
   }
 
-  private connectAgent(peer: Extract<Peer, { kind: "agent" }>, socket: LiveSocket, guard: (h: (t: string) => Promise<void>) => (t: string) => void): Connection {
+  private connectAgent(peer: Extract<Peer, { kind: "agent" | "connector" }>, socket: LiveSocket, guard: (h: (t: string) => Promise<void>) => (t: string) => void): Connection {
+    if (peer.kind === "connector") {
+      setOf(this.connectorChats, peer.chatId).add(socket);
+      void chatMessages(this.deps.db, peer.chatId).then((messages) => send(socket, { type: "chat.updated", chatId: peer.chatId, messages: messages.map(toVisitorMessage) }));
+    }
     this.agents.get(peer.sessionId)?.close(4000, "Replaced");
     this.agents.set(peer.sessionId, socket);
     void startRemote(this.remote, peer.sessionId).then(() => {
       if (this.viewers.get(peer.sessionId)?.size) send(socket, { type: "remote.peer" });
-    }).catch((e) => this.log(`live: start failed: ${e instanceof Error ? e.message : "unknown"}`));
+    }).catch((e) => this.log(`live: start failed: ${e instanceof Error ? e.name : "unknown"}`));
     return {
       onMessage: guard(async (text) => {
+        if (peer.kind === "connector") {
+          const chat = parse(ConnectorChat, text);
+          if (chat) {
+            const session = await remoteSession(this.deps.db, peer.sessionId);
+            if (session?.status !== "active") return;
+            const open = await this.deps.db.prepare("SELECT id FROM support_chats WHERE id = ? AND status <> 'closed'").bind(peer.chatId).first();
+            if (!open) { send(socket, { type: "chat.error", error: "This chat is closed" }); return; }
+            const after = await lastMessageId(this.deps.db, peer.chatId);
+            await this.deps.db.batch([insertMessageStatement(this.deps.db, peer.chatId, "customer", null, chat.body, this.deps.now()), touchChatStatement(this.deps.db, peer.chatId, this.deps.now())]);
+            await publishChat(this.deps.db, this, peer.chatId, after);
+            return;
+          }
+        }
         const message = parse(AgentMessage, text);
         if (!message) return;
+        if (message.type === "ping") { send(socket,{type:"pong"}); return; }
         if (message.type === "remote.signal") { for (const viewer of this.viewers.get(peer.sessionId) ?? []) send(viewer, { type: "remote.signal", sessionId: peer.sessionId, data: message.data }); }
         else await endRemote(this.remote, peer.sessionId, message.reason ?? "Stopped at the PC");
       }),
       onClose: () => {
+        if (peer.kind === "connector") removeFrom(this.connectorChats, peer.chatId, socket);
         if (this.agents.get(peer.sessionId) !== socket) return;
         this.agents.delete(peer.sessionId);
         // No signalling channel means no way to stop it remotely: the session ends with the window's connection.
-        void endRemote(this.remote, peer.sessionId, "Screen sharing stopped").catch((e) => this.log(`live: end failed: ${e instanceof Error ? e.message : "unknown"}`));
+        void endRemote(this.remote, peer.sessionId, "Screen sharing stopped").catch((e) => this.log(`live: end failed: ${e instanceof Error ? e.name : "unknown"}`));
       },
     };
   }
 
+  toChat(chatId: string, event: LiveEvent): void { for (const socket of this.connectorChats.get(chatId) ?? []) send(socket, event); }
   toVisitors(installationId: string, event: LiveEvent): void { for (const socket of this.visitors.get(installationId) ?? []) send(socket, event); }
   toStaff(event: LiveEvent): void {
     for (const [socket, peer] of this.staff) if (roleCan(peer.user.role, "support.chat") || roleCan(peer.user.role, "support.remote")) send(socket, event);

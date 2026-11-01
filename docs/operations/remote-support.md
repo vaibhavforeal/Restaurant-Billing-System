@@ -1,5 +1,8 @@
 # Live support and remote access
 
+> Phase 2 connector implementation and gated rollout: see [Support Connector release and recovery](connector-release.md). Updated counters use **Send connector** and separate local consent. The backend continues to support the older in-app protocol described below. Restaurant connector distribution remains disabled until signing and real-PC acceptance pass.
+
+
 Restaurants reach MasalaPOS support from inside the POS:
 
 - **Get support** (in the menu, the Captain menu, and Settings → Help & support) opens a chat in the browser. Support answers it from the Portal's **Live chat**.

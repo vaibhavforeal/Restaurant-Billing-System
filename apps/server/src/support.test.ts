@@ -150,3 +150,17 @@ describe("remote access", () => {
     expect((await f.app.inject({ method: "POST", url: "/api/support/remote/answer", headers: f.admin, payload: { sessionId: ask.sessionId, decision: "deny" } })).statusCode).toBe(409);
   });
 });
+
+
+describe("connector audit recovery", () => {
+  it("replays missed history once, with original times, and rejects another installation", async () => {
+    const f = await fixture();
+    const session = { id:randomUUID(),origin:"connector",installation:{id:installationId},requestedBy:{name:"Neha"},reason:"Printer",modeRequested:"control",mode:"view",approvedByName:"Meera",status:"ended",expiresAt:5000,requestedAt:1000,answeredAt:2000,startedAt:3000,endedAt:4000,endReason:"Stopped" };
+    f.link!.say({type:"connector.history",session:{...session,installation:{id:randomUUID()}}});
+    expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM remote_support_log").get()).toEqual({n:0});
+    f.link!.say({type:"connector.history",session});
+    f.link!.say({type:"connector.history",session});
+    expect(f.app.db.prepare("SELECT event, at FROM remote_support_log ORDER BY at").all()).toEqual([{event:"requested",at:1000},{event:"allowed",at:2000},{event:"started",at:3000},{event:"ended",at:4000}]);
+    expect(f.toDesktop).toEqual([]);
+  });
+});

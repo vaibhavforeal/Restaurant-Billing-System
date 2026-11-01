@@ -6,7 +6,7 @@ import type { ChatMessage, ChatSummary, VisitorChat, VisitorMessage } from "../p
 export const MESSAGE_MAX = 2000;
 
 interface SummaryRow {
-  id: string; number: number; status: ChatSummary["status"]; customerId: string; customerName: string; installationId: string; outletName: string | null;
+  id: string; number: number; status: ChatSummary["status"]; customerId: string; customerName: string; installationId: string | null; outletName: string | null;
   visitorName: string | null; visitorPhone: string | null; assigneeId: string | null; assigneeName: string | null; ticketId: string | null; ticketNumber: number | null;
   createdAt: number; lastMessageAt: number; closedAt: number | null; lastAuthor: ChatMessage["author"] | null; lastBody: string | null;
 }
@@ -15,14 +15,14 @@ const SUMMARY = `s.id, s.number, s.status, s.customer_id AS customerId, c.busine
   s.created_at AS createdAt, s.last_message_at AS lastMessageAt, s.closed_at AS closedAt,
   (SELECT author_type FROM support_chat_messages m WHERE m.chat_id = s.id ORDER BY m.id DESC LIMIT 1) AS lastAuthor,
   (SELECT body FROM support_chat_messages m WHERE m.chat_id = s.id ORDER BY m.id DESC LIMIT 1) AS lastBody`;
-const FROM = `FROM support_chats s JOIN customers c ON c.id = s.customer_id JOIN installations i ON i.installation_id = s.installation_id
+const FROM = `FROM support_chats s JOIN customers c ON c.id = s.customer_id LEFT JOIN installations i ON i.installation_id = s.installation_id
   LEFT JOIN staff_users a ON a.id = s.assignee_id LEFT JOIN tickets t ON t.id = s.ticket_id`;
 
 export const counterName = (installationId: string, outletName: string | null) => outletName ?? `Counter ${installationId.slice(0, 8)}`;
 
 const toSummary = (r: SummaryRow): ChatSummary => ({
   id: r.id, number: r.number, status: r.status, customer: { id: r.customerId, name: r.customerName },
-  installation: { id: r.installationId, name: counterName(r.installationId, r.outletName) },
+  installation: r.installationId ? { id: r.installationId, name: counterName(r.installationId, r.outletName) } : null,
   visitorName: r.visitorName, visitorPhone: r.visitorPhone, assignee: r.assigneeId ? { id: r.assigneeId, name: r.assigneeName ?? "Former staff" } : null,
   ticket: r.ticketId && r.ticketNumber !== null ? { id: r.ticketId, number: r.ticketNumber } : null,
   createdAt: r.createdAt, lastMessageAt: r.lastMessageAt, closedAt: r.closedAt,
@@ -80,14 +80,16 @@ export const touchChatStatement = (db: D1Like, chatId: string, at: number): D1St
   db.prepare(`UPDATE support_chats SET last_message_at = ? WHERE id = ?`).bind(at, chatId);
 
 /** Tells everyone watching that a chat changed: its new messages (after `afterId`) and its summary. */
-export async function publishChat(db: D1Like, live: LiveHub | undefined, chatId: string, afterId: number): Promise<void> {
+export async function publishChat(db: D1Like, live: LiveHub | undefined, chatId: string, afterId: number, transientBody?: string): Promise<void> {
   if (!live) return;
   const summary = await chatSummary(db, chatId);
   if (!summary) return;
   const messages = await chatMessages(db, chatId, afterId);
+  if (transientBody && messages.length) messages[messages.length-1]!.body = transientBody;
   live.toStaff({ type: "chat.updated", chat: summary, messages });
+  live.toChat?.(chatId, { type: "chat.updated", chatId, messages: messages.map(toVisitorMessage) });
   // The restaurant's page gets its own shape, without staff surnames.
-  live.toVisitors(summary.installation.id, { type: "visitor.updated", chatId, status: summary.status, agentName: firstName(summary.assignee?.name ?? null),
+  if (summary.installation) live.toVisitors(summary.installation.id, { type: "visitor.updated", chatId, status: summary.status, agentName: firstName(summary.assignee?.name ?? null),
     messages: messages.map(toVisitorMessage) });
 }
 
@@ -97,8 +99,8 @@ export async function lastMessageId(db: D1Like, chatId: string): Promise<number>
 }
 
 /** A line from the service in the chat ("Neha asked to see this PC"), stored and pushed. */
-export async function addSystemMessage(db: D1Like, live: LiveHub | undefined, chatId: string, body: string, at: number): Promise<void> {
+export async function addSystemMessage(db: D1Like, live: LiveHub | undefined, chatId: string, body: string, at: number, transientBody?: string): Promise<void> {
   const after = await lastMessageId(db, chatId);
   await db.batch([insertMessageStatement(db, chatId, "system", null, body, at), touchChatStatement(db, chatId, at)]);
-  await publishChat(db, live, chatId, after);
+  await publishChat(db, live, chatId, after, transientBody);
 }

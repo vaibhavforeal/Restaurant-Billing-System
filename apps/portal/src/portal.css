@@ -354,3 +354,10 @@ fieldset.choice label .field-hint { grid-column: 2; }
 .remote-overlay { position: absolute; inset: 0; display: grid; place-items: center; color: #ccc; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.viewer-chat{margin-top:24px;border:1px solid var(--border,#ddd);border-radius:10px;padding:20px}.viewer-chat ol{list-style:none;padding:0;max-height:240px;overflow:auto}.viewer-chat li{border-bottom:1px solid #ddd;padding:10px 0}.viewer-chat p{white-space:pre-wrap;overflow-wrap:anywhere}.viewer-chat form{display:flex;gap:12px}.viewer-chat textarea{flex:1}
+
+.viewer-workspace { display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,320px); gap:16px; align-items:start; }
+.viewer-workspace > .viewer-chat { margin-top:0; max-height:75vh; overflow:auto; }
+.viewer-workspace > .viewer-chat:only-child { grid-column:1 / -1; }
+@media (max-width:1000px) { .viewer-workspace { grid-template-columns:1fr; } }

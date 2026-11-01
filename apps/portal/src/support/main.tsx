@@ -1,3 +1,4 @@
+import { SupportMessage } from "../SupportMessage";
 // The restaurant's support chat, opened by MasalaPOS's Get support button. Plain and phone-friendly: say who you are once, then chat.
 // Messages are sent over HTTP; the live socket brings replies at once, and the page checks every few seconds when it is down.
 import { StrictMode, useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -140,9 +141,9 @@ function Chat({ data, typing, onSent, onExpired }: { data: Loaded; typing: strin
     <div className="messages" aria-live="polite">
       {!chat && <div className="welcome"><h1>How can we help?</h1><p className="muted">Tell us what's going on. A MasalaPOS support person will answer here. Keep this tab open.</p></div>}
       <ol>
-        {chat?.messages.map((m) => m.author === "system" ? <li key={m.id} className="msg system">{m.body}</li>
+        {chat?.messages.map((m) => m.author === "system" ? <li key={m.id} className="msg system">{<SupportMessage body={m.body} />}</li>
           : <li key={m.id} className={`msg ${m.author === "customer" ? "out" : "in"}`}>
-            <div className="bubble">{m.body}</div>
+            <div className="bubble">{<SupportMessage body={m.body} />}</div>
             <div className="meta">{m.author === "staff" ? `${m.name ?? "Support"} · ` : ""}{time.format(m.createdAt)}</div>
           </li>)}
         {typing && <li className="msg in typing">{typing} is typing…</li>}

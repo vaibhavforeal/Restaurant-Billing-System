@@ -18,8 +18,8 @@ async function detail(ctx: Ctx, id: string): Promise<ChatDetail> {
   const summary = await chatSummary(ctx.deps.db, id);
   if (!summary) throw notFound("That chat");
   return {
-    ...summary, messages: await chatMessages(ctx.deps.db, id), counterOnline: ctx.env.LIVE?.counterOnline(summary.installation.id) ?? false,
-    remoteSessions: await remoteSessionsWhere(ctx.deps.db, "r.installation_id = ?", [summary.installation.id], 5),
+    ...summary, messages: await chatMessages(ctx.deps.db, id), counterOnline: summary.installation ? ctx.env.LIVE?.counterOnline(summary.installation.id) ?? false : false,
+    remoteSessions: await remoteSessionsWhere(ctx.deps.db, "r.chat_id = ?", [summary.id], 5),
   };
 }
 
@@ -89,7 +89,7 @@ export const supportChatRoutes: Route[] = [
     await db.batch([
       db.prepare(`INSERT INTO tickets (id, number, customer_id, installation_id, subject, description, category, priority, assignee_id, created_by, created_at, updated_at)
         SELECT ?, COALESCE(MAX(number), 1000) + 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM tickets`)
-        .bind(id, chat.customer.id, chat.installation.id, body.subject, description, body.category, body.priority, chat.assignee?.id ?? ctx.user.id, ctx.user.id, now, now),
+        .bind(id, chat.customer.id, chat.installation?.id ?? null, body.subject, description, body.category, body.priority, chat.assignee?.id ?? ctx.user.id, ctx.user.id, now, now),
       db.prepare(`UPDATE support_chats SET ticket_id = ? WHERE id = ?`).bind(id, chat.id),
       logBy(ctx, { action: "ticket.opened", entityType: "ticket", entityId: id, customerId: chat.customer.id, summary: `Opened a ticket from chat C-${chat.number}: ${body.subject}` }),
     ]);

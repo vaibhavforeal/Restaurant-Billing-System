@@ -37,11 +37,17 @@ export interface LiveLink {
   on(event: "close", listener: (refused: boolean) => void): void;
 }
 
-export interface PendingRequest { sessionId: string; agentName: string; reason: string; mode: RemoteMode; expiresAt: number }
+export interface PendingRequest { sessionId: string; agentName: string; reason: string; mode: RemoteMode; expiresAt: number; connectorUrl?: string }
 export interface ActiveSession { sessionId: string; agentName: string; mode: RemoteMode; startedAt: number | null }
 
+const ConnectorSession = z.object({ requestedAt: z.number(), answeredAt: z.number().nullable(), endedAt: z.number().nullable(), id: z.string().uuid(), origin: z.literal("connector"), installation: z.object({ id: z.string().uuid() }).nullable(),
+  requestedBy: z.object({ name: z.string().max(120) }), reason: z.string().max(200), modeRequested: z.enum(["view","control"]), mode: z.enum(["view","control"]).nullable(),
+  approvedByName: z.string().nullable(), status: z.enum(["requested","approved","active","denied","expired","ended"]), expiresAt: z.number().nullable(), startedAt: z.number().nullable(), endReason: z.string().nullable() });
 const ServiceEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("pong") }),
+  z.object({ type: z.literal("connector.request"), session: ConnectorSession, url: z.string().url() }),
+  z.object({ type: z.literal("connector.updated"), session: ConnectorSession }),
+  z.object({ type: z.literal("connector.history"), session: ConnectorSession }),
   z.object({ type: z.literal("remote.request"), sessionId: z.string().uuid(), agentName: z.string().max(120), reason: z.string().max(200), mode: z.enum(["view", "control"]) }),
   z.object({ type: z.literal("remote.start"), sessionId: z.string().uuid(), token: z.string().regex(/^[A-Za-z0-9_-]{43}$/), mode: z.enum(["view", "control"]),
     agentPath: z.string().regex(/^\/[a-z0-9/_-]+$/), agentName: z.string().max(120), maxMs: z.number().int().positive(),
@@ -160,9 +166,9 @@ export function registerSupport(app: FastifyInstance, options: SupportOptions = 
   let active: ActiveSession | null = null;
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const record = (sessionId: string, event: "requested" | "allowed" | "refused" | "started" | "ended", detail: { agentName?: string | null; actorName?: string | null; detail?: string | null } = {}) =>
+  const record = (sessionId: string, event: "requested" | "allowed" | "refused" | "started" | "ended", detail: { agentName?: string | null; actorName?: string | null; detail?: string | null } = {}, at = Date.now()) =>
     db.prepare("INSERT INTO remote_support_log (session_id, at, event, agent_name, actor_name, detail) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(sessionId, Date.now(), event, detail.agentName ?? null, detail.actorName ?? null, detail.detail ?? null);
+      .run(sessionId, at, event, detail.agentName ?? null, detail.actorName ?? null, detail.detail ?? null);
   const enabled = () => ((db.prepare("SELECT remote_support_enabled AS on_ FROM settings WHERE id = 1").get() as { on_?: number } | undefined)?.on_ ?? 1) === 1;
   const state = () => ({ pending, active });
   const announce = () => app.broadcast("support.remote", state());
@@ -176,6 +182,40 @@ export function registerSupport(app: FastifyInstance, options: SupportOptions = 
     if (!parsed.success) return;
     const event = parsed.data;
     if (event.type === "pong") return;
+    if (event.type === "connector.history") {
+      const session = event.session;
+      if (session.installation?.id !== installationId) return;
+      const entries: Array<["requested" | "allowed" | "refused" | "started" | "ended", number]> = [["requested",session.requestedAt]];
+      if (session.answeredAt !== null) entries.push([session.mode ? "allowed" : "refused",session.answeredAt]);
+      if (session.startedAt !== null) entries.push(["started",session.startedAt]);
+      if (session.endedAt !== null && session.status !== "denied") entries.push(["ended",session.endedAt]);
+      for (const [kind,at] of entries) {
+        if (!db.prepare("SELECT 1 FROM remote_support_log WHERE session_id = ? AND event = ?").get(session.id,kind)) record(session.id,kind,{agentName:session.requestedBy.name,actorName:session.approvedByName,detail:kind === "requested" ? session.reason : session.endReason ?? session.mode},at);
+      }
+      if (session.status === "approved" || session.status === "active") active = {sessionId:session.id,agentName:session.requestedBy.name,mode:session.mode ?? "view",startedAt:session.startedAt};
+      else if (active?.sessionId === session.id) active = null;
+      announce(); return;
+    }
+    if (event.type === "connector.request" || event.type === "connector.updated") {
+      const session = event.session;
+      if (session.installation?.id !== installationId) return;
+      if (event.type === "connector.request") {
+        const url = new URL(event.url);
+        if (url.origin !== new URL(serviceUrl!).origin || url.pathname !== "/support/connector" || !/^[A-Za-z0-9_-]{43}$/.test(url.searchParams.get("t") ?? "")) return;
+        record(session.id,"requested",{agentName:session.requestedBy.name,detail:session.reason});
+        if (!enabled() || !desktop || active || pending) { channel?.send({type:"remote.end",sessionId:session.id,reason:"Connector requests are unavailable on this PC"}); return; }
+        pending = { sessionId:session.id,agentName:session.requestedBy.name,reason:session.reason,mode:session.modeRequested,expiresAt:session.expiresAt ?? Date.now()+30*60_000,connectorUrl:event.url };
+        pendingTimer = setTimeout(() => { clearPending(); announce(); },Math.max(1,pending.expiresAt-Date.now())); pendingTimer.unref?.();
+      } else {
+        const mapped = {approved:"allowed",active:"started",denied:"refused",expired:"ended",ended:"ended"} as const;
+        const kind = session.status === "requested" ? null : mapped[session.status];
+        if (kind && !db.prepare("SELECT 1 FROM remote_support_log WHERE session_id = ? AND event = ?").get(session.id,kind)) record(session.id,kind,{agentName:session.requestedBy.name,actorName:session.approvedByName,detail:session.endReason ?? session.mode});
+        if (session.status !== "requested" && pending?.sessionId === session.id) clearPending();
+        if (session.status === "approved" || session.status === "active") active = {sessionId:session.id,agentName:session.requestedBy.name,mode:session.mode ?? "view",startedAt:session.startedAt};
+        else if (active?.sessionId === session.id) active = null;
+      }
+      announce(); return;
+    }
     if (event.type === "remote.request") {
       // Refused without asking anyone: the admin turned it off, or there is no screen here to share (a server without the desktop app).
       const refusal = !enabled() ? "Remote access is turned off on this PC" : !desktop ? "This PC can't share its screen" : active || pending ? "Another remote session is in progress" : null;
@@ -278,6 +318,17 @@ export function registerSupport(app: FastifyInstance, options: SupportOptions = 
     const body = AnswerBody.parse(req.body);
     if (pending?.sessionId !== body.sessionId) throw httpError(409, "That request has already been answered or has expired");
     const request = pending;
+    if (request.connectorUrl) {
+      if (body.decision === "deny") {
+        channel?.send({type:"remote.end",sessionId:request.sessionId,reason:"Connector declined at the counter"});
+        record(request.sessionId,"refused",{agentName:request.agentName,actorName:req.user.name});
+      } else {
+        await resolveApprover(app,req,body.approverPin);
+        if (!enabled() || pending?.sessionId !== request.sessionId) throw httpError(409,"This invitation is no longer available");
+        desktop?.send({type:"connector-open",sessionId:request.sessionId,url:request.connectorUrl});
+      }
+      clearPending(); announce(); return state();
+    }
     if (body.decision === "deny") {
       clearPending();
       channel?.send({ type: "remote.answer", sessionId: request.sessionId, decision: "deny", approvedBy: req.user.name.slice(0, 80) });

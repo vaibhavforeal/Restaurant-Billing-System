@@ -1,3 +1,4 @@
+import { connectorRoute } from "./connector/routes.js";
 import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate } from "./activate.js";
 import type { Env } from "./env.js";
@@ -27,7 +28,7 @@ function signerFor(env: Env): Promise<SignerPair> {
 async function rateLimited(request: Request, env: Env): Promise<boolean> {
   try { return !(await env.LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success; }
   catch (error) {
-    console.error("licensing-worker: rate limiter unavailable:", error instanceof Error ? error.message : "unknown error");
+    console.error("licensing-worker: rate limiter unavailable:", error instanceof Error ? error.name : "unknown error");
     return false;
   }
 }
@@ -41,6 +42,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   const { method } = request;
   const deps = async (): Promise<Deps> => ({ db: env.DB, signer: await signerFor(env), now: Date.now, uuid: () => crypto.randomUUID() });
 
+  if (url.pathname === "/support/connector" || url.pathname.startsWith("/support/connector-runtime/") || url.pathname.startsWith("/v1/connector/")) return connectorRoute(request, env, await deps());
   if (url.pathname === "/portal" || url.pathname.startsWith("/portal/")) return portalRoute(request, env, await deps());
   if (url.pathname === "/support" || url.pathname.startsWith("/support/")) return supportRoute(request, env, await deps());
   if (method === "POST" && url.pathname === "/v1/support/link") {
@@ -68,7 +70,7 @@ export default {
     try { return await route(request, env); }
     catch (error) {
       // The message only: request bodies and secrets never reach the log.
-      console.error("licensing-worker: unhandled error:", error instanceof Error ? error.message : "unknown error");
+      console.error("licensing-worker: unhandled error:", error instanceof Error ? error.name : "unknown error");
       return json({ error: "internal" }, 500);
     }
   },

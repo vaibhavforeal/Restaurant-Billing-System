@@ -8,5 +8,5 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/remote/agent-page.ts"]
+  "include": ["src/remote/agent-page.ts", "../../packages/remote-agent/src/agent-page.ts"]
 }

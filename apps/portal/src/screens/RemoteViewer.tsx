@@ -1,7 +1,7 @@
 // The remote viewer: the restaurant's screen as a video, with the mouse and keyboard passed through when the PC allowed control.
 // Waits for the PC's answer first; everything stops when either side ends it or the restaurant presses Stop.
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from "react";
-import type { RemoteSession, RemoteViewerSetup, StaffUser } from "../../../licensing-worker/src/portal/api-types";
+import type { ChatDetail, ChatMessage, RemoteSession, RemoteViewerSetup, StaffUser } from "../../../licensing-worker/src/portal/api-types";
 import { api, post } from "../api";
 import { dateTime } from "../format";
 import { portalLive, useLiveConnected, useLiveEvent } from "../live";
@@ -31,16 +31,19 @@ export function RemoteViewer({ id }: { id: string; me: StaffUser }) {
   const [label, tone] = REMOTE_STATUS[session.status];
   const back = session.chatId ? <Link to={`/chats/${session.chatId}`}>Back to the chat</Link> : <Link to="/chats">Live chat</Link>;
   return <>
-    <PageHead back={back} title={<>{session.customer?.name ?? "Restaurant"} <span className="muted">· {session.installation.name}</span></>}
-      sub={<><Pill tone={tone}>{label}</Pill> {session.mode ? MODE_NAMES[session.mode] : `${MODE_NAMES[session.modeRequested]} asked`} · {session.reason}</>}
+    <PageHead back={back} title={<>{session.customer?.name ?? "Restaurant"} <span className="muted">· {session.installation?.name ?? "Support PC"}</span></>}
+      sub={<><Pill tone={tone}>{label}</Pill> {session.origin === "connector" && <Pill>Connector{session.elevated ? " · elevated" : ""}{session.adminPrompts ? " · admin prompts" : ""}</Pill>} {session.mode ? MODE_NAMES[session.mode] : `${MODE_NAMES[session.modeRequested]} asked`} · {session.reason}</>}
       actions={OPEN.has(session.status) && <button className="danger" disabled={busy} onClick={() => void run(async () => setData({ ...data, session: (await post<{ session: RemoteSession }>(`/remote-sessions/${id}/end`)).session }))}>End session</button>} />
     {status}
     {refused && <p className="notice negative" role="alert">Only the person who asked for this session (or an admin) can view it.</p>}
     {!connected && OPEN.has(session.status) && <p className="notice">Connecting to the portal's live service…</p>}
     {session.status === "requested" && <div className="remote-wait"><p><strong>Waiting for someone at the PC to allow access.</strong></p>
-      <p className="muted">They see your name and reason on the MasalaPOS screen, and have a minute to answer. Ask them on the chat or phone to click Allow.</p></div>}
+      <p className="muted">Open the connector link from the chat and run the downloaded file on the PC. Screen sharing begins only after they allow it.</p></div>}
     {session.status === "approved" && <div className="remote-wait"><p><strong>Allowed by {session.approvedByName}. Starting screen sharing…</strong></p></div>}
+    <div className="viewer-workspace">
     {session.status === "active" && connected && !refused && <Screen sessionId={id} mode={session.mode ?? "view"} iceServers={data.iceServers} />}
+    {session.chatId && !refused && <ViewerChat chatId={session.chatId} />}
+    </div>
     {!OPEN.has(session.status) && <div className="remote-wait"><p><strong>{session.status === "denied" ? `Refused at the PC${session.approvedByName ? ` by ${session.approvedByName}` : ""}.`
       : session.status === "expired" ? "No one answered at the PC." : `Ended${session.endReason ? `: ${session.endReason}` : ""}.`}</strong></p>
       <p className="muted small">Asked {dateTime(session.requestedAt)}{session.startedAt ? ` · started ${dateTime(session.startedAt)}` : ""}{session.endedAt ? ` · ended ${dateTime(session.endedAt)}` : ""}</p></div>}
@@ -151,4 +154,16 @@ function Screen({ sessionId, mode: grantedMode, iceServers }: { sessionId: strin
       {state !== "live" && <p className="remote-overlay muted">{state === "lost" ? "The connection dropped. Waiting for the PC to reconnect…" : "Starting the picture…"}</p>}
     </div>
   </div>;
+}
+
+function ViewerChat({ chatId }: { chatId: string }) {
+  const { data, setData, error } = useData(() => api<{ chat: ChatDetail }>(`/chats/${chatId}`), chatId);
+  const [reply,setReply] = useState("");
+  const { busy, run, status } = useRun();
+  useLiveEvent((event) => {
+    if (event.type !== "chat.updated" || (event["chat"] as ChatDetail)?.id !== chatId) return;
+    setData((current) => { if (!current) return current; const messages = new Map(current.chat.messages.map((m)=>[m.id,m])); for (const m of event["messages"] as ChatMessage[]) messages.set(m.id,m); return { chat: {...current.chat,...event["chat"] as ChatDetail,messages:[...messages.values()].sort((a,b)=>a.id-b.id)} }; });
+  });
+  return <section className="viewer-chat"><h2>Session chat</h2>{error && <p role="alert">{error}</p>}<ol>{data?.chat.messages.slice(-50).map((m)=><li key={m.id}><strong>{m.author === "staff" ? m.staff?.name : m.author === "customer" ? "Restaurant" : "MasalaPOS"}</strong><p>{m.body}</p></li>)}</ol>{status}
+    <form onSubmit={(e)=>{e.preventDefault();void run(async()=>{setData(await post<{chat:ChatDetail}>(`/chats/${chatId}/messages`,{body:reply}));setReply("");});}}><textarea aria-label="Message restaurant" rows={2} maxLength={2000} value={reply} onChange={(e)=>setReply(e.target.value)}/><button className="primary" disabled={busy || !reply.trim() || data?.chat.status === "closed"}>Send</button></form></section>;
 }

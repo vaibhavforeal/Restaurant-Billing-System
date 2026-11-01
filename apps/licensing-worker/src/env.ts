@@ -16,6 +16,8 @@ export interface RateLimiter { limit(options: { key: string }): Promise<{ succes
 export interface AssetsBinding { fetch(request: Request): Promise<Response> }
 export interface Env {
   DB: D1Like;
+  CONNECTOR?: import("./connector/routes.js").ConnectorDistribution;
+  CONNECTOR_LIMITER?: RateLimiter;
   LIMITER: RateLimiter;
   /** Portal sign-in attempts per address; falls back to LIMITER when the binding is missing. */
   LOGIN_LIMITER?: RateLimiter;

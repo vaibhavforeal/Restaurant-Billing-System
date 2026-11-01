@@ -10,6 +10,7 @@ import { CounterDialog, counterName, LicenceState, SeatStrip } from "./Counter";
 import { CustomerDialog, Renewal } from "./Customers";
 import { AddFollowUp, FollowUpRows } from "./FollowUps";
 import { OrdersTable } from "./Orders";
+import { RemoteDialog } from "./LiveChat";
 import { Tickets } from "./Tickets";
 
 type Tab = "overview" | "orders" | "counters" | "followups" | "tickets" | "activity";
@@ -19,6 +20,7 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
   const counters = useData(() => api<{ installations: InstallationSummary[] }>(`/customers/${id}/installations`), id);
   const staff = useData(() => api<{ staff: Colleague[] }>("/staff"), "staff");
   const [tab, setTab] = useState<Tab>("overview");
+  const [connector, setConnector] = useState(false);
   const [editing, setEditing] = useState(false);
   const [counter, setCounter] = useState<string | null>(null);
   if (error) return <><PageHead title="Customer" back={<Link to="/customers">Customers</Link>} /><LoadError message={error} retry={reload} /></>;
@@ -30,7 +32,7 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
   return <>
     <PageHead back={<Link to="/customers">Customers</Link>} title={c.businessName}
       sub={<span className="code-row">Customer ID <span className="code">{c.code}</span><CopyButton text={c.code} />{c.status === "inactive" && " · Inactive"}</span>}
-      actions={<>{roleCan(me.role, "customers.write") && <button className="secondary" onClick={() => setEditing(true)}>Edit</button>}
+      actions={<>{roleCan(me.role, "support.remote") && <button className="secondary" onClick={() => setConnector(true)}>Send connector</button>}{roleCan(me.role, "customers.write") && <button className="secondary" onClick={() => setEditing(true)}>Edit</button>}
         {canOrder && <button className="secondary" onClick={() => navigate(`/orders/new${query({ customerId: c.id, kind: "trial" })}`)}>Start a trial</button>}
         {canOrder && <button className="primary" onClick={() => navigate(`/orders/new${query({ customerId: c.id })}`)}>New order</button>}</>} />
     <div className="kpis">
@@ -71,6 +73,7 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
     {tab === "followups" && <CustomerFollowUps customerId={c.id} me={me} />}
     {tab === "tickets" && <Tickets me={me} customerId={c.id} />}
     {tab === "activity" && <CustomerActivity customerId={c.id} />}
+    {connector && <RemoteDialog customerId={c.id} onClose={() => setConnector(false)} />}
     {editing && <CustomerDialog me={me} staff={staff.data?.staff ?? []} customer={c} onClose={() => setEditing(false)} onSaved={(next) => { setEditing(false); setData({ customer: next }); }} />}
     {counter && <CounterDialog id={counter} me={me} onClose={() => setCounter(null)} onChanged={() => { void counters.reload(); void reload(); }} />}
   </>;

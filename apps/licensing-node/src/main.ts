@@ -6,6 +6,7 @@ import type { Env } from "../../licensing-worker/src/env.js";
 import { authorizeLive, LIVE_PATHS } from "../../licensing-worker/src/live/authorize.js";
 import { SupportHub } from "../../licensing-worker/src/live/hub.js";
 import { createApp } from "./app.js";
+import { connectorDistribution } from "./connector.js";
 import { directoryAssets } from "./assets.js";
 import { memoryLimiter } from "./limiter.js";
 import { readSecret } from "./secrets.js";
@@ -30,9 +31,12 @@ const dataDir = config["DATA_DIR"] ?? "./data";
 const { d1, db, applied } = fileD1(join(dataDir, "licensing.db"), config["MIGRATIONS_DIR"] ?? join(here, "migrations"));
 if (applied.length) console.log(`licensing-node: applied migrations: ${applied.join(", ")}`);
 
+const connector = connectorDistribution(config);
 // The same limits wrangler.jsonc gives the Cloudflare bindings.
 const env: Env = {
   DB: d1,
+  ...(connector ? { CONNECTOR: connector } : {}),
+  CONNECTOR_LIMITER: memoryLimiter(10, 60),
   LIMITER: memoryLimiter(20, 60),
   LOGIN_LIMITER: memoryLimiter(10, 60),
   ASSETS: directoryAssets(config["PORTAL_DIST"] ?? join(here, "web")),

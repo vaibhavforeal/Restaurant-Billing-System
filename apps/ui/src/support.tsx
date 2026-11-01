@@ -16,7 +16,7 @@ declare global {
 /** Only the desktop app's own window answers remote-access requests: never a browser or tablet elsewhere on the network. */
 export const onThisPc = () => window.masalaposDesktop?.remoteSupport === true;
 
-export interface PendingRequest { sessionId: string; agentName: string; reason: string; mode: "view" | "control"; expiresAt: number }
+export interface PendingRequest { sessionId: string; agentName: string; reason: string; mode: "view" | "control"; expiresAt: number; connectorUrl?: string }
 export interface ActiveSession { sessionId: string; agentName: string; mode: "view" | "control"; startedAt: number | null }
 export interface SupportStatus { online: boolean; available: boolean; canShare: boolean; remoteEnabled: boolean; pending: PendingRequest | null; active: ActiveSession | null }
 
@@ -119,10 +119,11 @@ function RemoteConsentOnPc({ user }: { user: User }) {
       <span><strong>{active.agentName}</strong> from MasalaPOS support {active.startedAt ? (active.mode === "control" ? "is viewing and can control this PC" : "is viewing this PC") : "is connecting…"}</span>
       <button onClick={() => void stop()}>Stop</button>
     </div>}
-    <WorkspaceDialog open={pending !== null} title="MasalaPOS support wants to see this PC" onClose={() => void answer("deny")} busy={busy} className="remote-consent">
+    <WorkspaceDialog open={pending !== null} title={pending?.connectorUrl ? "MasalaPOS support sent a connector" : "MasalaPOS support wants to see this PC"} onClose={() => void answer("deny")} busy={busy} className="remote-consent">
       {pending && <form onSubmit={(e) => void answer(pending.mode === "control" ? "control" : "view", e)}>
         <p className="remote-consent-who"><strong>{pending.agentName}</strong> from MasalaPOS support asks to <strong>{pending.mode === "control" ? "see and control" : "see"}</strong> this PC's screen.</p>
         <blockquote className="remote-consent-reason">{pending.reason}</blockquote>
+        {pending.connectorUrl && <p>Download and run Support Connector. Windows will ask for administrator permission, then the connector asks you what support may access.</p>}
         <ul className="remote-consent-points">
           <li>They will see everything on this screen{pending.mode === "control" ? ", and can use the mouse and keyboard" : ""}.</li>
           <li>A red frame shows while they are connected. You can press <strong>Stop</strong> at any time.</li>
@@ -133,8 +134,8 @@ function RemoteConsentOnPc({ user }: { user: User }) {
         {error && <p className="remote-consent-error" role="alert">{error}</p>}
         <div className="remote-consent-actions">
           <button type="button" className="secondary" onClick={() => void answer("deny")} disabled={busy}>Don't allow</button>
-          {pending.mode === "control" && <button type="button" className="secondary" onClick={() => void answer("view")} disabled={busy}>Allow view only</button>}
-          <button type="submit" className="primary" disabled={busy}>{pending.mode === "control" ? "Allow view and control" : "Allow"}</button>
+          {!pending.connectorUrl && pending.mode === "control" && <button type="button" className="secondary" onClick={() => void answer("view")} disabled={busy}>Allow view only</button>}
+          <button type="submit" className="primary" disabled={busy}>{pending.connectorUrl ? "Download connector" : pending.mode === "control" ? "Allow view and control" : "Allow"}</button>
         </div>
         <p className="remote-consent-timer">Closes on its own in {seconds} s if no one answers.</p>
       </form>}
@@ -169,7 +170,7 @@ export function SupportSettings() {
     </section>
     <section className="panel">
       <h4>Remote access</h4>
-      <p className="muted">MasalaPOS support can ask to see this PC's screen to help you. Each time, someone at this PC must allow it (an admin, or with an admin's PIN), and can stop it at any time. Support cannot reach admin prompts or Windows settings that need an administrator.</p>
+      <p className="muted">MasalaPOS support can ask to see this PC's screen to help you. Each time, someone at this PC must allow it (an admin, or with an admin's PIN), and can stop it at any time. Support Connector can access administrator windows. Windows admin prompts require separate permission in the connector.</p>
       {status && !status.canShare && <p className="notice">Screen sharing works only in the MasalaPOS desktop app on the main PC.</p>}
       <label className="support-toggle"><input type="checkbox" checked={status?.remoteEnabled ?? true} disabled={!status} onChange={(e) => void toggle(e.target.checked)} />
         <span>Allow MasalaPOS support to ask for remote access</span></label>

@@ -111,10 +111,15 @@ export function createApp(worker: Fetcher, env: Env, options: AppOptions = {}): 
       response.headers.forEach((value, name) => { if (name !== "set-cookie") headers.push([name, value]); });
       for (const cookie of response.headers.getSetCookie()) headers.push(["set-cookie", cookie]);
       res.writeHead(response.status, headers);
-      res.end(req.method === "HEAD" ? undefined : Buffer.from(await response.arrayBuffer()));
+      const body = req.method === "HEAD" ? undefined : Buffer.from(await response.arrayBuffer());
+      res.end(body);
+      const route = (req.url ?? "").split("?")[0];
+      if (route && ["/portal/api/connector","/support/connector","/support/connector-runtime/latest.json","/v1/connector/redeem","/v1/connector/consent"].includes(route)) {
+        console.log(JSON.stringify({event:"connector.http",route,status:response.status,bytes:body?.length ?? 0}));
+      }
     } catch (error) {
       const [status, code] = error instanceof BodyTooLarge ? [413, "payload_too_large"] : error instanceof BadTarget ? [400, "bad_request"] : [500, "internal"];
-      if (status === 500) console.error("licensing-node: unhandled error:", error instanceof Error ? error.message : "unknown error");
+      if (status === 500) console.error("licensing-node: unhandled error:", error instanceof Error ? error.name : "unknown error");
       if (!res.headersSent) res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: code }));
     }

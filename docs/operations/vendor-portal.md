@@ -1,5 +1,8 @@
 # MasalaPOS Portal
 
+> Phase 2 connector implementation and gated rollout: see [Support Connector release and recovery](connector-release.md). Updated counters use **Send connector** and separate local consent. The backend continues to support the older in-app protocol described below. Restaurant connector distribution remains disabled until signing and real-PC acceptance pass.
+
+
 The portal is where MasalaPOS's own staff run the business. It covers leads and follow-ups, customers, orders and payments, GST tax invoices, the counters each customer runs (their licences, modules and seats), renewals, support tickets and reports.
 
 It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the first admin, Razorpay) is in the [licensing worker README](../../apps/licensing-worker/README.md).

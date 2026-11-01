@@ -8,8 +8,6 @@ import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
 import { createUpdater, type AutoUpdaterLike } from "./updater.js";
 import { isToDesktop } from "../../../packages/domain/src/updates.js";
 import { isRemoteToDesktop } from "../../../packages/domain/src/remote-support.js";
-import { RemoteSupport } from "./remote/session.js";
-import { windowsInjector } from "./remote/input.js";
 
 declare const __MASALAPOS_DEMO__: boolean;
 declare const __MASALAPOS_COMMERCIAL__: boolean;
@@ -31,7 +29,6 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let recovering = false;
 let errorShown = false;
 let updates: ReturnType<typeof createUpdater> | null = null;
-let remote: RemoteSupport | null = null;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -97,7 +94,13 @@ else {
     child.on("message", (data: unknown) => {
       if (server !== child) return;
       // Remote support: the server only sends a start for a session someone at this PC has just allowed.
-      if (isRemoteToDesktop(data)) { remote?.handle(data); return; }
+      if (isRemoteToDesktop(data)) {
+        if (data.type === "connector-open") {
+          const url = new URL(data.url);
+          if (url.protocol === "https:" && url.hostname === "portal.billnroll.in" && url.pathname === "/support/connector") void shell.openExternal(url.href);
+        } else if (data.type === "remote-start") child.postMessage({type:"remote-state",sessionId:data.sessionId,state:"stopped",reason:"This version uses Support Connector. Ask support to send a connector link."});
+        return;
+      }
       if (!isToDesktop(data)) return;
       if (data.type === "restore") {
         // Settings staged and verified this file and the admin confirmed it on this PC; accept only that folder.
@@ -141,7 +144,6 @@ else {
     const child = server;
     if (!child) return;
     stopping = true;
-    remote?.stopAll("MasalaPOS is closing");
     await new Promise<void>((resolve) => {
       const force = setTimeout(() => child.kill(), 10_000);
       child.once("exit", () => { clearTimeout(force); resolve(); });
@@ -221,11 +223,6 @@ else {
         await stopServer();
         tray?.destroy();
       },
-    });
-    remote = new RemoteSupport({
-      here, log: writeLog, injector: windowsInjector,
-      toServer: (message) => server?.postMessage(message),
-      onActive: (active, agentName) => tray?.setToolTip(active ? `MasalaPOS — ${agentName} from MasalaPOS support is connected` : "MasalaPOS — restaurant POS server"),
     });
     startServer();
     writeLog("Creating tray menu\n");

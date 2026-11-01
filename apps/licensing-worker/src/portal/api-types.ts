@@ -185,7 +185,7 @@ export type ChatStatus = "waiting" | "active" | "closed";
 /** `staff` is set on staff messages; `customer` messages come from the restaurant, `system` ones from the service. */
 export interface ChatMessage { id: number; author: "customer" | "staff" | "system"; staff: Ref | null; body: string; createdAt: number }
 export interface ChatSummary {
-  id: string; number: number; status: ChatStatus; customer: Ref; installation: { id: string; name: string };
+  id: string; number: number; status: ChatStatus; customer: Ref; installation: { id: string; name: string } | null;
   visitorName: string | null; visitorPhone: string | null; assignee: Ref | null; ticket: { id: string; number: number } | null;
   createdAt: number; lastMessageAt: number; closedAt: number | null;
   lastMessage: { author: ChatMessage["author"]; body: string } | null;
@@ -200,8 +200,9 @@ export interface ChatDetail extends ChatSummary {
 export type RemoteMode = "view" | "control";
 export type RemoteStatus = "requested" | "denied" | "expired" | "approved" | "active" | "ended";
 export interface RemoteSession {
+  origin: "in_app" | "connector"; elevated: boolean; adminPrompts: boolean; expiresAt: number | null;
   id: string; status: RemoteStatus; reason: string; modeRequested: RemoteMode; mode: RemoteMode | null;
-  installation: { id: string; name: string }; customer: Ref | null; chatId: string | null; requestedBy: Ref; approvedByName: string | null;
+  installation: { id: string; name: string } | null; customer: Ref | null; chatId: string | null; requestedBy: Ref; approvedByName: string | null;
   requestedAt: number; answeredAt: number | null; startedAt: number | null; endedAt: number | null; endReason: string | null;
 }
 /** The viewer's connection details: ICE servers with short-lived TURN credentials. */

@@ -1,3 +1,4 @@
+import { connectorRoutes } from "../connector/routes.js";
 import type { Env } from "../env.js";
 import type { Deps } from "../issue.js";
 import { activityRoutes } from "./activity.js";
@@ -23,7 +24,7 @@ import { usersRoutes } from "./users.js";
 
 const ROUTES: Route[] = [...usersRoutes, ...settingsRoutes, ...activityRoutes, ...customersRoutes, ...orderRoutes, ...installationsRoutes, ...searchRoutes, ...paymentRoutes, ...invoiceRoutes,
   ...leadRoutes, ...followUpRoutes, ...ticketRoutes, ...renewalRoutes, ...homeRoutes, ...reportRoutes,
-  ...supportChatRoutes, ...remoteRoutes];
+  ...supportChatRoutes, ...remoteRoutes, ...connectorRoutes];
 
 /** Everything under /portal: the JSON API for signed-in staff, and the web app itself. */
 export async function portalRoute(request: Request, env: Env, deps: Deps): Promise<Response> {

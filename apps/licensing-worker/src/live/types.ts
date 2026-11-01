@@ -17,7 +17,8 @@ export type Peer =
   /** A counter's POS server, authenticated with its installation secret. Carries remote-access requests to the PC. */
   | { kind: "counter"; installationId: string; customerId: string }
   /** The screen-sharing window on the restaurant's PC during one approved remote session. */
-  | { kind: "agent"; sessionId: string; installationId: string };
+  | { kind: "agent"; sessionId: string; installationId: string }
+  | { kind: "connector"; sessionId: string; chatId: string; installationId: string | null };
 
 export interface Connection {
   onMessage(text: string): void;
@@ -34,6 +35,7 @@ export interface LiveHub {
   toVisitors(installationId: string, event: LiveEvent): void;
   /** To every staff member who can see support chats. */
   toStaff(event: LiveEvent): void;
+  toChat?(chatId: string, event: LiveEvent): void;
   /** To the counter's POS server; false when it is not connected. */
   toCounter(installationId: string, event: LiveEvent): boolean;
   counterOnline(installationId: string): boolean;

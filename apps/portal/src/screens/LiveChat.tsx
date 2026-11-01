@@ -1,3 +1,4 @@
+import { SupportMessage } from "../SupportMessage";
 // Live chat: restaurants write from MasalaPOS's Get support button; support answers here. The inbox and the open chat update as
 // messages arrive (live socket), and fall back to checking every few seconds when the socket is down.
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -62,7 +63,7 @@ export function LiveChat({ me, chatId }: { me: StaffUser; chatId?: string }) {
         <ul className="chat-list">
           {data?.chats.map((c) => <li key={c.id}><Link to={`/chats/${c.id}`} className="chat-row" aria-current={c.id === chatId ? "page" : undefined}>
             <span className="chat-row-top"><strong>{c.customer.name}</strong><span className="muted small">{relativeTime(c.lastMessageAt)}</span></span>
-            <span className="muted small">{c.installation.name}{c.visitorName ? ` · ${c.visitorName}` : ""}</span>
+            <span className="muted small">{c.installation?.name ?? "Support PC"}{c.visitorName ? ` · ${c.visitorName}` : ""}</span>
             <span className="chat-row-last">{c.lastMessage ? `${c.lastMessage.author === "staff" ? "Support: " : ""}${c.lastMessage.body}` : "—"}</span>
             <span className="chat-row-tags"><Pill tone={STATUS[c.status][1]}>{STATUS[c.status][0]}</Pill>{c.assignee && <span className="muted small">{c.assignee.id === me.id ? "With you" : `With ${c.assignee.name}`}</span>}</span>
           </Link></li>)}
@@ -101,17 +102,17 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
   const lastTyping = useRef(0);
   usePollWhileOffline(reload);
   const chat = data?.chat;
-  const online = useCounterOnline(chat?.installation.id);
+  const online = useCounterOnline(chat?.installation?.id);
 
   useLiveEvent((event) => {
     if (event.type === "chat.updated" && (event["chat"] as ChatSummary).id === id) {
       const summary = event["chat"] as ChatSummary, messages = event["messages"] as ChatMessage[];
       setData((current) => current && { chat: { ...current.chat, ...summary, messages: merge(current.chat.messages, messages) } });
       if (messages.some((m) => m.author === "customer")) setTypingUntil(0);
-    } else if (event.type === "chat.typing" && event["installationId"] === chat?.installation.id) setTypingUntil(Date.now() + 5_000);
+    } else if (event.type === "chat.typing" && event["installationId"] === chat?.installation?.id) setTypingUntil(Date.now() + 5_000);
     else if (event.type === "remote.updated") {
       const session = event["session"] as RemoteSession;
-      setData((current) => current && session.installation.id === current.chat.installation.id
+      setData((current) => current && session.chatId === current.chat.id
         ? { chat: { ...current.chat, remoteSessions: [session, ...current.chat.remoteSessions.filter((s) => s.id !== session.id)].slice(0, 5) } } : current);
     }
   });
@@ -140,12 +141,12 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
     <header className="chat-head">
       <div>
         <h2>{chat.customer.name} <span className="muted">· C-{chat.number}</span></h2>
-        <p className="muted small">{chat.installation.name}{chat.visitorName ? ` · ${chat.visitorName}` : ""}{chat.visitorPhone ? ` · ${chat.visitorPhone}` : ""} · started {dateTime(chat.createdAt)}</p>
+        <p className="muted small">{chat.installation?.name ?? "Support PC"}{chat.visitorName ? ` · ${chat.visitorName}` : ""}{chat.visitorPhone ? ` · ${chat.visitorPhone}` : ""} · started {dateTime(chat.createdAt)}</p>
       </div>
       <div className="actions">
         {!closed && !mine && <button className="secondary small" disabled={busy} onClick={() => void change({ assigneeId: me.id }, "The chat is yours.")}>Take this chat</button>}
-        {canRemote && !closed && <button className="secondary small" disabled={busy || !!openRemote || online === false} title={online === false ? "MasalaPOS isn't open on this counter's PC" : undefined}
-          onClick={() => setDialog("remote")}>Ask for remote access</button>}
+        {canRemote && !closed && <button className="secondary small" disabled={busy || !!openRemote}
+          onClick={() => setDialog("remote")}>Send connector</button>}
         {!chat.ticket && roleCan(me.role, "tickets.write") && <button className="secondary small" disabled={busy} onClick={() => setDialog("ticket")}>Open a ticket</button>}
         {!closed && <button className="secondary small" disabled={busy} onClick={() => void change({ status: "closed" }, "Chat closed.")}>Close chat</button>}
       </div>
@@ -154,9 +155,9 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
     <div className="chat-body">
       <ol className="chat-messages">
         {chat.messages.map((m) => m.author === "system"
-          ? <li key={m.id} className="msg system"><span>{m.body}</span><time className="muted small">{timeOfDay(m.createdAt)}</time></li>
+          ? <li key={m.id} className="msg system"><span>{<SupportMessage body={m.body} />}</span><time className="muted small">{timeOfDay(m.createdAt)}</time></li>
           : <li key={m.id} className={`msg ${m.author === "staff" ? "out" : "in"}`}>
-            <div className="bubble">{m.body}</div>
+            <div className="bubble">{<SupportMessage body={m.body} />}</div>
             <div className="muted small">{m.author === "staff" ? (m.staff?.id === me.id ? "You" : m.staff?.name ?? "Support") : chat.visitorName ?? "Restaurant"} · {timeOfDay(m.createdAt)}</div>
           </li>)}
         {typingUntil > Date.now() && <li className="msg in typing muted small">{chat.visitorName ?? "The restaurant"} is typing…</li>}
@@ -172,7 +173,7 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
     <aside className="chat-rail">
       <dl className="kv">
         <dt>Restaurant</dt><dd><Link to={`/customers/${chat.customer.id}`}>{chat.customer.name}</Link></dd>
-        <dt>Counter</dt><dd>{chat.installation.name} {online === null ? null : online ? <Pill tone="positive">Connected</Pill> : <Pill>Offline</Pill>}</dd>
+        <dt>Counter</dt><dd>{chat.installation?.name ?? "Support PC"} {online === null ? null : online ? <Pill tone="positive">Connected</Pill> : <Pill>Offline</Pill>}</dd>
         <dt>With</dt><dd>{closed ? chat.assignee?.name ?? "Nobody" : <select aria-label="With" value={chat.assignee?.id ?? ""} disabled={busy} onChange={(e) => void change({ assigneeId: e.target.value || null })}>
           <option value="">Nobody yet</option>{staff.data?.staff.filter((s) => s.role === "support" || s.role === "admin").map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === me.id ? " (me)" : ""}</option>)}</select>}</dd>
         {chat.ticket && <><dt>Ticket</dt><dd><Link to={`/tickets/${chat.ticket.id}`}>T-{chat.ticket.number}</Link></dd></>}
@@ -184,7 +185,7 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
         </li>)}</ul></section>}
     </aside>
     {dialog === "ticket" && <TicketDialog chat={chat} onClose={() => setDialog(null)} onDone={(c) => { setData({ chat: c }); setDialog(null); }} />}
-    {dialog === "remote" && <RemoteDialog installationId={chat.installation.id} chatId={chat.id} onClose={() => setDialog(null)} />}
+    {dialog === "remote" && <RemoteDialog chatId={chat.id} onClose={() => setDialog(null)} />}
   </section>;
 }
 
@@ -209,15 +210,18 @@ function TicketDialog({ chat, onClose, onDone }: { chat: ChatDetail; onClose: ()
   </Dialog>;
 }
 
-export function RemoteDialog({ installationId, chatId, onClose }: { installationId: string; chatId: string | null; onClose: () => void }) {
+export function RemoteDialog({ chatId, customerId, onClose }: { chatId?: string; customerId?: string; onClose: () => void }) {
   const [form, setForm] = useState({ reason: "", mode: "control" as RemoteMode });
   const { busy, run, status } = useRun();
-  return <Dialog title="Ask for remote access" onClose={onClose}>
+  const availability = useData(() => api<{ available: boolean }>("/connector"), "connector");
+  const [invitation, setInvitation] = useState<{ url: string; code: string; sessionId: string } | null>(null);
+  return <Dialog title="Send Support Connector" onClose={onClose}>
     <form className="stack" onSubmit={(e) => { e.preventDefault(); void run(async () => {
-      const { session } = await post<{ session: RemoteSession }>("/remote-sessions", { installationId, chatId, ...form });
-      navigate(`/remote/${session.id}`);
+      setInvitation(await post<{ url: string; code: string; sessionId: string }>("/connector", { ...(chatId ? { chatId } : { customerId }), ...form }));
     }); }}>
-      <p className="muted">The PC shows your name and reason. Someone there must allow it within a minute, and can stop it at any time. A red frame stays on their screen while you're connected.</p>
+      <p className="muted">The restaurant downloads and runs a small connector, then chooses what to allow. MasalaPOS does not need to be installed on that PC.</p>
+      {availability.data?.available === false && <p className="notice">Connector distribution is not enabled yet.</p>}
+      {invitation && <div className="panel"><p>Send this link to the person at the PC:</p><input aria-label="Connector download link" readOnly value={invitation.url} onFocus={(e)=>e.target.select()} /><p>Fallback code: <strong>{invitation.code}</strong></p><button type="button" className="secondary" onClick={()=>void navigator.clipboard.writeText(invitation.url)}>Copy link</button> <button type="button" className="primary" onClick={()=>navigate(`/remote/${invitation.sessionId}`)}>Open viewer</button></div>}
       <Field label="Why you need to see the PC" hint="The restaurant reads this."><input required autoFocus maxLength={200} value={form.reason}
         onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Check the KOT printer settings" disabled={busy} /></Field>
       <fieldset className="choice"><legend className="field-label">Access</legend>
@@ -225,7 +229,7 @@ export function RemoteDialog({ installationId, chatId, onClose }: { installation
           {MODE_NAMES[mode]}<span className="field-hint">{mode === "control" ? "You can use the mouse and keyboard." : "You see the screen; they do the clicking."}</span></label>)}
       </fieldset>
       {status}
-      <div className="form-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy}>Send the request</button></div>
+      <div className="form-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !!invitation || !availability.data?.available}>Send connector</button></div>
     </form>
   </Dialog>;
 }

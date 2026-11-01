@@ -13,7 +13,7 @@ import { currentVisitor } from "../support/visitor.js";
 import type { HubDeps } from "./hub.js";
 import type { Peer } from "./types.js";
 
-export const LIVE_PATHS = ["/portal/api/live", "/support/live", "/v1/counter/live", "/v1/remote/agent"] as const;
+export const LIVE_PATHS = ["/portal/api/live", "/support/live", "/v1/counter/live", "/v1/remote/agent", "/v1/connector/live"] as const;
 export const INSTALLATION_HEADER = "x-masalapos-installation-id";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -45,7 +45,11 @@ export async function authorizeLive(request: Request, env: Pick<Env, "TURN_URLS"
     }
     case "/v1/remote/agent": {
       const claimed = await claimAgentToken({ db: deps.db, now: deps.now, live: undefined, env }, url.searchParams.get("t") ?? "");
-      return claimed ? { kind: "agent", ...claimed } : null;
+      return claimed?.installationId ? { kind: "agent", sessionId: claimed.sessionId, installationId: claimed.installationId } : null;
+    }
+    case "/v1/connector/live": {
+      const claimed = await claimAgentToken({ db: deps.db, now: deps.now, live: undefined, env }, url.searchParams.get("t") ?? "", "connector");
+      return claimed?.chatId ? { kind: "connector", sessionId: claimed.sessionId, chatId: claimed.chatId, installationId: claimed.installationId } : null;
     }
     default: return null;
   }
