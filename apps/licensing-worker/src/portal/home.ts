@@ -1,3 +1,4 @@
+import { istDayStart, istMonthStart } from "../dates.js";
 import type { HomeData, OrderSummary } from "./api-types.js";
 import { path, type Route } from "./context.js";
 import { followUpsWhere } from "./followups.js";
@@ -7,20 +8,10 @@ import { ownedBy } from "./scope.js";
 import { roleCan } from "./shared.js";
 import { ticketsWhere } from "./tickets.js";
 
-const IST_OFFSET_MS = 330 * 60_000;
-/** Midnight in India at the start of the day `at` falls in, and at the start of its month. */
-function istStarts(at: number): { day: number; month: number } {
-  const local = new Date(at + IST_OFFSET_MS);
-  return {
-    day: Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - IST_OFFSET_MS,
-    month: Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - IST_OFFSET_MS,
-  };
-}
-
 /** The first screen after sign-in: what this person has to do today, and what is waiting on money, renewals and support. */
 export const homeRoutes: Route[] = [
   { method: "GET", path: path("/home"), handler: async (ctx) => {
-    const { db } = ctx.deps, now = ctx.deps.now(), { day, month } = istStarts(now), role = ctx.user.role;
+    const { db } = ctx.deps, now = ctx.deps.now(), day = istDayStart(now), month = istMonthStart(now), role = ctx.user.role;
     const scope = ownedBy(ctx.user, "c.owner_id");
     const canFollow = roleCan(role, "followups.write");
     const [followUps, followCounts, renewals, counts, waiting, waitingItems, money] = await Promise.all([

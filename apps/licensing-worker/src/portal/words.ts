@@ -29,10 +29,9 @@ export function rupeesInWords(paise: number): string {
   return `Rupees ${numberInWords(rupees)}${rest ? ` and ${belowHundred(rest)} Paise` : ""} Only`;
 }
 
-const IST_OFFSET_MS = 330 * 60_000;
 /** The Indian financial year (April to March) a moment falls in, as "26-27". */
 export function financialYear(at: number): string {
-  const local = new Date(at + IST_OFFSET_MS);
-  const start = local.getUTCMonth() >= 3 ? local.getUTCFullYear() : local.getUTCFullYear() - 1;
+  const start = financialYearOf(at);
   return `${String(start % 100).padStart(2, "0")}-${String((start + 1) % 100).padStart(2, "0")}`;
-}
+}import { financialYearOf } from "../dates.js";
+

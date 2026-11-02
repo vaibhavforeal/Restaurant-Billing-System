@@ -1,10 +1,10 @@
+import { financialYearStart, IST_OFFSET_MS, istMonthSql } from "../dates.js";
 import { LEAD_STAGES, type ReportData } from "./api-types.js";
 import { path, queryInt, type Route } from "./context.js";
 import { HttpError, json } from "./http.js";
 import { ownedBy } from "./scope.js";
 import { roleCan } from "./shared.js";
 
-const IST_MONTH = (column: string) => `strftime('%Y-%m', (${column} + 19800000) / 1000, 'unixepoch')`;
 
 /**
  * The numbers behind the business, for a period (this financial year unless chosen), within what the person may see: a sales rep's
@@ -13,15 +13,13 @@ const IST_MONTH = (column: string) => `strftime('%Y-%m', (${column} + 19800000) 
 export const reportRoutes: Route[] = [
   { method: "GET", path: path("/reports"), permission: "reports.read", handler: async (ctx) => {
     const now = ctx.deps.now(), { db } = ctx.deps;
-    const local = new Date(now + 330 * 60_000);
-    const fyStart = Date.UTC(local.getUTCMonth() >= 3 ? local.getUTCFullYear() : local.getUTCFullYear() - 1, 3, 1) - 330 * 60_000;
-    const from = queryInt(ctx.url, "from", fyStart)!, to = queryInt(ctx.url, "to", now + 1)!;
+    const from = queryInt(ctx.url, "from", financialYearStart(now))!, to = queryInt(ctx.url, "to", now + 1)!;
     if (to <= from || to - from > 3 * 366 * 86_400_000) throw new HttpError(400, "Choose a period of up to three years");
     const c = ownedBy(ctx.user, "c.owner_id"), l = ownedBy(ctx.user, "l.owner_id");
     // Twelve whole months to the end of the period, so the chart always has the same shape.
-    const end = new Date(to - 1 + 330 * 60_000), monthsFrom = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11, 1) - 330 * 60_000;
+    const end = new Date(to - 1 + IST_OFFSET_MS), monthsFrom = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11, 1) - IST_OFFSET_MS;
     const [byMonth, byPlan, funnel, sources, reps, renewals, trials, tickets, openTickets, resolution] = await Promise.all([
-      db.prepare(`SELECT ${IST_MONTH("p.received_at")} AS month, SUM(p.amount_paise) AS paise FROM payments p JOIN orders o ON o.id = p.order_id JOIN customers c ON c.id = o.customer_id
+      db.prepare(`SELECT ${istMonthSql("p.received_at")} AS month, SUM(p.amount_paise) AS paise FROM payments p JOIN orders o ON o.id = p.order_id JOIN customers c ON c.id = o.customer_id
         WHERE p.status = 'cleared' AND p.received_at >= ? AND p.received_at < ? AND ${c.sql} GROUP BY month`).bind(monthsFrom, to, ...c.binds).all<{ month: string; paise: number }>(),
       db.prepare(`SELECT o.plan, SUM(o.total_paise) AS paise, COUNT(*) AS orders FROM orders o JOIN customers c ON c.id = o.customer_id
         WHERE o.status = 'paid' AND o.paid_at >= ? AND o.paid_at < ? AND o.total_paise > 0 AND ${c.sql} GROUP BY o.plan`).bind(from, to, ...c.binds).all<{ plan: "basic" | "pro"; paise: number; orders: number }>(),
