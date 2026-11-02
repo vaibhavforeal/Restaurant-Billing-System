@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { Colleague, CustomerDetail, CustomerInput, CustomerSummary, StaffUser } from "../../../licensing-worker/src/portal/api-types";
 import { GST_STATES, roleCan } from "../../../licensing-worker/src/portal/shared";
 import { api, patch, post, query } from "../api";
+import { CITIES, cityNamed } from "../cities";
 import { daysFromToday, plural, relativeDay } from "../format";
 import { Link, navigate, useLocation } from "../router";
 import { Dialog, EmptyRow, Field, LoadError, PageHead, Person, Pill, useData, useRun } from "../ui";
@@ -84,7 +85,12 @@ export function CustomerDialog({ me, staff, customer, initial, onClose, onSaved 
         <option value="">Not assigned</option>{staff.filter((s) => s.role === "sales" || s.role === "admin").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>}
       <Field label="Address" wide><input maxLength={300} value={form.address} onChange={set("address")} disabled={busy} /></Field>
       <div className="customer-location wide">
-      <Field label="City"><input maxLength={80} value={form.city} onChange={set("city")} disabled={busy} /></Field>
+      <Field label="City"><input maxLength={80} list="city-options" autoComplete="off" value={form.city} onChange={(e) => {
+        // Picking a listed city fills in its state, unless one is already chosen.
+        const match = cityNamed(e.target.value);
+        setForm({ ...form, city: e.target.value, ...(match && !form.stateCode ? { stateCode: match.stateCode } : {}) });
+      }} disabled={busy} />
+        <datalist id="city-options">{CITIES.map((c) => <option key={`${c.name}-${c.stateCode}`} value={c.name}>{GST_STATES[c.stateCode]}</option>)}</datalist></Field>
       <Field label="State" hint="Used to calculate invoice tax."><select value={form.stateCode} onChange={set("stateCode")} disabled={busy}>
         <option value="">Choose a state</option>{Object.entries(GST_STATES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></Field>
       <Field label="PIN code"><input maxLength={6} inputMode="numeric" value={form.pincode} onChange={set("pincode")} disabled={busy} /></Field>
