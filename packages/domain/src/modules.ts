@@ -8,7 +8,7 @@ import { z } from "zod";
 export const MODULE_IDS = [
   "takeaway", "reservations", "qrOrdering", "guestServices",
   "inventory", "recipes", "costing", "reports", "dashboard",
-  "zomato", "kds", "crm",
+  "zomato", "kds", "crm", "dynamicReports",
 ] as const;
 export type ModuleId = typeof MODULE_IDS[number];
 export type ModuleGroup = "addon" | "service" | "backoffice";
@@ -49,6 +49,8 @@ export const MODULES: readonly ModuleDef[] = [
     description: "Show KOTs on kitchen screens and tablets so the kitchen can mark tickets done." },
   { id: "crm", name: "CRM & Loyalty", group: "addon", dependsOn: [], plans: { basic: true, pro: true },
     description: "Customer profiles, loyalty points and tiers, customer-type discounts, feedback, segments and insights." },
+  { id: "dynamicReports", name: "Dynamic Reports", group: "addon", dependsOn: ["reports", "dashboard"], plans: { basic: false, pro: true },
+    description: "Build your own Home dashboard: drag, resize and choose the sales, item and live service widgets you want." },
 ];
 
 export const isModuleId = (id: string): id is ModuleId => (MODULE_IDS as readonly string[]).includes(id);

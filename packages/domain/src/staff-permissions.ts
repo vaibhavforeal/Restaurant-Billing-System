@@ -38,7 +38,7 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     { slug: "stock.read", label: "View" }, { slug: "stock.manage", label: "Edit stock and recipes" }, { slug: "costs.read", label: "See and enter costs" },
   ] },
   { id: "reports", name: "Reports", actions: [
-    { slug: "reports.read", label: "View" }, { slug: "reports.manage", label: "Save custom reports" }, { slug: "reports.close_day", label: "Close the day" },
+    { slug: "reports.read", label: "View" }, { slug: "reports.manage", label: "Save custom reports" }, { slug: "reports.close_day", label: "Close the day" }, { slug: "reports.dashboard", label: "Customise own dashboard" },
   ] },
   { id: "zomato", name: "Zomato", actions: [
     { slug: "zomato.read", label: "View" }, { slug: "zomato.import", label: "Import" }, { slug: "zomato.configure", label: "Settings" },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "./db.js";
 import { migrate, type Migration } from "./migrate.js";
+import { MIGRATIONS } from "./migrations/index.js";
 
 const m1: Migration = {
   version: 1,
@@ -90,5 +91,13 @@ describe("migrate", () => {
     older.pragma("user_version = 3");
     expect(() => migrate(older, [baseline, m6])).toThrow(/older than this app can upgrade/);
     expect(older.pragma("user_version", { simple: true })).toBe(3);
+  });
+
+  it("creates dashboard_layouts at version 44", () => {
+    const db = openDb(":memory:");
+    migrate(db, MIGRATIONS);
+    expect(db.pragma("user_version", { simple: true })).toBe(44);
+    db.prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES ('u1', 'A', 'x', 'admin', 1)").run();
+    expect(() => db.prepare("INSERT INTO dashboard_layouts (user_id, layout_json, updated_at) VALUES ('u1', 'not json', 1)").run()).toThrow();
   });
 });

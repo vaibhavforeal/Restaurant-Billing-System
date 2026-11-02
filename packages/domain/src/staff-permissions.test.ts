@@ -26,4 +26,11 @@ describe("staff permissions", () => {
     expect(roleDefaults("waiter")).toMatchObject({ "orders.create": true, "bills.settle": false });
     expect(effectivePermissions("waiter", { "bills.settle": true })).toContain("bills.settle");
   });
+
+  it("only admins customise their dashboard unless granted", () => {
+    expect(staffCan("cashier", {}, "reports.dashboard")).toBe(false);
+    expect(staffCan("cashier", { "reports.dashboard": true }, "reports.dashboard")).toBe(true);
+    expect(staffCan("admin", {}, "reports.dashboard")).toBe(true);
+    expect(GRANTABLE_PERMISSIONS).toContain("reports.dashboard");
+  });
 });

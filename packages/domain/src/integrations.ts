@@ -2,14 +2,14 @@ import { z } from "zod";
 import type { Feature } from "./licensing.js";
 
 /** Static registry of integrations and add-ons the Marketplace can turn on or off. Only on/off state is stored (integration_state). */
-export type IntegrationId = "zomato" | "swiggy" | "kds" | "crm";
+export type IntegrationId = "zomato" | "swiggy" | "kds" | "crm" | "dynamicReports";
 export type IntegrationStatus = "available" | "coming_soon";
 
 export interface IntegrationDef {
   id: IntegrationId;
   name: string;
   description: string;
-  category: "delivery" | "kitchen" | "customers";
+  category: "delivery" | "kitchen" | "customers" | "insights";
   status: IntegrationStatus;
   /** Page the "Set up" action opens once the integration is on; null when there is nothing to configure yet. */
   setupPage: "zomato" | null;
@@ -55,6 +55,14 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     name: "CRM & Loyalty",
     description: "Customer profiles, loyalty points and tiers, customer-type discounts, feedback on receipts, segments and customer insights.",
     category: "customers",
+    status: "available",
+    setupPage: null,
+  },
+  {
+    id: "dynamicReports",
+    name: "Dynamic Reports",
+    description: "Build your own Home dashboard: drag, resize and choose the sales, item and live service widgets you want, each with its own period.",
+    category: "insights",
     status: "available",
     setupPage: null,
   },

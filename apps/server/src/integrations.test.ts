@@ -27,10 +27,10 @@ describe("GET /api/integrations", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["cache-control"]).toBe("no-store");
     const list = res.json().integrations as { id: string; enabled: boolean; licensed: boolean; updatedAt: number | null }[];
-    expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm"]);
+    expect(list.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm", "dynamicReports"]);
     expect(list.every((i) => i.enabled === false && i.updatedAt === null)).toBe(true);
     // Allowed in development builds; Swiggy is not a module yet, so it is never allowed.
-    expect(list.map((i) => i.licensed)).toEqual([true, false, true, true]);
+    expect(list.map((i) => i.licensed)).toEqual([true, false, true, true, true]);
     expect((await get()).statusCode).toBe(401);
     expect((await get(waiter.token)).statusCode).toBe(403);
     expect((await get(kitchen.token)).statusCode).toBe(403);
