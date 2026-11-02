@@ -6,8 +6,7 @@ import { httpError } from "./http-error.js";
 import { assertKdsActive } from "./kds.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { kotSlip } from "./print/templates.js";
-import { readProfile } from "./print/profile.js";
-import { bestEffortPrint } from "./print/best-effort.js";
+import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { orderTableLabel } from "./table-label.js";
 
 export function registerKots(app: FastifyInstance): void {
@@ -123,46 +122,14 @@ export function registerKots(app: FastifyInstance): void {
       });
 
       // Print each KOT
+      const context = jobContext(orderResult, tableName);
       for (const ck of createdKots) {
         const kotRow = allKots.find((k) => k.id === ck.id)!;
-        const stationRow = app.db
-          .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
-          .get(ck.stationId) as { name: string; printer_id: string | null } | undefined;
-
-        if (!stationRow) continue;
-
-        const printerRow = stationRow.printer_id
-          ? (app.db
-              .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
-              .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
-          : undefined;
-
-        if (!printerRow) continue;
-
         const kotItemsForPrint = allItems.filter((i) => i.kot_id === ck.id);
-
-        // Build context line using kitchen-board rule
-        let contextLine: string;
-        if (orderResult.type === "parcel") {
-          contextLine = orderResult.order_type_name ?? "Parcel";
-        } else if (orderResult.type === "zomato") {
-          contextLine = `Zomato #${orderResult.zomato_order_id}`;
-        } else if (tableName) {
-          if (orderResult.split_label === null || orderResult.split_label === "A") {
-            contextLine = tableName;
-          } else {
-            contextLine = `${tableName} / ${orderResult.split_label}`;
-          }
-        } else {
-          contextLine = "Table";
-        }
-
-        const label = `KOT #${kotRow.kot_no} — ${contextLine}`;
-
-        const rendered = bestEffortPrint(app.log, `KOT #${kotRow.kot_no}`, () => kotSlip(
+        const { error: printError } = printStationSlip(app, ck.stationId, "kot", `KOT #${kotRow.kot_no} — ${context}`, (target) => kotSlip(
           {
             kotNo: kotRow.kot_no,
-            stationName: stationRow.name,
+            stationName: target.stationName,
             orderType: orderResult.type,
             orderTypeName: orderResult.order_type_name ?? null,
             zomatoOrderId: orderResult.zomato_order_id ?? null,
@@ -176,10 +143,9 @@ export function registerKots(app: FastifyInstance): void {
             })),
             atMs: kotRow.created_at,
           },
-          printerRow.paper_width as 58 | 80,
-          readProfile(printerRow.kot_profile),
+          target.paperWidth,
+          target.profile,
         ));
-        const printError = rendered.error ?? app.enqueuePrint(ck.stationId, "kot", label, rendered.value!);
         if (printError) printErrors.push(printError);
       }
       return kotsWithContext;

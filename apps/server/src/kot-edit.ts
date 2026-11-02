@@ -2,8 +2,7 @@ import { SentItemEdit, returnPartialStock, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
-import { bestEffortPrint } from "./print/best-effort.js";
-import { readProfile } from "./print/profile.js";
+import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { contextLine, editSlip } from "./print/templates.js";
 import { publishStock } from "./stock.js";
 import { orderTableLabel } from "./table-label.js";
@@ -90,15 +89,11 @@ export function registerKotEdits(app: FastifyInstance): void {
 
     /** Queues the edit slip on the ticket's station printer. Returns whether a slip was queued; a render failure is reported, not thrown. */
     function printEditSlip(kot: KotRow, order: OrderRow, tableName: string | null, change: { name: string; oldQty: number; newQty: number; oldNote: string | null; newNote: string | null; reason: string | null; atMs: number }): boolean {
-      const station = db.prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?").get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
-      const printer = station?.printer_id
-        ? db.prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1").get(station.printer_id) as { paper_width: 58 | 80; kot_profile: string } | undefined
-        : undefined;
-      if (!printer) return false;
       const context = contextLine(order.type, tableName, order.split_label, order.zomato_order_id ?? null, order.order_type_name ?? null);
-      const rendered = bestEffortPrint(app.log, `Edit slip for KOT #${kot.kot_no}`, () => editSlip({ kotNo: kot.kot_no, context, ...change }, printer.paper_width, readProfile(printer.kot_profile)));
-      printError = rendered.error ?? app.enqueuePrint(kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${context}`, rendered.value!);
-      return printError === null;
+      const slip = printStationSlip(app, kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${jobContext(order, tableName)}`,
+        (target) => editSlip({ kotNo: kot.kot_no, context, ...change }, target.paperWidth, target.profile));
+      printError = slip.error;
+      return slip.queued;
     }
 
     const order = loadOrderJson(db, result.orderId)!;

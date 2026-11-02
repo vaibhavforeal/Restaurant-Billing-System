@@ -8,8 +8,7 @@ import { httpError } from "./http-error.js";
 import { reverseStock } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { cancelSlip } from "./print/templates.js";
-import { readProfile } from "./print/profile.js";
-import { bestEffortPrint } from "./print/best-effort.js";
+import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { integrationEnabled } from "./integrations.js";
@@ -263,39 +262,11 @@ export function registerOrders(app: FastifyInstance): void {
     const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
     // The combined label (e.g. "T3, T4") so the kitchen matches the slip to the tickets on screen.
     const tableName = orderTableLabel(app.db, order.id);
-    const stationRow = app.db
-      .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
-      .get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
-    if (!stationRow) return null;
-    const printerRow = stationRow.printer_id
-      ? (app.db
-          .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
-          .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
-      : undefined;
-    if (!printerRow) return null;
-
-    // Build context line using kitchen-board rule
-    let contextLine: string;
-    if (order.type === "parcel") {
-      contextLine = order.order_type_name ?? "Parcel";
-    } else if (order.type === "zomato") {
-      contextLine = `Zomato #${order.zomato_order_id}`;
-    } else if (tableName) {
-      if (order.split_label === null || order.split_label === "A") {
-        contextLine = tableName;
-      } else {
-        contextLine = `${tableName} / ${order.split_label}`;
-      }
-    } else {
-      contextLine = "Table";
-    }
-
-    const label = `Cancel — KOT #${kot.kot_no} — ${contextLine}`;
-
-    const rendered = bestEffortPrint(app.log, `Cancel slip for KOT #${kot.kot_no}`, () => cancelSlip(
+    const context = jobContext(order, tableName);
+    return printStationSlip(app, kot.station_id, "cancel", `Cancel — KOT #${kot.kot_no} — ${context}`, (target) => cancelSlip(
       {
         kotNo: kot.kot_no,
-        stationName: stationRow.name,
+        stationName: target.stationName,
         orderType: order.type,
         orderTypeName: order.order_type_name ?? null,
         zomatoOrderId: order.zomato_order_id ?? null,
@@ -305,11 +276,9 @@ export function registerOrders(app: FastifyInstance): void {
         reason,
         atMs: Date.now(),
       },
-      printerRow.paper_width as 58 | 80,
-      readProfile(printerRow.kot_profile),
-    ));
-    if (rendered.error) return rendered.error;
-    return app.enqueuePrint(kot.station_id, "cancel", label, rendered.value!);
+      target.paperWidth,
+      target.profile,
+    )).error;
   }
 
   app.post("/api/orders/:id/cancel", { preHandler: update }, async (req) => {

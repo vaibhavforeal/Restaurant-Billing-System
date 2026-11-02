@@ -2,8 +2,7 @@ import { OrderMerge, OrderMove, nextSplitLabel, uuidv7 } from "@masalapos/domain
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
-import { readProfile } from "./print/profile.js";
-import { bestEffortPrint } from "./print/best-effort.js";
+import { printStationSlip } from "./print/station-slip.js";
 import { tableChangeSlip } from "./print/templates.js";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import { orderTableLabel } from "./table-label.js";
@@ -17,24 +16,17 @@ function notifyKitchenTableChange(app: FastifyInstance, orderId: string, text: s
   const printErrors: string[] = [];
   const stations = app.db
     .prepare(
-      `SELECT DISTINCT ks.id, ks.name, ks.printer_id FROM kots k
+      `SELECT DISTINCT ks.id, ks.name FROM kots k
        JOIN kot_stations ks ON ks.id = k.station_id
        WHERE k.order_id = ? AND k.done_at IS NULL
        ORDER BY ks.name, ks.id`,
     )
-    .all(orderId) as Array<{ id: string; name: string; printer_id: string | null }>;
+    .all(orderId) as Array<{ id: string }>;
   const now = Date.now();
   for (const station of stations) {
-    if (!station.printer_id) continue;
-    const printer = app.db
-      .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
-      .get(station.printer_id) as { paper_width: number; kot_profile: string } | undefined;
-    if (!printer) continue;
-    const rendered = bestEffortPrint(app.log, "table change slip", () =>
-      tableChangeSlip({ stationName: station.name, text, atMs: now }, printer.paper_width as 58 | 80, readProfile(printer.kot_profile)),
-    );
-    const printError = rendered.error ?? app.enqueuePrint(station.id, "table", `Table change — ${text}`, rendered.value!);
-    if (printError) printErrors.push(printError);
+    const { error } = printStationSlip(app, station.id, "table", `Table change — ${text}`,
+      (target) => tableChangeSlip({ stationName: target.stationName, text, atMs: now }, target.paperWidth, target.profile));
+    if (error) printErrors.push(error);
   }
   return printErrors;
 }
