@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -31,15 +32,45 @@ const StagedActivation = z.object({
   license: z.string().max(16_384).nullable(),
 });
 type StagedActivation = z.infer<typeof StagedActivation>;
-function readStaged(path: string | undefined): StagedActivation | null {
-  if (!path || !existsSync(path)) return null;
+
+const ADMINS = "S-1-5-32-544", SYSTEM = "S-1-5-18";
+// Reads the path from the environment, so it never becomes part of the script text.
+const OWNERSHIP_SCRIPT = `$ErrorActionPreference = 'Stop'
+$item = Get-Item -LiteralPath $env:MASALAPOS_STAGED -Force
+if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { 'null'; exit }
+$acl = Get-Acl -LiteralPath $env:MASALAPOS_STAGED
+$write = [Security.AccessControl.FileSystemRights]'WriteData, AppendData, WriteAttributes, WriteExtendedAttributes, ChangePermissions, TakeOwnership'
+$writers = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
+  Where-Object { $_.AccessControlType -eq 'Allow' -and ($_.FileSystemRights -band $write) } |
+  ForEach-Object { $_.IdentityReference.Value })
+@{ owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; writers = $writers } | ConvertTo-Json -Compress`;
+
+/**
+ * Whether setup made and locked the staged file: owned by Administrators or SYSTEM, not a link, and writable by nobody else (setup
+ * gives the person using MasalaPOS only read and delete). %ProgramData% is shared by every Windows user, so a file that fails this may
+ * have been planted by another user to hand MasalaPOS an identity they know. Windows only; elsewhere setup never stages a file.
+ */
+export function stagedFileTrusted(path: string): boolean {
+  if (process.platform !== "win32" || !existsSync(path)) return false;
+  const run = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", OWNERSHIP_SCRIPT],
+    { env: { ...process.env, MASALAPOS_STAGED: path }, encoding: "utf8", timeout: 15_000, windowsHide: true });
+  if (run.status !== 0) return false;
+  try {
+    const found = JSON.parse(run.stdout.trim()) as { owner?: string; writers?: string[] | string } | null;
+    const writers = Array.isArray(found?.writers) ? found.writers : found?.writers ? [found.writers] : [];
+    return !!found && [ADMINS, SYSTEM].includes(found.owner ?? "") && writers.every((sid) => sid === ADMINS || sid === SYSTEM);
+  } catch { return false; }
+}
+
+function readStaged(path: string | undefined, trusted: (path: string) => boolean): StagedActivation | null {
+  if (!path || !existsSync(path) || !trusted(path)) return null;
   try {
     const text = readFileSync(path, "utf8");
     return StagedActivation.parse(JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text));
   } catch { return null; }
 }
 
-export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath()): LicensingOptions | undefined {
+export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath(), trusted = stagedFileTrusted): LicensingOptions | undefined {
   const publicKey = typeof __MASALAPOS_LICENSE_PUBLIC_KEY__ !== "undefined"
     ? __MASALAPOS_LICENSE_PUBLIC_KEY__ : process.env["MASALAPOS_LICENSE_PUBLIC_KEY"];
   if (!publicKey) {
@@ -57,7 +88,7 @@ export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath
   // The secret is created with the id and added to older files that lack it; the id is never replaced.
   let saved = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as { installationId: string; installationSecret?: unknown } : null;
   // A first start after setup activated this PC takes the identity setup enrolled with, so the licence it got belongs here.
-  const staged = saved ? null : readStaged(stagedPath);
+  const staged = saved ? null : readStaged(stagedPath, trusted);
   if (staged) {
     saved = { installationId: staged.installationId, installationSecret: staged.installationSecret };
     atomicJson(path, saved);
@@ -77,8 +108,8 @@ export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath
  * hourly check are the fallback.
  */
 export function adoptStagedActivation(licensing: Pick<Licensing, "activate">, installationId: string, log: (message: string) => void,
-  stagedPath = stagedActivationPath()): "installed" | "none" | "failed" {
-  const staged = readStaged(stagedPath);
+  stagedPath = stagedActivationPath(), trusted = stagedFileTrusted): "installed" | "none" | "failed" {
+  const staged = readStaged(stagedPath, trusted);
   if (!staged || staged.installationId !== installationId) return "none";
   let outcome: "installed" | "none" | "failed" = "none";
   if (staged.license) {

@@ -3,7 +3,8 @@ import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { adoptStagedActivation, licenseConfig } from "./license-config.js";
+import { execFileSync } from "node:child_process";
+import { adoptStagedActivation, licenseConfig, stagedFileTrusted } from "./license-config.js";
 
 const directories: string[] = [];
 const publicKey = generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -120,13 +121,15 @@ describe("activation made by the installer", () => {
     writeFileSync(path, typeof content === "string" ? content : JSON.stringify(content));
     return path;
   };
+  // These files are made by the test, not by setup, so the ownership check is stubbed; its own tests are below.
+  const trusted = () => true;
   const staged = (overrides: object = {}) => ({ format: "masalapos-installer-activation", version: 1, installationId: randomUUID(),
     installationSecret: "cd".repeat(32), license: "LICENSE-ENVELOPE", customerCode: "FC-7K3M-9QX", orderCode: "FO-2D8H-4MA", ...overrides });
 
   it("takes setup's identity on a first start", () => {
     dev();
     const data = directory(), file = staged(), stagedPath = stage(file);
-    const config = licenseConfig(data, stagedPath)!;
+    const config = licenseConfig(data, stagedPath, trusted)!;
     expect(config).toMatchObject({ installationId: file.installationId, installationSecret: file.installationSecret });
     expect(JSON.parse(readFileSync(join(data, "installation.json"), "utf8"))).toEqual({ installationId: file.installationId, installationSecret: file.installationSecret });
   });
@@ -135,30 +138,46 @@ describe("activation made by the installer", () => {
     dev();
     const data = directory(), installationId = randomUUID(), installationSecret = "ab".repeat(32);
     writeFileSync(join(data, "installation.json"), JSON.stringify({ installationId, installationSecret }));
-    expect(licenseConfig(data, stage(staged()))).toMatchObject({ installationId, installationSecret });
+    expect(licenseConfig(data, stage(staged()), trusted)).toMatchObject({ installationId, installationSecret });
   });
 
   it("ignores a file that is not setup's", () => {
     dev();
     for (const bad of ["not json", staged({ format: "other" }), staged({ installationSecret: "short" }), staged({ installationId: "x" })]) {
       const file = stage(bad);
-      expect(licenseConfig(directory(), file)!.installationSecret).not.toBe("cd".repeat(32));
+      expect(licenseConfig(directory(), file, trusted)!.installationSecret).not.toBe("cd".repeat(32));
     }
   });
 
   it("installs setup's licence once and removes the file", () => {
     const file = staged(), path = stage(file), activate = vi.fn(), log = vi.fn();
-    expect(adoptStagedActivation({ activate }, file.installationId, log, path)).toBe("installed");
+    expect(adoptStagedActivation({ activate }, file.installationId, log, path, trusted)).toBe("installed");
     expect(activate).toHaveBeenCalledWith("LICENSE-ENVELOPE", "Setup");
     expect(existsSync(path)).toBe(false);
-    expect(adoptStagedActivation({ activate }, file.installationId, log, path)).toBe("none");
+    expect(adoptStagedActivation({ activate }, file.installationId, log, path, trusted)).toBe("none");
     expect(activate).toHaveBeenCalledTimes(1);
     expect(log).not.toHaveBeenCalled();
   });
 
+  it("ignores a file that setup did not lock down, so another Windows user can't plant an identity", () => {
+    dev();
+    const file = staged(), path = stage(file), activate = vi.fn();
+    expect(licenseConfig(directory(), path, () => false)!.installationId).not.toBe(file.installationId);
+    expect(adoptStagedActivation({ activate }, file.installationId, vi.fn(), path, () => false)).toBe("none");
+    expect(activate).not.toHaveBeenCalled();
+  });
+
+  it.runIf(process.platform === "win32")("trusts a staged file only when Administrators or SYSTEM own it and nobody else can write to it", () => {
+    const path = stage(staged());
+    // Made by this test run: owned by its user (or, elevated, by Administrators); either way everyone may now write to it.
+    execFileSync("icacls.exe", [path, "/grant", "*S-1-1-0:(W)"], { stdio: "pipe" });
+    expect(stagedFileTrusted(path)).toBe(false);
+    expect(stagedFileTrusted(join(directory(), "missing.json"))).toBe(false);
+  });
+
   it("leaves a file made for another installation alone", () => {
     const path = stage(staged()), activate = vi.fn();
-    expect(adoptStagedActivation({ activate }, randomUUID(), vi.fn(), path)).toBe("none");
+    expect(adoptStagedActivation({ activate }, randomUUID(), vi.fn(), path, trusted)).toBe("none");
     expect(activate).not.toHaveBeenCalled();
     expect(existsSync(path)).toBe(true);
   });
@@ -166,14 +185,14 @@ describe("activation made by the installer", () => {
   it("logs a licence the counter refuses and still removes the file", () => {
     const file = staged(), path = stage(file), log = vi.fn();
     const activate = vi.fn(() => { throw new Error("License is invalid or belongs to another installation"); });
-    expect(adoptStagedActivation({ activate }, file.installationId, log, path)).toBe("failed");
+    expect(adoptStagedActivation({ activate }, file.installationId, log, path, trusted)).toBe("failed");
     expect(log).toHaveBeenCalledWith(expect.stringContaining("belongs to another installation"));
     expect(existsSync(path)).toBe(false);
   });
 
   it("removes a file without a licence (the hourly check fetches it)", () => {
     const file = staged({ license: null }), path = stage(file), activate = vi.fn();
-    expect(adoptStagedActivation({ activate }, file.installationId, vi.fn(), path)).toBe("none");
+    expect(adoptStagedActivation({ activate }, file.installationId, vi.fn(), path, trusted)).toBe("none");
     expect(activate).not.toHaveBeenCalled();
     expect(existsSync(path)).toBe(false);
   });

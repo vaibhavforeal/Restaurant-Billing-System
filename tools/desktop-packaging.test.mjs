@@ -155,6 +155,9 @@ test("the installer activation script protects the staged secret and trusts only
   // delete, nothing inherited), a leftover file that can't be removed stops setup, and the result is checked.
   assert.match(script, /\[IO\.FileMode\]::CreateNew/);
   assert.match(script, /SetAccessRuleProtection\(\$true, \$false\)/);
+  // Owned by the Administrators group, which the app checks before adopting the file (apps/server/src/license-config.ts).
+  assert.match(script, /\$security\.SetOwner\(\(New-Object Security\.Principal\.SecurityIdentifier\(\$Admins\)\)\)/);
+  assert.match(script, /if \(@\(\$Admins, \$System\) -notcontains \$acl\.GetOwner/);
   assert.match(script, /sid = \$userSid; rights = 'Read, Delete'/);
   assert.match(script, /throw 'The old activation file could not be removed\.'/);
   assert.match(script, /\$rules\.Count -ne 3/);

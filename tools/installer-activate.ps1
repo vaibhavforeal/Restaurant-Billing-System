@@ -180,17 +180,20 @@ function Write-StagedSecret([string]$path, [string]$text) {
   if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
   if (Test-Path -LiteralPath $path) { throw 'The old activation file could not be removed.' }
   $security = New-Object Security.AccessControl.FileSecurity
+  # Owned by the Administrators group (not the administrator who ran setup): MasalaPOS adopts the file only when Administrators or
+  # SYSTEM owns it and nobody else can write to it.
+  $security.SetOwner((New-Object Security.Principal.SecurityIdentifier($Admins)))
   $security.SetAccessRuleProtection($true, $false)
   foreach ($grant in @{ sid = $System; rights = 'FullControl' }, @{ sid = $Admins; rights = 'FullControl' }, @{ sid = $userSid; rights = 'Read, Delete' }) {
     $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($grant.sid)), [Security.AccessControl.FileSystemRights]$grant.rights, 'Allow')))
   }
   $stream = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [Security.AccessControl.FileSystemRights]::Write, [IO.FileShare]::None, 4096, [IO.FileOptions]::None, $security)
   try { $bytes = (New-Object Text.UTF8Encoding $false).GetBytes($text); $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
-  # Confirm what landed: an administrator owns it and exactly those three grants, none inherited, are on it.
+  # Confirm what landed: Administrators owns it and exactly those three grants, none inherited, are on it.
   $acl = Get-Acl -LiteralPath $path
   $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
   $expected = @($System, $Admins, $userSid)
-  if (@($Admins, $System, $selfSid) -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -or $rules.Count -ne 3 -or
+  if (@($Admins, $System) -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -or $rules.Count -ne 3 -or
       @($rules | Where-Object { $_.IsInherited -or $_.AccessControlType -ne 'Allow' -or $expected -notcontains $_.IdentityReference.Value }).Count) {
     Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
     throw 'The activation file did not get the expected permissions.'
