@@ -30,6 +30,7 @@ import { registerSalesReports } from "./sales-reports.js";
 import { registerOperationalReports } from "./operational-reports.js";
 import { registerCustomReports } from "./custom-reports.js";
 import { registerOrderAnalytics } from "./order-analytics.js";
+import { registerDashboard } from "./dashboard.js";
 import { registerStock } from "./stock.js";
 import { registerCosting } from "./costing.js";
 import { registerGuestOrdering } from "./guest-ordering.js";
@@ -150,6 +151,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCustomReports(app);
   registerCrmReports(app);
   registerOrderAnalytics(app);
+  registerDashboard(app);
   registerStock(app);
   registerCosting(app);
   registerGuestOrdering(app, opts.port);

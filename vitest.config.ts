@@ -7,6 +7,8 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: [
+      // The dashboard subpath is a folder with an index file.
+      { find: "@masalapos/domain/dashboard", replacement: fileURLToPath(new URL("./packages/domain/src/dashboard/index.ts", import.meta.url)) },
       // Subpath exports (e.g. "@masalapos/domain/gst") resolve to their own source file, not under the index.
       { find: /^@masalapos\/domain\/(.+)$/, replacement: fileURLToPath(new URL("./packages/domain/src/$1.ts", import.meta.url)) },
       { find: "@masalapos/domain", replacement: pkg("domain") },
