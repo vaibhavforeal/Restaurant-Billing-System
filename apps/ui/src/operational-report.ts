@@ -1,4 +1,5 @@
 import type { OperationalReport, ReportCell, ReportColumn } from "@masalapos/domain";
+import { toCsv, type CsvCell } from "@masalapos/domain/csv";
 import { reportMoney } from "./sales-report";
 
 export function operationalCell(value: ReportCell | undefined, column: ReportColumn, timezone: string, csv = false): string {
@@ -19,13 +20,10 @@ function csvHeader(column: ReportColumn): string {
 }
 
 export function operationalCsv(report: Omit<OperationalReport, "kind"> & { kind: string }): string {
-  const quote = (text: string, numeric = false) => '"' + ((!numeric && /^(?:\s*[=+\-@]|[\t\r\n'])/.test(text) ? "'" : "") + text).replaceAll('"', '""') + '"';
-  const lines = [["Report", report.kind], ["From", report.from], ["To", report.to], ["Server timezone", report.timezone], ["Generated at", new Date(report.generatedAt).toISOString()], ...report.notes.map((note) => ["Note", note])].map((row) => row.map((cell) => quote(cell)).join(","));
+  const rows: CsvCell[][] = [["Report", report.kind], ["From", report.from], ["To", report.to], ["Server timezone", report.timezone], ["Generated at", new Date(report.generatedAt).toISOString()], ...report.notes.map((note) => ["Note", note])];
   for (const table of report.tables) {
-    lines.push("", quote(table.title), table.columns.map((c) => quote(csvHeader(c))).join(","));
-    for (const row of [...table.rows, ...(table.totals ? [table.totals] : [])]) {
-      lines.push(table.columns.map((c) => quote(operationalCell(row[c.key], c, report.timezone, true), typeof row[c.key] === "number" && c.format !== "time")).join(","));
-    }
+    rows.push([], [table.title], table.columns.map(csvHeader));
+    for (const row of [...table.rows, ...(table.totals ? [table.totals] : [])]) rows.push(table.columns.map((c) => operationalCell(row[c.key], c, report.timezone, true)));
   }
-  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+  return toCsv(rows);
 }

@@ -1,5 +1,5 @@
 import {
-  SEGMENT_CSV_COLUMNS, SegmentFilter, SegmentSave, addMonths, catalogCsv, localDateKey, matchesSegment, tierFor, uuidv7,
+  SEGMENT_CSV_COLUMNS, SegmentFilter, SegmentSave, addMonths, localDateKey, matchesSegment, tierFor, toCsv, uuidv7,
   type Database, type SavedSegment, type SegmentCustomer, type SegmentFilterValue,
 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
@@ -51,7 +51,7 @@ function runSegment(db: Database, filter: SegmentFilterValue, now = Date.now()):
 
 const day = (ms: number | null) => ms === null ? "" : localDateKey(ms);
 function segmentCsv(customers: SegmentCustomer[]): string {
-  return catalogCsv([[...SEGMENT_CSV_COLUMNS], ...customers.map((c) => [
+  return toCsv([[...SEGMENT_CSV_COLUMNS], ...customers.map((c) => [
     c.name, c.phone, c.email ?? "", c.typeName ?? "", c.tierName ?? "", c.tags.join("; "), String(c.visits), (c.spendPaise / 100).toFixed(2),
     day(c.lastVisitAt), String(c.points), c.birthDate ?? "", c.anniversaryDate ?? "", c.marketingOptIn ? "Yes" : "No",
   ])]);

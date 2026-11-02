@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_CSV_COLUMNS, catalogCsv, parseCatalogCsv } from "./catalog-csv.js";
+import { CATALOG_CSV_COLUMNS, parseCatalogCsv } from "./catalog-csv.js";
+import { toCsv } from "./csv.js";
 import { ProductCreate, ProductUpdate, VariantCreate, VariantUpdate } from "./catalog-schemas.js";
 
 describe("catalog CSV Zomato columns", () => {
@@ -8,13 +9,13 @@ describe("catalog CSV Zomato columns", () => {
     expect(CATALOG_CSV_COLUMNS).toContain("variant_zomato_price");
   });
   it("parses a CSV without zomato_price, leaving the value absent", () => {
-    const csv = catalogCsv([["category", "name", "price", "gst_rate"], ["Mains", "Dal", "250.00", "5"]]);
+    const csv = toCsv([["category", "name", "price", "gst_rate"], ["Mains", "Dal", "250.00", "5"]]);
     const [row] = parseCatalogCsv(csv);
     expect(row?.values.zomato_price).toBeUndefined();
     expect(row?.values.name).toBe("Dal");
   });
   it("round-trips zomato_price and variant_zomato_price", () => {
-    const csv = catalogCsv([["category", "name", "price", "gst_rate", "zomato_price", "variant_zomato_price"], ["Mains", "Dal", "250.00", "5", "290.00", "310.00"]]);
+    const csv = toCsv([["category", "name", "price", "gst_rate", "zomato_price", "variant_zomato_price"], ["Mains", "Dal", "250.00", "5", "290.00", "310.00"]]);
     const [row] = parseCatalogCsv(csv);
     expect(row?.values.zomato_price).toBe("290.00");
     expect(row?.values.variant_zomato_price).toBe("310.00");
@@ -23,13 +24,13 @@ describe("catalog CSV Zomato columns", () => {
 
 describe("catalog CSV gst_rate column", () => {
   it("accepts a header without gst_rate", () => {
-    const [row] = parseCatalogCsv(catalogCsv([["category", "name", "price"], ["Mains", "Dal", "250.00"]]));
+    const [row] = parseCatalogCsv(toCsv([["category", "name", "price"], ["Mains", "Dal", "250.00"]]));
     expect(row?.values.gst_rate).toBeUndefined();
     expect(row?.values.name).toBe("Dal");
   });
   it("still requires category, name and price", () => {
-    expect(() => parseCatalogCsv(catalogCsv([["name", "price"], ["Dal", "250"]]))).toThrow("Missing required column: category.");
-    expect(() => parseCatalogCsv(catalogCsv([["category", "name", "gst_rate"], ["A", "Dal", ""]]))).toThrow("Missing required column: price.");
+    expect(() => parseCatalogCsv(toCsv([["name", "price"], ["Dal", "250"]]))).toThrow("Missing required column: category.");
+    expect(() => parseCatalogCsv(toCsv([["category", "name", "gst_rate"], ["A", "Dal", ""]]))).toThrow("Missing required column: price.");
   });
 });
 

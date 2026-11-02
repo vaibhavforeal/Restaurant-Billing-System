@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoSettings, type ZomatoReconciliation,
+import { ZOMATO_CSV_COLUMNS, type ZomatoSettings, type ZomatoReconciliation,
   type ZomatoReconciliationRow, type ZomatoImportKind, type ZomatoImportPreview } from "@masalapos/domain/zomato";
+import { toCsv } from "@masalapos/domain/csv";
 import { apiFetch } from "../api";
 import { connectWs } from "../ws";
 import { downloadText } from "../download";
@@ -62,7 +63,7 @@ export function ZomatoReconciliationPanel() {
       row.placedAt ? new Date(row.placedAt).toISOString() : "", row.orderStatus ?? "", stateLabel[row.state], amount(row.orderTotalPaise),
       amount(row.statementGrossPaise), amount(row.deductionsPaise), amount(row.additionsPaise), amount(row.expectedNetPaise), amount(row.paidPaise),
       amount(row.orderDifferencePaise), amount(row.payoutDifferencePaise), row.references.join(" | ")]);
-    downloadText(zomatoCsv([header, ...rows]), `zomato-reconciliation-${period.from}-${period.to}.csv`, "text/csv;charset=utf-8");
+    downloadText(toCsv([header, ...rows]), `zomato-reconciliation-${period.from}-${period.to}.csv`, "text/csv;charset=utf-8");
   }
   return <section className="zomato-screen">
     <div className="page-header"><div><h3>Zomato reconciliation</h3><p>Zomato orders and settlement reconciliation</p></div><button onClick={() => void refresh()} disabled={busy}>Refresh</button></div>
@@ -138,7 +139,7 @@ function ZomatoImport({ restaurantId, onImported }: { restaurantId: string; onIm
     {!restaurantId && <p>Save a restaurant ID in Marketplace, Zomato settings before importing.</p>}
     <fieldset disabled={busy || !restaurantId} className="zomato-fields">
       <div className="zomato-toolbar"><label>Import type<select value={kind} onChange={e => { setKind(e.target.value as ZomatoImportKind); replaceCsv(""); if (file.current) file.current.value = ""; }}><option value="orders">Order history</option><option value="settlements">Settlement entries</option></select></label>
-        <button type="button" onClick={() => downloadText(zomatoCsv([ZOMATO_CSV_COLUMNS[kind]]), `zomato-${kind}-template.csv`, "text/csv;charset=utf-8")}>Download template</button>
+        <button type="button" onClick={() => downloadText(toCsv([ZOMATO_CSV_COLUMNS[kind]]), `zomato-${kind}-template.csv`, "text/csv;charset=utf-8")}>Download template</button>
         <label>CSV file<input ref={file} type="file" accept=".csv,text/csv" onChange={e => void readFile(e.target.files?.[0])} /></label></div>
       <p className="muted">{kind === "orders" ? "Use ordered_at with a timezone, such as 2026-10-02T12:30:00+05:30. Keep order IDs as text to preserve leading zeros." : "Use a unique entry_id for each statement line. For later adjustments, use a new entry ID and include only the incremental amounts. Negative net_paid is supported for recoveries."}</p>
       <details><summary>Paste CSV instead</summary><label>CSV content<textarea rows={6} value={csv} onChange={e => replaceCsv(e.target.value)} spellCheck={false} /></label></details>

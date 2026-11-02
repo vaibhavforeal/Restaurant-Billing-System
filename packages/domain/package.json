@@ -13,6 +13,7 @@
     "./operational-reports": "./src/operational-reports.ts",
     "./custom-reports": "./src/custom-reports.ts",
     "./catalog-csv": "./src/catalog-csv.ts",
+    "./csv": "./src/csv.ts",
     "./zomato": "./src/zomato.ts",
     "./integrations": "./src/integrations.ts",
     "./licensing": "./src/licensing.ts",

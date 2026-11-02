@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { CATALOG_CSV_COLUMNS, catalogCsv, parseCatalogCsv, uuidv7 } from "@masalapos/domain";
+import { CATALOG_CSV_COLUMNS, parseCatalogCsv, toCsv, uuidv7 } from "@masalapos/domain";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => { await app?.close(); });
-const csv = (...rows: string[][]) => catalogCsv([["category", "name", "price", "gst_rate"], ...rows]);
+const csv = (...rows: string[][]) => toCsv([["category", "name", "price", "gst_rate"], ...rows]);
 async function preview(token: string, source: string) {
   return app.inject({ method: "POST", url: "/api/catalog/import/preview", headers: auth(token), payload: { csv: source } });
 }
@@ -67,7 +67,7 @@ describe("item CSV transfer", () => {
     const order = uuidv7();
     app.db.prepare("INSERT INTO orders (id,client_ref,type,opened_by,opened_at) VALUES (?,?,'parcel',?,?)").run(order, uuidv7(), admin.user.id, Date.now());
     app.db.prepare("INSERT INTO order_items (id,order_id,product_id,name_snapshot,price_paise_snapshot,gst_rate_snapshot,qty) VALUES (?,?,?,'Dal',10000,5,1)").run(uuidv7(), order, item.id);
-    const source = catalogCsv([["item_id", "category", "name", "price", "gst_rate"], [item.id, "New category", "Dal fry", "150.50", "12"]]);
+    const source = toCsv([["item_id", "category", "name", "price", "gst_rate"], [item.id, "New category", "Dal fry", "150.50", "12"]]);
     expect((await apply(admin.token, source)).statusCode).toBe(200);
     expect((await products(admin.token))[0]).toMatchObject({ id: item.id, name: "Dal fry", pricePaise: 15050, photoVersion: "hash fixture", variants: [{ name: "Half" }] });
     expect(app.db.prepare("SELECT photo_data FROM products WHERE id=?").get(item.id)).toEqual({ photo_data: "photo fixture" });
@@ -114,7 +114,7 @@ describe("item CSV transfer", () => {
   it("keeps an existing item's rate when the gst_rate column is absent", async () => {
     app = freshApp(); const { token } = await setupAdmin(app);
     await apply(token, csv(["A", "Cake", "50", "18"]));
-    await apply(token, catalogCsv([["category", "name", "price"], ["A", "Cake", "60"], ["A", "Tea", "10"]]));
+    await apply(token, toCsv([["category", "name", "price"], ["A", "Cake", "60"], ["A", "Tea", "10"]]));
     const list = await products(token);
     expect(list.find((p: { name: string }) => p.name === "Cake")).toMatchObject({ pricePaise: 6000, gstRate: 18 });
     expect(list.find((p: { name: string }) => p.name === "Tea")).toMatchObject({ gstRate: null });
@@ -147,12 +147,12 @@ describe("item CSV transfer", () => {
   it("rejects duplicate items, ambiguous names, wrong variant ownership and unknown kitchen stations", async () => {
     app = freshApp(); const { token } = await setupAdmin(app);
     expect((await preview(token, csv(["A", "Tea", "10", "0"], ["A", "Tea", "10", "0"]))).json().error).toContain("duplicate item row");
-    const withStation = catalogCsv([["category", "name", "price", "gst_rate", "kot_station"], ["A", "Tea", "10", "0", "Missing"]]);
+    const withStation = toCsv([["category", "name", "price", "gst_rate", "kot_station"], ["A", "Tea", "10", "0", "Missing"]]);
     expect((await preview(token, withStation)).json().error).toContain("unknown KOT station");
     await apply(token, csv(["A", "Tea", "10", "0"], ["A", "Coffee", "20", "0"]));
     const [coffee, tea] = await products(token);
     const variant = (await app.inject({ method: "POST", url: `/api/products/${tea.id}/variants`, headers: auth(token), payload: { name: "Large", pricePaise: 2000 } })).json().variant;
-    const wrongOwner = catalogCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", ""]]);
+    const wrongOwner = toCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", ""]]);
     expect((await preview(token, wrongOwner)).json().error).toContain("belongs to another item");
     await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { categoryId: tea.categoryId, name: "Tea", pricePaise: 500, gstRate: 0 } });
     expect((await preview(token, csv(["A", "Tea", "10", "0"]))).json().error).toContain("ambiguous item name");
@@ -206,7 +206,7 @@ describe("Zomato price CSV columns", () => {
 
   it("round-trips item and variant Zomato prices through export and import", async () => {
     app = freshApp(); const { token } = await setupAdmin(app);
-    const source = catalogCsv([
+    const source = toCsv([
       ["category", "name", "price", "gst_rate", "variant_name", "variant_price", "zomato_price", "variant_zomato_price"],
       ["Mains", "Dal", "200", "5", "", "", "290.00", ""],
       ["Mains", "Biryani", "300", "5", "Half", "180", "", "0"],

@@ -1,3 +1,4 @@
+import { toCsv } from "@masalapos/domain/csv";
 import type { TaxLine } from "@masalapos/domain";
 import { paiseToRupees } from "./money";
 
@@ -102,12 +103,6 @@ export function dayEndCsv(report: DayEndReport): string {
   // Never money received, and not the restaurant's own taxable value: always on their own two rows.
   amount("Zomato", ZOMATO_SUPPLIES_LABEL, report.zomatoSuppliesPaise);
   amount("Zomato", "Zomato receivable (outstanding)", report.zomatoReceivablePaise);
-  return "\uFEFF" + rows.map((cells) => cells.map((cell, column) => {
-    // Numeric cells stay numeric, including negative rounding. Text cannot execute
-    // spreadsheet formulas. INR values use two decimals; counts/rates are integers.
-    const value = typeof cell === "number"
-      ? (column === 5 && cells[6] === "INR" ? cell.toFixed(2) : String(cell))
-      : (/^(?:\s*[=+\-@]|[\t\r\n'])/.test(cell) ? "'" + cell : cell);
-    return '"' + value.replaceAll('"', '""') + '"';
-  }).join(",")).join("\r\n") + "\r\n";
+  // INR values use two decimals; counts and rates are integers. toCsv keeps numbers numeric, including negative rounding.
+  return toCsv(rows.map((cells) => cells.map((cell, column) => column === 5 && cells[6] === "INR" && typeof cell === "number" ? cell.toFixed(2) : cell)));
 }

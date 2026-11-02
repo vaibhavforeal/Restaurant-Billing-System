@@ -1,3 +1,4 @@
+import { toCsv } from "@masalapos/domain/csv";
 import { paiseToRupees } from "./money";
 
 export interface SalesTotals {
@@ -49,9 +50,5 @@ export function salesReportCsv(report: SalesReport, kind: SalesReportKind): stri
   const rows = [["From", "To", "Server timezone", ...headings],
     ...report.daily.map((day) => [report.from, report.to, report.timezone, day.date, ...values(day)]),
     [report.from, report.to, report.timezone, "TOTAL", ...values(report)]];
-  return "\uFEFF" + rows.map((row) => row.map((cell, index) => {
-    const raw = String(cell);
-    const text = index < 4 && /^(?:\s*[=+\-@]|[\t\r\n'])/.test(raw) ? "'" + raw : raw;
-    return '"' + text.replaceAll('"', '""') + '"';
-  }).join(",")).join("\r\n") + "\r\n";
+  return toCsv(rows);
 }
