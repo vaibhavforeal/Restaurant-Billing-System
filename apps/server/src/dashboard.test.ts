@@ -93,6 +93,19 @@ describe("dashboard layouts", () => {
     expect(kots.y).toBeGreaterThanOrEqual(2);
   });
 
+  it("closes the gap a hidden widget leaves, without changing what is stored", async () => {
+    const [a, b] = defaultLayout().items;
+    const hiddenItem = { key: "kots", widget: "runningKots", x: 0, y: a!.h, w: 3, h: 2, options: opts };
+    const below = { ...b!, x: 0, y: a!.h + 2 };
+    const stored = { version: 1, items: [{ ...a!, x: 0, y: 0 }, hiddenItem, below] };
+    app.db.prepare("INSERT INTO dashboard_layouts (user_id, layout_json, updated_at) VALUES (?, ?, 1)").run(adminId, JSON.stringify(stored));
+    const seen = (await request("GET")).json().layout as DashboardLayoutValue;
+    expect(widgets(seen)).not.toContain("runningKots");
+    expect(seen.items.find((i) => i.key === below.key)!.y).toBe(a!.h);
+    const raw = app.db.prepare("SELECT layout_json FROM dashboard_layouts WHERE user_id = ?").pluck().get(adminId) as string;
+    expect(JSON.parse(raw).items.find((i: { key: string }) => i.key === below.key).y).toBe(a!.h + 2);
+  });
+
   it("recovers from a stored layout it cannot read", async () => {
     const put = (json: string) => app.db.prepare(`INSERT INTO dashboard_layouts (user_id, layout_json, updated_at) VALUES (?, ?, 1)
       ON CONFLICT(user_id) DO UPDATE SET layout_json = excluded.layout_json`).run(adminId, json);

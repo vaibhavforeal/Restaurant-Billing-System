@@ -5,6 +5,9 @@ import { withTimeout } from "../abort-signal";
 import { useLiveRefresh } from "../live-refresh";
 import { isUnavailable } from "./useDashboardLayout";
 
+/** Every server event that can change a widget's figures: orders, kitchen tickets, QR requests, stock and tables. */
+export const DASHBOARD_LIVE_EVENTS = ["order.updated", "kot.created", "kot.updated", "guest-request.changed", "stock.changed", "table.changed"] as const;
+
 /**
  * Figures for the widgets on screen, fetched in one request. Nothing is requested while there are no items. A refresh keeps the
  * old figures until the new ones arrive; a failed request keeps the last good results and sets `error`.
@@ -39,7 +42,7 @@ export function useDashboardData(items: DashboardItemValue[]) {
     return () => { revision.current++; controller.abort(); };
   }, [requestKey, version]);
 
-  useLiveRefresh(refresh);
+  useLiveRefresh(refresh, { events: DASHBOARD_LIVE_EVENTS });
 
   return { data, error, unavailable, refresh };
 }

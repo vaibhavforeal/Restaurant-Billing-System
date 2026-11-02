@@ -42,7 +42,8 @@ export function registerDashboard(app: FastifyInstance): void {
   };
   const respond = (req: FastifyRequest, items: DashboardItemValue[], isDefault: boolean) => {
     const visible = visibleTo(app, req);
-    const layout: DashboardLayoutValue = { version: 1, items: items.filter((item) => visible(widgetDef(item.widget))) };
+    // Close the gaps that hidden widgets leave. The stored layout is not touched; a save merges hidden items back.
+    const layout: DashboardLayoutValue = { version: 1, items: compact(items.filter((item) => visible(widgetDef(item.widget)))) };
     return { layout, isDefault };
   };
 

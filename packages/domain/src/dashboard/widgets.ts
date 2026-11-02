@@ -73,7 +73,7 @@ export const DASHBOARD_WIDGETS: readonly WidgetDef[] = [
   chart("hourlySales", "Sales by hour", "Sales for each hour of the day.", WIDE_CHART_LIMITS, { compare: true, orderType: true }),
   chart("dailyTrend", "Daily trend", "Sales for each day in the period.", WIDE_CHART_LIMITS, { compare: true, orderType: true }),
   chart("paymentMix", "Payment mix", "How much was paid by each payment method.", SHORT_CHART_LIMITS, { compare: true }),
-  chart("orderTypeSplit", "Order types", "Sales split between dine-in, parcel and Zomato.", SHORT_CHART_LIMITS, { compare: true }),
+  chart("orderTypeSplit", "Order types", "Sales split between dine-in, takeaway and Zomato.", SHORT_CHART_LIMITS, { compare: true }),
   chart("topItems", "Top items", "Best selling items by sales.", WIDE_CHART_LIMITS, { orderType: true, topN: true }),
   chart("topCategories", "Top categories", "Best selling categories by sales.", WIDE_CHART_LIMITS, { orderType: true, topN: true }),
   status("openTables", "Open tables", "Tables with a running order right now.", { permissions: ["tables.read"], modules: [] }),

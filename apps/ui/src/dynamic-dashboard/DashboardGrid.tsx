@@ -56,6 +56,9 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
     setPreview(null);
   }, []);
 
+  // Leaving edit mode or switching to the narrow layout mid-drag clears the preview, placeholder and faded state.
+  useEffect(() => { cancel(); }, [editing, narrow, cancel]);
+
   // Escape abandons a drag in progress.
   const dragging = preview !== null;
   useEffect(() => {
@@ -78,7 +81,8 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
   }
 
   const begin = (e: PointerEvent<HTMLElement>, item: DashboardItemValue, mode: Mode) => {
-    if (!editing || (e.pointerType === "mouse" && e.button !== 0)) return;
+    // A second finger cannot take over a drag that is already running.
+    if (!editing || gesture.current || (e.pointerType === "mouse" && e.button !== 0)) return;
     // Pointer distances are measured against the column pitch (one column plus its gap).
     const width = gridRef.current?.getBoundingClientRect().width ?? 0;
     if (!(width > 0)) return;
@@ -105,6 +109,11 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
     const result = preview;
     cancel();
     if (result && !sameRect(result.rect, g.start)) onChange(result.items);
+  };
+
+  /** A cancelled or lost pointer only ends the gesture it started; another finger's event is ignored. */
+  const abandon = (e: PointerEvent<HTMLElement>) => {
+    if (gesture.current?.pointerId === e.pointerId) cancel();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLElement>, item: DashboardItemValue) => {
@@ -140,7 +149,8 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
                 onPointerDown={(e) => begin(e, item, "move")}
                 onPointerMove={track}
                 onPointerUp={finish}
-                onPointerCancel={cancel}
+                onPointerCancel={abandon}
+                onLostPointerCapture={abandon}
               >
                 <span className="dd-handle-title">{def.title}</span>
                 <span className="dd-tools" onPointerDown={(e) => e.stopPropagation()}>{renderTools(item)}</span>
@@ -154,7 +164,8 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
                 onPointerDown={(e) => begin(e, item, "resize")}
                 onPointerMove={track}
                 onPointerUp={finish}
-                onPointerCancel={cancel}
+                onPointerCancel={abandon}
+                onLostPointerCapture={abandon}
               />
             )}
           </div>

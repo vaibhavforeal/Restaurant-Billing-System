@@ -13,6 +13,10 @@ const ORDER_TYPES: Array<{ value: WidgetOptionsValue["orderType"]; label: string
 ];
 
 /** Settings for one widget. Only the options that widget supports are shown. */
+const TOP_N_CHOICES = [3, 5, 10, 15, 20];
+/** The fixed choices, plus the stored value when it is not one of them, so it still shows correctly. */
+export const topNChoices = (current: number): number[] => (TOP_N_CHOICES.includes(current) ? TOP_N_CHOICES : [...TOP_N_CHOICES, current].sort((a, b) => a - b));
+
 export function WidgetSettings({ item, onChange, onClose }: { item: DashboardItemValue | null; onChange(options: Partial<WidgetOptionsValue>): void; onClose(): void }) {
   const modules = useModules();
   const def = item ? widgetDef(item.widget) : null;
@@ -31,9 +35,10 @@ export function WidgetSettings({ item, onChange, onClose }: { item: DashboardIte
         <select value={options.orderType} onChange={(e) => onChange({ orderType: e.target.value as WidgetOptionsValue["orderType"] })}>
           {ORDER_TYPES.filter((t) => t.value !== "zomato" || modules.isActive("zomato")).map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select></label>}
-      {def.options.topN && <label>How many items (3 to 20)
-        <input type="number" min={3} max={20} step={1} value={options.topN}
-          onChange={(e) => { const n = Math.round(Number(e.target.value)); if (Number.isFinite(n)) onChange({ topN: Math.min(20, Math.max(3, n)) }); }} /></label>}
+      {def.options.topN && <label>How many items
+        <select value={options.topN} onChange={(e) => onChange({ topN: Number(e.target.value) })}>
+          {topNChoices(options.topN).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select></label>}
       <button type="button" className="primary" onClick={onClose}>Done</button>
     </div>}
   </WorkspaceDialog>;

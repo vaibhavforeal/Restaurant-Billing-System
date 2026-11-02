@@ -23,9 +23,19 @@ All three steps are needed.
    dashboard** (`reports.dashboard`). The person also needs **View** under Reports
    (`reports.read`). After the grant, the person signs in again.
 
-Operator note: the licensing worker must be redeployed so that it signs the new
-`dynamicReports` module key. Until then, a licence issued by the old worker cannot
-carry the module and the portal allowance has no effect.
+Operator note: update the licensing worker and the POS app together. The licence
+format now lists `dynamicReports`, and the app only accepts a licence that lists every
+module it knows about.
+
+- After the worker is redeployed, reissue every existing licence. A licence saved
+  before that does not list Dynamic Reports, so a counter running this version
+  rejects it. Until it is reissued, the portal allowance has no effect.
+- If the counter is updated before its licence is reissued, licensing shows
+  "The saved license is invalid. Import a valid license." and the counter cannot be
+  used until a reissued licence is imported.
+- The reverse also fails. A counter on an older version rejects licences signed by
+  the redeployed worker, so do not reissue licences to counters that have not been
+  updated.
 
 Cashiers see the fixed Sales dashboard unless they have been granted **Customise own
 dashboard**. Captain/waiter and kitchen accounts are unchanged.
@@ -46,9 +56,10 @@ dashboard**. Captain/waiter and kitchen accounts are unchanged.
 - Each widget header shows its period and the dates it covers; status widgets show
   "Live". The footer says when the figures were last updated.
 
-The dashboard refreshes about half a second after an order changes, after the
-connection returns, and every 60 seconds. The saved layout is read again when the
-person's access changes and after a reconnect, but not while they are editing.
+The figures refresh about half a second after an order, kitchen ticket, QR request,
+stock level or table changes, after the connection returns, and every 60 seconds. The
+saved layout is read again when the person's access changes, after a reconnect and
+once an hour, but not while they are editing.
 
 ### Narrow screens
 
@@ -77,7 +88,7 @@ needs is on. "Reports" below means Reports & analytics.
 | Sales by hour | Sales for each hour of the day. | `reports.read` | Reports |
 | Daily trend | Sales for each day in the period. | `reports.read` | Reports |
 | Payment mix | How much was paid by each payment method. | `reports.read` | Reports |
-| Order types | Sales split between dine-in, parcel and Zomato. | `reports.read` | Reports |
+| Order types | Sales split between dine-in, takeaway and Zomato. | `reports.read` | Reports |
 | Top items | Best selling items by sales. | `reports.read` | Reports |
 | Top categories | Best selling categories by sales. | `reports.read` | Reports |
 | Open tables | Tables with a running order right now. | `tables.read` | None |
