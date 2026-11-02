@@ -27,7 +27,7 @@ block any module for any restaurant on top of its plan.
 
 Billing, tables, the menu catalogue, staff and settings are core: they are always on.
 
-The `reports.dashboard` permission ("Customise own dashboard") is admin-only by default and can be granted per person.
+The `reports.dashboard` permission ("Customise own dashboard") is admin-only by default and can be granted per person. See [Dynamic Reports](dynamic-reports.md).
 
 A module works when all three hold:
 
