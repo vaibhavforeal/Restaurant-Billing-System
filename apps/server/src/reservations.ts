@@ -2,6 +2,7 @@ import { tablePriceTier } from "./pricing.js";
 import { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, uuidv7, localDateKey, nextSplitLabel, type Reservation, type ReservationInput } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
 import { assertReservationSlot, localMinute, reservationTime } from "./reservation-rules.js";
@@ -62,11 +63,9 @@ export function registerReservations(app: FastifyInstance) {
     const body = ReservationCreate.parse(req.body), fingerprint = JSON.stringify(body);
     let created = false;
     const id = app.db.transaction(() => {
-      const old = app.db.prepare("SELECT id, request_json FROM reservations WHERE client_ref = ?").get(body.clientRef) as { id: string; request_json: string } | undefined;
-      if (old) {
-        if (old.request_json !== fingerprint) throw httpError(409, "This request was already used for another reservation. Refresh the list before trying again.");
-        return old.id;
-      }
+      const old = priorRequest<{ id: string }>(app.db, "reservations", body.clientRef, fingerprint,
+        "This request was already used for another reservation. Refresh the list before trying again.", "id");
+      if (old) return old.id;
       const { start, end, now } = validate(body), id = uuidv7();
       app.db.prepare(`INSERT INTO reservations (id, client_ref, request_json, table_id, customer_name, phone, party_size, starts_at, ends_at, notes, created_at, created_by, updated_at, updated_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.clientRef, fingerprint, body.tableId, body.customerName, body.phone, body.partySize, start, end, body.notes, now, req.user.id, now, req.user.id);

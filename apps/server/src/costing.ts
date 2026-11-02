@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { UnitCostSet, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@masalapos/domain";
 import { readGstSettings } from "./gst-settings.js";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { publishStock, versionCheck } from "./stock.js";
@@ -22,11 +23,7 @@ export function registerCosting(app: FastifyInstance): void {
     const body = UnitCostSet.parse(req.body);
     const requestJson = JSON.stringify({ stockItemId: id, ...body });
     const created = db.transaction(() => {
-      const old = db.prepare("SELECT request_json FROM stock_cost_changes WHERE client_ref = ?").get(body.clientRef) as { request_json: string } | undefined;
-      if (old) {
-        if (old.request_json !== requestJson) throw httpError(409, "Cost reference already used for another request");
-        return false;
-      }
+      if (priorRequest(db, "stock_cost_changes", body.clientRef, requestJson, "Cost reference already used for another request")) return false;
       const row = db.prepare("SELECT * FROM stock_items WHERE id = ?").get(id) as StockRow | undefined;
       if (!row) throw httpError(404, "Stock item not found");
       versionCheck(row.version, body.expectedVersion);

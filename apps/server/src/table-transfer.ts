@@ -1,5 +1,6 @@
 import { OrderMerge, OrderMove, nextSplitLabel, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
 import { printStationSlip } from "./print/station-slip.js";
@@ -42,11 +43,7 @@ export function registerTableTransfer(app: FastifyInstance): void {
     const affectedTableIds = new Set<string>();
 
     const replayed = app.db.transaction((): boolean => {
-      const previous = app.db.prepare("SELECT request_json FROM order_table_events WHERE client_ref = ?").get(body.clientRef) as { request_json: string } | undefined;
-      if (previous) {
-        if (previous.request_json !== fingerprint) throw httpError(409, "Table change reference already used for a different request");
-        return true;
-      }
+      if (priorRequest(app.db, "order_table_events", body.clientRef, fingerprint, "Table change reference already used for a different request")) return true;
 
       const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as OrderRow | undefined;
       if (!order) throw httpError(404, "order not found");
@@ -108,11 +105,7 @@ export function registerTableTransfer(app: FastifyInstance): void {
     const affectedTableIds = new Set<string>();
 
     const replayed = app.db.transaction((): boolean => {
-      const previous = app.db.prepare("SELECT request_json FROM order_table_events WHERE client_ref = ?").get(body.clientRef) as { request_json: string } | undefined;
-      if (previous) {
-        if (previous.request_json !== fingerprint) throw httpError(409, "Table change reference already used for a different request");
-        return true;
-      }
+      if (priorRequest(app.db, "order_table_events", body.clientRef, fingerprint, "Table change reference already used for a different request")) return true;
 
       const getOrder = app.db.prepare("SELECT * FROM orders WHERE id = ?");
       const folded = getOrder.get(id) as (OrderRow & { merged_into: string | null }) | undefined;

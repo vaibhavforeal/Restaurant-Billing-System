@@ -1,5 +1,6 @@
 import { SentItemEdit, returnPartialStock, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
 import { jobContext, printStationSlip } from "./print/station-slip.js";
@@ -37,9 +38,8 @@ export function registerKotEdits(app: FastifyInstance): void {
 
     let printError: string | null = null;
     const result = db.transaction(() => {
-      const replay = db.prepare("SELECT order_id, request_json FROM kot_edits WHERE client_ref = ?").get(body.clientRef) as { order_id: string; request_json: string } | undefined;
+      const replay = priorRequest<{ order_id: string }>(db, "kot_edits", body.clientRef, requestJson, "Edit reference already used for a different request", "order_id");
       if (replay) {
-        if (replay.request_json !== requestJson) throw httpError(409, "Edit reference already used for a different request");
         return { orderId: replay.order_id, created: false, stockIds: [] as string[], kot: null };
       }
       const item = db.prepare("SELECT * FROM order_items WHERE id = ?").get(id) as OrderItemRow | undefined;
