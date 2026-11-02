@@ -149,14 +149,21 @@ test("the installer activation script gets this build's service, key and version
   assert.throws(() => installerActivationScript("no placeholders", { serviceUrl: "", verificationKeyFingerprint: null, appVersion: "1" }), /placeholder/);
 });
 
-test("the installer activation script protects the staged secret and finds the signed-in user's identity", () => {
+test("the installer activation script protects the staged secret and trusts only its own and the session user's identity", () => {
   const script = readFileSync(new URL("./installer-activate.ps1", import.meta.url), "utf8");
-  assert.match(script, /\/inheritance:r/);
-  assert.match(script, /\*S-1-5-18:F/);
-  assert.match(script, /\*S-1-5-32-544:F/);
-  assert.doesNotMatch(script, /S-1-5-32-545:M/);
-  assert.match(script, /Win32_ComputerSystem/);
-  assert.match(script, /Split-Path -Parent \$env:USERPROFILE/);
+  // The secret file: SYSTEM and Administrators full, the session user read and delete, nobody else.
+  assert.match(script, /icacls\.exe" \$stagePath \/inheritance:r \/grant:r "\*\$\{System\}:F" "\*\$\{Admins\}:F" "\*\$\{userSid\}:\(R,D\)"/);
+  assert.doesNotMatch(script, /S-1-5-32-545:(M|\(R,D\))/);
+  // The shared folder is administrator-owned and only administrators may write to it.
+  assert.match(script, /\$stageDir \/setowner "\*\$\{Admins\}"/);
+  assert.match(script, /\$stageDir \/inheritance:r \/grant:r "\*\$\{System\}:\(OI\)\(CI\)F" "\*\$\{Admins\}:\(OI\)\(CI\)F" '\*S-1-5-32-545:\(RX\)'/);
+  // The session user comes from this session's Explorer; no unresolved user falls back to a broad grant.
+  assert.match(script, /GetOwnerSid/);
+  assert.match(script, /if \(!\$userSid\) \{ Fail \$NoUser \}/);
+  // Identities come only from the two known profiles and must be owned by their user or an administrator; no profile scan.
+  assert.doesNotMatch(script, /Get-ChildItem/);
+  assert.match(script, /ProfileList\\\$userSid/);
+  assert.match(script, /Test-OwnedBy \$file\.path \$file\.owners/);
 });
 
 test("the installer asks for activation codes only when the build activates online", async () => {

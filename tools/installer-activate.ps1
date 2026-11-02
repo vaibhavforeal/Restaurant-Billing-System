@@ -47,23 +47,69 @@ try {
 } catch { Fail $CheckCodes }
 if (!$customerId -or !$orderId) { Fail $CheckCodes }
 
+$Admins = 'S-1-5-32-544'; $System = 'S-1-5-18'
+$NoUser = "Setup couldn't tell which Windows user will use MasalaPOS. Sign in to Windows as that person and run setup again."
+
+# The person whose desktop this setup runs on. Setup is elevated, possibly with another administrator's credentials, but it stays in the
+# session it was started from, so the owner of that session's Explorer is the person who will use MasalaPOS (this also works over RDP).
+function Get-SessionUserSid {
+  $session = [Diagnostics.Process]::GetCurrentProcess().SessionId
+  try {
+    foreach ($explorer in @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'explorer.exe'" -ErrorAction Stop)) {
+      if ($explorer.SessionId -ne $session) { continue }
+      $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwnerSid -ErrorAction Stop
+      if ($owner.ReturnValue -eq 0 -and "$($owner.Sid)" -match '^S-1-5-') { return "$($owner.Sid)" }
+    }
+  } catch { }
+  try {
+    $name = "$((Get-CimInstance -ClassName Win32_ComputerSystem).UserName)"
+    if ($name) { return (New-Object Security.Principal.NTAccount($name)).Translate([Security.Principal.SecurityIdentifier]).Value }
+  } catch { }
+  return $null
+}
+
+# Only a file owned by one of these accounts is trusted; anything else may have been planted by another user of this PC.
+function Test-OwnedBy([string]$path, [string[]]$sids) {
+  try {
+    $item = Get-Item -LiteralPath $path -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+    return $sids -contains (Get-Acl -LiteralPath $path).GetOwner([Security.Principal.SecurityIdentifier]).Value
+  } catch { return $false }
+}
+
+$userSid = Get-SessionUserSid
+if (!$userSid) { Fail $NoUser }
+$selfSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+
+# The staging folder is shared by every Windows user, so it must belong to administrators and let no one else write to it; otherwise a
+# user could swap setup's file for one carrying an identity they know. The Support Connector holds this folder to the same rule.
 $stageDir = Join-Path $env:ProgramData 'MasalaPOS'
 $stagePath = Join-Path $stageDir 'activation.json'
-# Reinstalling must not take a second seat: reuse this PC's identity if the app (or an earlier run of setup) already has one.
-# Setup runs elevated, possibly as a different administrator than the person who uses the app, so $env:APPDATA is not enough: look in
-# the signed-in user's profile and every other profile too, newest first (the app keeps installation.json under AppData\Roaming).
-$interactiveUser = $null
-try { $interactiveUser = "$((Get-CimInstance -ClassName Win32_ComputerSystem).UserName)" } catch { }
-$identityFiles = @(Join-Path $env:APPDATA 'masalapos-desktop\data\installation.json')
-if ($interactiveUser -match '\\(.+)$') { $identityFiles += Join-Path (Join-Path (Split-Path -Parent $env:USERPROFILE) $Matches[1]) 'AppData\Roaming\masalapos-desktop\data\installation.json' }
 try {
-  $identityFiles += @(Get-ChildItem -LiteralPath (Split-Path -Parent $env:USERPROFILE) -Directory -ErrorAction Stop |
-    ForEach-Object { Join-Path $_.FullName 'AppData\Roaming\masalapos-desktop\data\installation.json' } |
-    Where-Object { Test-Path -LiteralPath $_ } | Sort-Object { (Get-Item -LiteralPath $_).LastWriteTime } -Descending)
+  if (Test-Path -LiteralPath $stageDir) {
+    if (!(Test-OwnedBy $stageDir @($Admins, $System, $selfSid))) { Fail "$stageDir isn't owned by an administrator. Ask a local administrator to remove it, then run setup again." }
+  } else { New-Item -ItemType Directory -Path $stageDir | Out-Null }
+  & "$env:SystemRoot\System32\icacls.exe" $stageDir /setowner "*${Admins}" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'icacls failed' }
+  & "$env:SystemRoot\System32\icacls.exe" $stageDir /inheritance:r /grant:r "*${System}:(OI)(CI)F" "*${Admins}:(OI)(CI)F" '*S-1-5-32-545:(RX)' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'icacls failed' }
+} catch { Fail "Setup couldn't prepare $stageDir. Run setup again." }
+
+# Reinstalling must not take a second seat: reuse this PC's identity if the app (or an earlier run of setup) already has one. Only two
+# profiles are looked at, the administrator running setup and the person using this session (the app keeps installation.json under
+# AppData\Roaming), and only files their owner (or an administrator) made.
+$identityFiles = @(@{ path = (Join-Path $env:APPDATA 'masalapos-desktop\data\installation.json'); owners = @($selfSid, $Admins, $System) })
+try {
+  $profilePath = (Get-ItemProperty -LiteralPath "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$userSid" -ErrorAction Stop).ProfileImagePath
+  if ($profilePath) { $identityFiles += @{ path = (Join-Path $profilePath 'AppData\Roaming\masalapos-desktop\data\installation.json'); owners = @($userSid, $Admins, $System) } }
 } catch { }
+$identityFiles += @{ path = $stagePath; owners = @($selfSid, $Admins, $System) }
 $identity = $null
-foreach ($file in $identityFiles) { $identity = Read-Identity $file; if ($identity) { break } }
-if (!$identity) { $identity = Read-Identity $stagePath }
+foreach ($file in $identityFiles) {
+  if (!(Test-Path -LiteralPath $file.path) -or !(Test-OwnedBy $file.path $file.owners)) { continue }
+  $identity = Read-Identity $file.path
+  if ($identity) { break }
+}
 if (!$identity) {
   $bytes = New-Object byte[] 32
   $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($bytes); $rng.Dispose()
@@ -109,15 +155,12 @@ $staged = [ordered]@{
   license = $reply.license; customerCode = "$($reply.customer.code)"; orderCode = "$($reply.order.code)"; createdAt = $activation.generatedAt
 }
 try {
-  New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
   # The file holds the installation secret, so it is locked down before the secret is written. Only SYSTEM and Administrators get full
-  # control; MasalaPOS runs as the signed-in user, who needs to read the file and delete it once adopted (apps/server/src/license-config.ts).
-  # If that user can't be found, any local user may read and delete it, as the app only adopts a file made for its own identity.
-  $reader = '*S-1-5-32-545'
-  try { $reader = '*' + (New-Object Security.Principal.NTAccount($interactiveUser)).Translate([Security.Principal.SecurityIdentifier]).Value } catch { }
+  # control; MasalaPOS runs as the person using this session, who alone may read the file and delete it once adopted
+  # (apps/server/src/license-config.ts). No other user is ever given access.
   Remove-Item -LiteralPath $stagePath -Force -ErrorAction SilentlyContinue
   [IO.File]::WriteAllText($stagePath, '', (New-Object Text.UTF8Encoding $false))
-  & "$env:SystemRoot\System32\icacls.exe" $stagePath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' "${reader}:(R,D)" | Out-Null
+  & "$env:SystemRoot\System32\icacls.exe" $stagePath /inheritance:r /grant:r "*${System}:F" "*${Admins}:F" "*${userSid}:(R,D)" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'icacls failed' }
   [IO.File]::WriteAllText($stagePath, ($staged | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
 } catch { Fail "MasalaPOS was activated but setup couldn't save it in $stageDir. Run setup again." }
