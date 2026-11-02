@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { z } from "zod";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import { httpError } from "./http-error.js";
+import { guestRateLimiter } from "./guest-rate.js";
 import { loadOrderJson, type OrderRow } from "./mappers.js";
 import { lanUrls } from "./system.js";
 import { menuPhotoUrl } from "./menu-photo.js";
@@ -85,17 +86,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
 
   // Bounded, server-local protection. A restaurant Wi-Fi shares an IP, so reads
   // have a higher allowance than submissions; pending requests are also capped.
-  const rates = new Map<string, { until: number; count: number }>();
-  function rate(req: FastifyRequest, action: string, limit: number) {
-    const now = Date.now(), key = `${action}:${req.ip}`;
-    if (rates.size >= 10_000) {
-      for (const [k, value] of rates) if (value.until <= now) rates.delete(k);
-      if (rates.size >= 10_000 && !rates.has(key)) throw httpError(429, "Please wait a minute and try again");
-    }
-    let value = rates.get(key);
-    if (!value || value.until <= now) { value = { until: now + 60_000, count: 0 }; rates.set(key, value); }
-    if (++value.count > limit) throw httpError(429, "Please wait a minute and try again");
-  }
+  const rate = guestRateLimiter();
   // Guest capabilities never call requireAuth or register a staff device.
   function guestLicense(ordering = false) {
     const status = app.licensing.status();
