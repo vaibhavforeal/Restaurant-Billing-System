@@ -18,14 +18,14 @@ export function allocatePaise(total: number, weights: number[]): number[] {
   return parts.map((part) => sign * part.value);
 }
 
-/** Called inside bill creation's transaction; reports never reprice historical sales. `legacy`: migration 017's backfill, before combos existed. */
-export function saveReportLines(db: Database, billId: string, legacy = false) {
+/** Called inside bill creation's transaction; reports never reprice historical sales. */
+export function saveReportLines(db: Database, billId: string) {
   const bill = db.prepare("SELECT order_id, receipt_json, rounding_paise FROM bills WHERE id = ?").get(billId) as {
     order_id: string; receipt_json: string | null; rounding_paise: number;
   };
   // Legacy exclusive bills (taxInclusive === false, or no snapshot at all as migration 017 backfills) have a discount that excludes GST.
   const exclusive = bill.receipt_json ? JSON.parse(bill.receipt_json).taxInclusive === false : true;
-  const rows = db.prepare(`SELECT oi.id, oi.product_id, oi.variant_id, oi.name_snapshot, oi.qty, ${legacy ? "NULL" : "oi.parent_item_id"} AS parent_item_id,
+  const rows = db.prepare(`SELECT oi.id, oi.product_id, oi.variant_id, oi.name_snapshot, oi.qty, oi.parent_item_id AS parent_item_id,
     oi.price_paise_snapshot * oi.qty AS subtotal, oi.gst_rate_snapshot AS rate,
     c.id AS category_id, c.name AS category_name
     FROM order_items oi JOIN products p ON p.id = oi.product_id JOIN categories c ON c.id = p.category_id
@@ -52,11 +52,11 @@ export function saveReportLines(db: Database, billId: string, legacy = false) {
   }
   const rounding = allocatePaise(bill.rounding_paise, lines.map((line) => line.taxable + line.cgst + line.sgst));
   const insert = db.prepare(`INSERT INTO bill_report_lines (bill_id, order_item_id, product_id, variant_id, name,
-    category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise${legacy ? "" : ", parent_order_item_id"})
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${legacy ? "" : ", ?"})`);
+    category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, parent_order_item_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   lines.forEach((line, i) => insert.run(billId, line.id, line.product_id, line.variant_id, line.name_snapshot,
-    legacy ? null : line.category_id, legacy ? "Historical category unavailable" : line.category_name,
-    line.qty, line.subtotal, line.discount, line.taxable, line.cgst, line.sgst, rounding[i]!, line.taxable + line.cgst + line.sgst + rounding[i]!, ...(legacy ? [] : [null])));
+    line.category_id, line.category_name,
+    line.qty, line.subtotal, line.discount, line.taxable, line.cgst, line.sgst, rounding[i]!, line.taxable + line.cgst + line.sgst + rounding[i]!, null));
   for (const item of rows.filter((row) => row.parent_item_id)) insert.run(billId, item.id, item.product_id, item.variant_id, item.name_snapshot,
     item.category_id, item.category_name, item.qty, 0, 0, 0, 0, 0, 0, 0, item.parent_item_id);
 }

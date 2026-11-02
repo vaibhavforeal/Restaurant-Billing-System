@@ -33,16 +33,6 @@ async function fixture(provider?: ZomatoProvider) {
 }
 
 describe("Zomato setup and reconciliation", () => {
-  it("upgrades existing data additively and reruns safely", () => {
-    const db = openDb(":memory:");
-    try {
-      migrate(db, MIGRATIONS.filter(m => m.version < 21));
-      db.prepare("UPDATE settings SET restaurant_name='Existing restaurant' WHERE id=1").run();
-      migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
-      expect(db.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Existing restaurant" });
-      expect(db.prepare("SELECT enabled,version FROM zomato_settings").get()).toEqual({ enabled: 0, version: 1 });
-    } finally { db.close(); }
-  });
   it("keeps setup honest and rejects unsupported activation and stale edits", async () => {
     const f = await fixture();
     const read = await f.api("GET", "/api/zomato/settings");

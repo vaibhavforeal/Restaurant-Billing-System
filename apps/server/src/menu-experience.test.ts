@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -172,51 +171,5 @@ describe("menu descriptions and photos", () => {
     expect(after.json().products[0]).toMatchObject({ description: "A new description", photoUrl: `/api/menu-images/${product.id}/${photoHash(PROGRESSIVE)}` });
     expect(after.body).not.toContain("data:image");
     expect(after.json().products[0]).not.toHaveProperty("photo_data");
-  });
-});
-
-describe("menu experience migration", () => {
-  it("adds safe product defaults and links only canonical accepted guest item references belonging to the same order", () => {
-    const db = openDb(":memory:");
-    try {
-      migrate(db, MIGRATIONS.filter((migration) => migration.version < 10));
-      const userId = randomUUID(), categoryId = randomUUID(), productId = randomUUID(), tableId = randomUUID();
-      const orderId = randomUUID(), otherOrderId = randomUUID(), requestId = randomUUID(), pendingId = randomUUID();
-      db.prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, 'Owner', 'fixture', 'admin', 0)").run(userId);
-      db.prepare("INSERT INTO categories (id, name) VALUES (?, 'Meals')").run(categoryId);
-      db.prepare("INSERT INTO products (id, category_id, name, price_paise, gst_rate, created_at) VALUES (?, ?, 'Rice bowl', 10000, 5, 0)").run(productId, categoryId);
-      db.prepare("INSERT INTO dining_tables (id, name) VALUES (?, 'T1')").run(tableId);
-      for (const id of [orderId, otherOrderId]) db.prepare("INSERT INTO orders (id, client_ref, type, table_id, opened_by, opened_at) VALUES (?, ?, 'dine_in', ?, ?, 0)")
-        .run(id, randomUUID(), tableId, userId);
-      const requestItems = JSON.stringify(Array.from({ length: 30 }, () => ({ productId, variantId: null, name: "Original rice bowl", pricePaise: 9000, gstRate: 5, qty: 2, note: "" })));
-      for (const [id, status, order] of [[requestId, "accepted", orderId], [pendingId, "pending", null]] as const) {
-        db.prepare(`INSERT INTO guest_requests (id, client_ref, table_id, table_name, receipt_hash, fingerprint, items_json, subtotal_paise,
-          tax_inclusive, status, created_at, expires_at, order_id) VALUES (?, ?, ?, 'T1', 'hash', 'fingerprint', ?, 540000, 0, ?, 0, 1000, ?)`).run(id, randomUUID(), tableId, requestItems, status, order);
-      }
-      const rows = [
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:0`, expected: requestId },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:29`, expected: requestId },
-        { id: randomUUID(), order: otherOrderId, ref: `guest:${requestId}:1`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${pendingId}:0`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${randomUUID()}:0`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}junk`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:0junk`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:30`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:01`, expected: null },
-        { id: randomUUID(), order: orderId, ref: `guest:${requestId}:-1`, expected: null },
-        { id: randomUUID(), order: orderId, ref: randomUUID(), expected: null },
-      ];
-      for (const row of rows) db.prepare(`INSERT INTO order_items (id, order_id, client_ref, product_id, name_snapshot, price_paise_snapshot, gst_rate_snapshot, qty)
-        VALUES (?, ?, ?, ?, 'Original rice bowl', 9000, 5, 2)`).run(row.id, row.order, row.ref, productId);
-      const before = db.prepare("SELECT id, order_id, client_ref, name_snapshot, price_paise_snapshot, qty FROM order_items ORDER BY id").all();
-      const throughTen = MIGRATIONS.filter((migration) => migration.version <= 10);
-      migrate(db, throughTen); migrate(db, throughTen);
-      expect(db.prepare("SELECT description, is_sold_out, photo_data, photo_hash FROM products WHERE id = ?").get(productId))
-        .toEqual({ description: "", is_sold_out: 0, photo_data: null, photo_hash: null });
-      expect(db.prepare("SELECT id, order_id, client_ref, name_snapshot, price_paise_snapshot, qty FROM order_items ORDER BY id").all()).toEqual(before);
-      for (const row of rows) expect(db.prepare("SELECT guest_request_id FROM order_items WHERE id = ?").get(row.id), row.ref).toEqual({ guest_request_id: row.expected });
-      expect(db.pragma("foreign_key_check")).toEqual([]);
-    } finally { db.close(); }
   });
 });

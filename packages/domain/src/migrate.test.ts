@@ -71,4 +71,24 @@ describe("migrate", () => {
     const zero: Migration = { version: 0, name: "zero", up: () => {} };
     expect(() => migrate(db, [zero])).toThrow(/version 0 < 1/);
   });
+
+  it("starts from a baseline: builds a new database, skips one already there, and refuses one from before it", () => {
+    const baseline: Migration = { version: 5, name: "baseline", baseline: true, up: (d) => d.exec("CREATE TABLE a (id INTEGER PRIMARY KEY)") };
+    const m6: Migration = { version: 6, name: "add-b", up: (d) => d.exec("CREATE TABLE b (id INTEGER PRIMARY KEY)") };
+    const fresh = openDb(":memory:");
+    migrate(fresh, [baseline, m6]);
+    expect(fresh.pragma("user_version", { simple: true })).toBe(6);
+
+    const atBaseline = openDb(":memory:");
+    atBaseline.exec("CREATE TABLE a (id INTEGER PRIMARY KEY)");
+    atBaseline.pragma("user_version = 5");
+    migrate(atBaseline, [baseline, m6]); // would throw "table a already exists" if the baseline ran again
+    expect(atBaseline.pragma("user_version", { simple: true })).toBe(6);
+
+    const older = openDb(":memory:");
+    older.exec("CREATE TABLE a (id INTEGER PRIMARY KEY)");
+    older.pragma("user_version = 3");
+    expect(() => migrate(older, [baseline, m6])).toThrow(/older than this app can upgrade/);
+    expect(older.pragma("user_version", { simple: true })).toBe(3);
+  });
 });

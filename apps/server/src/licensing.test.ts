@@ -176,19 +176,6 @@ describe("commercial licensing", () => {
     expect(f.app.licensing.status(device)).toMatchObject({ serverTime: before.lastSeenAt! + 60_000, registeredDevices: 1, revision: 1, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
   });
 
-  it("migrates existing licenses and devices without changing grants or priority", () => {
-    const db = openDb(":memory:");
-    try {
-      migrate(db, MIGRATIONS.filter((m) => m.version < 13));
-      db.prepare("UPDATE license_state SET envelope='existing', revision=7, last_seen_at=123 WHERE id=1").run();
-      db.prepare("INSERT INTO licensed_devices (id, credential_hash, name, created_at) VALUES ('old','hash','Main',42)").run();
-      migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
-      expect(db.prepare("SELECT * FROM licensed_devices WHERE id='old'").get()).toMatchObject({ name: "Main", created_at: 42, last_seen_at: null, version: 1 });
-      expect(db.prepare("SELECT * FROM license_state WHERE id=1").get()).toMatchObject({ envelope: "existing", revision: 7, last_seen_at: 123 });
-      expect(db.prepare("SELECT count(*) AS n FROM license_events").get()).toEqual({ n: 0 });
-    } finally { db.close(); }
-  });
-
   it("rejects unrenderable signed dates and alternate base64 signature encodings", async () => {
     const f = await fixture();
     expect((await f.activate({ ...f.claims, expiresAt: Number.MAX_SAFE_INTEGER - 1, graceUntil: Number.MAX_SAFE_INTEGER })).statusCode).toBe(400);

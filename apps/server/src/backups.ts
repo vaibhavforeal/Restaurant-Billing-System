@@ -47,7 +47,9 @@ export function verifyBackup(path: string): number {
   try {
     if (check.pragma("quick_check", { simple: true }) !== "ok") throw new Error("Backup failed SQLite integrity check");
     const version = check.pragma("user_version", { simple: true }) as number;
-    if (version < 1 || version > MIGRATIONS.at(-1)!.version) throw new Error("Backup schema is not supported by this app version");
+    // A backup older than the baseline migration (a pre-release build) has no upgrade path left.
+    const oldest = MIGRATIONS[0]!.baseline ? MIGRATIONS[0]!.version : 1;
+    if (version < oldest || version > MIGRATIONS.at(-1)!.version) throw new Error("Backup schema is not supported by this app version");
     for (const table of ["settings", "users", "orders", "bills"]) check.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get();
     if ((check.pragma("foreign_key_check") as unknown[]).length) throw new Error("Backup contains broken references");
     return version;

@@ -92,7 +92,7 @@ describe("verified cloud upload queue", () => {
     await f.worker.process();
     expect(adapter.upload).toHaveBeenCalledTimes(1);
     const input = adapter.upload.mock.calls[0]![0];
-    expect(verifyBackup(input.path)).toBe(MIGRATIONS.length);
+    expect(verifyBackup(input.path)).toBe(MIGRATIONS.at(-1)!.version);
     expect(input.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(input.idempotencyKey).toBe(snapshot.name);
     expect(input.folderName).toBe("MasalaPOS Backups");
