@@ -31,9 +31,31 @@ function Read-VendorCode([string]$prefix, [string]$text) {
   return "$prefix-$($t.Substring(0, 4))-$($t.Substring(4))"
 }
 
-function Read-Identity([string]$path) {
-  if (!(Test-Path -LiteralPath $path)) { return $null }
-  try { $saved = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json } catch { return $null }
+Add-Type -Namespace MasalaPos -Name Handles -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle handle, System.Text.StringBuilder path, uint size, uint flags);
+/// <summary>The path the open file really has, after every junction and symbolic link on the way to it.</summary>
+public static string FinalPath(Microsoft.Win32.SafeHandles.SafeFileHandle handle) {
+  var path = new System.Text.StringBuilder(1024);
+  uint length = GetFinalPathNameByHandleW(handle, path, 1024, 0);
+  if (length == 0 || length >= 1024) return null;
+  var text = path.ToString();
+  if (text.StartsWith(@"\\?\UNC\")) return null;
+  return text.StartsWith(@"\\?\") ? text.Substring(4) : text;
+}
+'@
+
+# Reads an identity only from the file actually opened: it must sit at exactly this path (no junction or link anywhere on the way
+# redirected it) and be owned by one of $owners. Both are checked on the open handle, so the file can't be swapped after the check.
+function Read-Identity([string]$path, [string[]]$owners) {
+  if (!(Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+  $stream = $null
+  try {
+    $stream = New-Object IO.FileStream($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    if ([MasalaPos.Handles]::FinalPath($stream.SafeFileHandle) -ne [IO.Path]::GetFullPath($path)) { return $null }
+    if ($owners -notcontains $stream.GetAccessControl().GetOwner([Security.Principal.SecurityIdentifier]).Value) { return $null }
+    $saved = (New-Object IO.StreamReader($stream, (New-Object Text.UTF8Encoding $false), $true)).ReadToEnd() | ConvertFrom-Json
+  } catch { return $null } finally { if ($stream) { $stream.Dispose() } }
   if ("$($saved.installationId)" -match '^[0-9a-fA-F-]{36}$' -and "$($saved.installationSecret)" -cmatch '^[a-f0-9]{64}$') {
     return @{ installationId = "$($saved.installationId)"; installationSecret = "$($saved.installationSecret)" }
   }
@@ -97,19 +119,16 @@ try {
 
 # Reinstalling must not take a second seat: reuse this PC's identity if the app (or an earlier run of setup) already has one. Only two
 # profiles are looked at, the administrator running setup and the person using this session (the app keeps installation.json under
-# AppData\Roaming), and only files their owner (or an administrator) made.
+# AppData\Roaming), and only a file its own user made. The session user's file must be owned by that user alone: accepting an
+# administrator-owned file there would let them point their profile at another installation's file and have setup hand them its secret.
 $identityFiles = @(@{ path = (Join-Path $env:APPDATA 'masalapos-desktop\data\installation.json'); owners = @($selfSid, $Admins, $System) })
 try {
   $profilePath = (Get-ItemProperty -LiteralPath "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$userSid" -ErrorAction Stop).ProfileImagePath
-  if ($profilePath) { $identityFiles += @{ path = (Join-Path $profilePath 'AppData\Roaming\masalapos-desktop\data\installation.json'); owners = @($userSid, $Admins, $System) } }
+  if ($profilePath -and $userSid -ne $selfSid) { $identityFiles += @{ path = (Join-Path $profilePath 'AppData\Roaming\masalapos-desktop\data\installation.json'); owners = @($userSid) } }
 } catch { }
 $identityFiles += @{ path = $stagePath; owners = @($selfSid, $Admins, $System) }
 $identity = $null
-foreach ($file in $identityFiles) {
-  if (!(Test-Path -LiteralPath $file.path) -or !(Test-OwnedBy $file.path $file.owners)) { continue }
-  $identity = Read-Identity $file.path
-  if ($identity) { break }
-}
+foreach ($file in $identityFiles) { $identity = Read-Identity $file.path $file.owners; if ($identity) { break } }
 if (!$identity) {
   $bytes = New-Object byte[] 32
   $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($bytes); $rng.Dispose()
@@ -154,15 +173,30 @@ $staged = [ordered]@{
   installationId = $identity.installationId; installationSecret = $identity.installationSecret
   license = $reply.license; customerCode = "$($reply.customer.code)"; orderCode = "$($reply.order.code)"; createdAt = $activation.generatedAt
 }
-try {
-  # The file holds the installation secret, so it is locked down before the secret is written. Only SYSTEM and Administrators get full
-  # control; MasalaPOS runs as the person using this session, who alone may read the file and delete it once adopted
-  # (apps/server/src/license-config.ts). No other user is ever given access.
-  Remove-Item -LiteralPath $stagePath -Force -ErrorAction SilentlyContinue
-  [IO.File]::WriteAllText($stagePath, '', (New-Object Text.UTF8Encoding $false))
-  & "$env:SystemRoot\System32\icacls.exe" $stagePath /inheritance:r /grant:r "*${System}:F" "*${Admins}:F" "*${userSid}:(R,D)" | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'icacls failed' }
-  [IO.File]::WriteAllText($stagePath, ($staged | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
-} catch { Fail "MasalaPOS was activated but setup couldn't save it in $stageDir. Run setup again." }
+# The file holds the installation secret. It is created new (never reusing a file someone else may own, or a link) with its permissions
+# set at creation: SYSTEM and Administrators get full control, and the person using this session, as whom MasalaPOS runs, may only read
+# it and delete it once adopted (apps/server/src/license-config.ts). No other user is ever given access.
+function Write-StagedSecret([string]$path, [string]$text) {
+  if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+  if (Test-Path -LiteralPath $path) { throw 'The old activation file could not be removed.' }
+  $security = New-Object Security.AccessControl.FileSecurity
+  $security.SetAccessRuleProtection($true, $false)
+  foreach ($grant in @{ sid = $System; rights = 'FullControl' }, @{ sid = $Admins; rights = 'FullControl' }, @{ sid = $userSid; rights = 'Read, Delete' }) {
+    $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($grant.sid)), [Security.AccessControl.FileSystemRights]$grant.rights, 'Allow')))
+  }
+  $stream = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [Security.AccessControl.FileSystemRights]::Write, [IO.FileShare]::None, 4096, [IO.FileOptions]::None, $security)
+  try { $bytes = (New-Object Text.UTF8Encoding $false).GetBytes($text); $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
+  # Confirm what landed: an administrator owns it and exactly those three grants, none inherited, are on it.
+  $acl = Get-Acl -LiteralPath $path
+  $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+  $expected = @($System, $Admins, $userSid)
+  if (@($Admins, $System, $selfSid) -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -or $rules.Count -ne 3 -or
+      @($rules | Where-Object { $_.IsInherited -or $_.AccessControlType -ne 'Allow' -or $expected -notcontains $_.IdentityReference.Value }).Count) {
+    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    throw 'The activation file did not get the expected permissions.'
+  }
+}
+try { Write-StagedSecret $stagePath ($staged | ConvertTo-Json -Compress) }
+catch { Fail "MasalaPOS was activated but setup couldn't save it in $stageDir. Run setup again." }
 [Console]::Out.Write("Activated for $($reply.customer.name), order $($reply.order.code).")
 exit 0

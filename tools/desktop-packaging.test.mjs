@@ -151,19 +151,28 @@ test("the installer activation script gets this build's service, key and version
 
 test("the installer activation script protects the staged secret and trusts only its own and the session user's identity", () => {
   const script = readFileSync(new URL("./installer-activate.ps1", import.meta.url), "utf8");
-  // The secret file: SYSTEM and Administrators full, the session user read and delete, nobody else.
-  assert.match(script, /icacls\.exe" \$stagePath \/inheritance:r \/grant:r "\*\$\{System\}:F" "\*\$\{Admins\}:F" "\*\$\{userSid\}:\(R,D\)"/);
+  // The secret file is created new with its permissions set at creation (SYSTEM and Administrators full, the session user read and
+  // delete, nothing inherited), a leftover file that can't be removed stops setup, and the result is checked.
+  assert.match(script, /\[IO\.FileMode\]::CreateNew/);
+  assert.match(script, /SetAccessRuleProtection\(\$true, \$false\)/);
+  assert.match(script, /sid = \$userSid; rights = 'Read, Delete'/);
+  assert.match(script, /throw 'The old activation file could not be removed\.'/);
+  assert.match(script, /\$rules\.Count -ne 3/);
   assert.doesNotMatch(script, /S-1-5-32-545:(M|\(R,D\))/);
+  assert.doesNotMatch(script, /Remove-Item -LiteralPath \$stagePath -Force -ErrorAction SilentlyContinue/);
+  // Identities are read through the open handle: its real path and owner, and the session user's file only if that user owns it.
+  assert.match(script, /GetFinalPathNameByHandleW/);
+  assert.match(script, /owners = @\(\$userSid\) \}/);
   // The shared folder is administrator-owned and only administrators may write to it.
   assert.match(script, /\$stageDir \/setowner "\*\$\{Admins\}"/);
   assert.match(script, /\$stageDir \/inheritance:r \/grant:r "\*\$\{System\}:\(OI\)\(CI\)F" "\*\$\{Admins\}:\(OI\)\(CI\)F" '\*S-1-5-32-545:\(RX\)'/);
   // The session user comes from this session's Explorer; no unresolved user falls back to a broad grant.
   assert.match(script, /GetOwnerSid/);
   assert.match(script, /if \(!\$userSid\) \{ Fail \$NoUser \}/);
-  // Identities come only from the two known profiles and must be owned by their user or an administrator; no profile scan.
+  // Identities come only from the two known profiles and the staged file, each checked against its allowed owners; no profile scan.
   assert.doesNotMatch(script, /Get-ChildItem/);
   assert.match(script, /ProfileList\\\$userSid/);
-  assert.match(script, /Test-OwnedBy \$file\.path \$file\.owners/);
+  assert.match(script, /Read-Identity \$file\.path \$file\.owners/);
 });
 
 test("the installer asks for activation codes only when the build activates online", async () => {
