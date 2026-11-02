@@ -1,7 +1,7 @@
 import { addMonths, GRACE_MS } from "../dates.js";
 import type { D1StatementLike } from "../env.js";
 import { issueLicense, type Deps } from "../issue.js";
-import type { LicensingOrder } from "../orders.js";
+import { orderEnd, type LicensingOrder } from "../orders.js";
 import { activityStatement, INSTALLATION_COLUMNS, latestLicense, setOverridesStatement, type InstallationRow } from "../store.js";
 
 /**
@@ -9,7 +9,7 @@ import { activityStatement, INSTALLATION_COLUMNS, latestLicense, setOverridesSta
  * confirming an order worth nothing):
  * - the order becomes paid; the first statement fails the whole batch when the order is no longer waiting for payment, so an order is
  *   fulfilled once even when two payments land at the same moment;
- * - counters that activated on credit get the order's full term, counted from the day each activated;
+ * - counters that activated on credit get the order's full term, counted from the order's first activation;
  * - each counter a renewal order extends gets the order's plan, devices and modules until its current end date (or today, if it has
  *   lapsed) plus the term.
  */
@@ -25,7 +25,7 @@ export async function fulfilmentStatements(deps: Deps, order: LicensingOrder, ac
     const { results } = await db.prepare(`SELECT ${INSTALLATION_COLUMNS} FROM installations WHERE order_id = ?`).bind(order.id).all<InstallationRow>();
     for (const installation of results) {
       const latest = await latestLicense(db, installation.installationId);
-      const full = addMonths(installation.activatedAt ?? now, order.termMonths!);
+      const full = orderEnd(order, order.termStartedAt ?? installation.activatedAt ?? now)!;
       if (!latest || latest.expiresAt >= full) continue;
       const { statement } = await issueLicense(deps, { installation, plan: order.plan, expiresAt: full, graceUntil: full + GRACE_MS, trial: false, reason: "order", orderId: order.id });
       out.push(statement);

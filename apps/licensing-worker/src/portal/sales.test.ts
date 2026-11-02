@@ -249,6 +249,41 @@ describe("counters", () => {
     const check = await send(env, "POST", "/v1/activate", activation(OTHER_COUNTER, fingerprint, { ...held(offline.license), currentRevision: 1 }), withSecret({}, TEST_SECRET));
     expect(await check.json()).toEqual({ license: null, enrolled: true });
   });
+
+  it("an offline request whose licence doesn't match the counter's record is refused without taking a seat", async () => {
+    const customer = await newCustomer(admin);
+    const order = await newOrder(admin, customer.id, { outlets: 2, pricePerOutletPaise: 0 });
+    await admin.ok("POST", `/orders/${order.id}/confirm`);
+    expect((await enrol(COUNTER, customer.code, order.code)).status).toBe(200);
+    const other = await newOrder(admin, customer.id, { outlets: 1, pricePerOutletPaise: 0 });
+    await admin.ok("POST", `/orders/${other.id}/confirm`);
+    // The counter now holds a hand-issued licence with other identifiers: a licence signed for its record would be refused on the counter.
+    const handIssued = { licenseId: "33333333-3333-4333-8333-333333333333", organizationId: "44444444-4444-4444-8444-444444444444", outletId: "55555555-5555-4555-8555-555555555555" };
+    const request = JSON.stringify(activation(COUNTER, fingerprint, { ...handIssued, currentRevision: 5 }));
+    const res = await admin.call("POST", `/orders/${other.id}/offline-licence`, { activationRequest: request });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "mismatch" });
+    expect(await env.DB.prepare(`SELECT seats_used AS used FROM orders WHERE id = ?`).bind(other.id).first()).toEqual({ used: 0 });
+    expect((await latestLicense(env.DB, COUNTER))!.revision).toBe(1);
+  });
+
+  it("an order whose term has ended takes no more counters, by a move or an offline request", async () => {
+    const customer = await newCustomer(admin);
+    const trial = await newOrder(admin, customer.id, { kind: "trial" });
+    expect((await enrol(COUNTER, customer.code, trial.code)).status).toBe(200);
+    const paid = await newOrder(admin, customer.id, { outlets: 1, pricePerOutletPaise: 0 });
+    await admin.ok("POST", `/orders/${paid.id}/confirm`);
+    await admin.ok("POST", `/installations/${COUNTER}/move`, { orderId: paid.id });
+    vi.setSystemTime(T0 + 30 * DAY_MS);
+    const later = await signIn(env, admin.staff);
+    const back = await later.call("POST", `/installations/${COUNTER}/move`, { orderId: trial.id });
+    expect(back.status).toBe(409);
+    expect(await back.json()).toMatchObject({ code: "order_expired" });
+    const offline = await later.call("POST", `/orders/${trial.id}/offline-licence`, { activationRequest: JSON.stringify(activation(OTHER_COUNTER, fingerprint)) });
+    expect(offline.status).toBe(409);
+    expect(await offline.json()).toMatchObject({ code: "order_expired" });
+    expect(await env.DB.prepare(`SELECT seats_used AS used FROM orders WHERE id = ?`).bind(trial.id).first()).toEqual({ used: 0 });
+  });
 });
 
 describe("who may do what", () => {

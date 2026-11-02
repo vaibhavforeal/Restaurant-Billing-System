@@ -57,8 +57,12 @@ export async function signIn(deps: Deps, env: Env, request: Request): Promise<Re
     throw new HttpError(401, SIGN_IN_FAILED);
   }
   if (!(await verifyPassword(password, row.passwordHash))) {
-    const failed = row.failedAttempts + 1, lock = failed >= LOCK_AFTER;
-    await db.prepare(`UPDATE staff_users SET failed_attempts = ?, locked_until = ? WHERE id = ?`).bind(lock ? 0 : failed, lock ? now + LOCK_MS : null, row.id).run();
+    // Counted in one statement from the stored value, so wrong passwords sent at the same moment each count; a failure that passed the
+    // lock check before a parallel one set the lock leaves it in place.
+    await db.prepare(`UPDATE staff_users SET
+        failed_attempts = CASE WHEN failed_attempts + 1 >= ? THEN 0 ELSE failed_attempts + 1 END,
+        locked_until = CASE WHEN failed_attempts + 1 >= ? THEN ? ELSE locked_until END
+      WHERE id = ?`).bind(LOCK_AFTER, LOCK_AFTER, now + LOCK_MS, row.id).run();
     throw new HttpError(401, SIGN_IN_FAILED);
   }
   const token = newToken();

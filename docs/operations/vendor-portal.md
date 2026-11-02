@@ -67,7 +67,7 @@ It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the
   - An order can be confirmed only when both states are known and the seller details are filled in.
 - **On credit.** An admin can let a confirmed order activate before payment, until a date.
   - The counters' licences end on that date.
-  - When the order is paid they get the full term from the day each activated. Extending the credit date re-signs them.
+  - When the order is paid they get the order's full term, counted from the order's first activation. Extending the credit date re-signs them.
 - **Cancel.** Only an admin, and only before any payment. Counters already active keep their licences until they end.
 
 ## Payments
@@ -107,7 +107,7 @@ Each customer's **Counters** tab and every order show the licences on one timeli
 - **Last seen** and the MasalaPOS version the counter reports.
 - **Modules** (admins change them): see [Feature controls](feature-controls.md).
 - **Change this licence** (admins): another plan, end date or number of devices, with a reason that goes into the activity log. Use it for a goodwill extension or a correction.
-- **Move to another order** (admins): for example from the trial to the paid order, when the restaurant doesn't re-enter the IDs itself. The term starts that day.
+- **Move to another order** (admins): for example from the trial to the paid order, when the restaurant doesn't re-enter the IDs itself. The counter gets the new order's term, which counts from that order's first activation; an order whose term has ended cannot take it.
 - **Release seat** (Support): for a counter that died or was reinstalled.
   - The order can then activate the new computer.
   - The old computer's licence is signed and offline, so it keeps working until it ends.

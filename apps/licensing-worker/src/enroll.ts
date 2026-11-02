@@ -2,7 +2,7 @@ import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { ActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
 import { issueLicense, type Deps } from "./issue.js";
-import { activationBlocker, orderById, orderByCodes, orderTerms, type LicensingOrder } from "./orders.js";
+import { activationBlocker, orderById, orderByCodes, orderEnded, orderTerms, type LicensingOrder } from "./orders.js";
 import { isWellFormedSecret, sha256Hex, verifyInstallationSecret } from "./secret.js";
 import {
   activityStatement, createInstallation, getInstallation, latestLicense, raiseRevisionFloorStatement, setOverridesStatement,
@@ -20,6 +20,7 @@ const REFUSALS = {
   order_cancelled: [409, "This order was cancelled. Contact MasalaPOS."],
   not_paid: [409, "This order hasn't been paid yet. Pay the MasalaPOS invoice, or contact MasalaPOS."],
   renewal_order: [409, "This Order ID renews outlets that are already set up. Use the Order ID from your first purchase or trial."],
+  order_expired: [409, "This order's licence period has ended. Contact MasalaPOS to renew it."],
   seats_full: [409, "Every outlet on this order is already set up. Contact MasalaPOS to move it to this computer or add an outlet."],
   other_customer: [409, "This computer is registered to another MasalaPOS customer. Contact MasalaPOS."],
   already_licensed: [409, "This computer already has a paid MasalaPOS licence; a trial can't replace it."],
@@ -30,8 +31,8 @@ const refuse = (error: keyof typeof REFUSALS) => json({ error, message: REFUSALS
 
 /**
  * POST /v1/enroll: a counter at setup (or an administrator later) gives the Customer ID and Order ID from its setup card. The order must
- * belong to that customer and be paid, on credit, or a trial; the counter takes one of its seats and gets the order's licence, with
- * the term counted from now. Enrolling again on the same order hands back the same licence; enrolling on another order of the same
+ * belong to that customer and be paid, on credit, or a trial; the counter takes one of its seats and gets the order's licence, which ends
+ * when the order's term does (counted from its first activation; an order whose term has ended takes no more counters). Enrolling again on the same order hands back the same licence; enrolling on another order of the same
  * customer moves the counter's seat there (a trial becoming paid).
  */
 export async function handleEnroll(deps: Deps, body: unknown, secret: string | null): Promise<Response> {
@@ -70,6 +71,7 @@ export async function handleEnroll(deps: Deps, body: unknown, secret: string | n
   }
   if (installation.customerId !== null && installation.customerId !== order.customerId) return refuse("other_customer");
   if (installation.orderId === order.id) return handOut(deps, installation, order, request.currentRevision);
+  if (orderEnded(order, deps.now())) return refuse("order_expired");
   if (order.kind === "trial" && installation.orderId !== null && await holdsPaidLicence(deps, installation)) return refuse("already_licensed");
   if (order.seatsUsed >= order.outlets) return refuse("seats_full");
 
@@ -92,10 +94,11 @@ export async function orderFull(deps: Deps, orderId: string): Promise<boolean> {
 }
 
 /**
- * Gives a counter one seat of a new or trial order and signs the order's licence for it, the term counted from now. A counter that
- * held a seat on another order of the same customer gives that seat back. One batch: when the order is already full its seat CHECK
- * fails and nothing is written (the caller sees the error). `handedOut` raises the revision floor because the licence goes straight
- * to the counter (in the enrol reply, or as a file) rather than at its next check.
+ * Gives a counter one seat of a new or trial order and signs the order's licence for it, to the end of the order's term (which starts
+ * now when this is the order's first activation; callers refuse an order whose term has ended). A counter that held a seat on another
+ * order of the same customer gives that seat back. One batch: when the order is already full its seat CHECK fails and nothing is
+ * written (the caller sees the error). `handedOut` raises the revision floor because the licence goes straight to the counter (in the
+ * enrol reply, or as a file) rather than at its next check.
  */
 export async function assignSeat(deps: Deps, installation: InstallationRow, order: LicensingOrder,
   opts: { actorId: string | null; outletName: string | null; appVersion: string | null; handedOut: boolean }): Promise<LicenseRow> {

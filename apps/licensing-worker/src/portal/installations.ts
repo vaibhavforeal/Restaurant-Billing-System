@@ -5,7 +5,7 @@ import { z } from "zod";
 import { GRACE_MS } from "../dates.js";
 import { assignSeat, orderFull } from "../enroll.js";
 import { reissueLicense } from "../issue.js";
-import { activationBlocker, orderById } from "../orders.js";
+import { activationBlocker, orderById, orderEnded } from "../orders.js";
 import {
   createInstallation, getInstallation, getOwnerSettings, insertOwnerEventStatement, latestLicense, ownerEvents, setOverridesStatement, type InstallationRow,
 } from "../store.js";
@@ -71,6 +71,8 @@ async function detail(ctx: Ctx, installation: InstallationRow): Promise<Installa
   };
 }
 
+/** An order's term starts at its first activation; once it has ended, a renewal order extends the counters already on it. */
+const ENDED = "This order's term has ended, so it can't take more counters. Use a renewal order for the counters on it.";
 const label = (i: InstallationRow) => i.outletName ?? `Counter ${i.installationId.slice(0, 8)}`;
 /** Catalogue order, so the stored JSON is stable. */
 const sortOverrides = (overrides: ModuleOverrides): ModuleOverrides =>
@@ -187,6 +189,7 @@ export const installationsRoutes: Route[] = [
     if (order.id === installation.orderId) throw conflict("The counter is already on that order.");
     const blocker = activationBlocker(order, ctx.deps.now());
     if (blocker) throw conflict(blocker === "not_paid" ? "That order isn't paid or approved on credit yet." : "That order can't take counters.", blocker);
+    if (orderEnded(order, ctx.deps.now())) throw conflict(ENDED, "order_expired");
     if (order.seatsUsed >= order.outlets) throw conflict("Every outlet on that order is taken. Release one first.", "seats_full");
     try { await assignSeat(ctx.deps, installation, order, { actorId: ctx.user.id, outletName: null, appVersion: null, handedOut: false }); }
     catch (error) { if (await orderFull(ctx.deps, order.id)) throw conflict("Every outlet on that order is taken. Release one first.", "seats_full"); throw error; }
@@ -223,12 +226,17 @@ export const installationsRoutes: Route[] = [
       });
       installation = (await getInstallation(db, request.installationId))!;
     }
+    // As at enrolment: a licence signed for the stored identifiers would be refused by a counter that holds others, and waste the seat.
+    if (held && (request.licenseId !== installation.licenseId || request.organizationId !== installation.organizationId || request.outletId !== installation.outletId)) {
+      throw conflict("This counter's licence doesn't match MasalaPOS's records for it. Check the activation request came from this counter.", "mismatch");
+    }
     if (installation.customerId !== null && installation.customerId !== order.customerId) throw conflict("That counter belongs to another customer.", "other_customer");
     let envelope: string, revision: number;
     if (installation.orderId === order.id) {
       const latest = (await latestLicense(db, installation.installationId))!;
       envelope = latest.envelope; revision = latest.revision;
     } else {
+      if (orderEnded(order, ctx.deps.now())) throw conflict(ENDED, "order_expired");
       if (order.seatsUsed >= order.outlets) throw conflict("Every outlet on this order is taken. Release one first.", "seats_full");
       const row = await assignSeat(ctx.deps, installation, order, { actorId: ctx.user.id, outletName: request.outletName ?? null, appVersion: request.appVersion ?? null, handedOut: true });
       envelope = row.envelope; revision = row.revision;

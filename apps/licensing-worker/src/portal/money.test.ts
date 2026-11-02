@@ -120,6 +120,17 @@ describe("offline payments", () => {
     await pay(accounts, order.id, 1_180_000);
     expect(await latestLicense(env.DB, COUNTER)).toMatchObject({ revision: 2, expiresAt: addMonths(T0, 12) });
   });
+
+  it("paying an order on credit ends every counter on the order's own end date, including one that joined later", async () => {
+    const { customer, order } = await confirmedOrder({ outlets: 2 });
+    await admin.ok("POST", `/orders/${order.id}/credit`, { until: T0 + 10 * DAY_MS });
+    await enrol(COUNTER, customer, order);
+    vi.setSystemTime(T0 + 3 * DAY_MS);
+    await enrol(OTHER, customer, order);
+    accounts = Object.assign(await signIn(env, accounts.staff), { staff: accounts.staff });
+    expect((await pay(accounts, order.id, 2_360_000)).status).toBe(201);
+    for (const id of [COUNTER, OTHER]) expect((await latestLicense(env.DB, id))!.expiresAt).toBe(addMonths(T0, 12));
+  });
 });
 
 describe("GST invoices", () => {
