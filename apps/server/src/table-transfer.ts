@@ -13,7 +13,7 @@ import { orderTableLabel } from "./table-label.js";
  * `text` is printed as-is, so callers pass ASCII only (e.g. "T3 -> T7"). Returns print error messages;
  * the caller's transaction owns the queue inserts.
  */
-export function notifyKitchenTableChange(app: FastifyInstance, orderId: string, text: string): string[] {
+function notifyKitchenTableChange(app: FastifyInstance, orderId: string, text: string): string[] {
   const printErrors: string[] = [];
   const stations = app.db
     .prepare(

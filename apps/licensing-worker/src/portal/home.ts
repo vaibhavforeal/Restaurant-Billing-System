@@ -9,7 +9,7 @@ import { ticketsWhere } from "./tickets.js";
 
 const IST_OFFSET_MS = 330 * 60_000;
 /** Midnight in India at the start of the day `at` falls in, and at the start of its month. */
-export function istStarts(at: number): { day: number; month: number } {
+function istStarts(at: number): { day: number; month: number } {
   const local = new Date(at + IST_OFFSET_MS);
   return {
     day: Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - IST_OFFSET_MS,

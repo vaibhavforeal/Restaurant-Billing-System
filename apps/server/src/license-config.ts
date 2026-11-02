@@ -21,7 +21,7 @@ function serviceUrlFrom(value: string | undefined, commercial: boolean): string 
   return text.endsWith("/") ? text.slice(0, -1) : text;
 }
 /** Where the customer installer leaves the activation it made (tools/installer-activate.ps1); shared by every Windows user of the PC. */
-export function stagedActivationPath(): string | undefined {
+function stagedActivationPath(): string | undefined {
   const programData = process.env["ProgramData"];
   return programData ? join(programData, "MasalaPOS", "activation.json") : undefined;
 }

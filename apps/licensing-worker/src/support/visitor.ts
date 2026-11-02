@@ -10,11 +10,11 @@ import { sha256Hex, verifyInstallationSecret } from "../secret.js";
 import { insertMessageStatement, lastMessageId, MESSAGE_MAX, openChatId, publishChat, touchChatStatement, visitorChat } from "./chats.js";
 
 const COOKIE = "mp_support";
-export const LINK_TTL_MS = 10 * 60_000;
-export const VISITOR_TTL_MS = 24 * 60 * 60_000;
+const LINK_TTL_MS = 10 * 60_000;
+const VISITOR_TTL_MS = 24 * 60 * 60_000;
 
 /** The chat page's own policy: like the portal's, and it may be opened from anywhere but framed by no one. */
-export const SUPPORT_SECURITY_HEADERS: Record<string, string> = {
+const SUPPORT_SECURITY_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "x-frame-options": "DENY",
   "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
 };

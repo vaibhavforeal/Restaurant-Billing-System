@@ -9,7 +9,7 @@ const KINDS: Record<string, string> = { customer: "Customers", order: "Orders", 
   lead: "Leads", followup: "Follow-ups", ticket: "Tickets", user: "Staff", settings: "Settings" };
 
 /** Where an activity row's record lives in the portal, when it has a page. */
-export function recordLink(item: Pick<ActivityItem, "entityType" | "entityId" | "customer">): string | null {
+function recordLink(item: Pick<ActivityItem, "entityType" | "entityId" | "customer">): string | null {
   switch (item.entityType) {
     case "customer": return `/customers/${item.entityId}`;
     case "order": return `/orders/${item.entityId}`;

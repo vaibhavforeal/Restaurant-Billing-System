@@ -91,11 +91,11 @@ export const CUSTOM_REPORT_SOURCES: CustomReportSource[] = [
 /** Fields that hold numbers: they take numeric filters, typed as numbers (money in paise). */
 export const isNumericField = (field: Pick<CustomReportField, "type">) => field.type === "number" || field.type === "money" || field.type === "quantity";
 
-export const CUSTOM_REPORT_SOURCE_IDS = CUSTOM_REPORT_SOURCES.map((s) => s.id) as [string, ...string[]];
+const CUSTOM_REPORT_SOURCE_IDS = CUSTOM_REPORT_SOURCES.map((s) => s.id) as [string, ...string[]];
 export const customReportSource = (id: string) => CUSTOM_REPORT_SOURCES.find((s) => s.id === id);
 export const CUSTOM_REPORT_LIMITS = { columns: 30, filters: 10, groups: 5, rows: 5000 } as const;
 
-export const CUSTOM_FILTER_OPS = ["eq", "ne", "contains", "gt", "gte", "lt", "lte"] as const;
+const CUSTOM_FILTER_OPS = ["eq", "ne", "contains", "gt", "gte", "lt", "lte"] as const;
 export type CustomFilterOp = typeof CUSTOM_FILTER_OPS[number];
 export const CUSTOM_FILTER_OP_LABELS: Record<CustomFilterOp, string> = { eq: "is", ne: "is not", contains: "contains", gt: "greater than", gte: "at least", lt: "less than", lte: "at most" };
 const NUMERIC: CustomFilterOp[] = ["eq", "ne", "gt", "gte", "lt", "lte"];

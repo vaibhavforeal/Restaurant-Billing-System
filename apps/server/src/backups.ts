@@ -5,7 +5,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-export const managedName = /^masalapos-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
+const managedName = /^masalapos-(daily|manual|pre-update)-\d{13}-[a-f0-9-]{36}\.db$/;
 export type BackupKind = "daily" | "manual" | "pre-update";
 /** Kind and creation time from a managed snapshot name, or null for any other file. */
 export function parseBackupName(name: string): { kind: BackupKind; createdAt: number } | null {

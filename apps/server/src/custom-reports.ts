@@ -117,7 +117,7 @@ const formatOf = (field: CustomReportField): ReportColumn["format"] | undefined 
   field.type === "money" ? "money" : field.type === "quantity" ? "quantity" : field.type === "time" ? "time" : undefined;
 
 /** Runs a validated definition. Every identifier comes from the catalogue; every filter value is a bound parameter. */
-export function runCustomReport(app: FastifyInstance, config: CustomReportConfigValue, query: unknown, title: string): CustomReport {
+function runCustomReport(app: FastifyInstance, config: CustomReportConfigValue, query: unknown, title: string): CustomReport {
   const problem = customReportProblem(config);
   if (problem) throw httpError(400, problem);
   const { from, to, bounds } = reportRange(query);

@@ -5,7 +5,7 @@ export class HttpError extends Error {
   constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
 }
 
-export const NO_STORE = { "cache-control": "no-store" };
+const NO_STORE = { "cache-control": "no-store" };
 /** Sent with every portal response, pages and API alike. */
 export const SECURITY_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "x-frame-options": "DENY",

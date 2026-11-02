@@ -61,7 +61,7 @@ const windowId = uuid();
 const listeners = new Set<() => void>();
 const waiters = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
-export function notifyQueue() { listeners.forEach((listener) => listener()); }
+function notifyQueue() { listeners.forEach((listener) => listener()); }
 export function subscribeQueue(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 export function queueConnected() { return generationChecked; }
 

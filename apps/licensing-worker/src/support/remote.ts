@@ -12,7 +12,7 @@ import { addSystemMessage, counterName, firstName } from "./chats.js";
 /** The PC shows the request for 60 seconds; the service gives up a little later. */
 export const REQUEST_TTL_MS = 75_000;
 /** After it is allowed, the sharing window must connect within this. */
-export const START_TTL_MS = 2 * 60_000;
+const START_TTL_MS = 2 * 60_000;
 /** A session ends on its own after an hour. */
 export const SESSION_MAX_MS = 60 * 60_000;
 /** The path the sharing window connects to with its one-time token. */

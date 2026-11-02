@@ -9,7 +9,7 @@ import { requireModule } from "./modules.js";
 const PRICE_TIERS: PriceTier[] = ["non_ac", "ac", "takeaway", "zomato"];
 
 /** Every costing route needs the admin-only `costs.read` permission and the Dish costing module. */
-export function costGuards(app: FastifyInstance) {
+function costGuards(app: FastifyInstance) {
   return [app.requirePermission("costs.read"), requireModule(app, "costing")];
 }
 

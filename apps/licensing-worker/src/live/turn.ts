@@ -5,9 +5,9 @@ import type { Env } from "../env.js";
 export interface IceServer { urls: string[]; username?: string; credential?: string }
 
 /** Credentials outlive the longest session a little, so a relay never drops mid-session. */
-export const TURN_TTL_MS = 2 * 60 * 60 * 1000;
+const TURN_TTL_MS = 2 * 60 * 60 * 1000;
 
-export async function turnCredential(secret: string, username: string): Promise<string> {
+async function turnCredential(secret: string, username: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(username)));
   return btoa(String.fromCharCode(...mac));

@@ -44,13 +44,13 @@ export function segmentCustomers(db: Database, now = Date.now()): SegmentCustome
   });
 }
 
-export function runSegment(db: Database, filter: SegmentFilterValue, now = Date.now()): SegmentCustomer[] {
+function runSegment(db: Database, filter: SegmentFilterValue, now = Date.now()): SegmentCustomer[] {
   const today = localDateKey(now);
   return segmentCustomers(db, now).filter((c) => matchesSegment(c, filter, now, today));
 }
 
 const day = (ms: number | null) => ms === null ? "" : localDateKey(ms);
-export function segmentCsv(customers: SegmentCustomer[]): string {
+function segmentCsv(customers: SegmentCustomer[]): string {
   return catalogCsv([[...SEGMENT_CSV_COLUMNS], ...customers.map((c) => [
     c.name, c.phone, c.email ?? "", c.typeName ?? "", c.tierName ?? "", c.tags.join("; "), String(c.visits), (c.spendPaise / 100).toFixed(2),
     day(c.lastVisitAt), String(c.points), c.birthDate ?? "", c.anniversaryDate ?? "", c.marketingOptIn ? "Yes" : "No",

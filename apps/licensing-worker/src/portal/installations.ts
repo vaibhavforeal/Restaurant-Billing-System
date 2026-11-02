@@ -1,5 +1,4 @@
 import { MODULES, isModuleId, resolveModules, MODULE_IDS, type ModuleId, type ModuleOverrides } from "@masalapos/domain/modules";
-import { PLANS } from "@masalapos/domain/licensing";
 import { parseActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
 import { GRACE_MS } from "../dates.js";
@@ -50,7 +49,7 @@ export async function installationsWhere(ctx: Ctx, where: string, binds: unknown
 }
 
 /** The counter when the staff member may see it (through its customer); otherwise a 404. Counters with no customer are not for sales. */
-export async function visibleInstallation(ctx: Ctx, id: string): Promise<InstallationRow> {
+async function visibleInstallation(ctx: Ctx, id: string): Promise<InstallationRow> {
   const installation = await getInstallation(ctx.deps.db, id);
   if (!installation) throw notFound("That counter");
   if (installation.customerId === null) { if (seesOnlyOwn(ctx.user.role)) throw notFound("That counter"); return installation; }
@@ -290,5 +289,3 @@ export const installationsRoutes: Route[] = [
     return json({ license: envelope, fileName: `masalapos-licence-${request.installationId.slice(0, 8)}-r${revision}.txt`, installationId: request.installationId });
   } },
 ];
-
-export const planDevices = (plan: "basic" | "pro") => PLANS[plan].maxDevices;

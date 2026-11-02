@@ -54,7 +54,7 @@ export interface KotRow {
   done_at: number | null;
 }
 
-export function orderItemJson(r: OrderItemRow) {
+function orderItemJson(r: OrderItemRow) {
   return {
     id: r.id,
     clientRef: r.client_ref,
@@ -104,7 +104,7 @@ export function kotWithContextJson(
 /** Points the customer can spend now: expired points are left out even before a sweep records them. */
 export const pointsBalance = (db: Database, customerId: string) => spendableBalance(db, customerId);
 
-export const customerTags = (db: Database, customerId: string) =>
+const customerTags = (db: Database, customerId: string) =>
   (db.prepare("SELECT tag FROM customer_tags WHERE customer_id = ? ORDER BY tag COLLATE NOCASE").all(customerId) as Array<{ tag: string }>).map((r) => r.tag);
 
 /** A customer as staff screens show them: profile, tags, type name, current tier (when tiers are on) and points balance. */

@@ -2,7 +2,7 @@
 // Sending scan codes rather than virtual keys means the restaurant PC's own keyboard layout decides the character, as if typed there.
 // Extended keys (E0 prefix) carry KEYEVENTF_EXTENDEDKEY. Pause/Break and Ctrl+Alt+Del cannot be sent and are not listed.
 
-export interface ScanKey { scan: number; extended: boolean }
+interface ScanKey { scan: number; extended: boolean }
 
 const PLAIN: Record<string, number> = {
   Escape: 0x01, Digit1: 0x02, Digit2: 0x03, Digit3: 0x04, Digit4: 0x05, Digit5: 0x06, Digit6: 0x07, Digit7: 0x08, Digit8: 0x09, Digit9: 0x0a, Digit0: 0x0b,

@@ -5,7 +5,7 @@ import { useEffect, useState, type AnchorHTMLAttributes, type MouseEvent } from 
 const BASE = "/portal";
 const guards = new Set<() => boolean>();
 
-export const currentPath = () => (window.location.pathname.startsWith(BASE) ? window.location.pathname.slice(BASE.length) : window.location.pathname) || "/";
+const currentPath = () => (window.location.pathname.startsWith(BASE) ? window.location.pathname.slice(BASE.length) : window.location.pathname) || "/";
 
 /** Blocks navigation while it returns false (an unsaved form asks first). */
 export function useLeaveGuard(guard: () => boolean) {

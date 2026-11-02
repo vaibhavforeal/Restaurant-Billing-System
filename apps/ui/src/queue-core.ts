@@ -57,7 +57,7 @@ export interface SendFailure { status?: number; message: string }
 
 export const ENTRY_PREFIX = "masalapos.queue.v2.";
 export const RESULT_PREFIX = "masalapos.queue-result.v2.";
-export const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
+const RESULT_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 30_000;
 
 export function backoffMs(attempts: number, random: () => number): number {
@@ -66,7 +66,7 @@ export function backoffMs(attempts: number, random: () => number): number {
 }
 
 /** Network failures, timeouts, server errors, rate limits and expired sign-ins are worth trying again; other refusals are not. */
-export function isRetryable(failure: SendFailure): boolean {
+function isRetryable(failure: SendFailure): boolean {
   return failure.status === undefined || failure.status >= 500 || failure.status === 401 || failure.status === 429 || failure.status === 408;
 }
 

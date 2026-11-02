@@ -181,7 +181,7 @@ export interface ReportData {
   tickets: { opened: number; resolved: number; medianHoursToResolve: number | null; openByPriority: Record<string, number> };
 }
 
-export type ChatStatus = "waiting" | "active" | "closed";
+type ChatStatus = "waiting" | "active" | "closed";
 /** `staff` is set on staff messages; `customer` messages come from the restaurant, `system` ones from the service. */
 export interface ChatMessage { id: number; author: "customer" | "staff" | "system"; staff: Ref | null; body: string; createdAt: number }
 export interface ChatSummary {

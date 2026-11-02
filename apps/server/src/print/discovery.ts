@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
 
-export interface DiscoveredPrinter { name: string; driver: string; port: string; isDefault: boolean }
+interface DiscoveredPrinter { name: string; driver: string; port: string; isDefault: boolean }
 export interface PrinterDiscovery { supported: boolean; printers: DiscoveredPrinter[] }
 const execute = promisify(execFile);
 const Row = z.object({ Name: z.string(), DriverName: z.string().nullable(), PortName: z.string().nullable(), Default: z.boolean() });

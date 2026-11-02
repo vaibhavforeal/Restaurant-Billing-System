@@ -7,7 +7,7 @@ import { loyaltySettings } from "./loyalty.js";
 import { lanUrls } from "./system.js";
 
 /** How long after the bill a guest may still rate the visit through the receipt's QR code. */
-export const FEEDBACK_WINDOW_MS = 7 * 86_400_000;
+const FEEDBACK_WINDOW_MS = 7 * 86_400_000;
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 
 let serverPort = 4100;

@@ -9,7 +9,7 @@ import { sha256Hex } from "../secret.js";
 import { iceServersFor } from "../live/turn.js";
 import { activityStatement } from "../store.js";
 
-export const INVITATION_MS = 30 * 60_000;
+const INVITATION_MS = 30 * 60_000;
 export const CONSENT_MS = 15 * 60_000;
 export interface ConnectorManifest { version: string; size: number; sha256: string; url: string; signature: string; }
 export interface ConnectorDistribution {

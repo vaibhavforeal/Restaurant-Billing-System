@@ -16,7 +16,7 @@ import { formatPaise } from "./shared.js";
 const LINK_DAYS = 15;
 
 /** Cleared payments on an order. */
-export async function clearedPaise(deps: Deps, orderId: string): Promise<number> {
+async function clearedPaise(deps: Deps, orderId: string): Promise<number> {
   return (await deps.db.prepare(`SELECT COALESCE(SUM(amount_paise), 0) AS paid FROM payments WHERE order_id = ? AND status = 'cleared'`).bind(orderId).first<{ paid: number }>())!.paid;
 }
 
@@ -63,7 +63,7 @@ export async function cancelOpenLinks(deps: Deps, razorpay: RazorpayApi, orderId
 export const razorpayFor = (env: Env): RazorpayApi | null => (env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET ? razorpayApi(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET) : null);
 
 /** Razorpay wants a phone number with its country code; Indian numbers are usually written without it. */
-export function razorpayContact(phone: string | null): string | null {
+function razorpayContact(phone: string | null): string | null {
   const digits = phone?.replace(/[^\d+]/g, "") ?? "";
   if (/^[6-9]\d{9}$/.test(digits)) return `+91${digits}`;
   return /^\+?\d{8,14}$/.test(digits) ? digits : null;

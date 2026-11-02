@@ -9,7 +9,7 @@ export interface WsHandlers {
 /** How long the socket stays open after its last subscriber leaves, so a screen swap does not reconnect. */
 const CLOSE_GRACE_MS = 1000;
 /** The hub sends a heartbeat every 20 s; this long without any message means the connection silently died. */
-export const SILENCE_LIMIT_MS = 45_000;
+const SILENCE_LIMIT_MS = 45_000;
 let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 function watchSilence(socket: WebSocket) {
   if (silenceTimer) clearTimeout(silenceTimer);

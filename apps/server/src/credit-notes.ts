@@ -70,7 +70,7 @@ export function loadBillCreditNotes(db: Database, billId: string, billTotalPaise
 }
 
 /** Money still held per payment method and in total (paid minus refunded; the total is not clamped per method). */
-export function refundableOf(credit: BillCredit): Record<PayMode, number> & { total: number } {
+function refundableOf(credit: BillCredit): Record<PayMode, number> & { total: number } {
   const sum = (rows: Array<{ amountPaise: number }>) => rows.reduce((s, r) => s + r.amountPaise, 0);
   return { ...refundableByMode(credit.paid, credit.refunded), total: sum(credit.paid) - sum(credit.refunded) };
 }
@@ -87,7 +87,7 @@ interface CreditBillRow { id: string; order_id: string; status: "unpaid" | "paid
  * The credit a void or refund of this bill would issue, or the HTTP error that stops it. Shared by the preview and the
  * writes so both apply identical rules. A bill with no stored lines can only be voided: its credit is the bill totals.
  */
-export function draftCredit(db: Database, billId: string, kind: "void" | "refund", requested: Array<{ orderItemId: string; qty: number }> = []): { bill: CreditBillRow; credit: BillCredit; draft: CreditDraft } {
+function draftCredit(db: Database, billId: string, kind: "void" | "refund", requested: Array<{ orderItemId: string; qty: number }> = []): { bill: CreditBillRow; credit: BillCredit; draft: CreditDraft } {
   const bill = db.prepare("SELECT id, order_id, status, total_paise FROM bills WHERE id = ?").get(billId) as CreditBillRow | undefined;
   if (!bill) throw httpError(404, "bill not found");
   refuseZomatoBill(db, billId);
@@ -136,7 +136,7 @@ export async function resolveApprover(app: FastifyInstance, req: FastifyRequest,
 type RefundInput = VoidBillInput["refunds"];
 
 /** Refunds must stay within what each method paid, less what it already refunded. */
-export function checkRefundMethods(credit: BillCredit, refunds: RefundInput): void {
+function checkRefundMethods(credit: BillCredit, refunds: RefundInput): void {
   const held = refundableOf(credit);
   const asked: Record<PayMode, number> = { cash: 0, upi: 0, card: 0 };
   for (const r of refunds) asked[r.mode] += r.amountPaise;
@@ -170,7 +170,7 @@ function checkRefundAmounts(credit: BillCredit, draft: CreditDraft, refunds: Ref
 }
 
 /** Append a credit note with its lines, per-rate taxes and refund payments; returns its id. Call inside the write transaction. */
-export function writeCreditNote(db: Database, note: {
+function writeCreditNote(db: Database, note: {
   billId: string; kind: "void" | "refund"; reason: string; draft: CreditDraft; refunds: RefundInput;
   requestedBy: string; approvedBy: string; clientRef: string; requestJson: string; now: number;
 }): string {
@@ -193,7 +193,7 @@ export function writeCreditNote(db: Database, note: {
 }
 
 /** The earlier credit note written for this reference, if any; a reference reused with a different request is refused. */
-export function replayedCreditNote(db: Database, clientRef: string, requestJson: string): { id: string; billId: string } | null {
+function replayedCreditNote(db: Database, clientRef: string, requestJson: string): { id: string; billId: string } | null {
   const row = db.prepare("SELECT id, bill_id AS billId, request_json AS requestJson FROM credit_notes WHERE client_ref = ?").get(clientRef) as { id: string; billId: string; requestJson: string } | undefined;
   if (!row) return null;
   if (row.requestJson !== requestJson) throw httpError(409, "Credit note reference already used for a different request");

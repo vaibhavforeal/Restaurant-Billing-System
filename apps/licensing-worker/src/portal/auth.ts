@@ -14,7 +14,7 @@ export const SESSION_MS = 12 * 60 * 60 * 1000;
 export const IDLE_MS = 2 * 60 * 60 * 1000;
 const TOUCH_EVERY_MS = 60_000;
 /** Five wrong passwords lock the account for 15 minutes, whatever address they come from. */
-export const LOCK_AFTER = 5;
+const LOCK_AFTER = 5;
 export const LOCK_MS = 15 * 60 * 1000;
 
 const USER_COLUMNS = `u.id, u.email, u.name, u.role, u.must_change_password AS mustChangePassword`;
@@ -23,7 +23,7 @@ type UserRecord = Omit<StaffUser, "mustChangePassword"> & { mustChangePassword: 
 const toUser = (r: UserRecord): StaffUser => ({ id: r.id, email: r.email, name: r.name, role: r.role, mustChangePassword: r.mustChangePassword === 1 });
 
 const cookie = (value: string, maxAgeSeconds: number) => `${COOKIE}=${value}; Path=/portal; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
-export const sessionToken = (request: Request): string | null =>
+const sessionToken = (request: Request): string | null =>
   request.headers.get("cookie")?.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{43})(?:;|$)`))?.[1] ?? null;
 function newToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));

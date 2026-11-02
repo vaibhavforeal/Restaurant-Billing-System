@@ -47,7 +47,7 @@ function build(body: OrderBody, settings: PortalSettings): { termMonths: number 
 }
 
 /** CGST and SGST when MasalaPOS and the customer are in the same state; null while either state is unknown. */
-export const intraStateFor = (settings: PortalSettings, customer: { gstin: string | null; stateCode: string | null }) => {
+const intraStateFor = (settings: PortalSettings, customer: { gstin: string | null; stateCode: string | null }) => {
   const buyer = buyerState(customer);
   return settings.seller.stateCode && buyer ? settings.seller.stateCode === buyer : null;
 };

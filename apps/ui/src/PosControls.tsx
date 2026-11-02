@@ -1,6 +1,6 @@
 import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react";
 
-export function Button({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+function Button({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button type="button" className={`pos-button ${className}`} {...props} />;
 }
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) { return <input {...props} />; }

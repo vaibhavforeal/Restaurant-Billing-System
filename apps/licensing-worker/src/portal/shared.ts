@@ -6,7 +6,7 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_NAMES: Record<Role, string> = { admin: "Admin", sales: "Sales", accounts: "Accounts", support: "Support" };
 
 /** What each role may do in the portal. Sales reps are further limited to their own customers, leads and orders by the server. */
-export const PERMISSIONS = {
+const PERMISSIONS = {
   "users.manage": ["admin"],
   "settings.manage": ["admin"],
   "activity.read": ["admin"],
