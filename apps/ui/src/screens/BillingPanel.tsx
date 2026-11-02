@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
-import { receiptGstMode } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
@@ -30,7 +29,7 @@ type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string;
 export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
   const rates = billTaxRates(value, gst);
   // Nothing GST-related is shown for a bill issued without GST or one whose GST Zomato pays.
-  const noGst = gst !== undefined && (gst.gstPaidBy === "zomato" || receiptGstMode(gst) === "none");
+  const noGst = gst !== undefined && (gst.gstPaidBy === "zomato" || gst.gstMode === "none");
   const includedPaise = value.cgstPaise + value.sgstPaise;
   const breakdown = <>
     {gst && <p>{gstNote(gst)}</p>}

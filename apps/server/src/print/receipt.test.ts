@@ -149,11 +149,6 @@ describe("receipts", () => {
       }
     }
   });
-  it("reads the heading of a bill saved before gstMode existed from its legacy flags", () => {
-    const { gstMode: _gstMode, ...legacy } = bill.receipt;
-    expect(renderBytes(receiptSlip({ ...bill, receipt: legacy as Bill["receipt"] }, 58))).toContain("TAX INVOICE");
-    expect(renderBytes(receiptSlip({ ...bill, receipt: { ...legacy, gstScheme: "composition" } as Bill["receipt"] }, 58))).toContain("BILL OF SUPPLY");
-  });
   it.each(RECEIPT_STYLES)("labels a %s Zomato bill with the section 9(5) note and no GST lines", (receiptStyle) => {
     const totals = calculateBill([{ pricePaise: 25000, qty: 1, gstRate: 5 }], 0, "none");
     const zomato: Bill = { ...bill, ...totals,

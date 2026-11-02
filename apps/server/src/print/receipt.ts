@@ -1,4 +1,4 @@
-import { receiptGstMode, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
+import { resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { contextLine } from "./templates.js";
@@ -36,12 +36,12 @@ const compositionNote = "Composition taxable person, not eligible to collect tax
  */
 function billHeading(r: Bill["receipt"]): { thermal: string; html: string; declaration: string | null } {
   if (r.gstPaidBy === "zomato") return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
-  if (receiptGstMode(r) === "included") return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
+  if (r.gstMode === "included") return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
   if (r.gstin.trim()) return { thermal: "BILL OF SUPPLY", html: "Bill of supply", declaration: compositionNote };
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
 /** The per-rate GST shown after the total: only a tax invoice carries it. */
-const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && receiptGstMode(bill.receipt) === "included" ? bill.taxes : [];
+const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && bill.receipt.gstMode === "included" ? bill.taxes : [];
 
 function wrapText(value: string, width: number): string[] {
   return value.split(/\r?\n/).flatMap((part) => {

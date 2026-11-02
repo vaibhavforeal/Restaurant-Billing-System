@@ -14,7 +14,6 @@ export type QueuedRequest = QueueEntry & {
   error?: string;
 };
 
-const V1_PREFIX = "masalapos.queue.v1.";
 const GENERATION = "masalapos.generation";
 const LEASE = "masalapos.queue-lease";
 /** How often the queue checks in with the hub even with nothing to send, which also keeps the connection status honest. */
@@ -100,33 +99,8 @@ function settleWaiters() {
   }
 }
 
-/** Moves actions saved by the previous version of the queue into this one. */
-function migrateV1() {
-  for (const key of store.keys()) {
-    if (!key.startsWith(V1_PREFIX)) continue;
-    try {
-      const old = JSON.parse(store.get(key)!) as { id: string; userId: string; generation: string; path: string; body: string; label: string; createdAt: number; error?: string; draftKey?: string };
-      let body: unknown = null;
-      try { body = JSON.parse(old.body); } catch { /* kept as text */ }
-      const entry: QueueEntry = {
-        id: old.id, userId: old.userId, generation: old.generation, method: "POST", path: old.path, body: old.body, label: old.label,
-        lane: laneFor(old.path, body) ?? old.id, createdAt: old.createdAt, status: old.error ? "attention" : "pending", attempts: 0,
-        lastAttemptAt: null, nextAttemptAt: 0, ...(old.error ? { lastError: old.error } : {}), ...(old.draftKey ? { draftKey: old.draftKey } : {}),
-      };
-      saveEntry(store, entry);
-      store.remove(key);
-    } catch { /* leave a damaged old entry where it is for inspection */ }
-  }
-}
-
 export function startQueue(userId: string) {
   actor = userId; generationChecked = false; sentByAnotherWindow = false;
-  migrateV1();
-  // Older KOT buttons queued empty item lists. These refused requests cannot create a ticket; remove only those.
-  for (const entry of queuedRequests(userId)) {
-    try { if (entry.status === "attention" && isEmptyKitchenSend(entry.path, JSON.parse(entry.body))) discardEntry(store, entry.id, Date.now()); }
-    catch { /* keep unreadable requests for review */ }
-  }
   // Another window saved, sent or finished something: refresh, hear outcomes, and help send if it is now due.
   const onStorage = (event: StorageEvent) => {
     if (event.key && !event.key.startsWith("masalapos.")) return;

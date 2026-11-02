@@ -49,8 +49,6 @@ export interface ReceiptSnapshot {
   /** Absent on bills issued before UPI configuration was supported. */
   upiId?: string;
   gstMode: GstMode;
-  /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
-  taxInclusive?: boolean;
   restaurantName: string; address: string; gstin: string; fssai: string; receiptFooter: string;
   orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null;
   /** Set on Zomato orders. */
@@ -61,8 +59,6 @@ export interface ReceiptSnapshot {
   customer?: ReceiptCustomer;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
-  /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
-  gstScheme?: "composition";
   /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;
 }

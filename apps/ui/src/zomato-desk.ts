@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { PaymentMode } from "@masalapos/domain";
-import { receiptGstMode } from "@masalapos/domain/gst";
+import type { GstMode } from "@masalapos/domain/gst";
 import { ApiError, apiFetch } from "./api";
 import type { Order } from "./types";
 import { uuid } from "./uuid";
@@ -30,18 +30,18 @@ export function billContextLabel(receipt: { orderType: "dine_in" | "parcel" | "z
   return `${receipt.tableName} · ${receipt.splitLabel ?? "A"}`;
 }
 
-/** The receipt fields that say who charges GST on a bill. Older snapshots carry only the legacy flags, which `receiptGstMode` reads. */
-export type BillGst = Parameters<typeof receiptGstMode>[0];
+/** What a bill's GST line needs from its receipt. */
+export type BillGst = { gstMode: GstMode; gstPaidBy?: "zomato" };
 
 /** The GST line of a bill. Zomato wins: its snapshot also carries the restaurant's mode, but Zomato pays the GST. */
 export function gstNote(receipt: BillGst): string {
   if (receipt.gstPaidBy === "zomato") return "GST paid by Zomato (section 9(5))";
-  return receiptGstMode(receipt) === "none" ? "No GST charged" : "Includes GST";
+  return receipt.gstMode === "none" ? "No GST charged" : "Includes GST";
 }
 
 /** The per-rate GST rows a bill shows: none when Zomato pays the GST or the bill was issued without GST. */
 export function billTaxRates<T>(bill: { taxes: T[] }, receipt: BillGst | undefined): T[] {
-  return !receipt || (receipt.gstPaidBy !== "zomato" && receiptGstMode(receipt) === "included") ? bill.taxes : [];
+  return !receipt || (receipt.gstPaidBy !== "zomato" && receipt.gstMode === "included") ? bill.taxes : [];
 }
 
 /**

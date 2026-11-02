@@ -27,11 +27,11 @@ beforeEach(() => {
 });
 afterEach(() => { stop?.(); stop = undefined; vi.unstubAllGlobals(); });
 
-function saveV1(id: string, changes: Record<string, unknown> = {}) {
-  values.set(`masalapos.queue.v1.${id}`, JSON.stringify({
-    id, userId: "cashier", generation: "current", path: "/api/orders/order-1/send",
-    body: JSON.stringify({ clientRef: "request-1", itemIds: [] }), label: "Send to kitchen",
-    createdAt: 1, error: "Too small: expected array to have >=1 items", ...changes,
+/** An action the hub refused, saved as the queue keeps it, waiting for someone to retry or discard it. */
+function saveRefused(id: string, path: string, body: unknown, error: string) {
+  values.set(`masalapos.queue.v2.${id}`, JSON.stringify({
+    id, userId: "cashier", generation: "current", method: "POST", path, body: JSON.stringify(body), label: "Bill", lane: "order-3",
+    createdAt: 1, status: "attention", attempts: 1, lastAttemptAt: 1, nextAttemptAt: 0, lastError: error,
   }));
 }
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -43,22 +43,6 @@ describe("offline queue in the browser", () => {
     await expect(reliablePost("/api/orders/order-1/send", { clientRef: "request-1", itemIds: [] }, "Send to kitchen"))
       .rejects.toThrow("No items are waiting for a kitchen ticket.");
     expect(queuedRequests()).toEqual([]);
-  });
-
-  it("moves actions saved by the old queue across, dropping only refused empty kitchen sends", () => {
-    saveV1("empty-1"); saveV1("empty-2");
-    saveV1("other-user", { userId: "waiter" });
-    saveV1("real-kot", { body: JSON.stringify({ clientRef: "request-2", itemIds: ["item-1"] }) });
-    saveV1("bill", { path: "/api/orders/order-1/bill" });
-    saveV1("unacknowledged", { error: "", path: "/api/orders/order-2/items", body: JSON.stringify({ items: [] }) });
-    values.set("masalapos.draft.cashier.order-1", '[{"clientRef":"cart-1","qty":2}]');
-    stop = startQueue("cashier");
-    expect(queuedRequests().map((e) => [e.id, e.status, e.lane])).toEqual([
-      ["bill", "attention", "order-1"], ["real-kot", "attention", "order-1"], ["unacknowledged", "pending", "order-2"],
-    ]);
-    expect(queuedRequests("waiter").map((e) => e.id)).toEqual(["other-user"]);
-    expect([...values.keys()].some((k) => k.startsWith("masalapos.queue.v1."))).toBe(false);
-    expect(values.get("masalapos.draft.cashier.order-1")).toBe('[{"clientRef":"cart-1","qty":2}]');
   });
 
   it("keeps actions saved while the hub is unreachable and lets them be queued for the order's lane", async () => {
@@ -88,7 +72,7 @@ describe("offline queue in the browser", () => {
 
   it("retries a stopped action and discards one on request", async () => {
     values.set("masalapos.generation", "current");
-    saveV1("refused", { path: "/api/orders/order-3/bill", body: JSON.stringify({ clientRef: "b1" }), error: "Order changed; review a fresh bill preview" });
+    saveRefused("refused", "/api/orders/order-3/bill", { clientRef: "b1" }, "Order changed; review a fresh bill preview");
     stop = startQueue("cashier");
     expect(queuedRequests()[0]).toMatchObject({ id: "refused", status: "attention", error: "Order changed; review a fresh bill preview" });
     retryRequest("refused");

@@ -23,8 +23,6 @@ export function saveReportLines(db: Database, billId: string) {
   const bill = db.prepare("SELECT order_id, receipt_json, rounding_paise FROM bills WHERE id = ?").get(billId) as {
     order_id: string; receipt_json: string | null; rounding_paise: number;
   };
-  // Legacy exclusive bills (taxInclusive === false, or no snapshot at all as migration 017 backfills) have a discount that excludes GST.
-  const exclusive = bill.receipt_json ? JSON.parse(bill.receipt_json).taxInclusive === false : true;
   const rows = db.prepare(`SELECT oi.id, oi.product_id, oi.variant_id, oi.name_snapshot, oi.qty, oi.parent_item_id AS parent_item_id,
     oi.price_paise_snapshot * oi.qty AS subtotal, oi.gst_rate_snapshot AS rate,
     c.id AS category_id, c.name AS category_name
@@ -43,7 +41,7 @@ export function saveReportLines(db: Database, billId: string) {
   for (const tax of taxes) {
     const group = lines.filter((line) => line.rate === tax.gst_rate);
     const weights = group.map((line) => line.subtotal);
-    const discount = weights.reduce((sum, n) => sum + n, 0) - tax.taxable_paise - (exclusive ? 0 : tax.cgst_paise + tax.sgst_paise);
+    const discount = weights.reduce((sum, n) => sum + n, 0) - tax.taxable_paise - tax.cgst_paise - tax.sgst_paise;
     const discounts = allocatePaise(discount, weights);
     const netWeights = weights.map((n, i) => n - discounts[i]!);
     const taxable = allocatePaise(tax.taxable_paise, netWeights);

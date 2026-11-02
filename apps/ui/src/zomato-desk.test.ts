@@ -155,10 +155,6 @@ describe("gstNote", () => {
     expect(gstNote({ gstMode: "included" })).toBe("Includes GST");
   });
 
-  it("reads old snapshots through their legacy flags", () => {
-    expect(gstNote({ gstScheme: "composition" })).toBe("No GST charged");
-    expect(gstNote({ taxInclusive: false })).toBe("Includes GST");
-  });
 });
 
 describe("billPaymentLabel", () => {
@@ -180,16 +176,13 @@ describe("canReconcileZomato", () => {
 describe("billTaxRates", () => {
   const taxes = [{ gstRate: 5, taxablePaise: 25000, cgstPaise: 0, sgstPaise: 0 }];
   it("lists no per-rate GST rows on a bill whose GST Zomato pays", () => {
-    expect(billTaxRates({ taxes }, { gstPaidBy: "zomato" })).toEqual([]);
     expect(billTaxRates({ taxes }, { gstMode: "included", gstPaidBy: "zomato" })).toEqual([]);
   });
   it("lists no per-rate GST rows on a bill issued without GST", () => {
     expect(billTaxRates({ taxes }, { gstMode: "none" })).toEqual([]);
-    expect(billTaxRates({ taxes }, { gstScheme: "composition" })).toEqual([]);
   });
   it("lists the per-rate GST rows on the restaurant's own bills", () => {
     expect(billTaxRates({ taxes }, undefined)).toBe(taxes);
-    expect(billTaxRates({ taxes }, {})).toBe(taxes);
     expect(billTaxRates({ taxes }, { gstMode: "included" })).toBe(taxes);
   });
 });

@@ -51,7 +51,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const { shortcut, shortcutProps } = useShortcutLabels();
   const draftKey = `masalapos.draft.${user.id}.${orderId}`;
   function readDraft(): DraftItem[] {
-    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(draftKey) ?? "[]"); } catch { return []; }
   }
   const [order, setOrder] = useState<Order | null>(null);
   const [captains, setCaptains] = useState<Array<{ id: string; name: string }>>([]);
@@ -108,7 +108,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       const text = lostCart
         ? `This bill was merged into ${label}. Your unsaved items were not added — add them again on the combined bill.`
         : `Merged into ${label}`;
-      if (lostCart) { localStorage.removeItem(draftKey); localStorage.removeItem(`masalapos.draft.${orderId}`); }
+      if (lostCart) localStorage.removeItem(draftKey);
       setMessage(text);
       carryStatus(mergedInto, text, false);
       onOpenOrder(mergedInto);
@@ -234,7 +234,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   function saveDraft(next: DraftItem[]): boolean {
     try {
       localStorage.setItem(draftKey, JSON.stringify(next));
-      localStorage.removeItem(`masalapos.draft.${orderId}`);
       setDraft(next); return true;
     } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
   }

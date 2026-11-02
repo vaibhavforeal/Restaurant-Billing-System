@@ -1,4 +1,4 @@
-import { receiptGstMode, type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@masalapos/domain";
+import { type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { RECEIPT_CSS } from "./receipt-style.js";
@@ -41,7 +41,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
   });
   pos.hr(width);
   // A bill that charged no GST (no-GST restaurant or Zomato) has a credit note with none either.
-  if (receiptGstMode(r) === "included") for (const t of note.taxes) {
+  if (r.gstMode === "included") for (const t of note.taxes) {
     pair(`Taxable @ ${t.gstRate}%`, money(t.taxablePaise));
     pair(`CGST ${t.gstRate / 2}%`, money(t.cgstPaise));
     pair(`SGST ${t.gstRate / 2}%`, money(t.sgstPaise));
@@ -74,7 +74,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   const label = cnLabel(note);
   const unpaidVoid = isUnpaidVoid(note);
   const rounding = roundingOf(note);
-  const supply = receiptGstMode(r) !== "included";
+  const supply = r.gstMode !== "included";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Credit note ${label}</title><style>${RECEIPT_CSS}
   .items th:nth-child(3),.items td:nth-child(3){width:14%}.items th:last-child,.items td:last-child{width:37%}
