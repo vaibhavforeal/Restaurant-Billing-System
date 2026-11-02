@@ -1,5 +1,6 @@
 // Remote sessions: staff ask, the PC answers, the sharing window connects, someone ends it. Every step is a row update guarded by the
 // state it expects, so a late or repeated message changes nothing; every step is in the activity log and, when there is one, the chat.
+import { newToken } from "../secret.js";
 import type { D1Like } from "../env.js";
 import type { Env } from "../env.js";
 import type { LiveHub } from "../live/types.js";
@@ -77,11 +78,6 @@ export async function requestRemote(deps: RemoteDeps & { uuid: () => string }, s
   deps.live?.toStaff({ type: "remote.updated", session });
   if (ask.chatId) await addSystemMessage(db, deps.live, ask.chatId, `${firstName(staff.name)} asked to ${ask.mode === "control" ? "see and control" : "see"} this PC: ${ask.reason}`, now);
   return session;
-}
-
-export function newToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /**

@@ -1,5 +1,7 @@
 // The restaurant's side of support chat. The counter's POS server (holding the installation secret) asks for a one-time link and opens it
 // in the browser; the link turns into an mp_support cookie that speaks for that counter's chats, and nothing else, for a day.
+import { overLimit } from "../limits.js";
+import { newToken } from "../secret.js";
 import { z } from "zod";
 import type { Env } from "../env.js";
 import type { Deps } from "../issue.js";
@@ -21,10 +23,6 @@ const SUPPORT_SECURITY_HEADERS: Record<string, string> = {
 const respond = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   json(body, status, { ...SUPPORT_SECURITY_HEADERS, ...headers });
 
-function newToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 const LinkRequest = z.object({ installationId: z.string().uuid() }).passthrough();
@@ -64,9 +62,7 @@ const NewMessage = z.object({
   phone: z.string().trim().max(20).regex(/^[0-9+ ()-]*$/, "Use digits only").optional(),
 }).strict();
 
-async function limited(env: Env, request: Request): Promise<boolean> {
-  try { return !(await env.LIMITER.limit({ key: `support:${request.headers.get("cf-connecting-ip") ?? "unknown"}` })).success; } catch { return false; }
-}
+const limited = (env: Env, request: Request) => overLimit(env.LIMITER, request, "support");
 
 /** Everything under /support: the link exchange, the chat page's API, and the page itself. */
 export async function supportRoute(request: Request, env: Env, deps: Deps): Promise<Response> {
