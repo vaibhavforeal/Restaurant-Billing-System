@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { adoptStagedActivation, licenseConfig, stagedFileTrusted } from "./license-config.js";
+import { adoptStagedActivation, licenseConfig, readTrustedStagedFile } from "./license-config.js";
 
 const directories: string[] = [];
 const publicKey = generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -122,7 +122,7 @@ describe("activation made by the installer", () => {
     return path;
   };
   // These files are made by the test, not by setup, so the ownership check is stubbed; its own tests are below.
-  const trusted = () => true;
+  const trusted = (path: string) => readFileSync(path, "utf8");
   const staged = (overrides: object = {}) => ({ format: "masalapos-installer-activation", version: 1, installationId: randomUUID(),
     installationSecret: "cd".repeat(32), license: "LICENSE-ENVELOPE", customerCode: "FC-7K3M-9QX", orderCode: "FO-2D8H-4MA", ...overrides });
 
@@ -162,8 +162,8 @@ describe("activation made by the installer", () => {
   it("ignores a file that setup did not lock down, so another Windows user can't plant an identity", () => {
     dev();
     const file = staged(), path = stage(file), activate = vi.fn();
-    expect(licenseConfig(directory(), path, () => false)!.installationId).not.toBe(file.installationId);
-    expect(adoptStagedActivation({ activate }, file.installationId, vi.fn(), path, () => false)).toBe("none");
+    expect(licenseConfig(directory(), path, () => null)!.installationId).not.toBe(file.installationId);
+    expect(adoptStagedActivation({ activate }, file.installationId, vi.fn(), path, () => null)).toBe("none");
     expect(activate).not.toHaveBeenCalled();
   });
 
@@ -171,8 +171,8 @@ describe("activation made by the installer", () => {
     const path = stage(staged());
     // Made by this test run: owned by its user (or, elevated, by Administrators); either way everyone may now write to it.
     execFileSync("icacls.exe", [path, "/grant", "*S-1-1-0:(W)"], { stdio: "pipe" });
-    expect(stagedFileTrusted(path)).toBe(false);
-    expect(stagedFileTrusted(join(directory(), "missing.json"))).toBe(false);
+    expect(readTrustedStagedFile(path)).toBeNull();
+    expect(readTrustedStagedFile(join(directory(), "missing.json"))).toBeNull();
   });
 
   it("leaves a file made for another installation alone", () => {

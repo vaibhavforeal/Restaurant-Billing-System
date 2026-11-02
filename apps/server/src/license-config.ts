@@ -33,44 +33,52 @@ const StagedActivation = z.object({
 });
 type StagedActivation = z.infer<typeof StagedActivation>;
 
-const ADMINS = "S-1-5-32-544", SYSTEM = "S-1-5-18";
-// Reads the path from the environment, so it never becomes part of the script text.
-const OWNERSHIP_SCRIPT = `$ErrorActionPreference = 'Stop'
-$item = Get-Item -LiteralPath $env:MASALAPOS_STAGED -Force
-if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { 'null'; exit }
-$acl = Get-Acl -LiteralPath $env:MASALAPOS_STAGED
-$write = [Security.AccessControl.FileSystemRights]'WriteData, AppendData, WriteAttributes, WriteExtendedAttributes, ChangePermissions, TakeOwnership'
-$writers = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
-  Where-Object { $_.AccessControlType -eq 'Allow' -and ($_.FileSystemRights -band $write) } |
-  ForEach-Object { $_.IdentityReference.Value })
-@{ owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; writers = $writers } | ConvertTo-Json -Compress`;
+// Reads the path from the environment, so it never becomes part of the script text. Exits non-zero, printing nothing, when the file
+// or its folder is a link, isn't owned by Administrators or SYSTEM, or lets anyone else write. Every check and the read go through
+// one open handle of the file (shared for reading only, so it can't be replaced, renamed or deleted meanwhile), and a locked folder
+// means no one else can put another file there.
+const READ_TRUSTED_SCRIPT = `$ErrorActionPreference = 'Stop'
+$trusted = @('S-1-5-32-544', 'S-1-5-18')
+$write = [Security.AccessControl.FileSystemRights]'WriteData, AppendData, WriteAttributes, WriteExtendedAttributes, ChangePermissions, TakeOwnership, DeleteSubdirectoriesAndFiles'
+function Test-Locked($security) {
+  if ($trusted -notcontains $security.GetOwner([Security.Principal.SecurityIdentifier]).Value) { return $false }
+  foreach ($rule in $security.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    if ($rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $write) -and $trusted -notcontains $rule.IdentityReference.Value) { return $false }
+  }
+  return $true
+}
+$stream = [IO.File]::Open($env:MASALAPOS_STAGED, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try {
+  $folder = Get-Item -LiteralPath ([IO.Path]::GetDirectoryName($stream.Name)) -Force
+  $file = Get-Item -LiteralPath $stream.Name -Force
+  if (($folder.Attributes -bor $file.Attributes) -band [IO.FileAttributes]::ReparsePoint) { exit 3 }
+  if (!(Test-Locked $folder.GetAccessControl()) -or !(Test-Locked $stream.GetAccessControl())) { exit 3 }
+  [Console]::Out.Write((New-Object IO.StreamReader($stream, (New-Object Text.UTF8Encoding $false), $true)).ReadToEnd())
+} finally { $stream.Dispose() }`;
 
 /**
- * Whether setup made and locked the staged file: owned by Administrators or SYSTEM, not a link, and writable by nobody else (setup
- * gives the person using MasalaPOS only read and delete). %ProgramData% is shared by every Windows user, so a file that fails this may
- * have been planted by another user to hand MasalaPOS an identity they know. Windows only; elsewhere setup never stages a file.
+ * The staged file's text when setup made and locked it, otherwise null. %ProgramData% is shared by every Windows user, so a file
+ * (or folder) that isn't owned by Administrators or SYSTEM, or that someone else can write to, may have been planted to hand
+ * MasalaPOS an identity another user knows. Setup gives the person using MasalaPOS only read and delete on the file. Windows only;
+ * elsewhere setup never stages a file. Runs only when the file exists, i.e. on the first start after setup.
  */
-export function stagedFileTrusted(path: string): boolean {
-  if (process.platform !== "win32" || !existsSync(path)) return false;
-  const run = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", OWNERSHIP_SCRIPT],
-    { env: { ...process.env, MASALAPOS_STAGED: path }, encoding: "utf8", timeout: 15_000, windowsHide: true });
-  if (run.status !== 0) return false;
-  try {
-    const found = JSON.parse(run.stdout.trim()) as { owner?: string; writers?: string[] | string } | null;
-    const writers = Array.isArray(found?.writers) ? found.writers : found?.writers ? [found.writers] : [];
-    return !!found && [ADMINS, SYSTEM].includes(found.owner ?? "") && writers.every((sid) => sid === ADMINS || sid === SYSTEM);
-  } catch { return false; }
+export function readTrustedStagedFile(path: string): string | null {
+  if (process.platform !== "win32" || !existsSync(path)) return null;
+  const run = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", READ_TRUSTED_SCRIPT],
+    { env: { ...process.env, MASALAPOS_STAGED: path }, encoding: "utf8", timeout: 15_000, windowsHide: true, maxBuffer: 64 * 1024 });
+  return run.status === 0 && typeof run.stdout === "string" ? run.stdout : null;
 }
 
-function readStaged(path: string | undefined, trusted: (path: string) => boolean): StagedActivation | null {
-  if (!path || !existsSync(path) || !trusted(path)) return null;
+function readStaged(path: string | undefined, read: (path: string) => string | null): StagedActivation | null {
+  if (!path || !existsSync(path)) return null;
   try {
-    const text = readFileSync(path, "utf8");
+    const text = read(path);
+    if (text === null) return null;
     return StagedActivation.parse(JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text));
   } catch { return null; }
 }
 
-export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath(), trusted = stagedFileTrusted): LicensingOptions | undefined {
+export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath(), read = readTrustedStagedFile): LicensingOptions | undefined {
   const publicKey = typeof __MASALAPOS_LICENSE_PUBLIC_KEY__ !== "undefined"
     ? __MASALAPOS_LICENSE_PUBLIC_KEY__ : process.env["MASALAPOS_LICENSE_PUBLIC_KEY"];
   if (!publicKey) {
@@ -88,7 +96,7 @@ export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath
   // The secret is created with the id and added to older files that lack it; the id is never replaced.
   let saved = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as { installationId: string; installationSecret?: unknown } : null;
   // A first start after setup activated this PC takes the identity setup enrolled with, so the licence it got belongs here.
-  const staged = saved ? null : readStaged(stagedPath, trusted);
+  const staged = saved ? null : readStaged(stagedPath, read);
   if (staged) {
     saved = { installationId: staged.installationId, installationSecret: staged.installationSecret };
     atomicJson(path, saved);
@@ -108,8 +116,8 @@ export function licenseConfig(dataDir: string, stagedPath = stagedActivationPath
  * hourly check are the fallback.
  */
 export function adoptStagedActivation(licensing: Pick<Licensing, "activate">, installationId: string, log: (message: string) => void,
-  stagedPath = stagedActivationPath(), trusted = stagedFileTrusted): "installed" | "none" | "failed" {
-  const staged = readStaged(stagedPath, trusted);
+  stagedPath = stagedActivationPath(), read = readTrustedStagedFile): "installed" | "none" | "failed" {
+  const staged = readStaged(stagedPath, read);
   if (!staged || staged.installationId !== installationId) return "none";
   let outcome: "installed" | "none" | "failed" = "none";
   if (staged.license) {
