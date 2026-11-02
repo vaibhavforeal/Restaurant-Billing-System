@@ -127,12 +127,13 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   const taxes = allocation.map(({ rate, amount, discount }) => {
     const gross = amount - discount;
     if (mode === "none") return { gstRate: rate, taxablePaise: gross, cgstPaise: 0, sgstPaise: 0 };
-    // Included: the discounted gross already contains the GST, so split it out.
+    // Included: the discounted gross already contains the GST, so split it out. CGST and SGST are each half the rate on the same
+    // taxable value, so they are always equal: when the rounded tax is odd, its odd paisa stays in the taxable value (each half
+    // is then still within a paisa of taxable × rate / 2), and taxable + CGST + SGST is still exactly the gross.
     const divisor = BigInt(100 + rate);
-    const taxablePaise = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
-    const tax = gross - taxablePaise;
-    const cgstPaise = Math.ceil(tax / 2);
-    return { gstRate: rate, taxablePaise, cgstPaise, sgstPaise: tax - cgstPaise };
+    const rounded = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
+    const half = Math.floor((gross - rounded) / 2);
+    return { gstRate: rate, taxablePaise: gross - 2 * half, cgstPaise: half, sgstPaise: half };
   });
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
