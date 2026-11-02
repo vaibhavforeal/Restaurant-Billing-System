@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   COMPARE_LABELS, DASHBOARD_LIMITS, PERIOD_LABELS, compact, widgetDef, widgetVisible,
   type DashboardData, type DashboardItemValue, type DashboardWidgetId, type WidgetOptionsValue,
@@ -17,6 +17,9 @@ import { WidgetSettings } from "./WidgetSettings";
 import { addWidget, removeWidget, updateOptions } from "./editing";
 import { useDashboardData } from "./useDashboardData";
 import { useDashboardLayout } from "./useDashboardLayout";
+
+// Reconnect and hourly refresh only; a module-level object keeps the hook subscribed across renders.
+const LAYOUT_REFRESH = { events: [], pollMs: 3_600_000 } as const;
 
 const newKey = () => typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
   ? crypto.randomUUID()
@@ -64,7 +67,8 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
     if (firstAccess.current) { firstAccess.current = false; return; }
     if (!editingRef.current) load().catch(() => undefined);
   }, [access, load]);
-  useLiveRefresh(() => { if (!editingRef.current) load().catch(() => undefined); }, { events: [], pollMs: 3_600_000 });
+  const reloadLayout = useCallback(() => { if (!editingRef.current) load().catch(() => undefined); }, [load]);
+  useLiveRefresh(reloadLayout, LAYOUT_REFRESH);
 
   useEffect(() => { if (layoutOff || dataOff) onUnavailable(); }, [layoutOff, dataOff, onUnavailable]);
 
