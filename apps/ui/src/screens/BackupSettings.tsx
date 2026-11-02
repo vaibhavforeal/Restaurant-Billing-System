@@ -5,6 +5,7 @@ import { CloudBackupSettings } from "./CloudBackupSettings";
 import { Icon } from "../Icon";
 import { backupKindLabels as kindLabels, formatBytes, formatWhen } from "../backup-format";
 import "../backups.css";
+import { timeoutSignal } from "../abort-signal";
 
 interface BackupStatus {
   retentionDays: number; secondLocation: string; folder: string;
@@ -92,7 +93,7 @@ export function BackupSettings() {
           })}><Icon name="refresh" size={16} />Back up now</button>
           <button className="primary" disabled={busy} onClick={() => void run(async () => {
             setMessage("Preparing backup file…");
-            await saveResponse(await fetch("/api/system/backups/export", { method: "POST", headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), "MasalaPOS backup.db");
+            await saveResponse(await fetch("/api/system/backups/export", { method: "POST", headers: authHeaders(), signal: timeoutSignal(10 * 60_000) }), "MasalaPOS backup.db");
             setStatus(await apiFetch<BackupStatus>("/api/system/backups"));
             setMessage("Backup file downloaded. Keep it somewhere safe, away from this PC, such as a USB drive.");
           })}><Icon name="download" size={16} />Download backup file</button>
@@ -105,7 +106,7 @@ export function BackupSettings() {
           <span><strong>{formatWhen(b.createdAt)}</strong><small>{kindLabels[b.kind] ?? b.kind} · {formatBytes(b.bytes)}</small></span>
           <span className="backup-row-actions">
             <button aria-label={`Download backup from ${formatWhen(b.createdAt)}`} disabled={busy} onClick={() => void run(async () => {
-              await saveResponse(await fetch(`/api/system/backups/${encodeURIComponent(b.name)}`, { headers: authHeaders(), signal: AbortSignal.timeout(10 * 60_000) }), b.name);
+              await saveResponse(await fetch(`/api/system/backups/${encodeURIComponent(b.name)}`, { headers: authHeaders(), signal: timeoutSignal(10 * 60_000) }), b.name);
             })}>Download</button>
             {canRestore && <button aria-label={`Restore backup from ${formatWhen(b.createdAt)}`} disabled={busy || restoring} onClick={() => void stage(() => apiFetch<RestorePreview>("/api/system/restore/local", { method: "POST", body: JSON.stringify({ name: b.name }) }), "Checking backup…")}>Restore…</button>}
           </span>
@@ -119,7 +120,7 @@ export function BackupSettings() {
           const file = event.target.files?.[0];
           event.target.value = "";
           if (file) void stage(async () => {
-            const res = await fetch("/api/system/restore/file", { method: "POST", body: file, signal: AbortSignal.timeout(10 * 60_000),
+            const res = await fetch("/api/system/restore/file", { method: "POST", body: file, signal: timeoutSignal(10 * 60_000),
               headers: { ...authHeaders(), "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } });
             if (!res.ok) throw await failure(res, "Could not read the backup file");
             return await res.json() as RestorePreview;
@@ -137,7 +138,7 @@ export function BackupSettings() {
       <p className="backup-hint backup-privacy">Each file includes your menu and photos, orders, bills, customers, stock, staff and settings. Store downloaded copies securely, away from this PC.</p>
       </div><aside className="backup-sidebar" aria-label="Backup destinations">
       <CloudBackupSettings restoreBlockedReason={status.restoreBlockedReason} restoreBusy={busy || restoring}
-        onRestore={(id) => void stage(() => apiFetch<RestorePreview>("/api/system/cloud-backups/restore", { method: "POST", body: JSON.stringify({ id }), signal: AbortSignal.timeout(30 * 60_000) }), "Downloading backup from Google Drive…")} />
+        onRestore={(id) => void stage(() => apiFetch<RestorePreview>("/api/system/cloud-backups/restore", { method: "POST", body: JSON.stringify({ id }), signal: timeoutSignal(30 * 60_000) }), "Downloading backup from Google Drive…")} />
 
       <fieldset disabled={busy} className="backup-storage"><legend>Local storage settings</legend>
         <p>Backup folder<code>{status.folder}</code></p>

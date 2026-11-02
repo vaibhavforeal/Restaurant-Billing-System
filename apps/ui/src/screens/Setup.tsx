@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { apiFetch, session, type User } from "../api";
 import { AuthLayout } from "./AuthLayout";
+import { timeoutSignal } from "../abort-signal";
 
 /** How setup starts: "online" asks for the Customer ID and Order ID first; "offline" and "none" go straight to the admin. */
 export type SetupActivation = "online" | "offline" | "none";
@@ -52,7 +53,7 @@ function ActivateStep({ onActivated, onSkip }: { onActivated: (result: Activated
     if (!parseVendorCode("customer", customerId) || !parseVendorCode("order", orderId)) { setError(CHECK_CODES); return; }
     lock.current = true; setBusy(true); setError("");
     try {
-      onActivated(await apiFetch<Activated>("/api/setup/activate", { method: "POST", body: JSON.stringify({ customerId, orderId }), signal: AbortSignal.timeout(30_000) }));
+      onActivated(await apiFetch<Activated>("/api/setup/activate", { method: "POST", body: JSON.stringify({ customerId, orderId }), signal: timeoutSignal(30_000) }));
     } catch (err) { setError(err instanceof Error ? err.message : "Activation failed. Try again."); }
     finally { lock.current = false; setBusy(false); }
   }

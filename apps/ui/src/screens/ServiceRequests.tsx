@@ -5,6 +5,7 @@ import { connectWs } from "../ws";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import "../service-requests.css";
 import "../tables-requests.css";
+import { withTimeout } from "../abort-signal";
 
 const when = (at: number) => new Date(at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 
@@ -27,7 +28,7 @@ export function ServiceRequests({ disabled, onBusyChange, compact = false }: { d
     const controller = new AbortController();
     readController.current = controller;
     setLoading(true);
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]);
+    const signal = withTimeout(controller.signal, 15_000);
     // History is capped independently; it cannot supply an accurate pending badge.
     const pendingFetch = apiFetch<{ requests: ServiceRequest[] }>("/api/qr/service-requests?status=pending", { signal });
     const historyFetch = history ? apiFetch<{ requests: ServiceRequest[] }>("/api/qr/service-requests?status=all", { signal }) : Promise.resolve(null);

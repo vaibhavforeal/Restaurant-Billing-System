@@ -107,6 +107,17 @@ describe("offline queue in the browser", () => {
       .resolves.toEqual({ saved: false, value: { ok: "/api/orders/order-2/cancel" } });
   });
 
+  it("does not call an action saved offline while another window holds the lock and is sending it", async () => {
+    values.set("masalapos.generation", "current");
+    // Another window holds the queue lock, so this window's check-in never runs.
+    vi.stubGlobal("navigator", { locks: { request: async (_name: string, _options: unknown, callback: (lock: null) => Promise<void>) => { await callback(null); } } });
+    stop = startQueue("cashier");
+    let settled = false;
+    void outcomeOrSaved(enqueueRequest({ path: "/api/orders/order-1/cancel", body: {}, label: "Cancel order" }), 60_000).then(() => { settled = true; }, () => { settled = true; });
+    await flush();
+    expect(settled).toBe(false);
+  });
+
   it("finishes a saved bill and its payment after a reload, paying the bill the hub issued", async () => {
     values.set("masalapos.generation", "current");
     stop = startQueue("cashier");

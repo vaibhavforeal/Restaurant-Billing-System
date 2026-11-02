@@ -438,7 +438,7 @@ function ReceiptCard({ receipt, error, onNew, orderingAvailable }: { receipt: Gu
 function EarlierRequests({ requests, errors, truncated }: { requests: SavedRequest[]; errors: Record<string, string>; truncated: boolean }) {
   return <section className="guest-menu-earlier" aria-label="Your earlier order requests">
     <h2>Your earlier requests</h2>
-    {requests.toReversed().map(({ receipt }) => receipt && <details key={receipt.id}>
+    {[...requests].reverse().map(({ receipt }) => receipt && <details key={receipt.id}>
       <summary><span>Request {receipt.id.slice(-6).toUpperCase()} <small>{new Date(receipt.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</small></span><span className={`guest-menu-preparation-state guest-menu-preparation-${receipt.preparation?.state ?? "queued"}`} role="status">{receipt.preparation ? PREPARATION_LABELS[receipt.preparation.state] : "Accepted · Updating"}</span></summary>
       {receipt.preparation ? <div className="guest-menu-preparation"><ul>{receipt.preparation.items.map((item, index) => <li key={`${index}:${item.name}`}><span>{item.qty} × {item.name}</span><span>{PREPARATION_LABELS[item.state]}</span></li>)}</ul>
         {receipt.preparation.hasChanges && <p className="guest-menu-small">Our team updated some items or quantities. Please check with staff about the changes.</p>}

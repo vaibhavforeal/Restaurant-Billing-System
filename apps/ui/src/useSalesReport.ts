@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api";
 import type { ReportPeriod, SalesReport } from "./sales-report";
+import { withTimeout } from "./abort-signal";
 
 export function useSalesReport(initialPeriod?: ReportPeriod) {
   const [period, setPeriod] = useState<ReportPeriod | null>(initialPeriod ?? null);
@@ -15,7 +16,7 @@ export function useSalesReport(initialPeriod?: ReportPeriod) {
     const controller = new AbortController();
     setReport(null); setError(""); setLoading(true);
     const query = period ? `?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}` : "";
-    void apiFetch<{ report: SalesReport }>(`/api/reports/sales${query}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
+    void apiFetch<{ report: SalesReport }>(`/api/reports/sales${query}`, { signal: withTimeout(controller.signal, 15000) })
       .then(({ report: result }) => { if (request === revision.current) setReport(result); })
       .catch((e: unknown) => { if (!controller.signal.aborted && request === revision.current) setError(e instanceof Error ? e.message : "Could not load sales and collections"); })
       .finally(() => { if (request === revision.current) setLoading(false); });

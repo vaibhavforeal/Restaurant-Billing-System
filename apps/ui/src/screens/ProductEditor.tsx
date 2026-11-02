@@ -7,6 +7,7 @@ import { prepareProductPhoto } from "../product-photo";
 import type { Category, Product, Station, Variant } from "../types";
 import { ComboSlotsEditor, slotsFromGroups, slotsToGroups } from "./ComboSlotsEditor";
 import "../product-editor.css";
+import { withTimeout } from "../abort-signal";
 
 const optionalPrice = (value: number | null | undefined) => value == null ? "" : paiseToRupees(value);
 const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zomatoPrice: "" };
@@ -75,7 +76,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     if (!product?.photoVersion) { setPhotoLoading(false); return; }
     const controller = new AbortController();
     setPhotoLoading(true); setPhotoError("");
-    void apiFetch<{ photo: string | null }>(`/api/products/${product.id}/photo`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+    void apiFetch<{ photo: string | null }>(`/api/products/${product.id}/photo`, { signal: withTimeout(controller.signal, 15_000) })
       .then((result) => { if (!controller.signal.aborted) setCurrentPhoto(result.photo); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setPhotoError(cause instanceof Error ? cause.message : "Could not load the saved photo"); })
       .finally(() => { if (!controller.signal.aborted) setPhotoLoading(false); });

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { formatOccasion, joinOccasion, occasionNote, parseTags, splitOccasion, stars, todayKey } from "../crm";
 import { paiseToRupees } from "../money";
-import { uuid } from "../uuid";
+import { refFor, type RequestRef } from "../request-ref";
 import type { Customer } from "../types";
 import { useRun, type CustomerType } from "./customer-shared";
 
@@ -144,13 +144,15 @@ export function OccasionInput({ label, day, year, onChange }: { label: string; d
 
 function AdjustPoints({ customerId, onChanged }: { customerId: string; onChanged: () => Promise<void> }) {
   const [adjust, setAdjust] = useState({ points: "", note: "" });
+  const adjustRef = useRef<RequestRef>(null);
   const { busy, run, status } = useRun();
   return <fieldset disabled={busy} className="cash-drawer-form">
     <legend>Adjust points</legend>
     <label>Points (+/−) <input type="number" step="1" value={adjust.points} onChange={(e) => setAdjust({ ...adjust, points: e.target.value })} /></label>
     <label>Reason <input maxLength={200} value={adjust.note} onChange={(e) => setAdjust({ ...adjust, note: e.target.value })} /></label>
     <button disabled={!adjust.points || !adjust.note.trim()} onClick={() => void run(async () => {
-      await apiFetch(`/api/customers/${customerId}/loyalty-adjustments`, { method: "POST", body: JSON.stringify({ clientRef: uuid(), points: Number(adjust.points), note: adjust.note }) });
+      await apiFetch(`/api/customers/${customerId}/loyalty-adjustments`, { method: "POST", body: JSON.stringify({ clientRef: refFor(adjustRef, { customerId, ...adjust }), points: Number(adjust.points), note: adjust.note }) });
+      adjustRef.current = null;
       setAdjust({ points: "", note: "" }); await onChanged();
     }, "Points adjusted.")}>Adjust</button>
     {status}

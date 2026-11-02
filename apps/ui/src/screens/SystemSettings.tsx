@@ -4,6 +4,7 @@ import { BackupSettings } from "./BackupSettings";
 import { useIntegrations } from "../integrations";
 import { Icon, type IconName } from "../Icon";
 import "../connections.css";
+import { timeoutSignal } from "../abort-signal";
 
 interface CaptainConnection {
   enabled: boolean; error?: string; fingerprint?: string; expiresAt?: string;
@@ -14,7 +15,7 @@ interface AndroidCaptain {
   pairings: Array<{ origin: string; secure: boolean; qr: string }>;
 }
 async function download(path: string, filename: string) {
-  const res = await fetch(path, { headers: authHeaders(), signal: AbortSignal.timeout(60_000) });
+  const res = await fetch(path, { headers: authHeaders(), signal: timeoutSignal(60_000) });
   if (res.status === 401) session.clear();
   if (!res.ok) throw new Error("Download failed");
   const url = URL.createObjectURL(await res.blob());

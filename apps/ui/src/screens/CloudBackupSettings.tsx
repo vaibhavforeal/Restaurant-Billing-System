@@ -4,6 +4,7 @@ import { apiFetch } from "../api";
 import { Icon } from "../Icon";
 import { backupKindLabels as kindLabels, formatBytes, formatWhen } from "../backup-format";
 import "../cloud-backups.css";
+import { timeoutSignal } from "../abort-signal";
 
 const stateLabels = { not_configured: "Not available", not_connected: "Not connected", connected: "Connected", reconnect_required: "Reconnect required" };
 
@@ -104,7 +105,7 @@ export function CloudBackupSettings({ restoreBlockedReason, restoreBusy, onResto
       </dl>}
 
       {connected && <details className="backup-list" onToggle={(event) => {
-        if ((event.target as HTMLDetailsElement).open && !files) void run(() => apiFetch<{ files: CloudBackupFile[] }>("/api/system/cloud-backups/files", { signal: AbortSignal.timeout(60_000) }), (value) => setFiles(value.files));
+        if ((event.target as HTMLDetailsElement).open && !files) void run(() => apiFetch<{ files: CloudBackupFile[] }>("/api/system/cloud-backups/files", { signal: timeoutSignal(60_000) }), (value) => setFiles(value.files));
       }}>
         <summary>Backups in Google Drive{files ? ` (${files.length})` : ""}</summary>
         {!files ? <p>{busy ? "Loading…" : "Open to load the list."}</p> : !files.length ? <p>No backups in Google Drive yet.</p> : <>
@@ -114,7 +115,7 @@ export function CloudBackupSettings({ restoreBlockedReason, restoreBusy, onResto
               <small>{file.restaurantName ? `${file.restaurantName} · ` : ""}{kindLabels[file.kind] ?? file.kind} · {formatBytes(file.bytes)}{file.thisPc ? "" : " · from another PC"}</small></span>
             {!restoreBlockedReason && <span className="backup-row-actions"><button disabled={busy || restoreBusy} onClick={() => onRestore(file.id)}>Restore…</button></span>}
           </li>)}</ul>
-          <button className="text-button" disabled={busy} onClick={() => void run(() => apiFetch<{ files: CloudBackupFile[] }>("/api/system/cloud-backups/files", { signal: AbortSignal.timeout(60_000) }), (value) => setFiles(value.files))}>Refresh list</button>
+          <button className="text-button" disabled={busy} onClick={() => void run(() => apiFetch<{ files: CloudBackupFile[] }>("/api/system/cloud-backups/files", { signal: timeoutSignal(60_000) }), (value) => setFiles(value.files))}>Refresh list</button>
         </>}
       </details>}
 

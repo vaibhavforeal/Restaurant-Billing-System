@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { localDay } from "../sales-report";
 import { ApiError, apiFetch } from "../api";
 import { paiseToRupees, rupeesToPaise } from "../money";
-import { uuid } from "../uuid";
+import { refFor, type RequestRef } from "../request-ref";
 
 export interface Shift {
   id: string; cashierName: string; openedAt: number; openingFloatPaise: number;
@@ -34,13 +34,18 @@ export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; can
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const openRef = useRef<RequestRef>(null), movementRef = useRef<RequestRef>(null), closeRef = useRef<RequestRef>(null), dayRef = useRef<RequestRef>(null);
+  /** Only the newest load may show its result: a slower reply for an earlier date is dropped. */
+  const loadId = useRef(0);
 
   async function reload() {
+    const id = ++loadId.current;
     const [current, list, state] = await Promise.all([
       canSettle ? apiFetch<{ shift: Shift | null }>("/api/shifts/current") : Promise.resolve({ shift: null }),
       apiFetch<{ shifts: Shift[] }>(`/api/shifts?from=${date}&to=${date}`),
       apiFetch<DayCloseState>(`/api/day-close?date=${date}`),
     ]);
+    if (id !== loadId.current) return;
     setMine(current.shift); setShifts(list.shifts); setDay(state);
   }
   useEffect(() => { reload().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load cash drawer")); }, [date, canSettle]);
@@ -66,7 +71,8 @@ export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; can
         <p>Open a shift before taking cash. Count the change in the drawer and enter it as the opening float.</p>
         <label>Opening float (₹) <input type="number" min="0" step="0.01" value={float} onChange={(e) => setFloat(e.target.value)} /></label>
         <button className="primary" onClick={() => void run(async () => {
-          await apiFetch("/api/shifts", { method: "POST", body: JSON.stringify({ clientRef: uuid(), openingFloatPaise: amount(float, "the opening float") }) });
+          await apiFetch("/api/shifts", { method: "POST", body: JSON.stringify({ clientRef: refFor(openRef, { float }), openingFloatPaise: amount(float, "the opening float") }) });
+          openRef.current = null;
           setMessage("Shift opened.");
         })}>Open shift</button>
       </fieldset> : <>
@@ -87,7 +93,8 @@ export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; can
           <label>Amount (₹) <input type="number" min="0" step="0.01" value={movement.amount} onChange={(e) => setMovement({ ...movement, amount: e.target.value })} /></label>
           <label>Reason <input maxLength={200} value={movement.reason} placeholder="Milk, change from bank…" onChange={(e) => setMovement({ ...movement, reason: e.target.value })} /></label>
           <button onClick={() => void run(async () => {
-            await apiFetch(`/api/shifts/${mine.id}/cash-movements`, { method: "POST", body: JSON.stringify({ clientRef: uuid(), kind: movement.kind, amountPaise: amount(movement.amount, "the amount"), reason: movement.reason }) });
+            await apiFetch(`/api/shifts/${mine.id}/cash-movements`, { method: "POST", body: JSON.stringify({ clientRef: refFor(movementRef, { shift: mine.id, ...movement }), kind: movement.kind, amountPaise: amount(movement.amount, "the amount"), reason: movement.reason }) });
+            movementRef.current = null;
             setMovement({ ...movement, amount: "", reason: "" }); setMessage("Saved.");
           })}>Record</button>
         </fieldset>
@@ -97,7 +104,8 @@ export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; can
           {countedPaise !== null && counted.trim() !== "" && <p>Difference: <strong>{signed(countedPaise - mine.expectedCashPaise)}</strong></p>}
           <label>Note <input maxLength={200} value={closeNote} onChange={(e) => setCloseNote(e.target.value)} /></label>
           <button className="primary" disabled={counted.trim() === ""} onClick={() => void run(async () => {
-            const { shift } = await apiFetch<{ shift: Shift }>(`/api/shifts/${mine.id}/close`, { method: "POST", body: JSON.stringify({ clientRef: uuid(), countedCashPaise: amount(counted, "the counted cash"), note: closeNote }) });
+            const { shift } = await apiFetch<{ shift: Shift }>(`/api/shifts/${mine.id}/close`, { method: "POST", body: JSON.stringify({ clientRef: refFor(closeRef, { shift: mine.id, counted, closeNote }), countedCashPaise: amount(counted, "the counted cash"), note: closeNote }) });
+            closeRef.current = null;
             setCounted(""); setCloseNote(""); setMessage(`Shift closed. Difference: ${signed(shift.variancePaise ?? 0)}.`);
           })}>Close shift</button>
         </fieldset>
@@ -131,7 +139,8 @@ export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; can
           <label>Note <input maxLength={200} value={dayNote} onChange={(e) => setDayNote(e.target.value)} /></label>
           <button className="primary" onClick={() => void run(async () => {
             if (!window.confirm(`Close ${day.date}? The day-end report is saved as it is now.`)) return;
-            await apiFetch("/api/day-close", { method: "POST", body: JSON.stringify({ clientRef: uuid(), date: day.date, note: dayNote }) });
+            await apiFetch("/api/day-close", { method: "POST", body: JSON.stringify({ clientRef: refFor(dayRef, { date: day.date, dayNote }), date: day.date, note: dayNote }) });
+            dayRef.current = null;
             setDayNote(""); setMessage(`${day.date} closed.`);
           })}>Close day</button>
         </fieldset>}

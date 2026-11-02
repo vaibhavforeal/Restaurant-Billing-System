@@ -4,6 +4,7 @@ import { apiFetch, session } from "./api";
 import type { SalesReport } from "./sales-report";
 import type { Order } from "./types";
 import { connectWs } from "./ws";
+import { withTimeout } from "./abort-signal";
 
 export interface DashboardDayEnd { sales: { billCount: number }; cancellations: { orderCount: number } }
 interface DashboardData {
@@ -44,7 +45,7 @@ export function useDashboard(date: string, zomatoEnabled = false) {
   useEffect(() => {
     const request = ++revision.current;
     const controller = new AbortController();
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]);
+    const signal = withTimeout(controller.signal, 15000);
     setLoading(true);
     const day = encodeURIComponent(date);
     const get = <T,>(path: string) => apiFetch<T>(path, { signal, cache: "no-store" });

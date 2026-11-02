@@ -1,4 +1,5 @@
 import type { GuestRequest } from "@masalapos/domain";
+import { withTimeout } from "./abort-signal";
 
 /** Keep IDs until expiry so reconnects and repeated snapshots never ring twice. */
 export class QrArrivalTracker {
@@ -31,7 +32,7 @@ export function startQrMonitor(options: {
     if (reading) { queued = true; return; }
     reading = true;
     try {
-      const requests = await options.read(AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]));
+      const requests = await options.read(withTimeout(controller.signal, 12_000));
       if (!controller.signal.aborted) options.onSnapshot(requests, tracker.update(requests));
     } catch {
       if (!controller.signal.aborted) options.onError();

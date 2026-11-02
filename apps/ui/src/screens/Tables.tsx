@@ -3,6 +3,7 @@ import { ApiError, apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
+import { moveTablePatches } from "../table-order";
 import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readTablesCopy, saveOrderCopy, saveTablesCopy, withOrdersStartedHere } from "../offline-cache";
 import { Icon } from "../Icon";
@@ -149,12 +150,11 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }
 
   function move(table: TableInfo, dir: -1 | 1) {
-    const i = tables.findIndex((t) => t.id === table.id);
-    const neighbor = tables[i + dir];
-    if (!neighbor) return;
+    const patches = moveTablePatches(tables, table.id, dir);
+    if (!patches.length) return;
+    // Not atomic: a server endpoint that takes the whole new order would avoid a half-applied move.
     void run(async () => {
-      await apiFetch(`/api/tables/${table.id}`, { method: "PATCH", body: JSON.stringify({ sortOrder: neighbor.sortOrder }) });
-      await apiFetch(`/api/tables/${neighbor.id}`, { method: "PATCH", body: JSON.stringify({ sortOrder: table.sortOrder }) });
+      for (const patch of patches) await apiFetch(`/api/tables/${patch.id}`, { method: "PATCH", body: JSON.stringify({ sortOrder: patch.sortOrder }) });
     });
   }
 

@@ -5,6 +5,7 @@ import { SalesPeriodControls } from "../SalesReportControls";
 import { recentPeriod, type ReportPeriod } from "../sales-report";
 import { downloadText } from "../download";
 import { operationalCell, operationalCsv } from "../operational-report";
+import { withTimeout } from "../abort-signal";
 
 export type ProfitReport = Omit<OperationalReport, "kind"> & { kind: "profit" };
 type LoadedReport = OperationalReport | ProfitReport;
@@ -21,7 +22,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     let active = true;
     const controller = new AbortController();
     setLoading(true); setReport(null); setError(""); setMessage("");
-    apiFetch<{ report: LoadedReport }>(`${kind === "profit" ? "/api/reports/profit" : `/api/reports/operations/${kind}`}?${new URLSearchParams({ from: period.from, to: period.to })}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
+    apiFetch<{ report: LoadedReport }>(`${kind === "profit" ? "/api/reports/profit" : `/api/reports/operations/${kind}`}?${new URLSearchParams({ from: period.from, to: period.to })}`, { signal: withTimeout(controller.signal, 15000) })
       .then(({ report }) => { if (active) setReport(report); })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load report"); })
       .finally(() => { if (active) setLoading(false); });
