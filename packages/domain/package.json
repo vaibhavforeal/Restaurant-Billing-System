@@ -23,7 +23,8 @@
     "./customer-segments": "./src/customer-segments.ts",
     "./updates": "./src/updates.ts",
     "./vendor-codes": "./src/vendor-codes.ts",
-    "./remote-support": "./src/remote-support.ts"
+    "./remote-support": "./src/remote-support.ts",
+    "./dashboard": "./src/dashboard/index.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
