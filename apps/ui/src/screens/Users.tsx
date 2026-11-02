@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { ApiError, apiFetch } from "../api";
+import { useAction } from "../use-action";
+import { useEffect, useState } from "react";
+import { apiFetch } from "../api";
 import type { AdminUser } from "../types";
 import { DiscountCaps } from "./DiscountCaps";
 import { StaffPermissions } from "./StaffPermissions";
@@ -12,9 +13,7 @@ export function Users() {
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [role, setRole] = useState<AdminUser["role"]>("waiter");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
+  const { busy, error, setError, run: act } = useAction();
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState<AdminUser | null>(null);
 
@@ -28,16 +27,8 @@ export function Users() {
   }, []);
 
   async function run(action: () => Promise<unknown>) {
-    if (lock.current) return;
-    lock.current = true; setBusy(true); setMessage("");
-    setError("");
-    try {
-      await action();
-      await reload();
-      setMessage("Saved.");
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Request failed");
-    } finally { lock.current = false; setBusy(false); }
+    setMessage("");
+    if (await act(async () => { await action(); await reload(); })) setMessage("Saved.");
   }
 
   function addUser() {

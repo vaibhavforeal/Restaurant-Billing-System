@@ -1,3 +1,4 @@
+import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
@@ -56,8 +57,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   const [checkedJobs, setCheckedJobs] = useState<Record<string, boolean>>({});
 
   // Common
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAction();
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     if (!loaded) return; // the sections render only after the settings load
@@ -127,43 +127,28 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   }
 
   // Profile actions
-  async function saveProfile() {
-    if (busy) return;
-    setBusy(true);
+  function saveProfile() {
     setProfileStatus("");
-    try {
-      const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify(form),
-      });
-      setForm(settings);
-      setProfileStatus("saved");
-    } catch (e) {
-      setProfileError(e instanceof Error ? e.message : "Could not save restaurant settings");
-      setProfileStatus("error");
-    } finally {
-      setBusy(false);
-    }
+    void run(async () => {
+      try {
+        const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", { method: "PUT", body: JSON.stringify(form) });
+        setForm(settings);
+        setProfileStatus("saved");
+      } catch (e) {
+        setProfileError(e instanceof Error ? e.message : "Could not save restaurant settings");
+        setProfileStatus("error");
+      }
+    });
   }
 
   // Printer actions
-  async function addPrinter() {
-    if (busy) return;
-    if (!newPrinter.name.trim() || !newPrinter.connection.trim()) {
-      setError("Printer name and connection are required");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
+  function addPrinter() {
+    if (!newPrinter.name.trim() || !newPrinter.connection.trim()) return setError("Printer name and connection are required");
+    void run(async () => {
       await apiFetch("/api/printers", { method: "POST", body: JSON.stringify(newPrinter) });
       setNewPrinter(EMPTY_PRINTER);
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add printer");
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to add printer");
   }
 
   function startEditPrinter(p: PrinterInfo) {
@@ -173,124 +158,63 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   }
 
   async function savePrinter(id: string) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
+    const saved = await run(async () => {
       await apiFetch(`/api/printers/${id}`, { method: "PATCH", body: JSON.stringify(editPrinter) });
       setEditingPrinterId(null);
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update printer");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to update printer");
+    if (!saved) await loadAll();
   }
 
   async function togglePrinter(p: PrinterInfo) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/printers/${p.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: !p.isActive }),
-      });
+    const saved = await run(async () => {
+      await apiFetch(`/api/printers/${p.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !p.isActive }) });
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to toggle printer");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to toggle printer");
+    if (!saved) await loadAll();
   }
 
-  async function testPrint(printerId: string, profile: "receipt" | "kot" = "receipt") {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
+  function testPrint(printerId: string, profile: "receipt" | "kot" = "receipt") {
+    void run(async () => {
       await apiFetch(`/api/printers/${printerId}/test-print`, { method: "POST", body: JSON.stringify({ profile }) });
       await loadJobs();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Test print failed");
-    } finally {
-      setBusy(false);
-    }
+    }, "Test print failed");
   }
 
   // Station actions
-  async function addStation() {
-    if (busy) return;
+  function addStation() {
     const name = newStationName.trim();
-    if (!name) {
-      setError("Station name is required");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
+    if (!name) return setError("Station name is required");
+    void run(async () => {
       await apiFetch("/api/kot-stations", { method: "POST", body: JSON.stringify({ name }) });
       setNewStationName("");
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add station");
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to add station");
   }
 
   async function updateStationPrinter(stationId: string, printerId: string) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/kot-stations/${stationId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ printerId: printerId || null }),
-      });
+    const saved = await run(async () => {
+      await apiFetch(`/api/kot-stations/${stationId}`, { method: "PATCH", body: JSON.stringify({ printerId: printerId || null }) });
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update station");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to update station");
+    if (!saved) await loadAll();
   }
 
   async function toggleStation(s: StationInfo) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/kot-stations/${s.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: !s.isActive }),
-      });
+    const saved = await run(async () => {
+      await apiFetch(`/api/kot-stations/${s.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !s.isActive }) });
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to toggle station");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to toggle station");
+    if (!saved) await loadAll();
   }
 
   // Job actions
-  async function retryJob(jobId: string, action: "retry" | "confirm-printed" = "retry") {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
+  function retryJob(jobId: string, action: "retry" | "confirm-printed" = "retry") {
+    void run(async () => {
       await apiFetch(`/api/print-jobs/${jobId}/${action}`, { method: "POST", body: JSON.stringify({ checkedPaper: checkedJobs[jobId] === true }) });
       setCheckedJobs(previous => ({ ...previous, [jobId]: false }));
       await loadJobs();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Retry failed");
-    } finally {
-      setBusy(false);
-    }
+    }, "Retry failed");
   }
 
   // Helper for printer connection placeholder
