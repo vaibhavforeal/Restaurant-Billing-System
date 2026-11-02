@@ -106,6 +106,25 @@ describe("dashboard widget data", () => {
     expect(daily).toEqual({ kind: "series", format: "money", points: [{ label: "2026-09-28", value: all.totals.totalPaise }] });
   });
 
+  it("ranks top items by sales, not quantity, and keeps only topN", async () => {
+    const { category } = await post("/api/categories", { name: "Drinks" });
+    const make = async (name: string, pricePaise: number) =>
+      (await post("/api/products", { categoryId: category.id, name, pricePaise, gstRate: 5, kotStationId: null })).product.id as string;
+    const tea = await make("Tea", 1000), cola = await make("Cola", 2000), lassi = await make("Lassi", 3000);
+    const { order } = await post("/api/orders", { type: "parcel", clientRef: uuidv7() });
+    // Paneer 1 x 20000 is the top seller by value; Tea sells the most units for the least money.
+    const lines = [[productId, 1], [tea, 8], [cola, 2], [lassi, 3]] as const;
+    await post(`/api/orders/${order.id}/items`, { items: lines.map(([id, qty]) => ({ productId: id, qty, clientRef: uuidv7() })) });
+    const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
+    const { bill: issued } = await post(`/api/orders/${order.id}/bill`, { previewKey: preview.previewKey, clientRef: uuidv7() });
+    app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(at(8, 28, 12), issued.id);
+    const out = await data([widget("i", "topItems", { compare: "none", topN: 3 })]);
+    const ranking = current(out.results.i!);
+    if (ranking.kind !== "ranking") throw new Error("not a ranking");
+    expect(ranking.rows.map((r) => r.label)).toEqual(["Paneer", "Lassi", "Tea"]);
+    expect(ranking.rows.map((r) => r.qty)).toEqual([1, 3, 8]);
+  });
+
   it("compares with the previous period and with last week", async () => {
     const now = await bill(8, 28, 12, 2), before = await bill(8, 27, 12, 1), lastWeek = await bill(8, 21, 12, 3);
     const out = await data([widget("p", "netSales", { period: "today", compare: "previous" }), widget("w", "netSales", { period: "today", compare: "lastWeek" }),

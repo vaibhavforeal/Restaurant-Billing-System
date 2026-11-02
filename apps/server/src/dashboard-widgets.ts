@@ -21,6 +21,8 @@ interface Reports {
 
 const money = (value: number): WidgetValue => ({ kind: "number", value, format: "money" });
 const count = (value: number): WidgetValue => ({ kind: "number", value, format: "count" });
+/** Best sales first, ties by name, so a ranking by sales does not follow the report's quantity order. */
+const bySales = (a: { totalPaise: number; name: string }, b: { totalPaise: number; name: string }) => b.totalPaise - a.totalPaise || a.name.localeCompare(b.name);
 const pad = (hour: number) => String(hour).padStart(2, "0");
 
 /** The first few names a query returns, for the small detail line under a status count. */
@@ -110,9 +112,9 @@ export function computeWidgets(
           ] };
         }
         case "topItems":
-          return { kind: "ranking", rows: analytics().items.slice(0, topN).map((i) => ({ label: i.name, value: i.totalPaise, qty: i.qty })) };
+          return { kind: "ranking", rows: [...analytics().items].sort(bySales).slice(0, topN).map((i) => ({ label: i.name, value: i.totalPaise, qty: i.qty })) };
         case "topCategories":
-          return { kind: "ranking", rows: analytics().categories.slice(0, topN).map((c) => ({ label: c.name, value: c.totalPaise, qty: c.qty })) };
+          return { kind: "ranking", rows: [...analytics().categories].sort(bySales).slice(0, topN).map((c) => ({ label: c.name, value: c.totalPaise, qty: c.qty })) };
         default:
           return statusValue(db, request.widget, now);
       }
