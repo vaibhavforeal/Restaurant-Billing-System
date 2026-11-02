@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   COMPARE_LABELS, DASHBOARD_LIMITS, PERIOD_LABELS, compact, widgetDef, widgetVisible,
   type DashboardData, type DashboardItemValue, type DashboardWidgetId, type WidgetOptionsValue,
@@ -6,6 +6,7 @@ import {
 import { updatedLabel } from "../dashboard-view";
 import { useModules } from "../modules";
 import { useCan } from "../permissions";
+import { useLiveRefresh } from "../live-refresh";
 import { useAction } from "../use-action";
 import { useMediaQuery } from "../use-media-query";
 import { useNow } from "../useDashboard";
@@ -39,7 +40,7 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
   const modules = useModules();
   const narrow = !useMediaQuery("(min-width: 720px)");
   const now = useNow(60_000);
-  const { layout, error: loadError, unavailable: layoutOff, save, reset } = useDashboardLayout();
+  const { layout, error: loadError, unavailable: layoutOff, load, save, reset } = useDashboardLayout();
   const [draft, setDraft] = useState<DashboardItemValue[] | null>(null);
   const [catalogue, setCatalogue] = useState(false);
   const [settingsKey, setSettingsKey] = useState<string | null>(null);
@@ -54,6 +55,17 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
   const items = draft ?? savedItems;
   const { data, error: dataError, unavailable: dataOff, refresh } = useDashboardData(items);
 
+  // Fetch the layout again when what the user may see changes, and after a reconnect, so a later Save starts from the server.
+  const access = [...modules.modules.filter((m) => m.active).map((m) => m.id), can("reports.read"), can("reports.dashboard")].join(",");
+  const editingRef = useRef(false);
+  editingRef.current = editing;
+  const firstAccess = useRef(true);
+  useEffect(() => {
+    if (firstAccess.current) { firstAccess.current = false; return; }
+    if (!editingRef.current) load().catch(() => undefined);
+  }, [access, load]);
+  useLiveRefresh(() => { if (!editingRef.current) load().catch(() => undefined); }, { events: [], pollMs: 3_600_000 });
+
   useEffect(() => { if (layoutOff || dataOff) onUnavailable(); }, [layoutOff, dataOff, onUnavailable]);
 
   const { setError } = action;
@@ -63,6 +75,11 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
     if (narrow) { setDraft(null); setCatalogue(false); setSettingsKey(null); setError(""); }
   }, [narrow, setError]);
 
+  // Build the draft from a fresh copy, never the cached one, so Save cannot overwrite changes made elsewhere.
+  const onCustomise = () => void action.run(async () => {
+    const fresh = await load();
+    setDraft(compact(fresh.layout.items.filter((i) => widgetVisible(widgetDef(i.widget), can, modules.isActive))));
+  }, "Could not load the dashboard");
   const onSave = () => draft && void action.run(async () => {
     if (!layout) return;
     await save({ ...layout, items: draft });
@@ -98,7 +115,7 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
         <button type="button" disabled={action.busy} onClick={onReset}>Reset to default</button>
         <button type="button" disabled={action.busy} onClick={stopEditing}>Cancel</button>
         <button type="button" className="primary" disabled={action.busy} onClick={onSave}>{action.busy ? "Saving…" : "Save"}</button>
-      </> : <button type="button" onClick={() => setDraft(compact(savedItems))}>Customise</button>}
+      </> : <button type="button" disabled={action.busy} onClick={onCustomise}>{action.busy ? "Loading…" : "Customise"}</button>}
     </div>}
     {action.error && <p className="alert" role="alert">{action.error}</p>}
     {!editing && dataError && <p className="alert" role="status">{dataError}</p>}

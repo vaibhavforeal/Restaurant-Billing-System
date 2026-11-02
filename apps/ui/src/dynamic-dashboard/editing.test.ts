@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { WidgetOptions, defaultLayout, widgetDef, type DashboardItemValue } from "@masalapos/domain/dashboard";
 import { addWidget, removeWidget, updateOptions } from "./editing";
+import { ApiError } from "../api";
+import { isUnavailable } from "./useDashboardLayout";
 
 const base = (): DashboardItemValue[] => defaultLayout().items;
 
@@ -33,5 +35,18 @@ describe("dashboard editing", () => {
     expect(next.find((i) => i.key === "default-1")!.options).toMatchObject({ period: "last7", compare: "none", topN: 5 });
     expect(next.filter((i) => i.key !== "default-1")).toEqual(items.filter((i) => i.key !== "default-1"));
     expect(JSON.stringify(items)).toBe(before);
+  });
+});
+
+describe("isUnavailable", () => {
+  it("is true for a 409, a module_off 403 and a forbidden 403", () => {
+    expect(isUnavailable(new ApiError(409, "Dynamic Reports is switched off"))).toBe(true);
+    expect(isUnavailable(new ApiError(403, "Not licensed", "module_off"))).toBe(true);
+    expect(isUnavailable(new ApiError(403, "forbidden"))).toBe(true);
+  });
+  it("is false for a widget 403, a 400 and non-API errors", () => {
+    expect(isUnavailable(new ApiError(403, "That widget is not available to you."))).toBe(false);
+    expect(isUnavailable(new ApiError(400, "Your dashboard is full"))).toBe(false);
+    expect(isUnavailable(new Error("forbidden"))).toBe(false);
   });
 });
