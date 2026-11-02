@@ -33,6 +33,9 @@ export function OrderMoney({ order, me, onChanged }: { order: OrderDetail; me: S
         onChanged(res.order);
       }, "Payment link sent. Razorpay texts and emails it to the customer.")}>Send payment link</button>}
     </div>}
+    {order.status === "confirmed" && order.kind !== "trial" && order.totalPaise > 0 && order.paidPaise >= order.totalPaise && can("payments.record") && <div className="actions">
+      <p className="muted small">Paid in full, but the order wasn't completed. Nothing is lost: try again.</p>
+      <button className="secondary" disabled={busy} onClick={() => void act(`/orders/${order.id}/settle`, undefined, "Order completed.")}>Complete the order</button></div>}
     {status}
     {order.payments.length > 0 && <ul className="stack" style={{ gap: 8 }}>{order.payments.map((p) => <li key={p.id}>
       <div><strong>{money(p.amountPaise)}</strong> by {METHODS[p.method]} {p.status === "pending" ? <Pill tone="warning">Not cleared</Pill> : p.status === "bounced" ? <Pill tone="negative">Bounced</Pill> : null}</div>

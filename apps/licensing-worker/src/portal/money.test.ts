@@ -73,6 +73,25 @@ describe("offline payments", () => {
     expect((await pay(accounts, order.id, 100)).status).toBe(409);
   });
 
+  it("a payment whose settlement failed is kept, and the settle action completes the order once", async () => {
+    const { order } = await confirmedOrder();
+    const realBatch = env.DB.batch.bind(env.DB);
+    let failures = 1;
+    vi.spyOn(env.DB, "batch").mockImplementation(async (statements) => {
+      if (failures > 0 && (statements as unknown as Array<{ sql: string }>).some((s) => s.sql.includes("SET status = 'paid'"))) { failures--; throw new Error("D1 is down"); }
+      return realBatch(statements);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await pay(accounts, order.id, order.totalPaise);
+    expect(res.status).toBe(201);
+    expect((await res.json() as { order: OrderDetail }).order).toMatchObject({ status: "confirmed", paidPaise: order.totalPaise, invoices: [] });
+    expect((await (await as(env, "sales")).call("POST", `/orders/${order.id}/settle`)).status).toBe(403);
+    const settled = (await accounts.ok<{ order: OrderDetail }>("POST", `/orders/${order.id}/settle`)).order;
+    expect(settled).toMatchObject({ status: "paid" });
+    expect(settled.invoices).toHaveLength(1);
+    expect((await accounts.ok<{ order: OrderDetail }>("POST", `/orders/${order.id}/settle`)).order.invoices).toHaveLength(1);
+  });
+
   it("only accounts and admins record payments, and never on a draft or a trial", async () => {
     const { order } = await confirmedOrder();
     for (const role of ["sales", "support"] as const) expect((await pay(await as(env, role), order.id, 100)).status).toBe(403);
@@ -117,6 +136,18 @@ describe("GST invoices", () => {
     await pay(accounts, third.order.id, 1_180_000);
     expect((await invoices()).map((i) => i.number)).toEqual(["FF/27-28/00001", "FF/26-27/00002", "FF/26-27/00001"]);
     expect([financialYear(Date.UTC(2027, 2, 31, 18, 29)), financialYear(Date.UTC(2027, 2, 31, 18, 31)), financialYear(Date.UTC(2027, 0, 5))]).toEqual(["26-27", "27-28", "26-27"]);
+  });
+
+  it("keep the tax split the order was confirmed with, so the invoice total is the order total", async () => {
+    // At 18% on 10,000.03 rupees, CGST plus SGST round to 1,800.00 but IGST rounds to 1,800.01.
+    const { customer, order } = await confirmedOrder({ pricePerOutletPaise: 1_000_003 });
+    expect(order).toMatchObject({ intraState: true, taxPaise: 180_000, totalPaise: 1_180_003 });
+    await admin.ok("PATCH", `/customers/${customer.id}`, { businessName: "Spice Route", contactName: "Meera", phone: "98220 12345", email: "meera@spiceroute.in",
+      gstin: "29AABCU7781K1ZP", address: "FC Road", city: "Bengaluru", stateCode: "", pincode: "560001", notes: "" });
+    const paid = (await (await pay(accounts, order.id, order.totalPaise)).json() as { order: OrderDetail }).order;
+    expect(paid.invoices[0]!.totalPaise).toBe(paid.totalPaise);
+    const { invoice } = await admin.ok<{ invoice: InvoiceDetail }>("GET", `/invoices/${paid.invoices[0]!.id}`);
+    expect(invoice).toMatchObject({ totalPaise: 1_180_003, cgstPaise: 90_000, sgstPaise: 90_000, igstPaise: 0, intraState: true });
   });
 
   it("copy the seller, buyer and lines as they were, with CGST and SGST or IGST and the amount in words", async () => {
@@ -296,7 +327,8 @@ describe("payments that land together, and orders that change underneath a reque
     expect(order.intraState).toBe(true);
     await env.DB.prepare(`UPDATE customers SET gstin = NULL, state_code = '29' WHERE id = ?`).bind(customer.id).run();
     const after = await rows(admin, order.id);
-    expect(after.intraState).toBe(false);
+    // The split stays the one it was confirmed with, so it still adds up to the stored tax (and matches the invoice).
+    expect(after.intraState).toBe(true);
     expect([after.subtotalPaise, after.taxPaise, after.totalPaise]).toEqual([order.subtotalPaise, order.taxPaise, order.totalPaise]);
     expect(after.subtotalPaise + after.taxPaise).toBe(after.totalPaise);
     expect(after.cgstPaise + after.sgstPaise + after.igstPaise).toBe(after.taxPaise);

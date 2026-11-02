@@ -3,6 +3,7 @@
 // every client reconnects and reloads over HTTP.
 import { z } from "zod";
 import type { D1Like, Env } from "../env.js";
+import { IDLE_MS } from "../portal/auth.js";
 import { roleCan } from "../portal/shared.js";
 import { chatMessages, insertMessageStatement, lastMessageId, publishChat, toVisitorMessage, touchChatStatement } from "../support/chats.js";
 import { firstName } from "../support/chats.js";
@@ -41,6 +42,7 @@ function parse<S extends z.ZodType>(schema: S, text: string): z.infer<S> | null 
 export class SupportHub implements LiveHub {
   private readonly staff = new Map<LiveSocket, StaffPeer>();
   private readonly visitors = new Map<string, Set<LiveSocket>>();
+  private readonly visitorSessions = new Map<LiveSocket, string>();
   private readonly counters = new Map<string, LiveSocket>();
   private readonly connectorChats = new Map<string, Set<LiveSocket>>();
   private readonly agents = new Map<string, LiveSocket>();
@@ -63,15 +65,28 @@ export class SupportHub implements LiveHub {
   async sweep(): Promise<void> {
     await sweepRemote(this.remote);
     // About once a minute, staff whose session ended (signed out, deactivated, timed out) lose their socket too.
-    if (++this.sweeps % 12 === 0) await this.recheckStaff();
+    if (++this.sweeps % 12 === 0) { await this.recheckStaff(); await this.recheckVisitors(); }
   }
 
   private async recheckStaff(): Promise<void> {
     const now = this.deps.now();
-    for (const [socket, peer] of this.staff) {
-      const live = await this.deps.db.prepare(`SELECT 1 AS hit FROM staff_sessions s JOIN staff_users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`)
-        .bind(peer.tokenHash, now).first();
-      if (!live) socket.close(4001, "Signed out");
+    for (const [socket, peer] of [...this.staff]) {
+      const live = await this.deps.db.prepare(`SELECT 1 AS hit FROM staff_sessions s JOIN staff_users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND s.last_used_at > ? AND u.active = 1`)
+        .bind(peer.tokenHash, now, now - IDLE_MS).first();
+      if (!live) { socket.close(4001, "Signed out"); this.staff.delete(socket); }
+    }
+  }
+
+  /** Restaurants' chat pages whose support link session lapsed (or whose counter was deactivated) lose their socket. */
+  private async recheckVisitors(): Promise<void> {
+    const now = this.deps.now();
+    for (const [installationId, sockets] of [...this.visitors]) {
+      for (const socket of [...sockets]) {
+        const sessionHash = this.visitorSessions.get(socket) ?? "";
+        const live = await this.deps.db.prepare(`SELECT 1 AS hit FROM support_visitors v JOIN installations i ON i.installation_id = v.installation_id
+          WHERE v.session_hash = ? AND v.expires_at > ? AND i.customer_id IS NOT NULL`).bind(sessionHash, now).first();
+        if (!live) { socket.close(4001, "Session ended"); this.dropVisitor(installationId, socket); }
+      }
     }
   }
 
@@ -134,12 +149,18 @@ export class SupportHub implements LiveHub {
 
   private connectVisitor(peer: Extract<Peer, { kind: "visitor" }>, socket: LiveSocket, guard: (h: (t: string) => Promise<void>) => (t: string) => void): Connection {
     setOf(this.visitors, peer.installationId).add(socket);
+    this.visitorSessions.set(socket, peer.sessionHash);
     return {
       onMessage: guard(async (text) => {
         if (parse(VisitorMessage, text)) this.toStaff({ type: "chat.typing", installationId: peer.installationId });
       }),
-      onClose: () => removeFrom(this.visitors, peer.installationId, socket),
+      onClose: () => this.dropVisitor(peer.installationId, socket),
     };
+  }
+
+  private dropVisitor(installationId: string, socket: LiveSocket): void {
+    removeFrom(this.visitors, installationId, socket);
+    this.visitorSessions.delete(socket);
   }
 
   private connectCounter(peer: Extract<Peer, { kind: "counter" }>, socket: LiveSocket, guard: (h: (t: string) => Promise<void>) => (t: string) => void): Connection {

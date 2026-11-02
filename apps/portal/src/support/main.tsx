@@ -40,8 +40,11 @@ function App() {
   const [typing, setTyping] = useState<{ name: string; until: number } | null>(null);
   const [unread, setUnread] = useState(0);
 
+  // The newest message already on screen: polling asks only for what came after it, so a long chat keeps up.
+  const lastId = useRef(0);
+  if (state.kind === "ready") lastId.current = state.data.chat?.messages.at(-1)?.id ?? 0;
   const load = useCallback(async () => {
-    try { const data = await call<Loaded>("/chat"); setState((s) => s.kind === "ready" && s.data.chat && data.chat?.id === s.data.chat.id
+    try { const data = await call<Loaded>(`/chat${lastId.current ? `?after=${lastId.current}` : ""}`); setState((s) => s.kind === "ready" && s.data.chat && data.chat?.id === s.data.chat.id
       ? { kind: "ready", data: { ...data, chat: { ...data.chat, messages: merge(s.data.chat.messages, data.chat.messages) } } } : { kind: "ready", data }); }
     catch (e) { setState(e instanceof Refused && e.status === 401 ? { kind: "expired" } : { kind: "error", message: e instanceof Error ? e.message : "Couldn't load the chat." }); }
   }, []);

@@ -52,6 +52,15 @@ export const intraStateFor = (settings: PortalSettings, customer: { gstin: strin
   return settings.seller.stateCode && buyer ? settings.seller.stateCode === buyer : null;
 };
 
+/**
+ * Whether a confirmed order's tax was split into CGST and SGST (true) or charged as IGST (false): the one of the two that reproduces the
+ * tax stored at confirmation. When both do, the split makes no difference to the totals and `current` (from today's states) decides.
+ */
+export function confirmedIntra(lines: PricedLine[], storedTaxPaise: number, current: boolean): boolean {
+  const matches = (intra: boolean) => computeTotals(lines, intra).taxPaise === storedTaxPaise;
+  return matches(current) ? current : matches(!current) ? !current : current;
+}
+
 const SUMMARY = `o.id, o.code, o.kind, o.status, o.plan, o.term_months AS termMonths, o.term_days AS termDays, o.outlets, o.seats_used AS seatsUsed,
   o.total_paise AS totalPaise, (SELECT COALESCE(SUM(p.amount_paise), 0) FROM payments p WHERE p.order_id = o.id AND p.status = 'cleared') AS paidPaise,
   c.id AS customerId, c.business_name AS customerName, c.code AS customerCode, o.owner_id AS ownerId, u.name AS ownerName, o.created_at AS createdAt,
@@ -93,14 +102,14 @@ export async function orderDetail(ctx: Ctx, id: string): Promise<OrderDetail> {
   const live = computeTotals(lines.results, intraState ?? true);
   // A priced order keeps the figures it was confirmed with: a later change to the seller's or the customer's state must not change what is
   // owed. Only the CGST/SGST/IGST split follows the current state, and it always adds up to the stored tax.
-  const keep = row.status !== "draft", intra = intraState ?? true, taxPaise = keep ? extra!.storedTax : live.taxPaise;
+  const keep = row.status !== "draft", intra = keep ? confirmedIntra(lines.results, extra!.storedTax, intraState ?? true) : intraState ?? true, taxPaise = keep ? extra!.storedTax : live.taxPaise;
   const cgstPaise = keep ? (intra ? Math.floor(taxPaise / 2) : 0) : live.cgstPaise;
   const totals = keep ? { ...live, subtotalPaise: extra!.storedSubtotal, taxPaise, cgstPaise, sgstPaise: intra ? taxPaise - cgstPaise : 0, igstPaise: intra ? 0 : taxPaise } : live;
   const { customerGstin, customerState, ...summary } = row;
   void customerGstin; void customerState;
   return {
     ...toSummary(summary), maxDevices: extra!.maxDevices, modules: parseOverrides(extra!.modules) as Record<string, boolean>, notes: extra!.notes,
-    subtotalPaise: totals.subtotalPaise, taxPaise: totals.taxPaise, cgstPaise: totals.cgstPaise, sgstPaise: totals.sgstPaise, igstPaise: totals.igstPaise, intraState,
+    subtotalPaise: totals.subtotalPaise, taxPaise: totals.taxPaise, cgstPaise: totals.cgstPaise, sgstPaise: totals.sgstPaise, igstPaise: totals.igstPaise, intraState: keep ? intra : intraState,
     lines: lines.results.map((l, i) => ({ ...l, ...totals.lines[i]! })),
     confirmedAt: extra!.confirmedAt, paidAt: extra!.paidAt, cancelledAt: extra!.cancelledAt,
     creditApprovedBy: extra!.creditApprovedBy ? { id: extra!.creditApprovedBy, name: extra!.creditApprovedByName ?? "" } : null,

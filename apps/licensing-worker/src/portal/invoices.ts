@@ -6,7 +6,7 @@ import type { InvoiceBuyer, InvoiceDetail, InvoiceLine, InvoiceSeller, InvoiceSu
 import { logBy, path, queryInt, type Ctx, type Route } from "./context.js";
 import { conflict, HttpError, json, notFound, readBody, SECURITY_HEADERS } from "./http.js";
 import { invoicePdf } from "./invoice-pdf.js";
-import { visibleOrder } from "./order-routes.js";
+import { confirmedIntra, visibleOrder } from "./order-routes.js";
 import { ownedBy } from "./scope.js";
 import { loadSettings } from "./settings.js";
 import { buyerState, computeTotals, GST_STATES } from "./shared.js";
@@ -23,14 +23,15 @@ const PAGE = 50;
 export async function invoiceStatements(deps: Deps, orderId: string, actorId: string | null): Promise<D1StatementLike[]> {
   const { db } = deps, now = deps.now();
   const settings = await loadSettings(db);
-  const order = (await db.prepare(`SELECT o.code, o.customer_id AS customerId, c.code AS customerCode, c.business_name AS name, c.gstin, c.address, c.city, c.state_code AS stateCode,
+  const order = (await db.prepare(`SELECT o.code, o.tax_paise AS taxPaise, o.customer_id AS customerId, c.code AS customerCode, c.business_name AS name, c.gstin, c.address, c.city, c.state_code AS stateCode,
       c.pincode, c.email, c.phone FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`).bind(orderId)
-    .first<{ code: string; customerId: string; customerCode: string; name: string; gstin: string | null; address: string | null; city: string | null; stateCode: string | null; pincode: string | null; email: string | null; phone: string | null }>())!;
+    .first<{ code: string; taxPaise: number; customerId: string; customerCode: string; name: string; gstin: string | null; address: string | null; city: string | null; stateCode: string | null; pincode: string | null; email: string | null; phone: string | null }>())!;
   const buyerCode = buyerState(order), sellerCode = settings.seller.stateCode;
   if (!buyerCode || !sellerCode || !settings.seller.legalName) throw conflict("The seller's or the customer's state is missing, so the invoice can't be issued.", "state_missing");
-  const intra = buyerCode === sellerCode;
   const rows = (await db.prepare(`SELECT description, sac, quantity, unit_price_paise AS unitPricePaise, discount_paise AS discountPaise, gst_rate_bp AS gstRateBp
     FROM order_lines WHERE order_id = ? ORDER BY position`).bind(orderId).all<Omit<InvoiceLine, "taxablePaise" | "cgstPaise" | "sgstPaise" | "igstPaise">>()).results;
+  // The split fixed when the order was confirmed, so the invoice adds up to the order's total even if a state has changed since.
+  const intra = confirmedIntra(rows, order.taxPaise, buyerCode === sellerCode);
   const totals = computeTotals(rows, intra);
   const lines: InvoiceLine[] = rows.map((r, i) => ({ ...r, ...totals.lines[i]! }));
   const s = settings.seller;

@@ -38,9 +38,13 @@ export async function chatSummary(db: D1Like, id: string): Promise<ChatSummary |
   return (await chatsWhere(db, "s.id = ?", [id], "s.id", 1))[0] ?? null;
 }
 
+/** Up to 500 messages: the newest ones when asked for the whole chat (afterId 0), else the next ones after `afterId`, oldest first. */
 export async function chatMessages(db: D1Like, chatId: string, afterId = 0): Promise<ChatMessage[]> {
-  const { results } = await db.prepare(`SELECT m.id, m.author_type AS author, m.author_id AS staffId, u.name AS staffName, m.body, m.created_at AS createdAt
-    FROM support_chat_messages m LEFT JOIN staff_users u ON u.id = m.author_id WHERE m.chat_id = ? AND m.id > ? ORDER BY m.id LIMIT 500`)
+  const columns = `m.id, m.author_type AS author, m.author_id AS staffId, u.name AS staffName, m.body, m.created_at AS createdAt`;
+  const from = `FROM support_chat_messages m LEFT JOIN staff_users u ON u.id = m.author_id WHERE m.chat_id = ? AND m.id > ?`;
+  const sql = afterId > 0 ? `SELECT ${columns} ${from} ORDER BY m.id LIMIT 500`
+    : `SELECT * FROM (SELECT ${columns} ${from} ORDER BY m.id DESC LIMIT 500) ORDER BY id`;
+  const { results } = await db.prepare(sql)
     .bind(chatId, afterId).all<{ id: number; author: ChatMessage["author"]; staffId: string | null; staffName: string | null; body: string; createdAt: number }>();
   return results.map(({ staffId, staffName, ...m }) => ({ ...m, staff: staffId ? { id: staffId, name: staffName ?? "Support" } : null }));
 }

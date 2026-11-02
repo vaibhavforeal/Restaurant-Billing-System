@@ -79,6 +79,16 @@ const Payment = z.object({
   pending: z.boolean().default(false),
 }).strict();
 
+/**
+ * Settles right after a payment is recorded. The payment is already on file, so a failure here must not fail the request (the person would
+ * record it again and double it): it is logged, the order stays confirmed and fully paid, and the "settle" action (or the next payment
+ * status change) tries again.
+ */
+async function settleAfterPayment(ctx: Ctx, orderId: string): Promise<void> {
+  try { await settleOrder(ctx.deps, orderId, ctx.user.id, (m) => console.warn(m)); }
+  catch (error) { console.warn(`order ${orderId} is paid but could not be settled yet: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
 async function afterPaid(ctx: Ctx, orderId: string): Promise<void> {
   const razorpay = razorpayFor(ctx.env);
   const order = await orderById(ctx.deps.db, orderId);
@@ -100,9 +110,19 @@ export const paymentRoutes: Route[] = [
           summary: `Recorded ${formatPaise(body.amountPaise)} by ${body.method}${pending ? " (cheque not cleared yet)" : ""} for order ${order.code}` }),
     ]);
     // The payment is on file whatever happens next; a payment that lands with this one is counted too.
-    if (!pending) await settleOrder(ctx.deps, order.id, ctx.user.id, (m) => console.warn(m));
+    if (!pending) await settleAfterPayment(ctx, order.id);
     await afterPaid(ctx, order.id);
     return json({ order: await orderDetail(ctx, order.id) }, 201);
+  } },
+
+  // Retries completing an order whose payments cover it but whose settlement failed. Safe to repeat: it does nothing unless the order is still confirmed and covered.
+  { method: "POST", path: path("/orders/:id/settle"), permission: "payments.record", handler: async (ctx) => {
+    const order = await visibleOrder(ctx, ctx.params[0]!);
+    if (order.status === "confirmed" && order.kind !== "trial") {
+      await settleOrder(ctx.deps, order.id, ctx.user.id, (m) => console.warn(m));
+      await afterPaid(ctx, order.id);
+    }
+    return json({ order: await orderDetail(ctx, order.id) });
   } },
 
   { method: "POST", path: path("/payments/:id/status"), permission: "payments.record", handler: async (ctx) => {
@@ -119,7 +139,7 @@ export const paymentRoutes: Route[] = [
       logBy(ctx, { action: `payment.${status}`, entityType: "payment", entityId: payment.id, customerId: payment.customerId,
         summary: `Cheque of ${formatPaise(payment.amountPaise)} for order ${payment.code} ${status === "cleared" ? "cleared" : "bounced"}` }),
     ]);
-    if (status === "cleared") await settleOrder(ctx.deps, payment.orderId, ctx.user.id, (m) => console.warn(m));
+    if (status === "cleared") await settleAfterPayment(ctx, payment.orderId);
     await afterPaid(ctx, payment.orderId);
     return json({ order: await orderDetail(ctx, payment.orderId) });
   } },

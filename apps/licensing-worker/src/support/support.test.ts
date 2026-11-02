@@ -121,6 +121,21 @@ describe("live chat", () => {
     expect(second.chat).toMatchObject({ number: 1002, status: "waiting" });
   });
 
+  it("keeps showing the newest messages once a chat passes 500", async () => {
+    const v = await visitor();
+    await v.call("POST", "/messages", { body: "first", name: "Ravi" });
+    const chatId = (await support.ok<{ chats: ChatSummary[] }>("GET", "/chats")).chats[0]!.id;
+    const rows = Array.from({ length: 520 }, (_, i) => env.DB.prepare(`INSERT INTO support_chat_messages (chat_id, author_type, body, created_at) VALUES (?, 'customer', ?, ?)`).bind(chatId, `m${i}`, T0));
+    await env.DB.batch(rows);
+    const staff = (await support.ok<{ chat: ChatDetail }>("GET", `/chats/${chatId}`)).chat.messages;
+    expect(staff.at(-1)!.body).toBe("m519");
+    const seen = (await (await v.call("GET", "/chat")).json() as VisitorChat).chat!.messages;
+    expect(seen.at(-1)!.body).toBe("m519");
+    await v.call("POST", "/messages", { body: "newest" });
+    const polled = (await (await v.call("GET", `/chat?after=${seen.at(-1)!.id}`)).json() as VisitorChat).chat!.messages;
+    expect(polled.map((m) => m.body)).toEqual(["newest"]);
+  });
+
   it("is for support and admins only, and the restaurant needs its cookie", async () => {
     const sales = await as(env, "sales");
     expect((await sales.call("GET", "/chats")).status).toBe(403);
@@ -183,6 +198,31 @@ describe("live socket sign-in", () => {
     expect(await upgrade("/v1/counter/live", { [INSTALLATION_HEADER]: installationId, [SECRET_HEADER]: "0".repeat(64) })).toBeNull();
     expect(await upgrade("/v1/remote/agent?t=nope")).toBeNull();
     expect(await upgrade("/somewhere")).toBeNull();
+  });
+});
+
+describe("open live sockets", () => {
+  const upgrade = (path: string, headers: Record<string, string>) => authorizeLive(new Request(`${ORIGIN}${path}`, { headers }), env, { db: env.DB, now: Date.now, uuid: () => crypto.randomUUID() });
+  const sweepMinute = async () => { for (let i = 0; i < 12; i++) await hub.sweep(); };
+
+  it("close when the visitor's session expires", async () => {
+    const v = await visitor();
+    const page = open((await upgrade("/support/live", { cookie: v.cookie, origin: ORIGIN }))!);
+    await sweepMinute();
+    expect(page.socket.closed).toBeNull();
+    vi.setSystemTime(T0 + 24 * 60 * 60_000 + 1);
+    await sweepMinute();
+    expect(page.socket.closed).toBe(4001);
+  });
+
+  it("close when the staff session has been idle too long", async () => {
+    const peer = (await upgrade("/portal/api/live", { cookie: support.cookie, origin: ORIGIN }))!;
+    const staff = open(peer);
+    await sweepMinute();
+    expect(staff.socket.closed).toBeNull();
+    vi.setSystemTime(T0 + 2 * 60 * 60_000 + 1);
+    await sweepMinute();
+    expect(staff.socket.closed).toBe(4001);
   });
 });
 
