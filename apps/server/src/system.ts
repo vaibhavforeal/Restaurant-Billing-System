@@ -87,8 +87,8 @@ export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4
   const { staging, desktop } = restore;
   /** Restore stops every counter, so it is started only from the main PC's desktop app. */
   const restoreBlocked = (req: FastifyRequest): string | null =>
-    !desktop || !staging ? "Restore runs in the MasalaPOS desktop app on the main POS PC. Use the tray menu â†’ Restore backup."
-      : !fromMainPc(req) ? "To restore, open Settings â†’ Backups on the main POS PC." : null;
+    !desktop || !staging ? "Restore runs in the MasalaPOS desktop app on the main POS PC. Use the tray menu → Restore backup."
+      : !fromMainPc(req) ? "To restore, open Settings → Backups on the main POS PC." : null;
   const requireRestore = (req: FastifyRequest) => { const reason = restoreBlocked(req); if (reason) throw httpError(409, reason); return staging!; };
   const backupStatus = (req: FastifyRequest, status: ReturnType<Backups["status"]>) => ({ ...status, restoreBlockedReason: restoreBlocked(req) });
   const restaurantName = () => (app.db.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name: string } | undefined)?.restaurant_name ?? "";

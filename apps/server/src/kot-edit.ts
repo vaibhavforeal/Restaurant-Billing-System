@@ -11,8 +11,11 @@ import { userCan } from "./auth.js";
 
 type KotEditPrint = "ask" | "always" | "never";
 
-/** Copied onto the cancelled item that holds a quantity cut; every other column keeps the original item's value. */
-const SPLIT_OVERRIDES = new Set(["id", "qty", "status", "cancel_reason", "cancelled_by", "cancelled_at", "client_ref"]);
+/**
+ * Set afresh on the cancelled item that holds a quantity cut; every other column keeps the original item's value.
+ * guest_request_id is cleared because a QR guest's items are matched back to their request through client_ref, which the copy cannot share.
+ */
+const SPLIT_OVERRIDES = new Set(["id", "qty", "status", "cancel_reason", "cancelled_by", "cancelled_at", "client_ref", "guest_request_id"]);
 
 /**
  * Editing an item after it was sent to the kitchen (GoFrugal's "KOT edit"). A note change needs `orders.update`;
@@ -62,8 +65,8 @@ export function registerKotEdits(app: FastifyInstance): void {
         // The removed units become their own cancelled item, so bills, cancellation reports and the kitchen see them as cancelled.
         cancelledItemId = uuidv7();
         const columns = (db.prepare("PRAGMA table_info(order_items)").all() as Array<{ name: string }>).map((c) => c.name).filter((c) => !SPLIT_OVERRIDES.has(c));
-        db.prepare(`INSERT INTO order_items (id, qty, status, cancel_reason, cancelled_by, cancelled_at, client_ref, ${columns.join(", ")})
-          SELECT ?, ?, 'cancelled', ?, ?, ?, NULL, ${columns.join(", ")} FROM order_items WHERE id = ?`)
+        db.prepare(`INSERT INTO order_items (id, qty, status, cancel_reason, cancelled_by, cancelled_at, client_ref, guest_request_id, ${columns.join(", ")})
+          SELECT ?, ?, 'cancelled', ?, ?, ?, NULL, NULL, ${columns.join(", ")} FROM order_items WHERE id = ?`)
           .run(cancelledItemId, item.qty - newQty, reason, req.user.id, now, id);
         stockIds = returnPartialStock(db, { orderItemId: id, cancelledItemId, currentQty: item.qty, removedQty: item.qty - newQty, actorId: req.user.id, note: reason ?? "KOT edit" });
       }
@@ -94,9 +97,8 @@ export function registerKotEdits(app: FastifyInstance): void {
       if (!printer) return false;
       const context = contextLine(order.type, tableName, order.split_label, order.zomato_order_id ?? null, order.order_type_name ?? null);
       const rendered = bestEffortPrint(app.log, `Edit slip for KOT #${kot.kot_no}`, () => editSlip({ kotNo: kot.kot_no, context, ...change }, printer.paper_width, readProfile(printer.kot_profile)));
-      if (rendered.error) { printError = rendered.error; return false; }
-      app.enqueuePrint(kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${context}`, rendered.value!);
-      return true;
+      printError = rendered.error ?? app.enqueuePrint(kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${context}`, rendered.value!);
+      return printError === null;
     }
 
     const order = loadOrderJson(db, result.orderId)!;

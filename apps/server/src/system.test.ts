@@ -29,6 +29,18 @@ it("restricts backups and network details to admins and downloads only managed s
   expect(android.downloads.map((link: { url: string }) => link.url)).toEqual(connections.map((link: { url: string }) => `${link.url}/captain/android/MasalaPOS-Captain.apk`));
   expect(android.pairings.every((pairing: { secure: boolean }) => !pairing.secure)).toBe(true);
 });
+it("explains where to restore with a real arrow, on a standalone server and from another counter", async () => {
+  folder = mkdtempSync(join(tmpdir(), "masalapos-system-test-")); const db = openDb(join(folder, "masalapos.db")); migrate(db, MIGRATIONS);
+  app = buildServer({ db, backups: new Backups(db, folder), updateBridge: { send: () => {}, onMessage: () => {} } });
+  const admin = await setupAdmin(app);
+  const fromCounter = await app.inject({ url: "/api/system/backups", headers: auth(admin.token), remoteAddress: "192.168.1.40" });
+  expect(fromCounter.json().restoreBlockedReason).toBe("To restore, open Settings → Backups on the main POS PC.");
+  await app.close();
+
+  app = buildServer({ db, backups: new Backups(db, folder) });
+  expect((await app.inject({ url: "/api/system/backups", headers: auth(admin.token) })).json().restoreBlockedReason)
+    .toBe("Restore runs in the MasalaPOS desktop app on the main POS PC. Use the tray menu → Restore backup.");
+});
 it("creates a Windows Edge app-mode shortcut with a fixed server URL", () => {
   const result = edgeShortcut("http://192.168.1.50:4100");
   expect(result).toContain("--app=http://192.168.1.50:4100");

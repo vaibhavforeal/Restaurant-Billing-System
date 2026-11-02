@@ -179,8 +179,8 @@ export function registerKots(app: FastifyInstance): void {
           printerRow.paper_width as 58 | 80,
           readProfile(printerRow.kot_profile),
         ));
-        if (rendered.error) printErrors.push(rendered.error);
-        else app.enqueuePrint(ck.stationId, "kot", label, rendered.value!);
+        const printError = rendered.error ?? app.enqueuePrint(ck.stationId, "kot", label, rendered.value!);
+        if (printError) printErrors.push(printError);
       }
       return kotsWithContext;
     })();

@@ -27,7 +27,7 @@ interface RequestRow {
 function preparation(db: Database, request: RequestRow): GuestPreparation | null {
   if (request.status !== "accepted") return null;
   type Row = {
-    id: string; name_snapshot: string; qty: number; status: string; note: string | null; client_ref: string; parent_item_id: string | null;
+    id: string; name_snapshot: string; qty: number; status: string; note: string | null; client_ref: string | null; parent_item_id: string | null;
     kot_id: string | null; done_at: number | null; kot_station_id: string | null; order_status: string;
   };
   const select = `SELECT i.id, i.name_snapshot, i.qty, i.status, i.note, i.client_ref, i.parent_item_id, i.kot_id, k.done_at,
@@ -44,7 +44,7 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
   const original = JSON.parse(request.items_json) as GuestRequestItem[];
   let hasChanges = rows.length !== original.length;
   const items = rows.map((row) => {
-    const index = Number(row.client_ref.slice(`guest:${request.id}:`.length));
+    const index = row.client_ref === null ? -1 : Number(row.client_ref.slice(`guest:${request.id}:`.length));
     const before = original[index];
     if (!before || before.qty !== row.qty || before.name !== row.name_snapshot || before.note !== (row.note ?? "")) hasChanges = true;
     const held = inCombos.filter((item) => item.parent_item_id === row.id);

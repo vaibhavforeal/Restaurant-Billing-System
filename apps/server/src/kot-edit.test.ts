@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
-import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { randomBytes } from "node:crypto";
+import { auth, commercialApp, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 describe("KOT edit after send", () => {
   let app: FastifyInstance; let token: string; let productId: string; let stockId: string;
@@ -101,6 +102,17 @@ describe("KOT edit after send", () => {
     expect((await app.inject({ method: "POST", url: `/api/order-items/${itemId}/edit-sent`, headers: auth(token), payload: { ...payload, reason: "Other" } })).statusCode).toBe(409);
   });
 
+  it("reports that the edit slip was not printed when the ticket's station is turned off", async () => {
+    const { itemId } = await sentItem(2);
+    const station = app.db.prepare("SELECT id FROM kot_stations LIMIT 1").get() as { id: string };
+    await app.inject({ method: "PATCH", url: `/api/kot-stations/${station.id}`, headers: auth(token), payload: { isActive: false } });
+    const res = await edit(itemId, { note: "Less spicy", print: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().printError).toMatch(/Changed.*KOT #\d+.*turned off/);
+    expect(editJobs()).toHaveLength(0);
+    expect(app.db.prepare("SELECT printed FROM kot_edits").get()).toEqual({ printed: 0 });
+  });
+
   it("lets a waiter change the note but not cut the quantity", async () => {
     const waiter = await createUser(app, token, { name: "Ravi", pin: "2222", role: "waiter" });
     const cashier = await createUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
@@ -110,5 +122,37 @@ describe("KOT edit after send", () => {
     expect(cut.statusCode).toBe(403);
     expect(cut.json().permission).toBe("orders.cancel_sent");
     expect((await edit(itemId, { qty: 1, reason: "Wrong" }, cashier.token)).statusCode).toBe(200);
+  });
+});
+
+describe("KOT edit on a QR guest's item", () => {
+  it("cuts a sent guest item without breaking the staff request list or the guest's status page", async () => {
+    const { app, headers } = await commercialApp("pro");
+    try {
+      const api = (method: "GET" | "POST" | "PUT", url: string, payload?: object) => app.inject({ method, url, headers, ...(payload === undefined ? {} : { payload }) });
+      const category = (await api("POST", "/api/categories", { name: "Meals" })).json().category as { id: string };
+      const station = app.db.prepare("SELECT id FROM kot_stations LIMIT 1").get() as { id: string };
+      const product = (await api("POST", "/api/products", { name: "Rice bowl", categoryId: category.id, pricePaise: 10000, gstRate: 5, kotStationId: station.id })).json().product as { id: string };
+      const table = (await api("POST", "/api/tables", { name: "T1", area: "Patio" })).json().table as { id: string };
+      const qrToken = ((await api("PUT", `/api/qr/tables/${table.id}`, { enabled: true })).json().table.path as string).split("#")[1]!;
+      const menuVersion = (await app.inject({ url: "/api/guest/menu", headers: { "x-qr-token": qrToken } })).json().menuVersion as string;
+      const receiptToken = randomBytes(32).toString("hex");
+      const submitted = await app.inject({ method: "POST", url: "/api/guest/requests", headers: { "x-qr-token": qrToken },
+        payload: { clientRef: uuidv7(), receiptToken, menuVersion, items: [{ productId: product.id, variantId: null, qty: 2, note: "" }] } });
+      expect(submitted.statusCode, submitted.body).toBe(201);
+      const requestId = submitted.json().request.id as string;
+      const accepted = await api("POST", `/api/qr/requests/${requestId}/accept`, { orderId: null });
+      expect(accepted.statusCode, accepted.body).toBe(200);
+      const order = accepted.json().order as { id: string; items: Array<{ id: string }> };
+      expect((await api("POST", `/api/orders/${order.id}/send`)).statusCode).toBe(200);
+      const cut = await api("POST", `/api/order-items/${order.items[0]!.id}/edit-sent`, { clientRef: uuidv7(), qty: 1, reason: "Guest changed mind" });
+      expect(cut.statusCode, cut.body).toBe(200);
+
+      const list = await api("GET", "/api/qr/requests?status=all");
+      expect(list.statusCode, list.body).toBe(200);
+      const receipt = await app.inject({ url: `/api/guest/requests/${requestId}`, headers: { "x-guest-receipt": receiptToken } });
+      expect(receipt.statusCode, receipt.body).toBe(200);
+      expect(receipt.json().request.preparation).toMatchObject({ state: "preparing", hasChanges: true, items: [{ name: "Rice bowl", qty: 1, state: "preparing" }] });
+    } finally { await app.close(); app.db.close(); }
   });
 });

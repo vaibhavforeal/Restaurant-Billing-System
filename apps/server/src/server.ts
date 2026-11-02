@@ -98,15 +98,19 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.addHook("onReady", async () => queue.start());
   app.addHook("preClose", async () => queue.close());
 
-  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer) => {
+  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer): string | null => {
     interface StationRow {
+      name: string;
       printer_id: string | null;
+      is_active: number;
     }
     const station = app.db
-      .prepare("SELECT printer_id FROM kot_stations WHERE id = ? AND is_active = 1")
+      .prepare("SELECT name, printer_id, is_active FROM kot_stations WHERE id = ?")
       .get(stationId) as StationRow | undefined;
 
-    if (!station || !station.printer_id) return;
+    if (!station) return `${label} was saved but not printed: its kitchen station no longer exists`;
+    if (station.is_active !== 1) return `${label} was saved but not printed: the ${station.name} station is turned off`;
+    if (!station.printer_id) return `${label} was saved but not printed: the ${station.name} station has no printer`;
 
     interface PrinterRow {
       id: string;
@@ -120,9 +124,10 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       .prepare("SELECT id, name, kind, connection, is_active, kot_profile FROM printers WHERE id = ?")
       .get(station.printer_id) as PrinterRow | undefined;
 
-    if (!printer || printer.is_active !== 1) return;
+    if (!printer || printer.is_active !== 1) return `${label} was saved but not printed: the ${station.name} station's printer is turned off`;
 
     queue.enqueue(printer, kind, label, bytes, readProfile(printer.kot_profile).copies);
+    return null;
   });
 
   app.setErrorHandler((err: unknown, _req, reply) => {
@@ -203,6 +208,7 @@ declare module "fastify" {
   interface FastifyInstance {
     db: Database;
     printQueue: PrintQueue;
-    enqueuePrint(stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer): void;
+    /** Queues a kitchen slip at the station's printer. Returns why nothing was queued, or null once the job is queued. */
+    enqueuePrint(stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer): string | null;
   }
 }

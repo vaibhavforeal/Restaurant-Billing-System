@@ -309,8 +309,7 @@ export function registerOrders(app: FastifyInstance): void {
       readProfile(printerRow.kot_profile),
     ));
     if (rendered.error) return rendered.error;
-    app.enqueuePrint(kot.station_id, "cancel", label, rendered.value!);
-    return null;
+    return app.enqueuePrint(kot.station_id, "cancel", label, rendered.value!);
   }
 
   app.post("/api/orders/:id/cancel", { preHandler: update }, async (req) => {

@@ -849,3 +849,24 @@ describe("orders: order cancel", () => {
     expect(res.json().error).toBe("order is not open");
   });
 });
+
+describe("orders: cancel slip for a turned-off station", () => {
+  it("cancels the sent item and reports that the cancel slip was not printed", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { biryaniId, kitchenStationId } = await fixtures(app, admin.token);
+    const printer = await app.inject({ method: "POST", url: "/api/printers", headers: auth(admin.token), payload: { name: "Kitchen", kind: "network", connection: "127.0.0.1:9100", paperWidth: 80 } });
+    await app.inject({ method: "PATCH", url: `/api/kot-stations/${kitchenStationId}`, headers: auth(admin.token), payload: { printerId: printer.json().printer.id } });
+    const order = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: "order-off-station", type: "parcel" } });
+    const orderId = order.json().order.id as string;
+    const added = await app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers: auth(admin.token), payload: { items: [{ productId: biryaniId, qty: 1 }] } });
+    const itemId = added.json().order.items[0].id as string;
+    expect((await app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(admin.token) })).statusCode).toBe(200);
+    await app.inject({ method: "PATCH", url: `/api/kot-stations/${kitchenStationId}`, headers: auth(admin.token), payload: { isActive: false } });
+    const jobsBefore = (app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get() as { n: number }).n;
+    const res = await app.inject({ method: "POST", url: `/api/order-items/${itemId}/cancel`, headers: auth(admin.token), payload: { reason: "Guest left" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().printError).toMatch(/Cancel.*KOT #\d+.*turned off/);
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get()).toEqual({ n: jobsBefore });
+  });
+});

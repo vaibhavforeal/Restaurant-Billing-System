@@ -33,8 +33,8 @@ export function notifyKitchenTableChange(app: FastifyInstance, orderId: string, 
     const rendered = bestEffortPrint(app.log, "table change slip", () =>
       tableChangeSlip({ stationName: station.name, text, atMs: now }, printer.paper_width as 58 | 80, readProfile(printer.kot_profile)),
     );
-    if (rendered.error) printErrors.push(rendered.error);
-    else app.enqueuePrint(station.id, "table", `Table change — ${text}`, rendered.value!);
+    const printError = rendered.error ?? app.enqueuePrint(station.id, "table", `Table change — ${text}`, rendered.value!);
+    if (printError) printErrors.push(printError);
   }
   return printErrors;
 }
