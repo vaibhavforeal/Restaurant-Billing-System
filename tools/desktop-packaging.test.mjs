@@ -149,6 +149,16 @@ test("the installer activation script gets this build's service, key and version
   assert.throws(() => installerActivationScript("no placeholders", { serviceUrl: "", verificationKeyFingerprint: null, appVersion: "1" }), /placeholder/);
 });
 
+test("the installer activation script protects the staged secret and finds the signed-in user's identity", () => {
+  const script = readFileSync(new URL("./installer-activate.ps1", import.meta.url), "utf8");
+  assert.match(script, /\/inheritance:r/);
+  assert.match(script, /\*S-1-5-18:F/);
+  assert.match(script, /\*S-1-5-32-544:F/);
+  assert.doesNotMatch(script, /S-1-5-32-545:M/);
+  assert.match(script, /Win32_ComputerSystem/);
+  assert.match(script, /Split-Path -Parent \$env:USERPROFILE/);
+});
+
 test("the installer asks for activation codes only when the build activates online", async () => {
   const { installerConfig } = await import("./desktop-build-config.mjs");
   assert.equal(installerConfig("C:\b$x\a.ps1", true), '!define MASALAPOS_ACTIVATION_SCRIPT "C:\b$$x\a.ps1"\n!define MASALAPOS_ONLINE_ACTIVATION\n');

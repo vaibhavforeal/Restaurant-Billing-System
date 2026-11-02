@@ -50,7 +50,19 @@ if (!$customerId -or !$orderId) { Fail $CheckCodes }
 $stageDir = Join-Path $env:ProgramData 'MasalaPOS'
 $stagePath = Join-Path $stageDir 'activation.json'
 # Reinstalling must not take a second seat: reuse this PC's identity if the app (or an earlier run of setup) already has one.
-$identity = Read-Identity (Join-Path $env:APPDATA 'masalapos-desktop\data\installation.json')
+# Setup runs elevated, possibly as a different administrator than the person who uses the app, so $env:APPDATA is not enough: look in
+# the signed-in user's profile and every other profile too, newest first (the app keeps installation.json under AppData\Roaming).
+$interactiveUser = $null
+try { $interactiveUser = "$((Get-CimInstance -ClassName Win32_ComputerSystem).UserName)" } catch { }
+$identityFiles = @(Join-Path $env:APPDATA 'masalapos-desktop\data\installation.json')
+if ($interactiveUser -match '\\(.+)$') { $identityFiles += Join-Path (Join-Path (Split-Path -Parent $env:USERPROFILE) $Matches[1]) 'AppData\Roaming\masalapos-desktop\data\installation.json' }
+try {
+  $identityFiles += @(Get-ChildItem -LiteralPath (Split-Path -Parent $env:USERPROFILE) -Directory -ErrorAction Stop |
+    ForEach-Object { Join-Path $_.FullName 'AppData\Roaming\masalapos-desktop\data\installation.json' } |
+    Where-Object { Test-Path -LiteralPath $_ } | Sort-Object { (Get-Item -LiteralPath $_).LastWriteTime } -Descending)
+} catch { }
+$identity = $null
+foreach ($file in $identityFiles) { $identity = Read-Identity $file; if ($identity) { break } }
 if (!$identity) { $identity = Read-Identity $stagePath }
 if (!$identity) {
   $bytes = New-Object byte[] 32
@@ -98,9 +110,16 @@ $staged = [ordered]@{
 }
 try {
   New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+  # The file holds the installation secret, so it is locked down before the secret is written. Only SYSTEM and Administrators get full
+  # control; MasalaPOS runs as the signed-in user, who needs to read the file and delete it once adopted (apps/server/src/license-config.ts).
+  # If that user can't be found, any local user may read and delete it, as the app only adopts a file made for its own identity.
+  $reader = '*S-1-5-32-545'
+  try { $reader = '*' + (New-Object Security.Principal.NTAccount($interactiveUser)).Translate([Security.Principal.SecurityIdentifier]).Value } catch { }
+  Remove-Item -LiteralPath $stagePath -Force -ErrorAction SilentlyContinue
+  [IO.File]::WriteAllText($stagePath, '', (New-Object Text.UTF8Encoding $false))
+  & "$env:SystemRoot\System32\icacls.exe" $stagePath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' "${reader}:(R,D)" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'icacls failed' }
   [IO.File]::WriteAllText($stagePath, ($staged | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
-  # Setup runs as an administrator but MasalaPOS runs as the signed-in user, who must be able to delete the file once it is adopted.
-  & "$env:SystemRoot\System32\icacls.exe" $stagePath /grant '*S-1-5-32-545:M' | Out-Null
 } catch { Fail "MasalaPOS was activated but setup couldn't save it in $stageDir. Run setup again." }
 [Console]::Out.Write("Activated for $($reply.customer.name), order $($reply.order.code).")
 exit 0

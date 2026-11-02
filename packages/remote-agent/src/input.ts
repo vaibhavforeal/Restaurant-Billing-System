@@ -28,6 +28,18 @@ export function pointOn(bounds: Bounds, x: number, y: number): { x: number; y: n
   return { x: bounds.x + Math.min(Math.floor(x * bounds.width), bounds.width - 1), y: bounds.y + Math.min(Math.floor(y * bounds.height), bounds.height - 1) };
 }
 
+/** A button-up or key-up. These are always forwarded: dropping one near a protected window would leave the button or key held down on the PC. */
+export function isRelease(message: InputMessage): boolean {
+  return (message.t === "button" || message.t === "key") && !message.down;
+}
+
+/** Whether a press (or move, wheel) must be dropped: a protected window has focus (only the pointer may act) or the pointer is over one. */
+export function blockedByProtected(message: InputMessage, focused: boolean, overProtected: boolean): boolean {
+  if (isRelease(message)) return false;
+  if (focused && message.t !== "move" && message.t !== "button") return true;
+  return (message.t === "move" || message.t === "button") && overProtected;
+}
+
 export interface Injector {
   /** Physical screen pixels. */
   moveTo(x: number, y: number): void;

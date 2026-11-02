@@ -4,7 +4,7 @@
 import { BrowserWindow, desktopCapturer, ipcMain, screen, session as electronSession, type Display, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
 import { join } from "node:path";
 import type { RemoteToDesktop, RemoteToServer } from "../../domain/src/remote-support.js";
-import { parseInput, pointOn, type Injector } from "./input.js";
+import { blockedByProtected, isRelease, parseInput, pointOn, type Injector } from "./input.js";
 
 type Start = Extract<RemoteToDesktop, { type: "remote-start" }>;
 
@@ -221,16 +221,20 @@ export class RemoteSupport {
     if (!message || message.t === "screen" || this.mode(run) !== "control" || !run.injector || !run.sharing) return;
     const injector = run.injector;
     const protectedWindows = [run.banner, ...(this.deps.protectedWindows?.() ?? [])].filter((w): w is BrowserWindow => !!w && !w.isDestroyed());
-    if (protectedWindows.some((w) => w.isFocused()) && message.t !== "move" && message.t !== "button") return;
+    const focused = protectedWindows.some((w) => w.isFocused());
     if (message.t === "move" || message.t === "button") {
       const display = this.display(run);
       const point = pointOn(display.bounds, message.x, message.y);
-      if (protectedWindows.some((w) => { const b = w.getBounds(); return point.x >= b.x && point.y >= b.y && point.x < b.x + b.width && point.y < b.y + b.height; })) return;
-      const physical = screen.dipToScreenPoint(point);
-      injector.moveTo(physical.x, physical.y);
+      const over = protectedWindows.some((w) => { const b = w.getBounds(); return point.x >= b.x && point.y >= b.y && point.x < b.x + b.width && point.y < b.y + b.height; });
+      if (blockedByProtected(message, focused, over)) return;
+      // A release over a protected window still goes through (where the pointer already is), so nothing stays held down.
+      if (!isRelease(message) || !over) {
+        const physical = screen.dipToScreenPoint(point);
+        injector.moveTo(physical.x, physical.y);
+      }
       if (message.t === "button") injector.button(message.button, message.down);
-    } else if (message.t === "wheel") injector.wheel(message.dx, message.dy);
-    else injector.key(message.code, message.down);
+    } else if (message.t === "wheel") { if (!blockedByProtected(message, focused, false)) injector.wheel(message.dx, message.dy); }
+    else if (!blockedByProtected(message, focused, false)) injector.key(message.code, message.down);
   }
 
   private finish(reason: string, tellServer: boolean) {
