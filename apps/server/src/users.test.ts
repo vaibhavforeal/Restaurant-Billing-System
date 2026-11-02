@@ -76,6 +76,22 @@ describe("users admin", () => {
     expect(login.statusCode).toBe(200);
   });
 
+  it("lets only one of several simultaneous requests claim the same new PIN", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const w = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
+    const results = await Promise.all([
+      app.inject({ method: "POST", url: "/api/users", payload: { name: "Ravi", pin: "4321", role: "cashier" }, headers: auth(admin.token) }),
+      app.inject({ method: "POST", url: "/api/users", payload: { name: "Meena", pin: "4321", role: "cashier" }, headers: auth(admin.token) }),
+      app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { pin: "4321" }, headers: auth(admin.token) }),
+    ]);
+    const winners = results.filter((r) => r.statusCode !== 409);
+    expect(winners).toHaveLength(1);
+    expect(results.filter((r) => r.statusCode === 409).map((r) => r.json().error)).toEqual(["PIN already in use", "PIN already in use"]);
+    const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "4321" } });
+    expect(login.json().user.id).toBe(winners[0]!.json().user.id);
+  });
+
   it("refuses to deactivate or demote the last active admin", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

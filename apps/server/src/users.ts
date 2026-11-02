@@ -33,13 +33,24 @@ export function registerUsers(app: FastifyInstance): void {
   // PIN alone identifies a user at login, so a PIN must be unique across ALL
   // users — inactive included, because reactivation cannot re-verify a PIN we
   // only hold hashed. Salted hashes preclude a unique index; scan instead.
-  async function pinInUse(pin: string, excludeId?: string): Promise<boolean> {
-    const rows = app.db.prepare("SELECT id, pin_hash FROM users").all() as Array<{ id: string; pin_hash: string }>;
-    for (const row of rows) {
-      if (row.id === excludeId) continue;
-      if (await verifyPassword(pin, row.pin_hash)) return true;
+  // Checking each hash is async, so another request can save a PIN meanwhile:
+  // the write re-reads the users in its transaction and goes ahead only when
+  // every other PIN has been checked, otherwise it checks the new ones first.
+  async function writeWithUniquePin<T>(pin: string, excludeId: string | undefined, write: (pinHash: string) => T): Promise<T> {
+    const checked = new Map<string, string>(); // user id → the pin_hash already found not to match
+    const unchecked = () => (app.db.prepare("SELECT id, pin_hash FROM users").all() as Array<{ id: string; pin_hash: string }>)
+      .filter((row) => row.id !== excludeId && checked.get(row.id) !== row.pin_hash);
+    let pinHash: string | undefined;
+    for (;;) {
+      for (const row of unchecked()) {
+        if (await verifyPassword(pin, row.pin_hash)) throw httpError(409, "PIN already in use");
+        checked.set(row.id, row.pin_hash);
+      }
+      pinHash ??= await hashPassword(pin);
+      const hash = pinHash;
+      const done = app.db.transaction(() => (unchecked().length > 0 ? null : { result: write(hash) }))();
+      if (done) return done.result;
     }
-    return false;
   }
 
   app.get("/api/users", { preHandler: manage }, async () => {
@@ -71,18 +82,18 @@ export function registerUsers(app: FastifyInstance): void {
       const insert = app.db.prepare("INSERT INTO user_permissions (user_id, permission, allowed, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)");
       for (const [permission, allowed] of Object.entries(changes)) insert.run(row.id, permission, allowed ? 1 : 0, now, req.user.id);
     })();
-    // Screens of that person refresh what they can do without signing out.
+    // Screens of that person refresh what they can do without signing out, and their sockets get only what they may see.
+    app.wsRevalidate();
     app.broadcast("user.changed", { userId: row.id });
     return { permissions: permissionsJson(row) };
   });
 
   app.post("/api/users", { preHandler: manage }, async (req, reply) => {
     const body = UserCreate.parse(req.body);
-    if (await pinInUse(body.pin)) throw httpError(409, "PIN already in use");
     const id = uuidv7();
-    app.db
+    await writeWithUniquePin(body.pin, undefined, (pinHash) => app.db
       .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?)")
-      .run(id, body.name, await hashPassword(body.pin), body.role, Date.now());
+      .run(id, body.name, pinHash, body.role, Date.now()));
     return reply.status(201).send({ user: toUser(getUser(id)!) });
   });
 
@@ -102,16 +113,15 @@ export function registerUsers(app: FastifyInstance): void {
       if (others.n === 0) throw httpError(409, "cannot remove the last admin");
     }
 
-    if (body.pin && (await pinInUse(body.pin, id))) throw httpError(409, "PIN already in use");
-    const pinHash = body.pin ? await hashPassword(body.pin) : row.pin_hash;
-
-    app.db
+    const update = (pinHash: string) => app.db
       .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ?, max_discount_percent = ? WHERE id = ?")
       .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash,
         body.maxDiscountPercent === undefined ? row.max_discount_percent : body.maxDiscountPercent, id);
+    if (body.pin) await writeWithUniquePin(body.pin, id, update);
+    else update(row.pin_hash);
 
-    // Close WS sockets if user was deactivated
-    if (row.is_active === 1 && body.isActive === false) {
+    // Close WS sockets if user was deactivated; a new role changes what their sockets may receive.
+    if ((row.is_active === 1 && body.isActive === false) || (body.role !== undefined && body.role !== row.role)) {
       app.wsRevalidate();
     }
     if (body.isActive === false || (body.role !== undefined && body.role !== "waiter")) app.broadcast("table.changed", {});
