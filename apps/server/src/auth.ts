@@ -31,6 +31,28 @@ export function userCan(user: AuthedUser, slug: string): boolean {
   return KNOWN_PERMISSIONS.includes(slug) ? user.permissions.includes(slug) : staffCan(user.role, {}, slug);
 }
 
+export const canSeeCustomers = (user: AuthedUser) => userCan(user, "customers.read");
+
+type WithCustomer = { customer?: unknown };
+const dropCustomer = <T extends WithCustomer>(order: T): T => (order?.customer ? { ...order, customer: null } : order);
+
+/**
+ * A response or event as sent to someone who may not view customers: every order in it (`order`, or each of `orders`) keeps
+ * everything but the attached customer's details. Screens only rely on the order itself, and reload customers through the
+ * permission-checked customer routes.
+ */
+export function withoutCustomers(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const { order, orders } = payload as { order?: WithCustomer; orders?: unknown };
+  const cleanOrders = Array.isArray(orders) && orders.some((o: WithCustomer) => o?.customer);
+  if (!order?.customer && !cleanOrders) return payload;
+  return {
+    ...payload,
+    ...(order?.customer ? { order: dropCustomer(order) } : {}),
+    ...(cleanOrders ? { orders: (orders as WithCustomer[]).map(dropCustomer) } : {}),
+  };
+}
+
 interface SessionRow {
   device: string | null;
   user_id: string;
@@ -92,6 +114,11 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     req.user = user;
     app.licensing.assertAccess(req);
   };
+
+  // Many routes hand back an order with its customer attached (reads, item changes, billing, moves...). One hook, rather than
+  // each route, keeps those customer details from anyone signed in without customers.read.
+  app.addHook("preSerialization", async (req, _reply, payload) =>
+    req.user && !canSeeCustomers(req.user) ? withoutCustomers(payload) : payload);
 
   app.decorate("requireAuth", requireAuth);
   app.decorate("requirePermission", (slug: string): preHandlerHookHandler => {

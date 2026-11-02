@@ -1,7 +1,7 @@
 import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "@fastify/websocket";
-import { sessionUser, userCan, type AuthedUser } from "./auth.js";
+import { canSeeCustomers, sessionUser, withoutCustomers } from "./auth.js";
 
 interface ClientInfo {
   token: string;
@@ -9,17 +9,6 @@ interface ClientInfo {
   device: unknown;
   /** Whether this person may view customers; refreshed whenever sockets are revalidated. */
   canSeeCustomers: boolean;
-}
-
-const canSeeCustomers = (user: AuthedUser) => userCan(user, "customers.read");
-
-/**
- * The event as sent to someone who may not view customers: an order keeps its id and everything else, but not the attached
- * customer's contact details. Screens reload orders through the permission-checked API, so they only rely on the id.
- */
-function withoutCustomer(data: unknown): unknown {
-  const order = (data as { order?: { customer?: unknown } } | null)?.order;
-  return order?.customer ? { ...(data as object), order: { ...order, customer: null } } : data;
 }
 
 /** How often connected screens hear from the hub, even when nothing else happens. */
@@ -33,7 +22,7 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
     let redacted: string | undefined;
     for (const [ws, info] of clients.entries()) {
       if (ws.readyState !== ws.OPEN) continue;
-      ws.send(info.canSeeCustomers ? msg : (redacted ??= JSON.stringify({ event, data: withoutCustomer(data) })));
+      ws.send(info.canSeeCustomers ? msg : (redacted ??= JSON.stringify({ event, data: withoutCustomers(data) })));
     }
   });
 
