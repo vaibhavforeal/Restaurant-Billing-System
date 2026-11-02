@@ -1,5 +1,5 @@
 import {
-  LoyaltyTierCreate, LoyaltyTierUpdate, addMonths, expireRef, expiringSoon, expiryDue, tierFor, uuidv7,
+  LoyaltyTierCreate, LoyaltyTierUpdate, addMonths, expireRef, expiringSoon, expiryDue, openLots, tierFor, uuidv7,
   type Database, type LedgerEntry, type TierRule,
 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
@@ -57,7 +57,29 @@ export function currentTier(db: Database, customerId: string, now = Date.now(), 
 }
 
 const ledgerOf = (db: Database, customerId: string) =>
-  db.prepare(`SELECT id, kind, points, created_at AS createdAt, expires_at AS expiresAt, client_ref AS clientRef FROM loyalty_ledger WHERE customer_id = ?`).all(customerId) as LedgerEntry[];
+  db.prepare(`SELECT id, kind, points, created_at AS createdAt, expires_at AS expiresAt, client_ref AS clientRef, bill_id AS billId
+    FROM loyalty_ledger WHERE customer_id = ?`).all(customerId) as LedgerEntry[];
+
+/**
+ * The points a bill redeemed, split by the expiry of the lots they came out of (oldest first). Points the redemption took
+ * with no lot left to come from are not listed.
+ */
+export function redeemedLots(db: Database, customerId: string, billId: string): Array<{ points: number; expiresAt: number | null }> {
+  const entries = ledgerOf(db, customerId);
+  const before = (a: LedgerEntry, b: LedgerEntry) => a.createdAt < b.createdAt || (a.createdAt === b.createdAt && a.id < b.id);
+  const pieces: Array<{ points: number; expiresAt: number | null }> = [];
+  for (const redeem of entries.filter((e) => e.kind === "redeem" && e.billId === billId).sort((a, b) => (before(a, b) ? -1 : 1))) {
+    const prior = entries.filter((e) => before(e, redeem));
+    const after = new Map(openLots([...prior, redeem]).map((l) => [l.id, l.remaining]));
+    for (const lot of openLots(prior)) {
+      const points = lot.remaining - (after.get(lot.id) ?? 0);
+      if (!points) continue;
+      const same = pieces.find((p) => p.expiresAt === lot.expiresAt);
+      if (same) same.points += points; else pieces.push({ points, expiresAt: lot.expiresAt });
+    }
+  }
+  return pieces;
+}
 
 /**
  * Writes an `expire` row for each lot of the customer's points that has passed its expiry date. The row's `client_ref`

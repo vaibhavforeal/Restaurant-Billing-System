@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { crmEnabled, requireIntegration } from "./integrations.js";
-import { currentTier, customerSpend, earnExpiry, loyaltySettings, pointsExpiringSoon, sweepExpiry } from "./loyalty.js";
+import { currentTier, customerSpend, earnExpiry, loyaltySettings, pointsExpiringSoon, redeemedLots, sweepExpiry } from "./loyalty.js";
 import { customerJson, loadOrderJson, pointsBalance } from "./mappers.js";
 
 export { customerJson, pointsBalance, loyaltySettings };
@@ -35,12 +35,16 @@ export function customerSlab(db: Database, customerId: string, subtotalPaise: nu
 
 /**
  * Loyalty after a credit note on a customer's bill. A void takes back every point the bill earned and returns the points it
- * redeemed. A refund takes back earned points in proportion to how much of the bill has now been credited. Balances may go
- * below zero when points were already spent. Call inside the credit note's transaction.
+ * redeemed, each keeping the expiry of the points it was redeemed from (so they may lapse at the next sweep). A refund
+ * takes back earned points in proportion to how much of the bill has now been credited. Balances may go below zero when
+ * points were already spent. Call inside the credit note's transaction.
  */
 export function reverseLoyalty(db: Database, input: { billId: string; creditNoteId: string; kind: "void" | "refund"; actorId: string; now: number }): void {
   const bill = db.prepare("SELECT customer_id, total_paise, points_redeemed FROM bills WHERE id = ?").get(input.billId) as { customer_id: string | null; total_paise: number; points_redeemed: number };
   if (!bill.customer_id) return;
+  const customerId = bill.customer_id;
+  // Record any expired points first, so points the bill earned that have lapsed count below as lapsed, not as points to take back.
+  sweepExpiry(db, customerId, input.now);
   const sum = (where: string) => (db.prepare(`SELECT COALESCE(SUM(points), 0) AS n FROM loyalty_ledger WHERE bill_id = ? AND ${where}`).get(input.billId) as { n: number }).n;
   const earned = sum("kind = 'earn'");
   const takenBack = -sum("kind = 'reverse' AND points < 0");
@@ -51,10 +55,21 @@ export function reverseLoyalty(db: Database, input: { billId: string; creditNote
     WHERE l.bill_id = ? AND l.kind = 'earn'`).get(input.billId) as { n: number }).n;
   const share = input.kind === "void" || bill.total_paise <= 0 ? earned : Math.min(earned, Math.floor(earned * credited / bill.total_paise));
   const target = Math.max(0, share - lapsed);
-  const write = (points: number, note: string) => db.prepare(`INSERT INTO loyalty_ledger (id, customer_id, kind, points, bill_id, credit_note_id, note, created_at, created_by)
-    VALUES (?, ?, 'reverse', ?, ?, ?, ?, ?, ?)`).run(uuidv7(), bill.customer_id, points, input.billId, input.creditNoteId, note, input.now, input.actorId);
+  const write = (points: number, note: string, expiresAt: number | null = null) => db.prepare(`INSERT INTO loyalty_ledger (id, customer_id, kind, points, bill_id, credit_note_id, note, created_at, created_by, expires_at)
+    VALUES (?, ?, 'reverse', ?, ?, ?, ?, ?, ?, ?)`).run(uuidv7(), customerId, points, input.billId, input.creditNoteId, note, input.now, input.actorId, expiresAt);
   if (target > takenBack) write(-(target - takenBack), input.kind === "void" ? "Bill voided" : "Bill refunded");
-  if (input.kind === "void" && bill.points_redeemed > returned) write(bill.points_redeemed - returned, "Redeemed points returned on void");
+  if (input.kind === "void" && bill.points_redeemed > returned) {
+    const lots = redeemedLots(db, customerId, input.billId);
+    // Points the redemption took with no lot behind them are dated like points earned now.
+    const unbacked = bill.points_redeemed - lots.reduce((n, l) => n + l.points, 0);
+    if (unbacked > 0) lots.push({ points: unbacked, expiresAt: earnExpiry(loyaltySettings(db), input.now) });
+    let skip = returned;
+    for (const lot of lots) {
+      const points = lot.points - Math.min(skip, lot.points);
+      skip -= lot.points - points;
+      if (points > 0) write(points, "Redeemed points returned on void", lot.expiresAt);
+    }
+  }
 }
 
 export function registerCustomers(app: FastifyInstance): void {
