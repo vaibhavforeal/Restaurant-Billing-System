@@ -113,19 +113,25 @@ export function registerUsers(app: FastifyInstance): void {
       if (others.n === 0) throw httpError(409, "cannot remove the last admin");
     }
 
-    const update = (pinHash: string) => app.db
-      .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ?, max_discount_percent = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash,
-        body.maxDiscountPercent === undefined ? row.max_discount_percent : body.maxDiscountPercent, id);
+    const roleChanged = body.role !== undefined && body.role !== row.role;
+    const update = app.db.transaction((pinHash: string) => {
+      app.db
+        .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ?, max_discount_percent = ? WHERE id = ?")
+        .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash,
+          body.maxDiscountPercent === undefined ? row.max_discount_percent : body.maxDiscountPercent, id);
+      // Per-person changes are differences from the old role; a new role starts from its own permissions, so nothing granted
+      // (or taken away) for the old job carries over unnoticed.
+      if (roleChanged) app.db.prepare("DELETE FROM user_permissions WHERE user_id = ?").run(id);
+    });
     if (body.pin) await writeWithUniquePin(body.pin, id, update);
     else update(row.pin_hash);
 
     // Close WS sockets if user was deactivated; a new role changes what their sockets may receive.
-    if ((row.is_active === 1 && body.isActive === false) || (body.role !== undefined && body.role !== row.role)) {
+    if ((row.is_active === 1 && body.isActive === false) || roleChanged) {
       app.wsRevalidate();
     }
     if (body.isActive === false || (body.role !== undefined && body.role !== "waiter")) app.broadcast("table.changed", {});
-    if (body.role !== undefined && body.role !== row.role) app.broadcast("user.changed", { userId: id });
+    if (roleChanged) app.broadcast("user.changed", { userId: id });
 
     return { user: toUser(getUser(id)!) };
   });

@@ -44,16 +44,28 @@ describe("staff permissions", () => {
     expect((await request("GET", "/api/me", undefined, meena.token)).json().user.permissions).toContain("bills.settle");
   });
 
-  it("stores only real differences, keeps changes through a role change, and resets to the role", async () => {
+  it("stores only real differences, clears them when the role changes, and resets to the role", async () => {
     const ravi = await createUser(app, token, { name: "Ravi", pin: "4444", role: "cashier" });
     const saved = await setPermissions(ravi.id, { "catalog.manage": true, "bills.settle": true });
     expect(saved.json().permissions.overrides).toEqual({ "catalog.manage": true });
-    expect((await request("PATCH", `/api/users/${ravi.id}`, { role: "waiter" })).statusCode).toBe(200);
-    const after = (await request("GET", `/api/users/${ravi.id}/permissions`)).json().permissions;
-    expect(after).toMatchObject({ role: "waiter", overrides: { "catalog.manage": true } });
-    expect(after.effective).toContain("catalog.manage");
-    expect(after.effective).not.toContain("bills.settle");
+    // Saving without changing the role keeps the changes.
+    expect((await request("PATCH", `/api/users/${ravi.id}`, { role: "cashier", name: "Ravi K" })).statusCode).toBe(200);
+    expect((await request("GET", `/api/users/${ravi.id}/permissions`)).json().permissions.overrides).toEqual({ "catalog.manage": true });
     expect((await setPermissions(ravi.id, {})).json().permissions.overrides).toEqual({});
+  });
+
+  it("a new role starts from that role's permissions, so a grant made for the old role doesn't carry over", async () => {
+    const ravi = await createUser(app, token, { name: "Ravi", pin: "4444", role: "waiter" });
+    await setPermissions(ravi.id, { "bills.refund": true });
+    expect((await request("PATCH", `/api/users/${ravi.id}`, { role: "kitchen" })).statusCode).toBe(200);
+    const after = (await request("GET", `/api/users/${ravi.id}/permissions`)).json().permissions;
+    expect(after).toMatchObject({ role: "kitchen", overrides: {} });
+    expect(after.effective).not.toContain("bills.refund");
+    // Changing the role and the PIN together clears them too.
+    await request("PATCH", `/api/users/${ravi.id}`, { role: "waiter" });
+    await setPermissions(ravi.id, { "bills.refund": true });
+    expect((await request("PATCH", `/api/users/${ravi.id}`, { role: "cashier", pin: "8642" })).statusCode).toBe(200);
+    expect((await request("GET", `/api/users/${ravi.id}/permissions`)).json().permissions.overrides).toEqual({});
   });
 
   it("never restricts an admin and keeps managing staff and settings for admins", async () => {

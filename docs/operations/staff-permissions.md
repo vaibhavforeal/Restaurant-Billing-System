@@ -17,7 +17,7 @@ The button shows how many changes a person has, for example **Permissions (2 cha
 A change applies at once: the person's screens update without signing out, and the server
 uses the new permissions from their next action.
 
-Changes stay when a person's role changes and keep applying on top of the new role.
+Changing a person's role clears their changes: they start from the new role's permissions, so nothing granted or taken away for the old job carries over. Make any changes the new job needs again after changing the role.
 
 ## What can be changed
 

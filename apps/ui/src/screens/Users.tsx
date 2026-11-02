@@ -91,7 +91,11 @@ export function Users() {
             <tr key={u.id} style={{ borderBottom: "1px solid #eee", opacity: u.isActive ? 1 : 0.45 }}>
               <td style={{ padding: 6 }}>{u.name}</td>
               <td>
-                <select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => patchUser(u.id, { role: e.target.value as AdminUser["role"] })}>
+                <select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => {
+                  const changes = u.permissionChanges ?? 0;
+                  if (changes && !window.confirm(`Changing ${u.name}'s role clears their ${changes === 1 ? "1 permission change" : `${changes} permission changes`}. They get the new role's permissions. Continue?`)) return;
+                  patchUser(u.id, { role: e.target.value as AdminUser["role"] });
+                }}>
                   {ROLES.map((r) => (
                     <option key={r} value={r}>{r === "waiter" ? "Captain / waiter" : r}</option>
                   ))}
