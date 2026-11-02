@@ -1,0 +1,88 @@
+.dd-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 56px;
+  gap: 12px;
+}
+
+.dd-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dd-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
+.dd-item-editing:focus-visible {
+  outline: var(--focus-width) solid var(--pos-primary);
+  outline-offset: 2px;
+}
+
+.dd-item-active {
+  opacity: 0.6;
+}
+
+.dd-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dd-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--pos-accent-soft);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.dd-handle:active {
+  cursor: grabbing;
+}
+
+.dd-handle-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.dd-tools {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.dd-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--control-touch);
+  height: var(--control-touch);
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(135deg, transparent 55%, var(--pos-muted) 55%, var(--pos-muted) 62%, transparent 62%, transparent 74%, var(--pos-muted) 74%, var(--pos-muted) 81%, transparent 81%);
+}
+
+.dd-placeholder {
+  pointer-events: none;
+  background: var(--pos-accent-soft);
+  border: 2px dashed var(--pos-primary);
+  border-radius: var(--radius-panel);
+}
