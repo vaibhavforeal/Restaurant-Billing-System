@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
-  DashboardItem, DashboardLayout, DASHBOARD_LIMITS, clampItem, compact, defaultLayout, widgetDef, widgetVisible,
+  DashboardDataRequest, DashboardItem, DashboardLayout, DASHBOARD_LIMITS, clampItem, compact, defaultLayout, widgetDef, widgetVisible,
   type DashboardItemValue, type DashboardLayoutValue, type WidgetDef,
 } from "@masalapos/domain/dashboard";
 import { userCan } from "./auth.js";
+import { computeWidgets } from "./dashboard-widgets.js";
 import { httpError } from "./http-error.js";
 import { moduleActive, requireModule } from "./modules.js";
 
@@ -75,5 +76,13 @@ export function registerDashboard(app: FastifyInstance): void {
     reply.header("Cache-Control", "no-store");
     app.db.prepare("DELETE FROM dashboard_layouts WHERE user_id = ?").run(req.user.id);
     return respond(req, defaultLayout().items, true);
+  });
+
+  app.post("/api/dashboard/data", { preHandler }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { widgets } = DashboardDataRequest.parse(req.body ?? {});
+    if (new Set(widgets.map((w) => w.key)).size !== widgets.length) throw httpError(400, "Each widget needs its own key.");
+    return computeWidgets(app.db, widgets, visibleTo(app, req), Date.now(),
+      (error, widget) => req.log.error({ err: error, widget }, "dashboard widget failed"));
   });
 }
