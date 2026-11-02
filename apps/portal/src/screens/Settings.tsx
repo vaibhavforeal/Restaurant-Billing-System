@@ -1,28 +1,48 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { PortalSettingsData, PriceRow } from "../../../licensing-worker/src/portal/api-types";
 import { formatPaise, GST_STATES, parseRupees } from "../../../licensing-worker/src/portal/shared";
 import { api, put } from "../api";
 import { useLeaveGuard } from "../router";
 import { Field, LoadError, PageHead, useData, useRun } from "../ui";
+import { Icon } from "../icons";
 
 const TERMS = [1, 3, 6, 12, 24, 36];
 const rupees = (paise: number) => formatPaise(paise, "").replace(/\.00$/, "");
+const SECTIONS = [
+  { id: "seller", title: "Seller on invoices", blurb: "Legal name, GSTIN, address and contact details", icon: "customers" },
+  { id: "invoice", title: "Invoice wording", blurb: "Numbering, tax rate, bank details and terms", icon: "invoices" },
+  { id: "prices", title: "Price list", blurb: "Plan prices, extra devices and trial length", icon: "orders" },
+] as const;
+type SectionId = typeof SECTIONS[number]["id"];
+type SettingsControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 export function Settings() {
   const { data, error, reload } = useData(() => api<{ settings: PortalSettingsData }>("/settings"), "settings");
-  return <>
-    <PageHead title="Settings" sub="The seller details and wording on every GST invoice, and the prices new orders start from." />
+  return <div className="portal-settings-page">
+    <PageHead title="Settings" />
     {error && <LoadError message={error} retry={reload} />}
     {data && <SettingsForm initial={data.settings} />}
-  </>;
+  </div>;
 }
 
 function SettingsForm({ initial }: { initial: PortalSettingsData }) {
+  const [active, setActive] = useState<SectionId | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const cards = useRef<Partial<Record<SectionId, HTMLButtonElement | null>>>({});
+  const returnToCard = useRef<SectionId | null>(null);
+  const invalidControl = useRef<SettingsControl | null>(null);
   const [s, setS] = useState(initial);
   const [prices, setPrices] = useState(() => priceTable(initial.prices));
   const [extraDevice, setExtraDevice] = useState(rupees(initial.extraDevicePaise));
   const [saved, setSaved] = useState(JSON.stringify(initial));
-  const { busy, run, status, setError } = useRun();
+  const { busy, run, status, setError, setMessage } = useRun();
+  useEffect(() => {
+    if (invalidControl.current) {
+      invalidControl.current.reportValidity();
+      invalidControl.current = null;
+    } else if (active) heading.current?.focus();
+    else if (returnToCard.current) cards.current[returnToCard.current]?.focus();
+  }, [active]);
   const current = () => {
     const rows: PriceRow[] = [];
     for (const [key, text] of Object.entries(prices)) {
@@ -46,18 +66,43 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
   }, [dirty]);
   const seller = (key: keyof PortalSettingsData["seller"]) => (e: { target: { value: string } }) => setS({ ...s, seller: { ...s.seller, [key]: e.target.value } });
   const invoice = (key: "prefix" | "sac" | "bankDetails" | "terms") => (e: { target: { value: string } }) => setS({ ...s, invoice: { ...s.invoice, [key]: e.target.value } });
-  const submit = (e: FormEvent) => {
+  const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (busy) return;
+    // A draft can span sections. Reveal invalid hidden fields before asking the browser to focus them.
+    const invalid = Array.from(e.currentTarget.querySelectorAll<SettingsControl>("input, select, textarea"))
+      .find((field) => field.willValidate && !field.validity.valid);
+    if (invalid) {
+      const section = invalid.closest<HTMLElement>("[data-settings-section]")?.dataset["settingsSection"] as SectionId;
+      setError(invalid.validationMessage);
+      if (section === active) invalid.reportValidity();
+      else { invalidControl.current = invalid; setActive(section); }
+      return;
+    }
     let next: PortalSettingsData;
-    try { next = current(); } catch (err) { setError((err as Error).message); return; }
+    try { next = current(); } catch (err) { setActive("prices"); setError((err as Error).message); return; }
     void run(async () => {
       const { settings } = await put<{ settings: PortalSettingsData }>("/settings", next);
       setS(settings); setPrices(priceTable(settings.prices)); setExtraDevice(rupees(settings.extraDevicePaise)); setSaved(JSON.stringify(settings));
     }, "Settings saved.");
   };
-  return <form onSubmit={submit}>
-    <section className="settings-section">
-      <div><h2>Seller on invoices</h2><p>MasalaPOS's legal name, GSTIN and address as printed on every tax invoice. The state decides CGST and SGST or IGST.</p></div>
+  return <form onSubmit={submit} onChange={() => { setError(""); setMessage(""); }} noValidate>
+    {active === null ? <ul className="portal-settings-cards" aria-label="Settings sections">
+      {SECTIONS.map(({ id, title, blurb, icon }) => <li key={id}>
+        <button type="button" className="portal-settings-card" ref={(node) => { cards.current[id] = node; }} disabled={busy}
+          onClick={() => { returnToCard.current = id; setActive(id); }}>
+          <span className="portal-settings-card-icon"><Icon name={icon} /></span>
+          <span className="portal-settings-card-title">{title}</span>
+          <span className="portal-settings-card-blurb">{blurb}</span>
+        </button>
+      </li>)}
+    </ul> : <div className="portal-settings-detail-head">
+      <button type="button" className="secondary" disabled={busy} onClick={() => { returnToCard.current = active; setActive(null); }}><Icon name="arrowLeft" />All settings</button>
+      <h2 id="portal-settings-heading" ref={heading} tabIndex={-1}>{SECTIONS.find((section) => section.id === active)?.title}</h2>
+    </div>}
+    <fieldset className="portal-settings-fields" disabled={busy}>
+    <section className="portal-settings-section" data-settings-section="seller" hidden={active !== "seller"} aria-labelledby="portal-settings-heading">
+      <p>MasalaPOS's legal name, GSTIN and address as printed on every tax invoice. The state decides CGST and SGST or IGST.</p>
       <div className="settings-panel form-grid">
         <Field label="Legal name" wide><input maxLength={120} value={s.seller.legalName} onChange={seller("legalName")} /></Field>
         <Field label="GSTIN"><input maxLength={15} value={s.seller.gstin} onChange={seller("gstin")} placeholder="27AAAAA0000A1Z5" /></Field>
@@ -70,8 +115,8 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
         <Field label="Phone"><input type="tel" maxLength={20} value={s.seller.phone} onChange={seller("phone")} /></Field>
       </div>
     </section>
-    <section className="settings-section">
-      <div><h2>Invoice wording</h2><p>Numbers read {s.invoice.prefix || "FF"}/26-27/000001 and restart each financial year. The SAC and rate apply to licence lines.</p></div>
+    <section className="portal-settings-section" data-settings-section="invoice" hidden={active !== "invoice"} aria-labelledby="portal-settings-heading">
+      <p>Numbers read {s.invoice.prefix || "FF"}/26-27/000001 and restart each financial year. The SAC and rate apply to licence lines.</p>
       <div className="settings-panel form-grid">
         <Field label="Number prefix" hint="1 to 4 letters or digits"><input maxLength={4} value={s.invoice.prefix} onChange={invoice("prefix")} /></Field>
         <Field label="SAC for licences" hint="997331: licensing the right to use software"><input maxLength={8} inputMode="numeric" value={s.invoice.sac} onChange={invoice("sac")} /></Field>
@@ -81,10 +126,10 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
         <Field label="Terms" wide><textarea rows={3} maxLength={1000} value={s.invoice.terms} onChange={invoice("terms")} /></Field>
       </div>
     </section>
-    <section className="settings-section">
-      <div><h2>Price list</h2><p>Price per outlet before GST. New orders start from these; staff can change the price on an order. Leave a term blank if it isn't sold.</p></div>
+    <section className="portal-settings-section" data-settings-section="prices" hidden={active !== "prices"} aria-labelledby="portal-settings-heading">
+      <p>Price per outlet before GST. New orders start from these; staff can change the price on an order. Leave a term blank if it isn't sold.</p>
       <div className="settings-panel">
-        <table className="data"><thead><tr><th>Term</th><th className="num">Basic (₹)</th><th className="num">Pro (₹)</th></tr></thead>
+        <table className="data portal-settings-prices"><thead><tr><th>Term</th><th className="num">Basic (₹)</th><th className="num">Pro (₹)</th></tr></thead>
           <tbody>{TERMS.map((months) => <tr key={months}><td>{months === 1 ? "1 month" : `${months} months`}</td>
             {(["basic", "pro"] as const).map((plan) => <td key={plan} className="num"><input aria-label={`${plan === "pro" ? "Pro" : "Basic"}, ${months} months`} inputMode="decimal" style={{ maxWidth: 140, textAlign: "right" }}
               value={prices[`${plan}:${months}`] ?? ""} onChange={(e) => setPrices({ ...prices, [`${plan}:${months}`]: e.target.value })} /></td>)}</tr>)}</tbody></table>
@@ -95,9 +140,10 @@ function SettingsForm({ initial }: { initial: PortalSettingsData }) {
         </div>
       </div>
     </section>
-    <div className="form-actions" style={{ justifyContent: "flex-start", alignItems: "center" }}>
+    </fieldset>
+    <div className="portal-settings-save" hidden={active === null && !dirty}>
       <button className="primary" disabled={busy || !dirty}>{busy ? "Saving…" : "Save settings"}</button>
-      {!dirty && !status && <span className="muted">All changes saved.</span>}
+      {dirty ? <span className="muted">Unsaved changes</span> : !status && <span className="muted">All changes saved.</span>}
     </div>
     {status}
   </form>;

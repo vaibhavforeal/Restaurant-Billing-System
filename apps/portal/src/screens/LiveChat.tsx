@@ -52,10 +52,10 @@ export function LiveChat({ me, chatId }: { me: StaffUser; chatId?: string }) {
     void api<{ counts: { waiting: number; active: number } }>("/chats?view=mine").then((r) => setData((current) => current && { ...current, counts: r.counts })).catch(() => {});
   });
   const counts = data?.counts ?? { waiting: 0, active: 0 };
-  return <>
+  return <div className="chat-page">
     <PageHead title="Live chat" sub={data ? <>{counts.waiting} waiting · {counts.active} active{!connected && " · reconnecting, checking every few seconds"}</> : "Loading chats…"}
       actions={<AlertsButton />} />
-    <div className="chat-layout">
+    <div className={`chat-layout${chatId ? " has-chat" : ""}`}>
       <section className="chat-inbox" aria-label="Chats">
         <Tabs label="Chats" value={view} onChange={setView} tabs={[{ id: "open", label: <>Open<span className="count">{counts.waiting + counts.active}</span></> },
           { id: "mine", label: "Mine" }, { id: "closed", label: "Closed" }]} />
@@ -63,16 +63,22 @@ export function LiveChat({ me, chatId }: { me: StaffUser; chatId?: string }) {
         <ul className="chat-list">
           {data?.chats.map((c) => <li key={c.id}><Link to={`/chats/${c.id}`} className="chat-row" aria-current={c.id === chatId ? "page" : undefined}>
             <span className="chat-row-top"><strong>{c.customer.name}</strong><span className="muted small">{relativeTime(c.lastMessageAt)}</span></span>
-            <span className="muted small">{c.installation?.name ?? "Support PC"}{c.visitorName ? ` · ${c.visitorName}` : ""}</span>
+            <span className="muted small">{c.customer.code}</span>
             <span className="chat-row-last">{c.lastMessage ? `${c.lastMessage.author === "staff" ? "Support: " : ""}${c.lastMessage.body}` : "—"}</span>
-            <span className="chat-row-tags"><Pill tone={STATUS[c.status][1]}>{STATUS[c.status][0]}</Pill>{c.assignee && <span className="muted small">{c.assignee.id === me.id ? "With you" : `With ${c.assignee.name}`}</span>}</span>
+            <span className="chat-row-tags">
+              <span className="chat-row-context muted small" title={`${c.installation?.name ?? "Support PC"}${c.visitorName ? ` · ${c.visitorName}` : ""}`}>
+                {c.installation?.name ?? "Support PC"}{c.visitorName ? ` · ${c.visitorName}` : ""}
+              </span>
+              <Pill tone={STATUS[c.status][1]}>{STATUS[c.status][0]}</Pill>
+              {c.assignee && <span className="chat-row-assignee muted small" title={`With ${c.assignee.name}`}>{c.assignee.id === me.id ? "With you" : `With ${c.assignee.name}`}</span>}
+            </span>
           </Link></li>)}
           {data && data.chats.length === 0 && <li className="empty-block">{view === "closed" ? "No closed chats yet." : "No one is waiting. New chats appear here as they arrive."}</li>}
         </ul>
       </section>
       {chatId ? <ChatPane key={chatId} id={chatId} me={me} /> : <section className="chat-pane chat-empty"><p className="muted">Pick a chat on the left.</p></section>}
     </div>
-  </>;
+  </div>;
 }
 
 const order = (view: View) => (a: ChatSummary, b: ChatSummary) =>
@@ -95,10 +101,11 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
   const { data, error, reload, setData } = useData(() => api<{ chat: ChatDetail }>(`/chats/${id}`), id);
   const staff = useData(() => api<{ staff: Colleague[] }>("/staff"), "staff");
   const [reply, setReply] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const [typingUntil, setTypingUntil] = useState(0);
   const [dialog, setDialog] = useState<"ticket" | "remote" | null>(null);
   const { busy, run, status } = useRun();
-  const end = useRef<HTMLDivElement>(null);
+  const messageBody = useRef<HTMLDivElement>(null);
   const lastTyping = useRef(0);
   usePollWhileOffline(reload);
   const chat = data?.chat;
@@ -116,19 +123,22 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
         ? { chat: { ...current.chat, remoteSessions: [session, ...current.chat.remoteSessions.filter((s) => s.id !== session.id)].slice(0, 5) } } : current);
     }
   });
-  useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [chat?.messages.length]);
+  useEffect(() => {
+    const body = messageBody.current;
+    if (body) body.scrollTop = body.scrollHeight;
+  }, [chat?.messages.length]);
   const [, tick] = useState(0);
   useEffect(() => { if (typingUntil <= Date.now()) return; const t = setTimeout(() => tick((n) => n + 1), typingUntil - Date.now() + 50); return () => clearTimeout(t); }, [typingUntil]);
 
-  if (error) return <section className="chat-pane"><LoadError message={error} retry={reload} /></section>;
-  if (!chat) return <section className="chat-pane chat-empty"><p className="muted">Loading…</p></section>;
+  if (error) return <section className="chat-pane"><Link to="/chats" className="chat-back">Back to chats</Link><LoadError message={error} retry={reload} /></section>;
+  if (!chat) return <section className="chat-pane chat-empty"><Link to="/chats" className="chat-back">Back to chats</Link><p className="muted">Loading…</p></section>;
   const closed = chat.status === "closed";
   const mine = chat.assignee?.id === me.id;
   const change = (body: { assigneeId?: string | null; status?: "active" | "closed" }, done = "") => run(async () => setData(await patch<{ chat: ChatDetail }>(`/chats/${id}`, body)), done);
   const send = (e?: FormEvent) => {
     e?.preventDefault();
     const body = reply.trim();
-    if (!body) return;
+    if (!body || busy) return;
     void run(async () => { setData(await post<{ chat: ChatDetail }>(`/chats/${id}/messages`, { body })); setReply(""); });
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -139,20 +149,44 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
   const canRemote = roleCan(me.role, "support.remote");
   return <section className="chat-pane" aria-label={`Chat with ${chat.customer.name}`}>
     <header className="chat-head">
-      <div>
-        <h2>{chat.customer.name} <span className="muted">· C-{chat.number}</span></h2>
-        <p className="muted small">{chat.installation?.name ?? "Support PC"}{chat.visitorName ? ` · ${chat.visitorName}` : ""}{chat.visitorPhone ? ` · ${chat.visitorPhone}` : ""} · started {dateTime(chat.createdAt)}</p>
+      <div className="chat-heading">
+        <Link to="/chats" className="chat-back">Back to chats</Link>
+        <h2>{chat.customer.name} <span className="muted">· {chat.customer.code} · C-{chat.number}</span></h2>
+        <p className="chat-meta muted small">{chat.installation?.name ?? "Support PC"}{chat.visitorName ? ` · ${chat.visitorName}` : ""}
+          <Pill tone={STATUS[chat.status][1]}>{STATUS[chat.status][0]}</Pill>
+          {canRemote && openRemote && <Link to={`/remote/${openRemote.id}`}>Open viewer</Link>}
+        </p>
       </div>
       <div className="actions">
         {!closed && !mine && <button className="secondary small" disabled={busy} onClick={() => void change({ assigneeId: me.id }, "The chat is yours.")}>Take this chat</button>}
         {canRemote && !closed && <button className="secondary small" disabled={busy || !!openRemote}
           onClick={() => setDialog("remote")}>Send connector</button>}
-        {!chat.ticket && roleCan(me.role, "tickets.write") && <button className="secondary small" disabled={busy} onClick={() => setDialog("ticket")}>Open a ticket</button>}
-        {!closed && <button className="secondary small" disabled={busy} onClick={() => void change({ status: "closed" }, "Chat closed.")}>Close chat</button>}
+        <button type="button" className="secondary small" aria-expanded={showDetails} aria-controls={`chat-details-${id}`} onClick={() => setShowDetails(!showDetails)}>Details</button>
       </div>
     </header>
     {status}
-    <div className="chat-body">
+    <aside className="chat-rail" id={`chat-details-${id}`} aria-label="Chat details" hidden={!showDetails}>
+      <dl className="kv">
+        <dt>Restaurant</dt><dd><Link to={`/customers/${chat.customer.id}`}>{chat.customer.name}</Link></dd>
+        <dt>Customer ID</dt><dd>{chat.customer.code}</dd>
+        <dt>Counter</dt><dd>{chat.installation?.name ?? "Support PC"} {online === null ? null : online ? <Pill tone="positive">Connected</Pill> : <Pill>Offline</Pill>}</dd>
+        <dt>With</dt><dd>{closed ? chat.assignee?.name ?? "Nobody" : <select aria-label="With" value={chat.assignee?.id ?? ""} disabled={busy} onChange={(e) => void change({ assigneeId: e.target.value || null })}>
+          <option value="">Nobody yet</option>{staff.data?.staff.filter((s) => s.role === "support" || s.role === "admin").map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === me.id ? " (me)" : ""}</option>)}</select>}</dd>
+        {chat.visitorPhone && <><dt>Phone</dt><dd>{chat.visitorPhone}</dd></>}
+        <dt>Started</dt><dd>{dateTime(chat.createdAt)}</dd>
+        {chat.ticket && <><dt>Ticket</dt><dd><Link to={`/tickets/${chat.ticket.id}`}>T-{chat.ticket.number}</Link></dd></>}
+      </dl>
+      {canRemote && chat.remoteSessions.length > 0 && <section><h3 className="rail-title">Remote access</h3>
+        <ul className="remote-list">{chat.remoteSessions.map((s) => <li key={s.id}>
+          <Pill tone={REMOTE_STATUS[s.status][1]}>{REMOTE_STATUS[s.status][0]}</Pill> <span className="muted small">{MODE_NAMES[s.mode ?? s.modeRequested]} · {relativeTime(s.requestedAt)}</span>
+          {(s.status === "requested" || s.status === "approved" || s.status === "active") && <div><Link to={`/remote/${s.id}`}>Open the viewer</Link></div>}
+        </li>)}</ul></section>}
+      <div className="actions chat-detail-actions">
+        {!chat.ticket && roleCan(me.role, "tickets.write") && <button className="secondary small" disabled={busy} onClick={() => setDialog("ticket")}>Open a ticket</button>}
+        {!closed && <button className="secondary small" disabled={busy} onClick={() => void change({ status: "closed" }, "Chat closed.")}>Close chat</button>}
+      </div>
+    </aside>
+    <div className="chat-body" ref={messageBody}>
       <ol className="chat-messages">
         {chat.messages.map((m) => m.author === "system"
           ? <li key={m.id} className="msg system"><span>{<SupportMessage body={m.body} />}</span><time className="muted small">{timeOfDay(m.createdAt)}</time></li>
@@ -162,28 +196,14 @@ function ChatPane({ id, me }: { id: string; me: StaffUser }) {
           </li>)}
         {typingUntil > Date.now() && <li className="msg in typing muted small">{chat.visitorName ?? "The restaurant"} is typing…</li>}
       </ol>
-      <div ref={end} />
     </div>
     {closed ? <p className="chat-closed muted">This chat is closed{chat.closedAt ? ` (${dateTime(chat.closedAt)})` : ""}. The restaurant can start a new one from MasalaPOS.</p>
       : <form className="chat-composer" onSubmit={send}>
-        <textarea rows={2} maxLength={2000} aria-label="Reply" placeholder="Write a reply. Enter sends, Shift+Enter for a new line." value={reply}
+        <textarea rows={2} maxLength={2000} aria-label="Reply" aria-describedby="chat-reply-hint" placeholder="Write a reply…" value={reply}
           onChange={(e) => setReply(e.target.value)} onKeyDown={onKey} disabled={busy} />
         <button className="primary" disabled={busy || !reply.trim()}>Send</button>
+        <span id="chat-reply-hint" className="chat-reply-hint muted small">Enter to send · Shift+Enter for a new line</span>
       </form>}
-    <aside className="chat-rail">
-      <dl className="kv">
-        <dt>Restaurant</dt><dd><Link to={`/customers/${chat.customer.id}`}>{chat.customer.name}</Link></dd>
-        <dt>Counter</dt><dd>{chat.installation?.name ?? "Support PC"} {online === null ? null : online ? <Pill tone="positive">Connected</Pill> : <Pill>Offline</Pill>}</dd>
-        <dt>With</dt><dd>{closed ? chat.assignee?.name ?? "Nobody" : <select aria-label="With" value={chat.assignee?.id ?? ""} disabled={busy} onChange={(e) => void change({ assigneeId: e.target.value || null })}>
-          <option value="">Nobody yet</option>{staff.data?.staff.filter((s) => s.role === "support" || s.role === "admin").map((s) => <option key={s.id} value={s.id}>{s.name}{s.id === me.id ? " (me)" : ""}</option>)}</select>}</dd>
-        {chat.ticket && <><dt>Ticket</dt><dd><Link to={`/tickets/${chat.ticket.id}`}>T-{chat.ticket.number}</Link></dd></>}
-      </dl>
-      {canRemote && chat.remoteSessions.length > 0 && <section><h3 className="rail-title">Remote access</h3>
-        <ul className="remote-list">{chat.remoteSessions.map((s) => <li key={s.id}>
-          <Pill tone={REMOTE_STATUS[s.status][1]}>{REMOTE_STATUS[s.status][0]}</Pill> <span className="muted small">{MODE_NAMES[s.mode ?? s.modeRequested]} · {relativeTime(s.requestedAt)}</span>
-          {(s.status === "requested" || s.status === "approved" || s.status === "active") && <div><Link to={`/remote/${s.id}`}>Open the viewer</Link></div>}
-        </li>)}</ul></section>}
-    </aside>
     {dialog === "ticket" && <TicketDialog chat={chat} onClose={() => setDialog(null)} onDone={(c) => { setData({ chat: c }); setDialog(null); }} />}
     {dialog === "remote" && <RemoteDialog chatId={chat.id} onClose={() => setDialog(null)} />}
   </section>;

@@ -185,7 +185,7 @@ export type ChatStatus = "waiting" | "active" | "closed";
 /** `staff` is set on staff messages; `customer` messages come from the restaurant, `system` ones from the service. */
 export interface ChatMessage { id: number; author: "customer" | "staff" | "system"; staff: Ref | null; body: string; createdAt: number }
 export interface ChatSummary {
-  id: string; number: number; status: ChatStatus; customer: Ref; installation: { id: string; name: string } | null;
+  id: string; number: number; status: ChatStatus; customer: Ref & { code: string }; installation: { id: string; name: string } | null;
   visitorName: string | null; visitorPhone: string | null; assignee: Ref | null; ticket: { id: string; number: number } | null;
   createdAt: number; lastMessageAt: number; closedAt: number | null;
   lastMessage: { author: ChatMessage["author"]; body: string } | null;

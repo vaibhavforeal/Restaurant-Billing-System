@@ -29,7 +29,7 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
   const list = counters.data?.installations ?? [];
   const enrolled = list.filter((i) => i.enrolled);
   const canOrder = roleCan(me.role, "orders.write");
-  return <>
+  return <div className="customer-page">
     <PageHead back={<Link to="/customers">Customers</Link>} title={c.businessName}
       sub={<span className="code-row">Customer ID <span className="code">{c.code}</span><CopyButton text={c.code} />{c.status === "inactive" && " · Inactive"}</span>}
       actions={<>{roleCan(me.role, "support.remote") && <button className="secondary" onClick={() => setConnector(true)}>Send connector</button>}{roleCan(me.role, "customers.write") && <button className="secondary" onClick={() => setEditing(true)}>Edit</button>}
@@ -76,7 +76,7 @@ export function Customer({ id, me }: { id: string; me: StaffUser }) {
     {connector && <RemoteDialog customerId={c.id} onClose={() => setConnector(false)} />}
     {editing && <CustomerDialog me={me} staff={staff.data?.staff ?? []} customer={c} onClose={() => setEditing(false)} onSaved={(next) => { setEditing(false); setData({ customer: next }); }} />}
     {counter && <CounterDialog id={counter} me={me} onClose={() => setCounter(null)} onChanged={() => { void counters.reload(); void reload(); }} />}
-  </>;
+  </div>;
 }
 
 /** wa.me wants the number with its country code and no symbols; Indian numbers are written without +91 more often than not. */

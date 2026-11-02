@@ -74,23 +74,25 @@ export function CustomerDialog({ me, staff, customer, initial, onClose, onSaved 
     void run(async () => onSaved((customer ? await patch<{ customer: CustomerDetail }>(`/customers/${customer.id}`, body) : await post<{ customer: CustomerDetail }>("/customers", body)).customer));
   };
   return <Dialog title={customer ? `Edit ${customer.businessName}` : "Add customer"} onClose={onClose} wide>
-    <form onSubmit={submit} className="form-grid">
-      <Field label="Business name" wide><input required maxLength={120} autoFocus value={form.businessName} onChange={set("businessName")} disabled={busy} /></Field>
+    <form onSubmit={submit} className="form-grid customer-form">
+      <Field label="Business name"><input required maxLength={120} autoFocus value={form.businessName} onChange={set("businessName")} disabled={busy} /></Field>
       <Field label="Contact person"><input maxLength={80} value={form.contactName} onChange={set("contactName")} disabled={busy} /></Field>
       <Field label="Phone"><input type="tel" maxLength={20} value={form.phone} onChange={set("phone")} disabled={busy} /></Field>
-      <Field label="Email" hint="Razorpay sends payment links here."><input type="email" maxLength={254} value={form.email} onChange={set("email")} disabled={busy} /></Field>
-      <Field label="GSTIN" hint="Leave blank for a restaurant without GST registration."><input maxLength={15} value={form.gstin} onChange={set("gstin")} disabled={busy} /></Field>
-      <Field label="Address" wide><input maxLength={300} value={form.address} onChange={set("address")} disabled={busy} /></Field>
-      <Field label="City"><input maxLength={80} value={form.city} onChange={set("city")} disabled={busy} /></Field>
-      <Field label="State" hint="Decides CGST and SGST or IGST on invoices."><select value={form.stateCode} onChange={set("stateCode")} disabled={busy}>
-        <option value="">Choose a state</option>{Object.entries(GST_STATES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></Field>
-      <Field label="PIN code"><input maxLength={6} inputMode="numeric" value={form.pincode} onChange={set("pincode")} disabled={busy} /></Field>
+      <Field label="Email" hint="Payment links are sent here."><input type="email" maxLength={254} value={form.email} onChange={set("email")} disabled={busy} /></Field>
+      <Field label="GSTIN" hint="Optional if not GST-registered."><input maxLength={15} value={form.gstin} onChange={set("gstin")} disabled={busy} /></Field>
       {me.role === "admin" && <Field label="Sales rep"><select value={form.ownerId ?? ""} onChange={(e) => setForm({ ...form, ownerId: e.target.value || null })} disabled={busy}>
         <option value="">Not assigned</option>{staff.filter((s) => s.role === "sales" || s.role === "admin").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>}
+      <Field label="Address" wide><input maxLength={300} value={form.address} onChange={set("address")} disabled={busy} /></Field>
+      <div className="customer-location wide">
+      <Field label="City"><input maxLength={80} value={form.city} onChange={set("city")} disabled={busy} /></Field>
+      <Field label="State" hint="Used to calculate invoice tax."><select value={form.stateCode} onChange={set("stateCode")} disabled={busy}>
+        <option value="">Choose a state</option>{Object.entries(GST_STATES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></Field>
+      <Field label="PIN code"><input maxLength={6} inputMode="numeric" value={form.pincode} onChange={set("pincode")} disabled={busy} /></Field>
+      </div>
       {customer && <Field label="Status"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })} disabled={busy}>
         <option value="active">Active</option><option value="inactive">Inactive (no longer a customer)</option></select></Field>}
-      <Field label="Notes" wide><textarea rows={3} maxLength={2000} value={form.notes} onChange={set("notes")} disabled={busy} /></Field>
-      <div className="wide">{status}</div>
+      <Field label="Notes" wide><textarea rows={2} maxLength={2000} value={form.notes} onChange={set("notes")} disabled={busy} /></Field>
+      {status && <div className="wide">{status}</div>}
       <div className="form-actions wide"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy}>{customer ? "Save" : "Add customer"}</button></div>
     </form>
   </Dialog>;
