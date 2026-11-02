@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { requireIntegration } from "./integrations.js";
-import { loyaltySettings, loyaltyTiers, sweepAllExpiry } from "./loyalty.js";
+import { billSpendSql, loyaltySettings, loyaltyTiers, sweepAllExpiry } from "./loyalty.js";
 
 const TAG_SEPARATOR = "\u001f";
 
@@ -20,8 +20,7 @@ export function segmentCustomers(db: Database, now = Date.now()): SegmentCustome
   const settings = loyaltySettings(db);
   const tiers = settings.tiersEnabled ? loyaltyTiers(db).filter((t) => t.isActive) : [];
   const windowStart = addMonths(now, -settings.tierWindowMonths);
-  const net = (where: string) => `COALESCE((SELECT SUM(b.total_paise) FROM bills b WHERE b.customer_id = c.id AND b.status <> 'void'${where}), 0)
-    - COALESCE((SELECT SUM(cn.total_paise) FROM credit_notes cn JOIN bills b ON b.id = cn.bill_id WHERE b.customer_id = c.id AND b.status <> 'void'${where}), 0)`;
+  const net = (where: string) => `COALESCE((SELECT SUM(${billSpendSql("b")}) FROM bills b WHERE b.customer_id = c.id AND b.status <> 'void'${where}), 0)`;
   const rows = db.prepare(`SELECT c.id, c.name, c.phone, c.email, c.type_id, t.name AS type_name, c.created_at, c.birth_date, c.anniversary_date,
       c.marketing_opt_in, c.is_active,
       (SELECT group_concat(tag, '${TAG_SEPARATOR}') FROM customer_tags g WHERE g.customer_id = c.id) AS tags,

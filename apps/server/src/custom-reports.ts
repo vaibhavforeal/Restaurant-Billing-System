@@ -7,6 +7,7 @@ import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { requireModule } from "./modules.js";
+import { billSpendSql } from "./loyalty.js";
 
 type Row = Record<string, ReportCell>;
 const AGG = { sum: "SUM", avg: "AVG", max: "MAX" } as const;
@@ -77,7 +78,7 @@ function sourceSql(id: string, start: number, end: number): SourceSql {
         birthday: "COALESCE(c.birth_date, '')", anniversary: "COALESCE(c.anniversary_date, '')",
         optIn: "CASE c.marketing_opt_in WHEN 1 THEN 'Yes' ELSE 'No' END", active: "CASE c.is_active WHEN 1 THEN 'Yes' ELSE 'No' END",
         joined: "c.created_at",
-        visits: `(SELECT COUNT(*) ${bills()})`, spend: `(SELECT COALESCE(SUM(v.total_paise), 0) ${bills()})`, lastVisit: `(SELECT MAX(v.created_at) ${bills()})`,
+        visits: `(SELECT COUNT(*) ${bills()})`, spend: `(SELECT COALESCE(SUM(${billSpendSql("v")}), 0) ${bills()})`, lastVisit: `(SELECT MAX(v.created_at) ${bills()})`,
         // Earned less redeemed and expired plus reversed/adjusted is the change in balance over the dates.
         pointsEarned: `(SELECT COALESCE(SUM(l.points), 0) ${points("'earn'")})`, pointsRedeemed: `(SELECT COALESCE(-SUM(l.points), 0) ${points("'redeem'")})`,
         pointsExpired: `(SELECT COALESCE(-SUM(l.points), 0) ${points("'expire'")})`,

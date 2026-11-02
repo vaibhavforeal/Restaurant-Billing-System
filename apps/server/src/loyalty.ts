@@ -36,11 +36,15 @@ export const loyaltyTiers = (db: Database): LoyaltyTier[] =>
     .map((r) => ({ id: r.id, name: r.name, minSpendPaise: r.min_spend_paise, earnMultiplier: r.earn_multiplier, isActive: r.is_active === 1 }));
 
 /** What a customer spent since `since`: bill totals less refunds, leaving out void bills. */
+/**
+ * What one bill adds to its customer's spend: its total less any refunds on it. Every screen and report that shows a customer's spend
+ * (profile, tiers, segments, the CRM report, custom reports) sums this over the customer's bills that are not void, so they agree.
+ */
+export const billSpendSql = (bill: string) => `(${bill}.total_paise - COALESCE((SELECT SUM(cn.total_paise) FROM credit_notes cn WHERE cn.bill_id = ${bill}.id), 0))`;
+
 export function customerSpend(db: Database, customerId: string, since = 0): number {
-  return (db.prepare(`SELECT COALESCE(SUM(b.total_paise), 0)
-      - COALESCE((SELECT SUM(cn.total_paise) FROM credit_notes cn JOIN bills x ON x.id = cn.bill_id
-          WHERE x.customer_id = ? AND x.status <> 'void' AND x.created_at >= ?), 0) AS n
-    FROM bills b WHERE b.customer_id = ? AND b.status <> 'void' AND b.created_at >= ?`).get(customerId, since, customerId, since) as { n: number }).n;
+  return (db.prepare(`SELECT COALESCE(SUM(${billSpendSql("b")}), 0) AS n FROM bills b WHERE b.customer_id = ? AND b.status <> 'void' AND b.created_at >= ?`)
+    .get(customerId, since) as { n: number }).n;
 }
 
 export interface CustomerTier { id: string; name: string; earnMultiplier: number; windowSpendPaise: number; next: { name: string; minSpendPaise: number } | null }
