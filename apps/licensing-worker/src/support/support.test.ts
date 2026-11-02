@@ -46,7 +46,16 @@ function open(peer: Peer) {
   return { socket, say: (message: unknown) => connection.onMessage(JSON.stringify(message)), close: () => connection.onClose() };
 }
 /** Lets the hub's fire-and-forget handlers finish. */
+/** A short pause, for checking that something did NOT happen. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+/** Waits until `done` holds (the hub answers asynchronously, and slower under a loaded test run), failing after two seconds. */
+async function until(done: () => boolean | Promise<boolean>, what: string): Promise<void> {
+  // Counted in attempts, not by the clock, which these tests stop.
+  for (let tries = 0; !(await done()); tries++) {
+    if (tries > 400) throw new Error(`Timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
 
 async function link(secret = TEST_SECRET): Promise<Response> {
   return send(env, "POST", "/v1/support/link", { installationId }, withSecret({}, secret));
@@ -168,7 +177,7 @@ describe("live chat", () => {
     expect(update.messages).toHaveLength(1);
 
     page.say({ type: "typing" });
-    await settle();
+    await until(() => staffSocket.socket.of("chat.typing").length > 0, "chat.typing");
     expect(staffSocket.socket.of("chat.typing")[0]).toMatchObject({ installationId });
 
     await support.ok("POST", `/chats/${update.chat.id}/messages`, { body: "Hi!" });
@@ -241,7 +250,7 @@ describe("remote sessions", () => {
     expect((await ask()).status).toBe(409);
 
     counter.say({ type: "remote.answer", sessionId: session.id, decision: "control", approvedBy: "Owner" });
-    await settle();
+    await until(() => counter.socket.of("remote.start").length > 0, "remote.start");
     const start = counter.socket.of("remote.start")[0] as { token: string; mode: string; iceServers: Array<{ urls: string[]; username?: string }> };
     expect(start.mode).toBe("view");
     expect(start.iceServers.find((s) => s.username)?.urls).toEqual(["turn:relay.test:3478?transport=udp", "turns:relay.test:5349"]);
@@ -253,7 +262,7 @@ describe("remote sessions", () => {
     const counter = open({ kind: "counter", installationId, customerId: "c" });
     const { session } = await (await ask()).json() as { session: RemoteSession };
     counter.say({ type: "remote.answer", sessionId: session.id, decision: "control", approvedBy: "Owner" });
-    await settle();
+    await until(() => counter.socket.of("remote.start").length > 0, "remote.start");
     const { token } = counter.socket.of("remote.start")[0] as { token: string };
 
     const authorize = (t: string) => authorizeLive(new Request(`${ORIGIN}/v1/remote/agent?t=${t}`), env, { db: env.DB, now: Date.now, uuid: () => crypto.randomUUID() });
@@ -265,23 +274,23 @@ describe("remote sessions", () => {
     viewer.say({ type: "remote.watch", sessionId: session.id });
     const stranger = open(staffPeer({ id: crypto.randomUUID(), name: "Other" }));
     stranger.say({ type: "remote.watch", sessionId: session.id });
-    await settle();
+    await until(() => stranger.socket.of("remote.refused").length > 0, "remote.refused");
     expect(stranger.socket.of("remote.refused")).toHaveLength(1);
 
     const agent = open(peer!);
-    await settle();
+    await until(() => agent.socket.of("remote.peer").length > 0, "remote.peer");
     expect(agent.socket.of("remote.peer")).toHaveLength(1);
     expect((await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${session.id}`)).session.status).toBe("active");
 
     agent.say({ type: "remote.signal", data: { sdp: "offer" } });
     viewer.say({ type: "remote.signal", sessionId: session.id, data: { sdp: "answer" } });
     stranger.say({ type: "remote.signal", sessionId: session.id, data: { sdp: "sneaky" } });
-    await settle();
+    await until(() => viewer.socket.of("remote.signal").length > 0 && agent.socket.of("remote.signal").length > 0, "remote.signal");
     expect(viewer.socket.of("remote.signal")[0]).toMatchObject({ data: { sdp: "offer" } });
     expect(agent.socket.of("remote.signal").map((e) => e.data)).toEqual([{ sdp: "answer" }]);
 
     agent.close();
-    await settle();
+    await until(() => counter.socket.of("remote.ended").length > 0, "remote.ended");
     const ended = (await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${session.id}`)).session;
     expect(ended).toMatchObject({ status: "ended", endReason: "Screen sharing stopped" });
     expect(counter.socket.of("remote.ended")[0]).toMatchObject({ sessionId: session.id });
@@ -295,7 +304,7 @@ describe("remote sessions", () => {
 
     const first = (await (await ask("control", chatId)).json() as { session: RemoteSession }).session;
     counter.say({ type: "remote.answer", sessionId: first.id, decision: "deny", approvedBy: "Ravi" });
-    await settle();
+    await until(async () => (await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${first.id}`)).session.status === "denied", "the denial");
     expect((await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${first.id}`)).session.status).toBe("denied");
 
     const second = (await (await ask("control", chatId)).json() as { session: RemoteSession }).session;
