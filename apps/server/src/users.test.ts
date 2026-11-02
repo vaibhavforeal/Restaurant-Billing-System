@@ -108,6 +108,20 @@ describe("users admin", () => {
     expect(now.statusCode).toBe(200);
   });
 
+  it("keeps one admin when the last two are demoted at the same moment, even when one change also sets a PIN", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const beena = await createUser(app, admin.token, { name: "Beena", pin: "2468", role: "admin" });
+    // The PIN change makes one request wait on hashing, which is when the other used to slip past the check.
+    const results = await Promise.all([
+      app.inject({ method: "PATCH", url: `/api/users/${admin.user.id}`, payload: { role: "cashier", pin: "1357" }, headers: auth(admin.token) }),
+      app.inject({ method: "PATCH", url: `/api/users/${beena.id}`, payload: { role: "cashier" }, headers: auth(admin.token) }),
+    ]);
+    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    const admins = app.db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1").get() as { n: number };
+    expect(admins.n).toBe(1);
+  });
+
   it("deactivating a user invalidates their existing session", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

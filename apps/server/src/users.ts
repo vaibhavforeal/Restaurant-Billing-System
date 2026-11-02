@@ -103,18 +103,22 @@ export function registerUsers(app: FastifyInstance): void {
     const row = getUser(id);
     if (!row) throw httpError(404, "user not found");
 
-    // Lockout guard: the last active admin can be neither deactivated nor demoted.
+    // Lockout guard: the last active admin can be neither deactivated nor demoted. Checked up front for a quick answer, and again
+    // inside the write, because a PIN change awaits hashing and another admin's demotion may land in between.
     const wasActiveAdmin = row.role === "admin" && row.is_active === 1;
     const staysActiveAdmin = (body.role ?? row.role) === "admin" && (body.isActive ?? row.is_active === 1);
-    if (wasActiveAdmin && !staysActiveAdmin) {
+    const assertAnotherAdmin = () => {
+      if (!wasActiveAdmin || staysActiveAdmin) return;
       const others = app.db
         .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1 AND id != ?")
         .get(id) as { n: number };
       if (others.n === 0) throw httpError(409, "cannot remove the last admin");
-    }
+    };
+    assertAnotherAdmin();
 
     const roleChanged = body.role !== undefined && body.role !== row.role;
     const update = app.db.transaction((pinHash: string) => {
+      assertAnotherAdmin();
       app.db
         .prepare("UPDATE users SET name = ?, role = ?, is_active = ?, pin_hash = ?, max_discount_percent = ? WHERE id = ?")
         .run(body.name ?? row.name, body.role ?? row.role, (body.isActive ?? row.is_active === 1) ? 1 : 0, pinHash,
