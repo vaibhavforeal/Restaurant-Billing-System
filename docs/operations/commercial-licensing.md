@@ -177,8 +177,12 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 
 ## Activation and renewal workflow
 
-**The normal way: online, with the setup card.**
-- On a commercial build with the licensing service, setup starts by asking for the Customer ID and Order ID from MasalaPOS's setup card.
+**The normal way: in the setup file, with the setup card.**
+- On a commercial build with the licensing service, the Windows installer (`MasalaPOS-Setup-x.y.z.exe`) asks for the Customer ID and Order ID on an **Activate MasalaPOS** page right after the folder choice. Both are required, and the PC must be online: setup enrols with the service before it installs anything. A typo, an unpaid or full order, or no internet keeps the installer on that page with the reason.
+- How it works: `tools/installer-activate.ps1` (filled in per build by `tools/build-desktop.mjs`, checked against the staged app by `tools/verify-desktop-package.mjs`) creates the installation identity, makes the same `POST /v1/enroll` call as the counter, and saves the identity and licence in `%ProgramData%\MasalaPOS\activation.json`. At first start the server adopts that identity, installs the licence and deletes the file (`adoptStagedActivation` in `apps/server/src/license-config.ts`), so the first screen is creating the admin.
+- Reinstalling on the same PC reuses its identity (from the user's `installation.json`, or a setup file not yet adopted), so it does not take a second seat. Automatic updates skip the page. Silent installs (`/S`) never show it and fall back to the counter's own activation below.
+- If the hand-off fails (for example MasalaPOS is first opened by a different Windows user), the counter's setup still asks for the two IDs as before:
+- Counter fallback: setup starts by asking for the Customer ID and Order ID from MasalaPOS's setup card.
 - The counter checks a typo locally (each ID has a check character), then enrols with the service. It installs the order's licence, pre-fills the restaurant name, and registers the browser that set it up.
 - **No internet? Set up now and activate later** finishes setup without a licence. Plan and devices then shows an **Activate this counter** form for the same two IDs.
 - After setup, an admin can move the counter to another order of the same customer (a trial becoming paid) from **Activation details > Use a different Order ID**. Plan and devices shows both IDs for support calls.

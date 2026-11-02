@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync
 import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
-import { desktopBuildConfig } from "./desktop-build-config.mjs";
+import { desktopBuildConfig, installerActivationScript, installerConfig } from "./desktop-build-config.mjs";
 import { stageCaptainAndroid } from "./captain-android-release.mjs";
 import { googleOAuthClient } from "./google-oauth-client.mjs";
 
@@ -76,7 +76,17 @@ cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
 // The Captain Android app, when built for this release by tools/build-captain-android.mjs.
 console.log(stageCaptainAndroid(join(root, "apps/captain-android/app/build/outputs/apk/release"), join(stage, "ui"), pkg.version));
 writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "masalapos-demo" : "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "MasalaPOS customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));
-writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));
+writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint, ...(commercial ? { serviceUrl: serviceUrl.replace(/\/+$/, "") } : {}) }, null, 2));
+// The customer installer asks for the Customer ID and Order ID and activates before installing (tools/installer.nsh). Its script
+// and settings sit outside the app stage, so they are compiled into the setup file but never shipped inside the app.
+if (commercial) {
+  const installerDir = join(root, "build", "desktop", "installer");
+  rmSync(installerDir, { recursive: true, force: true }); mkdirSync(installerDir, { recursive: true });
+  const script = installerActivationScript(readFileSync(join(root, "tools/installer-activate.ps1"), "utf8"), { serviceUrl, verificationKeyFingerprint, appVersion: pkg.version });
+  writeFileSync(join(installerDir, "installer-activate.ps1"), script);
+  writeFileSync(join(installerDir, "installer-config.nsh"), installerConfig(join(installerDir, "installer-activate.ps1"), !!serviceUrl));
+  console.log(serviceUrl ? "Installer: asks for the Customer ID and Order ID and activates before installing" : "Installer: no licensing service URL, so setup does not ask for activation codes");
+}
 
 // Small MasalaPOS M icon, rendered without extra image or native build tools.
 const M_MARK = [[36,32],[46,32],[54,48],[62,32],[72,32],[72,76],[62,76],[62,50],[54,64],[46,50],[46,76],[36,76]];

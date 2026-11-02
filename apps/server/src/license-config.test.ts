@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { licenseConfig } from "./license-config.js";
+import { adoptStagedActivation, licenseConfig } from "./license-config.js";
 
 const directories: string[] = [];
 const publicKey = generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -106,6 +106,76 @@ describe("installation secret", () => {
     const path = directory(), installationId = randomUUID(), installationSecret = "ab".repeat(32);
     writeFileSync(join(path, "installation.json"), JSON.stringify({ installationId, installationSecret }));
     expect(licenseConfig(path)).toMatchObject({ installationId, installationSecret });
+  });
+});
+
+describe("activation made by the installer", () => {
+  const dev = () => {
+    vi.stubGlobal("__MASALAPOS_COMMERCIAL__", undefined);
+    vi.stubGlobal("__MASALAPOS_LICENSE_PUBLIC_KEY__", undefined);
+    vi.stubEnv("MASALAPOS_LICENSE_PUBLIC_KEY", publicKey);
+  };
+  const stage = (content: object | string) => {
+    const path = join(directory(), "activation.json");
+    writeFileSync(path, typeof content === "string" ? content : JSON.stringify(content));
+    return path;
+  };
+  const staged = (overrides: object = {}) => ({ format: "masalapos-installer-activation", version: 1, installationId: randomUUID(),
+    installationSecret: "cd".repeat(32), license: "LICENSE-ENVELOPE", customerCode: "FC-7K3M-9QX", orderCode: "FO-2D8H-4MA", ...overrides });
+
+  it("takes setup's identity on a first start", () => {
+    dev();
+    const data = directory(), file = staged(), stagedPath = stage(file);
+    const config = licenseConfig(data, stagedPath)!;
+    expect(config).toMatchObject({ installationId: file.installationId, installationSecret: file.installationSecret });
+    expect(JSON.parse(readFileSync(join(data, "installation.json"), "utf8"))).toEqual({ installationId: file.installationId, installationSecret: file.installationSecret });
+  });
+
+  it("never replaces an identity the counter already has", () => {
+    dev();
+    const data = directory(), installationId = randomUUID(), installationSecret = "ab".repeat(32);
+    writeFileSync(join(data, "installation.json"), JSON.stringify({ installationId, installationSecret }));
+    expect(licenseConfig(data, stage(staged()))).toMatchObject({ installationId, installationSecret });
+  });
+
+  it("ignores a file that is not setup's", () => {
+    dev();
+    for (const bad of ["not json", staged({ format: "other" }), staged({ installationSecret: "short" }), staged({ installationId: "x" })]) {
+      const file = stage(bad);
+      expect(licenseConfig(directory(), file)!.installationSecret).not.toBe("cd".repeat(32));
+    }
+  });
+
+  it("installs setup's licence once and removes the file", () => {
+    const file = staged(), path = stage(file), activate = vi.fn(), log = vi.fn();
+    expect(adoptStagedActivation({ activate }, file.installationId, log, path)).toBe("installed");
+    expect(activate).toHaveBeenCalledWith("LICENSE-ENVELOPE", "Setup");
+    expect(existsSync(path)).toBe(false);
+    expect(adoptStagedActivation({ activate }, file.installationId, log, path)).toBe("none");
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("leaves a file made for another installation alone", () => {
+    const path = stage(staged()), activate = vi.fn();
+    expect(adoptStagedActivation({ activate }, randomUUID(), vi.fn(), path)).toBe("none");
+    expect(activate).not.toHaveBeenCalled();
+    expect(existsSync(path)).toBe(true);
+  });
+
+  it("logs a licence the counter refuses and still removes the file", () => {
+    const file = staged(), path = stage(file), log = vi.fn();
+    const activate = vi.fn(() => { throw new Error("License is invalid or belongs to another installation"); });
+    expect(adoptStagedActivation({ activate }, file.installationId, log, path)).toBe("failed");
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("belongs to another installation"));
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("removes a file without a licence (the hourly check fetches it)", () => {
+    const file = staged({ license: null }), path = stage(file), activate = vi.fn();
+    expect(adoptStagedActivation({ activate }, file.installationId, vi.fn(), path)).toBe("none");
+    expect(activate).not.toHaveBeenCalled();
+    expect(existsSync(path)).toBe(false);
   });
 });
 

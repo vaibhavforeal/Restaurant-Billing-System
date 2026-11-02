@@ -10,7 +10,7 @@ import { redactUrl } from "./log-redact.js";
 import { Backups } from "./backups.js";
 import { prepareDatabase } from "./startup.js";
 import { restoreDatabase } from "./recovery.js";
-import { licenseConfig } from "./license-config.js";
+import { adoptStagedActivation, licenseConfig } from "./license-config.js";
 import { loadCaptainHttps, startCaptainHttps, type CaptainHttpsInfo } from "./captain-https.js";
 import { seedDemo } from "./demo-seed.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -77,6 +77,8 @@ try {
   process.on("SIGINT", () => { void close(); });
   parent?.on("message", ({ data }) => { if (data === "shutdown") void close().then(() => process.exit(0)); });
   if (demo) await seedDemo(app);
+  // The customer installer activates the PC before installing; its licence is applied here, before any counter connects.
+  if (licensing) adoptStagedActivation(app.licensing, licensing.installationId, (message) => app.log.warn(message));
   await app.listen({ host: "0.0.0.0", port });
   // Billing never waits on the licensing service: this only fetches in the background and logs failures.
   if (!demo) stopRenewals = app.licensing.startRenewalChecks((message) => app.log.warn(message));

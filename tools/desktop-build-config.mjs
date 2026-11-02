@@ -32,3 +32,26 @@ export function desktopBuildConfig(args, env) {
   if (serviceUrl && !isHttpsUrl(serviceUrl)) throw new Error("Licensing service URL must use HTTPS");
   return { demo, commercial, edition, stageName, publicKey, verificationKeyFingerprint, serviceUrl };
 }
+
+const psQuoted = (value) => String(value).replaceAll("'", "''");
+/** tools/installer-activate.ps1 with this build's service, key and version filled in. Windows PowerShell 5.1 reads it as ANSI, so it stays ASCII. */
+export function installerActivationScript(template, { serviceUrl, verificationKeyFingerprint, appVersion }) {
+  const values = {
+    __MASALAPOS_LICENSE_SERVICE_URL__: serviceUrl ? serviceUrl.replace(/\/+$/, "") : "",
+    __MASALAPOS_KEY_FINGERPRINT__: verificationKeyFingerprint ?? "",
+    __MASALAPOS_APP_VERSION__: String(appVersion).slice(0, 40),
+  };
+  let script = template;
+  for (const [name, value] of Object.entries(values)) {
+    if (!script.includes(`'${name}'`)) throw new Error(`The installer activation script lost its ${name} placeholder`);
+    script = script.replaceAll(`'${name}'`, `'${psQuoted(value)}'`);
+  }
+  if (/[^\x00-\x7f]/.test(script)) throw new Error("The installer activation script must be plain ASCII for Windows PowerShell");
+  return script;
+}
+
+/** The NSIS settings tools/installer.nsh includes; `$` is doubled because NSIS reads it as a variable. */
+export function installerConfig(scriptPath, online) {
+  if (/["\r\n]/.test(scriptPath)) throw new Error("Unsupported installer script path");
+  return `!define MASALAPOS_ACTIVATION_SCRIPT "${scriptPath.replaceAll("$", "$$$$")}"\n${online ? "!define MASALAPOS_ONLINE_ACTIVATION\n" : ""}`;
+}

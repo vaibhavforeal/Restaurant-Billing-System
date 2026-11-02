@@ -19,6 +19,14 @@ export default function verifyDesktopPackage({ packager }) {
   if (edition === "commercial" && !/^[a-f0-9]{64}$/.test(info.verificationKeyFingerprint ?? "")) {
     throw new Error("Customer installers require an embedded license verification key");
   }
+  // The setup wizard's activation script is generated next to the stage; it must come from the same build as the app it installs.
+  if (edition === "commercial") {
+    let script;
+    try { script = readFileSync(join(appDir, "..", "installer", "installer-activate.ps1"), "utf8"); }
+    catch { throw new Error("Missing the installer activation script. Run npm run build:commercial before packaging"); }
+    const expected = [`$ServiceUrl = '${(info.serviceUrl ?? "").replaceAll("'", "''")}'`, `$Fingerprint = '${info.verificationKeyFingerprint}'`, `$AppVersion = '${info.version}'`];
+    if (!expected.every((line) => script.includes(line))) throw new Error("The installer activation script is from another build. Run npm run build:commercial before packaging");
+  }
   if (edition === "demo" && info.verificationKeyFingerprint !== null) {
     throw new Error("Demo installers must not use customer licensing");
   }
