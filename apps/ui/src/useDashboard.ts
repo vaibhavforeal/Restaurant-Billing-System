@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
-import { apiFetch, session } from "./api";
+import { apiFetch } from "./api";
 import type { SalesReport } from "./sales-report";
 import type { Order } from "./types";
-import { connectWs } from "./ws";
+import { useLiveRefresh } from "./live-refresh";
 import { withTimeout } from "./abort-signal";
 
 export interface DashboardDayEnd { sales: { billCount: number }; cancellations: { orderCount: number } }
@@ -82,18 +82,7 @@ export function useDashboard(date: string, zomatoEnabled = false) {
     return () => { revision.current++; controller.abort(); };
   }, [date, version, zomatoEnabled]);
 
-  useEffect(() => {
-    let scheduled: ReturnType<typeof setTimeout> | undefined;
-    let connectedOnce = false;
-    const schedule = () => { clearTimeout(scheduled); scheduled = setTimeout(refresh, 400); };
-    const stop = connectWs({
-      onEvent: (event) => { if (event === "order.updated") schedule(); },
-      onStatus: (connected) => { if (connected) { if (connectedOnce) schedule(); connectedOnce = true; } },
-      onAuthFail: () => session.clear(),
-    });
-    const timer = setInterval(refresh, 60000);
-    return () => { stop(); clearTimeout(scheduled); clearInterval(timer); };
-  }, [refresh]);
+  useLiveRefresh(refresh);
 
   const current = data?.date === date ? data : null;
   return {
