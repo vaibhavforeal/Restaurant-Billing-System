@@ -75,6 +75,10 @@ export function CounterDialog({ id, me, onClose, onChanged }: { id: string; me: 
         {support && c.enrolled && <button className="secondary" disabled={busy} onClick={() => {
           if (window.confirm(`Release ${counterName(c)}'s seat? Its order can then activate another computer. This computer's licence keeps working offline until it ends.`)) void act(() => post(`/installations/${c.id}/release`), "Seat released.");
         }}>Release seat</button>}
+        {support && c.enrolled && c.licence && c.licence.state !== "expired" && <button className="secondary" disabled={busy} onClick={() => {
+          const next = window.prompt(`Replace ${counterName(c)} with another computer. The new computer takes over this seat and its licence (same plan, end date, devices and modules).\n\nAsk the restaurant to enter the Customer ID and Order ID on the new computer first, then enter its Installation ID (MasalaPOS shows it under Settings > Plan and devices):`)?.trim();
+          if (next) void act(() => post(`/installations/${c.id}/replace`, { installationId: next }), "Replaced. The new computer gets the licence when it next checks in or enters its IDs again.");
+        }}>Replace computer</button>}
         {support && c.paired && <button className="secondary" disabled={busy} onClick={() => {
           if (window.confirm("Reset the pairing? The next computer that checks in with this installation ID claims it. Do this only after the restaurant restored or reinstalled MasalaPOS.")) void act(() => post(`/installations/${c.id}/reset-pairing`), "Pairing reset.");
         }}>Reset pairing</button>}

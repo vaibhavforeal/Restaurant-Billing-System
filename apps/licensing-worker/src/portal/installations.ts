@@ -4,7 +4,7 @@ import { parseActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
 import { GRACE_MS } from "../dates.js";
 import { assignSeat, orderFull } from "../enroll.js";
-import { reissueLicense } from "../issue.js";
+import { issueLicense, reissueLicense } from "../issue.js";
 import { activationBlocker, orderById, orderEnded } from "../orders.js";
 import {
   createInstallation, getInstallation, getOwnerSettings, insertOwnerEventStatement, latestLicense, ownerEvents, setOverridesStatement, type InstallationRow,
@@ -166,6 +166,52 @@ export const installationsRoutes: Route[] = [
         summary: `Released ${label(installation)}'s seat on order ${order?.code ?? ""}${latest ? `; its current licence still works offline until ${new Date(latest.graceUntil).toISOString().slice(0, 10)}` : ""}` }),
     ]);
     return json({ installation: await detail(ctx, (await getInstallation(db, installation.installationId))!) });
+  } },
+
+  // For a counter whose computer died, when its order can't simply activate another one (its term ended and a renewal kept this counter
+  // going): the new computer, which asked to activate and was refused, takes over the seat and the current licence, with the same plan,
+  // end date, devices and modules. Pending renewals of the old counter follow it. Like a release, the old computer's signed licence keeps
+  // working offline until it ends.
+  { method: "POST", path: path("/installations/:id/replace"), permission: "installations.support", handler: async (ctx) => {
+    const old = await visibleInstallation(ctx, ctx.params[0]!);
+    const { installationId } = await readBody(ctx.request, z.object({ installationId: z.string().uuid() }).strict());
+    if (installationId === old.installationId) throw conflict("Choose the new computer, not this counter.", "same_counter");
+    if (!old.orderId) throw conflict("This counter doesn't hold a seat, so there's nothing to hand over.", "not_enrolled");
+    const { db } = ctx.deps, now = ctx.deps.now();
+    const latest = await latestLicense(db, old.installationId);
+    if (!latest || latest.graceUntil <= now) throw conflict("This counter's licence has ended, so there's nothing to hand over. Renew it first.", "expired");
+    const target = await getInstallation(db, installationId);
+    if (!target) throw notFound("That computer (ask the restaurant to enter the Customer ID and Order ID on it first)");
+    if (target.orderId) throw conflict("That computer already holds a seat. Release it first.", "target_enrolled");
+    if (target.customerId !== null && target.customerId !== old.customerId) throw conflict("That computer belongs to another customer.", "other_customer");
+
+    const { overrides } = await getOwnerSettings(db, old.installationId);
+    const next: InstallationRow = {
+      ...target, customerId: old.customerId, orderId: old.orderId, maxDevices: old.maxDevices, activatedAt: now, outletName: old.outletName ?? target.outletName,
+    };
+    const { row, statement } = await issueLicense(ctx.deps, {
+      installation: next, plan: latest.plan, expiresAt: latest.expiresAt, graceUntil: latest.graceUntil, trial: readClaims(latest.envelope).trial === true,
+      reason: "manual", orderId: latest.orderId, modules: overrides,
+    });
+    await db.batch([
+      // Fails the whole batch (seats_used can't be negative) unless the old counter still holds the seat and the new one still holds none,
+      // so a double click or two staff members at once hand the seat over only once.
+      db.prepare(`UPDATE orders SET seats_used = -1 WHERE id = ? AND (NOT EXISTS (SELECT 1 FROM installations WHERE installation_id = ? AND order_id = ?)
+          OR EXISTS (SELECT 1 FROM installations WHERE installation_id = ? AND order_id IS NOT NULL))`)
+        .bind(old.orderId, old.installationId, old.orderId, target.installationId),
+      db.prepare(`UPDATE installations SET order_id = NULL WHERE installation_id = ?`).bind(old.installationId),
+      db.prepare(`UPDATE installations SET customer_id = ?, order_id = ?, max_devices = ?, activated_at = ?, outlet_name = ? WHERE installation_id = ?`)
+        .bind(next.customerId, next.orderId, next.maxDevices, now, next.outletName, next.installationId),
+      setOverridesStatement(db, next.installationId, overrides, now),
+      statement,
+      db.prepare(`UPDATE OR IGNORE order_installations SET installation_id = ? WHERE installation_id = ? AND order_id IN (SELECT id FROM orders WHERE status IN ('draft', 'confirmed'))`)
+        .bind(next.installationId, old.installationId),
+      logBy(ctx, { action: "installation.replaced", entityType: "installation", entityId: next.installationId, customerId: old.customerId,
+        summary: `${label(old)} replaced by computer ${next.installationId.slice(0, 8)}, which takes over its seat and licence until ${new Date(latest.expiresAt).toISOString().slice(0, 10)}; `
+          + `the old computer's licence still works offline until ${new Date(latest.graceUntil).toISOString().slice(0, 10)}`,
+        data: { replaced: old.installationId, revision: row.revision } }),
+    ]);
+    return json({ installation: await detail(ctx, (await getInstallation(db, next.installationId))!) });
   } },
 
   // After the restaurant restored or reinstalled the counter with a new installation secret: the next check-in claims the counter again.
