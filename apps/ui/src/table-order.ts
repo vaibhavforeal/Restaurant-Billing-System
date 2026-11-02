@@ -1,12 +1,12 @@
 /**
- * The sortOrder changes that move a table one place up or down in the displayed order. Tables that share a sortOrder
- * cannot be told apart by swapping, so the whole list is renumbered 1..n and only the tables whose number changes are returned.
+ * Every table's id in the order shown after moving one table a place up or down, for PUT /api/tables/order (which saves the
+ * whole order at once). Null when the table is already at that end.
  */
-export function moveTablePatches(tables: { id: string; sortOrder: number }[], id: string, dir: -1 | 1): { id: string; sortOrder: number }[] {
+export function movedTableOrder(tables: { id: string }[], id: string, dir: -1 | 1): string[] | null {
   const from = tables.findIndex((t) => t.id === id);
   const to = from + dir;
-  if (from < 0 || to < 0 || to >= tables.length) return [];
-  const order = [...tables];
-  [order[from], order[to]] = [order[to]!, order[from]!];
-  return order.flatMap((t, index) => t.sortOrder === index + 1 ? [] : [{ id: t.id, sortOrder: index + 1 }]);
+  if (from < 0 || to < 0 || to >= tables.length) return null;
+  const ids = tables.map((t) => t.id);
+  [ids[from], ids[to]] = [ids[to]!, ids[from]!];
+  return ids;
 }

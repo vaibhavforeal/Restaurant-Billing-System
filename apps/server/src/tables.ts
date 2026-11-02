@@ -1,4 +1,4 @@
-import { TableCreate, TableUpdate, uuidv7 } from "@masalapos/domain";
+import { TableCreate, TableOrder, TableUpdate, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { localMinute } from "./reservation-rules.js";
@@ -115,6 +115,22 @@ export function registerTables(app: FastifyInstance): void {
       .run(id, body.name, body.area, body.sortOrder, body.priceTier);
     app.broadcast("table.changed", { tableId: id });
     return reply.status(201).send({ table: toTable(getTable(id)!) });
+  });
+
+  // The whole display order at once, so a move can never be left half-applied. The list must name every table exactly once:
+  // one made from an out-of-date screen (a table added or removed since) is refused rather than guessed at.
+  app.put("/api/tables/order", { preHandler: manage }, async (req) => {
+    const { ids } = TableOrder.parse(req.body);
+    const known = (app.db.prepare("SELECT id FROM dining_tables").all() as Array<{ id: string }>).map((r) => r.id);
+    const given = new Set(ids);
+    if (given.size !== ids.length || given.size !== known.length || !known.every((id) => given.has(id))) {
+      throw httpError(409, "The tables changed while you were arranging them. Reload and try again.");
+    }
+    const setOrder = app.db.prepare("UPDATE dining_tables SET sort_order = ? WHERE id = ?");
+    app.db.transaction(() => ids.forEach((id, index) => setOrder.run(index + 1, id)))();
+    app.broadcast("table.changed", {});
+    const rows = app.db.prepare("SELECT * FROM dining_tables ORDER BY sort_order, name").all() as TableRow[];
+    return { tables: toTables(rows) };
   });
 
   app.patch("/api/tables/:id", { preHandler: manage }, async (req) => {

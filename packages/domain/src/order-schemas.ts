@@ -26,6 +26,9 @@ export const TableUpdate = z.object({
 });
 export type TableUpdateInput = z.infer<typeof TableUpdate>;
 
+/** Every table's id, in the new display order. */
+export const TableOrder = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(1000) }).strict();
+
 export const OrderCreate = z
   .object({
     clientRef: ClientRef,

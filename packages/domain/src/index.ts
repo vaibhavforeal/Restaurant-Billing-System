@@ -38,7 +38,7 @@ export { SettingsUpdate, UpiId, type SettingsUpdateInput } from "./settings-sche
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {
-  TableCreate, TableUpdate,
+  TableCreate, TableUpdate, TableOrder,
   OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, SentItemEdit, ZOMATO_ORDER_ID, ORDER_TYPE_KINDS, OrderTypeCreate, OrderTypeUpdate, OrderTypeChange,
   type TableCreateInput, type TableUpdateInput,
   type OrderType, type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput, type SentItemEditInput, type OrderTypeKind,
