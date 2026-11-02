@@ -11,14 +11,14 @@ MasalaPOS's Home screen shows a **fixed** sales dashboard (`dashboard` module, `
 **Decisions made with the user (2026-11-02)**
 - Purpose: an owner's live overview. Not a report builder, and not remote viewing.
 - A new licence module `dynamicReports` in the `addon` group. When it's active, Home shows the customizable dashboard; otherwise the current fixed dashboard stays.
-- One layout per person (users with `reports.read`), starting from a default layout.
+- One layout per person, starting from a default layout. Only people with the new `reports.dashboard` permission get the customizable dashboard (see §2a).
 - Widgets in v1: KPI tiles, built-in charts, live service status. Saved custom reports are **not** widgets.
 - Free 2D drag and resize on a 12-column grid, **built in-house** with no new UI dependency.
 - The period is chosen per widget, together with its comparison.
 
 **Assumptions (accepted with the design)**
 - The licence allows `dynamicReports` on Pro by default and not on Basic; the portal can allow it per order or counter like other modules. As with every add-on, it stays off until an admin switches it on in the Marketplace.
-- Cashiers keep `reports.read` as they have today, so they also get a personal dashboard. No new permission.
+- Cashiers see the fixed default dashboard unless an admin grants them "Customise own dashboard" (`reports.dashboard`) in their per-person permissions (Users → permissions). Decided by the user on 2026-11-02.
 - Screens narrower than 720px (phones and tablets on LAN browsers) show the widgets read-only in one column; editing happens on wider screens.
 
 ## Architecture
@@ -38,6 +38,11 @@ MasalaPOS's Home screen shows a **fixed** sales dashboard (`dashboard` module, `
 - The portal's order editor and the counter module table read `MODULES`, so they pick it up automatically. Verify `apps/portal/src/screens/OrderEditor.tsx` and `Counter.tsx`. The licensing worker must be redeployed so it signs the new key.
 - Update the module table in `docs/operations/feature-controls.md`.
 
+### 2a. Permission
+- New slug `reports.dashboard`, labelled "Customise own dashboard", added to the Reports area of `PERMISSION_AREAS` in `packages/domain/src/staff-permissions.ts`. It then shows up automatically in the per-person permissions screen (`apps/ui/src/screens/StaffPermissions.tsx`, served by `apps/server/src/users.ts`).
+- Roles (`packages/domain/src/roles.ts`): admin has it through `*`; cashier, waiter and kitchen do **not**. Admins grant it to a single person with the existing per-person overrides (`user_permissions`), which are cleared when the person's role changes, as they are today.
+- The UI checks it with `useCan("reports.dashboard")`; the server checks it with `requirePermission`.
+
 ### 3. Database: migration 44 (`packages/domain/src/migrations/`, registered in `index.ts`)
 ```sql
 CREATE TABLE dashboard_layouts (
@@ -49,7 +54,7 @@ CREATE TABLE dashboard_layouts (
 A user with no row gets `defaultLayout()`.
 
 ### 4. Server (`apps/server/src/dashboard.ts`, registered in `server.ts`)
-Every route needs `requirePermission("reports.read")` and `requireModule(app, "dynamicReports")`.
+Every route needs `requirePermission("reports.read")`, `requirePermission("reports.dashboard")` and `requireModule(app, "dynamicReports")`.
 - `GET /api/dashboard/layout`: the user's saved layout or the default, with widgets the user can't currently see filtered out (their position is kept in storage).
 - `PUT /api/dashboard/layout`: validate with zod and `compact`, refuse widgets the user isn't allowed, upsert.
 - `DELETE /api/dashboard/layout`: reset to the default.
@@ -80,13 +85,13 @@ Every route needs `requirePermission("reports.read")` and `requireModule(app, "d
   - keep the last good values when a refresh fails, as `useDashboard` does;
   - live refresh on `order.updated` with a 400 ms debounce, a 60 s poll, and a refresh on reconnect (copy the pattern at `useDashboard.ts:84-96`);
   - reload the catalogue on `modules.changed`.
-- `screens/Home.tsx`: when `isActive("dynamicReports")` and the user can `reports.read`, render `<DynamicDashboard>`; otherwise keep today's `<SalesDashboard>`.
+- `screens/Home.tsx`: when `isActive("dynamicReports")` and the user can both `reports.read` and `reports.dashboard`, render `<DynamicDashboard>`; otherwise keep today's `<SalesDashboard>`, the fixed default dashboard.
 
 ### Error handling
 - A widget whose data fails shows an inline "Couldn't load" with a retry. The other widgets are unaffected.
 - A widget whose module or permission has gone away disappears from view but stays in the saved layout, so it comes back if access returns.
 - A layout save that fails keeps edit mode open with the error shown.
-- If the module is switched off, the server returns 403 `module_off` and Home falls back to `SalesDashboard`.
+- If the module is switched off, the server returns 403 `module_off` and Home falls back to `SalesDashboard`. If `reports.dashboard` is taken away, the server returns 403 and Home falls back the same way; the saved layout is kept for when it is granted again.
 
 ## Delivery
 1. Branch `feat/dynamic-reports` from the current `fix/audit-bugs` tip, which holds the report refactors, and rebase once PR #8 merges.
@@ -105,6 +110,7 @@ Every route needs `requirePermission("reports.read")` and `requireModule(app, "d
 - **Server tests** (existing vitest patterns):
   - layouts are kept separate per user and reset works;
   - disallowed widgets are refused on PUT and dropped from GET;
+  - a cashier without `reports.dashboard` gets 403 on every dashboard route, and gets through once a per-person override grants it;
   - `/api/dashboard/data` figures equal `/api/reports/sales` and `/api/reports/analytics` for the same range, including credit notes subtracting on their own date;
   - one failing widget doesn't fail the others;
   - the module switched off gives 403 `module_off`.
