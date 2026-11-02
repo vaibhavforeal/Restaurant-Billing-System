@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { resolveWorkspace } from "./workspace-exports.mjs";
 import { createRequire } from "node:module";
 import { cpSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { dirname, join, resolve, relative } from "node:path";
@@ -51,10 +52,7 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
     // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
     __MASALAPOS_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __MASALAPOS_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
   // Workspace packages are bundled from source, including subpath imports (@masalapos/domain/vendor-codes): the installer ships no copy of them.
-  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)(\/[a-z0-9-]+)?$/ }, (args) => {
-    const [, pkg, sub] = args.path.split("/");
-    return { path: join(root, "packages", pkg, "src", `${sub ?? "index"}.ts`) };
-  }); } }],
+  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)(\/[a-z0-9-]+)?$/ }, (args) => ({ path: resolveWorkspace(root, args.path) })); } }],
 });
 // The installer has no workspace packages: an import of one left in the bundle means a server that cannot start.
 const leftover = readFileSync(join(stage, "server/main.mjs"), "utf8").match(/from\s*["']@masalapos\/[^"']*["']/g);
