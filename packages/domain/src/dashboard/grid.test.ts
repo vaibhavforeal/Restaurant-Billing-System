@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampItem, collides, compact, moveItem, resizeItem, stackOrder, type GridItem, type SizeLimits } from "./grid.js";
+import { clampItem, collides, compact, moveItem, resizeItem, resolveOverlaps, stackOrder, type GridItem, type SizeLimits } from "./grid.js";
 
 const item = (key: string, x: number, y: number, w: number, h: number): GridItem => ({ key, x, y, w, h });
 const LIMITS: SizeLimits = { min: { w: 2, h: 1 }, max: { w: 12, h: 6 } };
@@ -56,9 +56,27 @@ describe("dashboard grid", () => {
     const resized = resizeItem(items, "a", { w: 20, h: 0 }, LIMITS);
     expect(byKey(resized, "a").w).toBe(12);
     expect(byKey(resized, "a").h).toBe(1);
-    const rounded = moveItem(items, "a", { x: 2.6, y: 0 }, LIMITS);
-    expect(byKey(rounded, "a").x).toBe(3);
-    expect(clampItem(item("a", 2.6, 1.4, 3.5, 2.2), LIMITS)).toEqual(item("a", 3, 1, 4, 2));
+    const free = moveItem(items, "a", { x: 2.6, y: 1.4 }, LIMITS);
+    expect(byKey(free, "a")).toMatchObject({ x: 2.6, y: 1.4 });
+    expect(clampItem(item("a", 2.6, 1.4, 3.5, 2.2), LIMITS)).toEqual(item("a", 2.6, 1.4, 3.5, 2.2));
+  });
+
+  it("retains the drop point and unrelated gaps when pushing a collision aside", () => {
+    const items = [item("a", 0, 0, 3, 2), item("b", 3, 0, 3, 2), item("c", 8, 9.4, 3, 2)];
+    const moved = moveItem(items, "a", { x: 0.13, y: 0.27 }, LIMITS);
+    expect(byKey(moved, "a")).toMatchObject({ x: 0.13, y: 0.27 });
+    expect(byKey(moved, "b").y).toBe(2.27);
+    expect(byKey(moved, "c")).toEqual(items[2]);
+    expectNoOverlap(moved);
+  });
+
+  it("repairs stored overlaps without compacting a valid free layout", () => {
+    const items = [item("a", 0.2, 3.8, 3.1, 2), item("b", 0.2, 3.9, 3.1, 2), item("c", 8, 20, 3, 2)];
+    const repaired = resolveOverlaps(items);
+    expectNoOverlap(repaired);
+    expect(byKey(repaired, "a")).toEqual(items[0]);
+    expect(byKey(repaired, "c")).toEqual(items[2]);
+    expect(resolveOverlaps(repaired)).toEqual(repaired);
   });
 
   it("keeps a resized item inside the grid when it grows past the right edge", () => {
@@ -82,9 +100,9 @@ describe("dashboard grid", () => {
     for (let step = 0; step < 200; step++) {
       const key = `w${Math.floor(rand() * 8)}`;
       if (rand() < 0.5) {
-        items = moveItem(items, key, { x: Math.floor(rand() * 16) - 2, y: Math.floor(rand() * 20) - 2 }, LIMITS);
+        items = moveItem(items, key, { x: rand() * 16 - 2, y: rand() * 20 - 2 }, LIMITS);
       } else {
-        items = resizeItem(items, key, { w: Math.floor(rand() * 14), h: Math.floor(rand() * 8) }, LIMITS);
+        items = resizeItem(items, key, { w: rand() * 14, h: rand() * 8 }, LIMITS);
       }
       expect(items).toHaveLength(8);
       expectNoOverlap(items);

@@ -115,21 +115,32 @@ export interface BarChartProps {
 const DEFAULT_CLASSES: BarChartClasses = { root: "dd-bars", bar: "dd-bar", track: "dd-bar-track" };
 
 export function BarChart({ points, format, compare, legend, label, classes = DEFAULT_CLASSES, labelEvery, onSelect, selected, describe, tooltip }: BarChartProps) {
+  const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   if (!points.length) return <p className="dd-empty">No data for this period.</p>;
   const { max } = scaleMax(points, compare);
   const every = labelEvery ?? Math.max(1, Math.ceil(points.length / 8));
   const names = legend === false ? null : compare ? legend ?? ["This period", "Comparison"] : null;
   const bars = points.map((point, i) => {
     const other = compare?.[i];
-    const height = (value: number) => ({ height: `${Math.max(0, value) / max * 100}%`, ...(other ? { width: "50%" } : {}) });
+    const height = (value: number) => ({ height: `${Math.max(0, value) / max * 100}%`, width: other ? "50%" : "100%" });
     const spoken = describe ? describe(i, point) : `${point.label}: ${formatValue(format, point.value)}${other ? `, compared ${formatValue(format, other.value)}` : ""}`;
     const inner = <>
       <span className={classes.track} aria-hidden="true"><span style={height(point.value)} />{other && <span className="dd-bar-compare" style={height(other.value)} />}</span>
-      <small>{i % every === 0 ? point.label : ""}</small>
+      <small style={{ width: `${Math.min(every, points.length - i) * 100}%` }}>{i % every === 0 ? point.label : ""}</small>
     </>;
     const common = { className: `${classes.bar}${selected === i ? " selected" : ""}`, "aria-label": spoken, title: tooltip ? tooltip(i, point) : spoken };
     return onSelect
-      ? <button key={i} type="button" {...common} aria-pressed={selected === i} onClick={() => onSelect(i)}>{inner}</button>
+      ? <button key={i} type="button" {...common} aria-pressed={selected === i}
+        ref={(element) => { buttons.current[i] = element; }}
+        tabIndex={i === (selected ?? 0) ? 0 : -1}
+        onFocus={() => onSelect(i)} onClick={() => onSelect(i)}
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1
+            : Math.max(0, Math.min(points.length - 1, i + (event.key === "ArrowRight" ? 1 : -1)));
+          buttons.current[next]?.focus();
+        }}>{inner}</button>
       : <div key={i} {...common} role="img">{inner}</div>;
   });
   return <>

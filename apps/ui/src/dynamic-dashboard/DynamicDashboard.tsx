@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  COMPARE_LABELS, DASHBOARD_LIMITS, PERIOD_LABELS, compact, widgetDef, widgetVisible,
+  COMPARE_LABELS, DASHBOARD_LIMITS, PERIOD_LABELS, widgetDef, widgetVisible,
   type DashboardData, type DashboardItemValue, type DashboardWidgetId, type WidgetOptionsValue,
 } from "@masalapos/domain/dashboard";
 import { updatedLabel } from "../dashboard-view";
@@ -13,7 +13,7 @@ import { useNow } from "../useDashboard";
 import { DashboardGrid } from "./DashboardGrid";
 import { WidgetBody } from "./widgets";
 import { WidgetCatalogue } from "./WidgetCatalogue";
-import { WidgetSettings } from "./WidgetSettings";
+import { ORDER_TYPES, WidgetSettings } from "./WidgetSettings";
 import { addWidget, removeWidget, updateOptions } from "./editing";
 import { useDashboardData } from "./useDashboardData";
 import { useDashboardLayout } from "./useDashboardLayout";
@@ -49,6 +49,7 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
   const [settingsKey, setSettingsKey] = useState<string | null>(null);
   const action = useAction();
   const editing = draft !== null;
+  const editingGrid = editing && !narrow;
 
   // Widgets the user can no longer see (permission or module changed) are left out of the screen and of any save.
   const savedItems = useMemo(
@@ -74,15 +75,15 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
 
   const { setError } = action;
   const stopEditing = () => { setDraft(null); setCatalogue(false); setSettingsKey(null); setError(""); };
-  // The window shrinking below the editing width cancels the draft.
+  // Close desktop dialogs on narrow screens, but keep the draft until Save or Cancel.
   useEffect(() => {
-    if (narrow) { setDraft(null); setCatalogue(false); setSettingsKey(null); setError(""); }
-  }, [narrow, setError]);
+    if (narrow) { setCatalogue(false); setSettingsKey(null); }
+  }, [narrow]);
 
   // Build the draft from a fresh copy, never the cached one, so Save cannot overwrite changes made elsewhere.
   const onCustomise = () => void action.run(async () => {
     const fresh = await load();
-    setDraft(compact(fresh.layout.items.filter((i) => widgetVisible(widgetDef(i.widget), can, modules.isActive))));
+    setDraft(fresh.layout.items.filter((i) => widgetVisible(widgetDef(i.widget), can, modules.isActive)));
   }, "Could not load the dashboard");
   const onSave = () => draft && void action.run(async () => {
     if (!layout) return;
@@ -99,10 +100,12 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
   const header = (item: DashboardItemValue) => {
     const def = widgetDef(item.widget);
     const meta = def.options.period
-      ? [PERIOD_LABELS[item.options.period], rangeText(data, item.key)].filter(Boolean).join(" · ")
+      ? [PERIOD_LABELS[item.options.period], rangeText(data, item.key),
+        def.options.orderType && (item.options.orderType === "all" ? "All order types" : ORDER_TYPES.find((type) => type.value === item.options.orderType)?.label),
+      ].filter(Boolean).join(" · ")
       : "Live";
     return <header className="dd-widget-header">
-      {!editing && <h3>{def.title}</h3>}
+      {!editingGrid && <h3>{def.title}</h3>}
       <span className="dd-widget-meta">{meta}</span>
     </header>;
   };
@@ -115,17 +118,21 @@ export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
   return <div className="dd-screen">
     {!narrow && <div className="dd-toolbar">
       {draft ? <>
+        <p className="dd-edit-hint">Drag by the header. Nearby edges align automatically; hold Alt to move freely.</p>
         <button type="button" disabled={full || action.busy} title={full ? "Your dashboard is full" : undefined} onClick={() => setCatalogue(true)}>+ Add widget</button>
         <button type="button" disabled={action.busy} onClick={onReset}>Reset to default</button>
         <button type="button" disabled={action.busy} onClick={stopEditing}>Cancel</button>
         <button type="button" className="primary" disabled={action.busy} onClick={onSave}>{action.busy ? "Saving…" : "Save"}</button>
       </> : <button type="button" disabled={action.busy} onClick={onCustomise}>{action.busy ? "Loading…" : "Customise"}</button>}
     </div>}
+    {narrow && editing && <p className="dd-notice" role="status">Your unsaved changes are kept in this tab. Widen the window to continue editing and save.</p>}
     {action.error && <p className="alert" role="alert">{action.error}</p>}
-    {!editing && dataError && <p className="alert" role="status">{dataError}</p>}
-    {items.length === 0 && <p className="dd-empty">{editing ? "No widgets yet. Add one to get started." : "Your dashboard is empty. Use Customise to add widgets."}</p>}
+    {!editingGrid && dataError && <p className="alert" role="status">{dataError}</p>}
+    {items.length === 0 && <p className="dd-empty">{narrow
+      ? "Your dashboard is empty. Use a wider window or a computer to add widgets."
+      : editing ? "No widgets yet. Add one to get started." : "Your dashboard is empty. Use Customise to add widgets."}</p>}
     <DashboardGrid
-      items={items} editing={editing} narrow={narrow}
+      items={items} editing={editingGrid} narrow={narrow}
       onChange={(next) => setDraft(next)}
       renderItem={(item) => <div className="dd-widget">
         {header(item)}

@@ -93,7 +93,7 @@ describe("dashboard layouts", () => {
     expect(kots.y).toBeGreaterThanOrEqual(2);
   });
 
-  it("closes the gap a hidden widget leaves, without changing what is stored", async () => {
+  it("keeps visible widgets in place when another widget is hidden", async () => {
     const [a, b] = defaultLayout().items;
     const hiddenItem = { key: "kots", widget: "runningKots", x: 0, y: a!.h, w: 3, h: 2, options: opts };
     const below = { ...b!, x: 0, y: a!.h + 2 };
@@ -101,9 +101,32 @@ describe("dashboard layouts", () => {
     app.db.prepare("INSERT INTO dashboard_layouts (user_id, layout_json, updated_at) VALUES (?, ?, 1)").run(adminId, JSON.stringify(stored));
     const seen = (await request("GET")).json().layout as DashboardLayoutValue;
     expect(widgets(seen)).not.toContain("runningKots");
-    expect(seen.items.find((i) => i.key === below.key)!.y).toBe(a!.h);
+    expect(seen.items.find((i) => i.key === below.key)!.y).toBe(a!.h + 2);
     const raw = app.db.prepare("SELECT layout_json FROM dashboard_layouts WHERE user_id = ?").pluck().get(adminId) as string;
     expect(JSON.parse(raw).items.find((i: { key: string }) => i.key === below.key).y).toBe(a!.h + 2);
+  });
+
+  it("round-trips free positions, fractional sizes and deliberate gaps", async () => {
+    const [a, b] = defaultLayout().items;
+    const layout = { version: 1, items: [{ ...a!, x: 0.135, y: 1.27, w: 3.18, h: 2.37 }, { ...b!, x: 6.4, y: 8.56 }] };
+    const saved = await request("PUT", { layout });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().layout).toEqual(layout);
+    expect((await request("GET")).json().layout).toEqual(layout);
+    const raw = app.db.prepare("SELECT layout_json FROM dashboard_layouts WHERE user_id = ?").pluck().get(adminId) as string;
+    expect(JSON.parse(raw)).toEqual(layout);
+  });
+
+  it("preserves visible free positions when saving while another widget is hidden", async () => {
+    enableIntegration(app, "kds");
+    await request("PUT", { layout: extra(defaultLayout(), "runningKots", "kots") });
+    app.db.prepare("UPDATE integration_state SET enabled = 0 WHERE id = 'kds'").run();
+    const layout = { version: 1, items: [{ ...defaultLayout().items[0]!, x: 1.45, y: 4.37 }] };
+    expect((await request("PUT", { layout })).json().layout).toEqual(layout);
+    enableIntegration(app, "kds");
+    const result = (await request("GET")).json().layout as DashboardLayoutValue;
+    expect(result.items.find((item) => item.key === layout.items[0]!.key)).toEqual(layout.items[0]);
+    expect(result.items).toHaveLength(2);
   });
 
   it("recovers from a stored layout it cannot read", async () => {

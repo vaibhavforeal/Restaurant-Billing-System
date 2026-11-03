@@ -1,7 +1,7 @@
 # Dynamic Reports
 
 Dynamic Reports is an add-on that lets a person build their own **Home** dashboard.
-They drag and resize widgets on a grid, choose a period for each one (and a
+They freely drag and resize widgets on a canvas, choose a period for each one (and a
 comparison where it makes sense), and save the layout. Layouts belong to the person,
 so each user has their own. The widgets read the same figures as **Reports**; no
 figure is calculated separately. The module and permission are described in
@@ -45,16 +45,30 @@ dashboard**. Captain/waiter and kitchen accounts are unchanged.
 - **Customise** (top right of Home) opens the editor. **+ Add widget** opens the
   catalogue; **Settings** on a widget sets its period, comparison, order type or the
   number of rows, where the widget has them; **Remove** takes it off.
-- Drag a widget to move it, and drag its corner to resize it. Each widget has a
-  smallest and largest size. With the keyboard, focus a widget and use the arrow
-  keys to move it and Shift plus the arrow keys to resize it.
+- Drag a widget by its header to move it freely, and drag its corner to resize it.
+  Movement and resizing align to nearby widget edges within 12px, keeping a 12px
+  gap between adjacent cards. Hold Alt while dragging or resizing to bypass
+  alignment. Positions do not snap to blocks. Each widget has a smallest and
+  largest size. The widget stays where you drop it; overlapping widgets move down
+  to make room. Deliberate gaps remain, including after adding or removing widgets.
+- With the keyboard, focus a widget and use the arrow keys to move it by 8 pixels
+  and Shift plus the arrow keys to resize it. Hold Alt as well for 1-pixel adjustments.
 - **Save** stores the layout. **Cancel** drops the changes. **Reset to default**
   asks first, then replaces the saved layout with the default one.
 - A layout holds at most 30 widgets. Widgets hidden from the person (see below) count
   towards the 30. When it is full, **+ Add widget** is disabled and a save that goes
   over the limit says "Your dashboard is full".
-- Each widget header shows its period and the dates it covers; status widgets show
-  "Live". The footer says when the figures were last updated.
+- Each widget header shows its period, the dates it covers and its order-type filter
+  where supported; status widgets show "Live". The footer says when the figures were last updated.
+- Hourly sales uses a bar plot; daily trend uses a line plot. Tap or point at the plot
+  to read an exact value and comparison below it, use the previous/next buttons,
+  or focus the plot and use Left, Right, Home and End.
+- Payment mix and Order types use horizontal bars with amounts shown alongside
+  every category. Muted values and vertical markers show the comparison period.
+- Editing gives the canvas extra vertical room for controls. Saving preserves the
+  exact relative positions and sizes, displayed at the usual viewing height.
+  Horizontal positions scale with the available screen width. Existing saved
+  layouts continue to work.
 
 The figures refresh about half a second after an order, kitchen ticket, QR request,
 stock level or table changes, after the connection returns, and every 60 seconds. The
@@ -64,7 +78,9 @@ once an hour, but not while they are editing.
 ### Narrow screens
 
 Below 720 px wide the dashboard is read-only and shows one column. **Customise** is
-hidden. If the window is made narrower while editing, the unsaved changes are dropped.
+hidden. If the window is made narrower while editing, the unsaved draft stays in the
+current tab and a message explains how to continue. Widen the window to resume
+editing and save. Reloading or leaving Home still discards unsaved changes.
 Use a wider window or a laptop to change the layout.
 
 ## Widgets

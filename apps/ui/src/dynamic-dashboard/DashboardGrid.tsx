@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { GRID_COLUMNS, moveItem, resizeItem, stackOrder, widgetDef, type DashboardItemValue, type GridRect } from "@masalapos/domain/dashboard";
-import { GAP_PX, ROW_HEIGHT_PX, cellFromPointer, keyboardChange } from "./grid-pointer";
+import { EDIT_ROW_HEIGHT_PX, GAP_PX, ROW_HEIGHT_PX, alignRect, cellFromPointer, keyboardChange } from "./grid-pointer";
 import "./dynamic-dashboard.css";
 
 interface Props {
@@ -22,6 +22,8 @@ interface Gesture {
   startX: number;
   startY: number;
   pitch: number;
+  canvasTop: number;
+  canvasLeft: number;
   start: GridRect;
 }
 
@@ -35,14 +37,20 @@ interface Preview {
 const rectOf = (i: GridRect): GridRect => ({ x: i.x, y: i.y, w: i.w, h: i.h });
 const sameRect = (a: GridRect, b: GridRect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
-function placement(r: GridRect): CSSProperties {
-  return { gridColumn: `${r.x + 1} / span ${r.w}`, gridRow: `${r.y + 1} / span ${r.h}` };
+function placement(r: GridRect, rowHeight: number): CSSProperties {
+  return {
+    left: `calc(${r.x / GRID_COLUMNS * 100}% + ${r.x / GRID_COLUMNS * GAP_PX}px)`,
+    width: `calc(${r.w / GRID_COLUMNS * 100}% - ${(1 - r.w / GRID_COLUMNS) * GAP_PX}px)`,
+    top: r.y * (rowHeight + GAP_PX),
+    height: r.h * (rowHeight + GAP_PX) - GAP_PX,
+  };
 }
 
 export function DashboardGrid({ items, editing, narrow, onChange, renderItem, renderTools }: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const rowHeight = editing ? EDIT_ROW_HEIGHT_PX : ROW_HEIGHT_PX;
 
   const apply = useCallback((item: DashboardItemValue, mode: Mode, target: { x: number; y: number } | { w: number; h: number }): DashboardItemValue[] => {
     const limits = widgetDef(item.widget).limits;
@@ -84,29 +92,33 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
     // A second finger cannot take over a drag that is already running.
     if (!editing || gesture.current || (e.pointerType === "mouse" && e.button !== 0)) return;
     // Pointer distances are measured against the column pitch (one column plus its gap).
-    const width = gridRef.current?.getBoundingClientRect().width ?? 0;
-    if (!(width > 0)) return;
+    const canvas = gridRef.current?.getBoundingClientRect();
+    if (!canvas || !(canvas.width > 0)) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    gesture.current = { key: item.key, mode, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, pitch: width / GRID_COLUMNS, start: rectOf(item) };
+    gesture.current = { key: item.key, mode, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, pitch: (canvas.width + GAP_PX) / GRID_COLUMNS, canvasTop: canvas.top, canvasLeft: canvas.left, start: rectOf(item) };
     setPreview({ key: item.key, items, rect: rectOf(item) });
   };
 
-  const track = (e: PointerEvent<HTMLElement>) => {
+  const previewAt = (e: PointerEvent<HTMLElement>): Preview | null => {
     const g = gesture.current;
-    if (!g || g.pointerId !== e.pointerId) return;
+    const canvas = gridRef.current?.getBoundingClientRect();
+    if (!g || g.pointerId !== e.pointerId || !canvas) return null;
     const item = items.find((i) => i.key === g.key);
-    if (!item) return cancel();
-    const target = cellFromPointer(e.clientX - g.startX, e.clientY - g.startY, g.pitch, g.start, g.mode);
-    const next = apply(item, g.mode, target);
+    if (!item) return null;
+    const target = cellFromPointer(e.clientX - g.startX + g.canvasLeft - canvas.left, e.clientY - g.startY + g.canvasTop - canvas.top, g.pitch, g.start, g.mode, EDIT_ROW_HEIGHT_PX);
+    const raw = { ...g.start, ...target };
+    const aligned = e.altKey || sameRect(raw, g.start) ? raw : alignRect(raw, items.filter((i) => i.key !== g.key), g.mode, { x: g.pitch, y: EDIT_ROW_HEIGHT_PX + GAP_PX }, widgetDef(item.widget).limits);
+    const next = apply(item, g.mode, aligned);
     const moved = next.find((i) => i.key === g.key);
-    if (moved) setPreview({ key: g.key, items: next, rect: rectOf(moved) });
+    return moved ? { key: g.key, items: next, rect: rectOf(moved) } : null;
   };
+  const track = (e: PointerEvent<HTMLElement>) => { if (gesture.current?.pointerId === e.pointerId) setPreview(previewAt(e)); };
 
   const finish = (e: PointerEvent<HTMLElement>) => {
     const g = gesture.current;
     if (!g || g.pointerId !== e.pointerId) return;
-    const result = preview;
+    const result = previewAt(e);
     cancel();
     if (result && !sameRect(result.rect, g.start)) onChange(result.items);
   };
@@ -119,7 +131,10 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
   const onKeyDown = (e: KeyboardEvent<HTMLElement>, item: DashboardItemValue) => {
     // Keys pressed inside a tool button belong to that button.
     if (!editing || e.target !== e.currentTarget) return;
-    const change = keyboardChange(e.key, e.shiftKey, item);
+    const width = gridRef.current?.getBoundingClientRect().width ?? 0;
+    if (width <= 0) return;
+    const pixels = e.altKey ? 1 : 8;
+    const change = keyboardChange(e.key, e.shiftKey, item, { x: pixels / ((width + GAP_PX) / GRID_COLUMNS), y: pixels / (rowHeight + GAP_PX) });
     if (!change) return;
     const next = change.size ? apply(item, "resize", change.size) : change.move ? apply(item, "move", change.move) : null;
     const after = next?.find((i) => i.key === item.key);
@@ -129,8 +144,10 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
     onChange(next);
   };
 
+  const shown = preview?.items ?? items;
+  const canvasHeight = Math.max(0, ...shown.map((item) => (item.y + item.h) * (rowHeight + GAP_PX) - GAP_PX));
   return (
-    <div ref={gridRef} className="dd-grid">
+    <div ref={gridRef} className="dd-grid" style={{ height: canvasHeight }}>
       {items.map((item) => {
         const def = widgetDef(item.widget);
         const active = preview?.key === item.key;
@@ -138,9 +155,9 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
           <div
             key={item.key}
             className={`dd-item${editing ? " dd-item-editing" : ""}${active ? " dd-item-active" : ""}`}
-            style={placement(item)}
+            style={placement(shown.find((shownItem) => shownItem.key === item.key) ?? item, rowHeight)}
             tabIndex={editing ? 0 : undefined}
-            aria-label={editing ? `${def.title}, column ${item.x + 1}, row ${item.y + 1}, ${item.w} by ${item.h}` : undefined}
+            aria-label={editing ? `${def.title}. Arrow keys move; Shift plus arrows resize; Alt makes fine adjustments.` : undefined}
             onKeyDown={editing ? (e) => onKeyDown(e, item) : undefined}
           >
             {editing && (
@@ -152,7 +169,7 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
                 onPointerCancel={abandon}
                 onLostPointerCapture={abandon}
               >
-                <span className="dd-handle-title">{def.title}</span>
+                <span className="dd-handle-title"><span className="dd-drag-icon" aria-hidden="true">⠿</span>{def.title}</span>
                 <span className="dd-tools" onPointerDown={(e) => e.stopPropagation()}>{renderTools(item)}</span>
               </div>
             )}
@@ -171,7 +188,7 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
           </div>
         );
       })}
-      {preview && <div className="dd-placeholder" aria-hidden="true" style={placement(preview.rect)} />}
+      {preview && <div className="dd-placeholder" aria-hidden="true" style={placement(preview.rect, rowHeight)} />}
     </div>
   );
 }

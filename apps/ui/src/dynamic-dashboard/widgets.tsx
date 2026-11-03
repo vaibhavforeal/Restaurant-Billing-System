@@ -1,6 +1,7 @@
 import type { WidgetDef, WidgetResult, WidgetValue } from "@masalapos/domain/dashboard";
 import { percentChange } from "@masalapos/domain/dashboard";
-import { BarChart, LineChart, formatValue } from "./charts";
+import { formatValue } from "./charts";
+import { BreakdownChart, TimeChart } from "./DashboardCharts";
 
 export interface WidgetBodyProps {
   def: WidgetDef;
@@ -32,9 +33,9 @@ function Value({ def, value, compare, compareLabel }: { def: WidgetDef; value: W
       </div>;
     case "series": {
       const other = compare?.kind === "series" ? compare.points : undefined;
-      return def.id === "dailyTrend"
-        ? <LineChart points={value.points} format={value.format} compare={other} legend={["This period", compareLabel]} title={def.title} description={def.description} label={`${def.title}. Use arrow keys, Home or End to explore points.`} />
-        : <BarChart points={value.points} format={value.format} compare={other} legend={["This period", compareLabel]} label={def.title} />;
+      return def.id === "dailyTrend" || def.id === "hourlySales"
+        ? <TimeChart points={value.points} format={value.format} compare={other} title={def.title} compareLabel={compareLabel} hourly={def.id === "hourlySales"} />
+        : <BreakdownChart points={value.points} format={value.format} compare={other} title={def.title} compareLabel={compareLabel} />;
     }
     case "ranking":
       return value.rows.length

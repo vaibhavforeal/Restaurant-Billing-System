@@ -16,10 +16,10 @@ export type WidgetOptionsValue = z.output<typeof WidgetOptions>;
 export const DashboardItem = z.object({
   key: z.string().min(1).max(40),
   widget: z.enum(DASHBOARD_WIDGET_IDS),
-  x: z.number().int().min(0),
-  y: z.number().int().min(0),
-  w: z.number().int().min(0),
-  h: z.number().int().min(0),
+  x: z.number().finite().min(0),
+  y: z.number().finite().min(0),
+  w: z.number().finite().min(0),
+  h: z.number().finite().min(0),
   options: WidgetOptions,
 });
 export type DashboardItemValue = z.output<typeof DashboardItem>;
@@ -33,7 +33,7 @@ export const DashboardLayout = z.object({
     if (seen.has(item.key)) ctx.addIssue({ code: "custom", path: ["items", i, "key"], message: "Duplicate widget key" });
     seen.add(item.key);
 
-    if (item.x + item.w > GRID_COLUMNS) {
+    if (item.x + item.w > GRID_COLUMNS + 1e-9) {
       ctx.addIssue({ code: "custom", path: ["items", i, "x"], message: `Widget goes past column ${GRID_COLUMNS}` });
     }
     const { min, max } = widgetDef(item.widget).limits;

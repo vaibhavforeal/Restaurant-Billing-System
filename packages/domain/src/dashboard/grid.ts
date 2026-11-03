@@ -1,4 +1,4 @@
-/** Number of columns in the dashboard grid. Rows are unbounded. */
+/** Responsive coordinate width. Positions and sizes may be fractional; vertical space is unbounded. */
 export const GRID_COLUMNS = 12;
 
 export interface GridSize {
@@ -20,21 +20,22 @@ export interface SizeLimits {
   max: GridSize;
 }
 
-/** True only when the two rectangles share at least one cell. Touching edges do not count. */
+/** Touching edges and floating-point roundoff do not count as overlap. */
 export function collides(a: GridRect, b: GridRect): boolean {
-  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const epsilon = 1e-9;
+  return a.x < b.x + b.w - epsilon && b.x < a.x + a.w - epsilon && a.y < b.y + b.h - epsilon && b.y < a.y + a.h - epsilon;
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/** Rounds to whole cells, keeps w/h inside the limits, then keeps the item inside the grid columns and below row 0. */
+/** Keeps fractional dimensions inside their limits and the item inside the canvas. */
 export function clampItem<T extends GridItem>(item: T, limits: SizeLimits): T {
-  const w = clamp(Math.round(item.w), limits.min.w, Math.min(limits.max.w, GRID_COLUMNS));
-  const h = clamp(Math.round(item.h), limits.min.h, limits.max.h);
-  const x = clamp(Math.round(item.x), 0, GRID_COLUMNS - w);
-  const y = Math.max(Math.round(item.y), 0);
+  const w = clamp(item.w, limits.min.w, Math.min(limits.max.w, GRID_COLUMNS));
+  const h = clamp(item.h, limits.min.h, limits.max.h);
+  const x = clamp(item.x, 0, GRID_COLUMNS - w);
+  const y = Math.max(item.y, 0);
   return { ...item, x, y, w, h };
 }
 
@@ -60,6 +61,22 @@ export function compact<T extends GridItem>(items: readonly T[]): T[] {
   return placed;
 }
 
+/** Repairs collisions in stored layouts while preserving deliberate empty space and input order. */
+export function resolveOverlaps<T extends GridItem>(items: readonly T[]): T[] {
+  const placed: T[] = [];
+  for (const item of stackOrder(items)) {
+    let next = item;
+    for (;;) {
+      const blockers = placed.filter((other) => collides(next, other));
+      if (!blockers.length) break;
+      next = { ...next, y: Math.max(...blockers.map((other) => other.y + other.h)) };
+    }
+    placed.push(next);
+  }
+  const byKey = new Map(placed.map((item) => [item.key, item]));
+  return items.map((item) => byKey.get(item.key)!);
+}
+
 /**
  * Puts the target where the user dropped it, then pushes colliding items down until nothing overlaps.
  * Every push moves an item strictly lower and the total height is bounded, so the loop always ends.
@@ -80,7 +97,7 @@ function place<T extends GridItem>(items: readonly T[], target: T): T[] {
         pushed = true;
       }
     }
-    if (!pushed) return compact(out);
+    if (!pushed) return out;
   }
 }
 

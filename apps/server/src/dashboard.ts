@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
-  DashboardDataRequest, DashboardItem, DashboardLayout, DASHBOARD_LIMITS, clampItem, compact, defaultLayout, widgetDef, widgetVisible,
+  DashboardDataRequest, DashboardItem, DashboardLayout, DASHBOARD_LIMITS, clampItem, resolveOverlaps, defaultLayout, widgetDef, widgetVisible,
   type DashboardItemValue, type DashboardLayoutValue, type WidgetDef,
 } from "@masalapos/domain/dashboard";
 import { userCan } from "./auth.js";
@@ -15,7 +15,8 @@ export function visibleTo(app: FastifyInstance, req: FastifyRequest): (def: Widg
 
 /**
  * Turn whatever is stored into a list the grid accepts: unreadable or unknown items and repeated keys are dropped,
- * sizes are pulled into their limits and gaps are closed. Returns null when the stored text is not a layout at all.
+ * sizes are pulled into their limits and collisions repaired. Deliberate gaps are preserved.
+ * Returns null when the stored text is not a layout at all.
  */
 function repair(json: string): DashboardItemValue[] | null {
   let stored: unknown;
@@ -30,7 +31,7 @@ function repair(json: string): DashboardItemValue[] | null {
     keys.add(parsed.data.key);
     items.push(clampItem(parsed.data, widgetDef(parsed.data.widget).limits));
   }
-  return compact(items);
+  return resolveOverlaps(items);
 }
 
 export function registerDashboard(app: FastifyInstance): void {
@@ -42,8 +43,7 @@ export function registerDashboard(app: FastifyInstance): void {
   };
   const respond = (req: FastifyRequest, items: DashboardItemValue[], isDefault: boolean) => {
     const visible = visibleTo(app, req);
-    // Close the gaps that hidden widgets leave. The stored layout is not touched; a save merges hidden items back.
-    const layout: DashboardLayoutValue = { version: 1, items: compact(items.filter((item) => visible(widgetDef(item.widget)))) };
+    const layout: DashboardLayoutValue = { version: 1, items: items.filter((item) => visible(widgetDef(item.widget))) };
     return { layout, isDefault };
   };
 
@@ -66,7 +66,7 @@ export function registerDashboard(app: FastifyInstance): void {
     if (submitted.items.length + kept.length > DASHBOARD_LIMITS.items) throw httpError(400, "Your dashboard is full. Remove a widget before adding more.");
     const bottom = Math.max(0, ...submitted.items.map((item) => item.y + item.h));
     const top = Math.min(...kept.map((item) => item.y));
-    const merged = compact([...submitted.items, ...kept.map((item) => ({ ...item, y: item.y - top + bottom }))]);
+    const merged = [...submitted.items, ...kept.map((item) => ({ ...item, y: item.y - top + bottom }))];
     app.db.prepare(`INSERT INTO dashboard_layouts (user_id, layout_json, updated_at) VALUES (?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET layout_json = excluded.layout_json, updated_at = excluded.updated_at`)
       .run(req.user.id, JSON.stringify({ version: 1, items: merged }), Date.now());

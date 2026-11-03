@@ -5,7 +5,7 @@ import {
 import { useModules } from "../modules";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 
-const ORDER_TYPES: Array<{ value: WidgetOptionsValue["orderType"]; label: string }> = [
+export const ORDER_TYPES: Array<{ value: WidgetOptionsValue["orderType"]; label: string }> = [
   { value: "all", label: "All" },
   { value: "parcel", label: "Takeaway" },
   { value: "dine_in", label: "Dine-in" },

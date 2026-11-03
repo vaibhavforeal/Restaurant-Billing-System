@@ -18,14 +18,21 @@ describe("dashboard editing", () => {
     expect(items).toHaveLength(10);
   });
 
-  it("removes a widget and closes the gap", () => {
+  it("removes a widget without moving the other widgets", () => {
     const items: DashboardItemValue[] = [
       { key: "a", widget: "netSales", x: 0, y: 0, w: 3, h: 2, options: WidgetOptions.parse({}) },
       { key: "b", widget: "billCount", x: 0, y: 2, w: 3, h: 2, options: WidgetOptions.parse({}) },
     ];
     const next = removeWidget(items, "a");
     expect(next.map((i) => i.key)).toEqual(["b"]);
-    expect(next[0]!.y).toBe(0);
+    expect(next[0]!.y).toBe(2);
+  });
+
+  it("adding a widget preserves free positions and deliberate gaps", () => {
+    const items = [{ ...base()[0]!, x: 1.37, y: 5.42 }];
+    const next = addWidget(items, "netSales", "extra");
+    expect(next[0]).toEqual(items[0]);
+    expect(next[1]!.y).toBe(7.42);
   });
 
   it("changes one widget's options and leaves the rest alone", () => {

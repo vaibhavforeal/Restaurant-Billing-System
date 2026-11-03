@@ -1,5 +1,5 @@
 import {
-  GRID_COLUMNS, WidgetOptions, compact, widgetDef,
+  GRID_COLUMNS, WidgetOptions, widgetDef,
   type DashboardItemValue, type DashboardWidgetId, type WidgetOptionsValue,
 } from "@masalapos/domain/dashboard";
 
@@ -7,11 +7,11 @@ import {
 export function addWidget(items: DashboardItemValue[], widget: DashboardWidgetId, key: string): DashboardItemValue[] {
   const bottom = items.reduce((lowest, item) => Math.max(lowest, item.y + item.h), 0);
   const { w, h } = widgetDef(widget).defaultSize;
-  return compact([...items, { key, widget, x: 0, y: bottom, w: Math.min(w, GRID_COLUMNS), h, options: WidgetOptions.parse({}) }]);
+  return [...items, { key, widget, x: 0, y: bottom, w: Math.min(w, GRID_COLUMNS), h, options: WidgetOptions.parse({}) }];
 }
 
 export function removeWidget(items: DashboardItemValue[], key: string): DashboardItemValue[] {
-  return compact(items.filter((item) => item.key !== key));
+  return items.filter((item) => item.key !== key);
 }
 
 /** Changes the options of one widget; the other items are returned as they were. */

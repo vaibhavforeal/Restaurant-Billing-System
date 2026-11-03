@@ -15,6 +15,12 @@ describe("dashboard layout", () => {
     expect(parsed.items[0]!.options).toEqual({ period: "today", compare: "previous", orderType: "all", topN: 5 });
   });
 
+  it("accepts fractional positions and sizes without changing them", () => {
+    const value = item("free", 1.125, 3.375, 3.625, 2.125);
+    expect(DashboardLayout.parse(layout([value])).items[0]).toMatchObject({ x: 1.125, y: 3.375, w: 3.625, h: 2.125 });
+    expect(() => DashboardLayout.parse(layout([{ ...value, y: Infinity }]))).toThrow();
+  });
+
   it("rejects overlaps, duplicate keys, items off the grid, sizes outside a widget's limits, unknown widgets and more than 30 items", () => {
     expect(() => DashboardLayout.parse(layout([item("a", 0, 0), item("b", 2, 0)]))).toThrow();
     expect(() => DashboardLayout.parse(layout([item("a", 0, 0), item("a", 3, 0)]))).toThrow();
