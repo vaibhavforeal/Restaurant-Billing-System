@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { ValueFormat } from "@masalapos/domain/dashboard";
 import { paiseToRupees } from "../money";
+import "./charts.css";
 
 export interface ChartPoint { label: string; value: number }
 

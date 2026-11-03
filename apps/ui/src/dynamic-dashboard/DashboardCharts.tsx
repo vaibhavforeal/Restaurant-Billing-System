@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ValueFormat } from "@masalapos/domain/dashboard";
+import { RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react";
+import { IconButton } from "@board/components/base/buttons/icon-button";
+import { asIcon } from "./board-icons";
 import { formatValue, type ChartPoint } from "./charts";
 
 interface Props {
@@ -97,8 +100,8 @@ export function TimeChart({ points, compare, format, title, compareLabel, hourly
     <div className="dd-time-detail">
       <div aria-live="polite" aria-atomic="true"><span>{label(point)}</span><strong>{formatValue(format, point.value)}</strong>{other && <small>{compareLabel}: {formatValue(format, other.value)}</small>}</div>
       <div className="dd-time-nav">
-        <button type="button" aria-label={`Previous ${title} value`} disabled={index === 0} onClick={() => setSelected(index - 1)}>‹</button>
-        <button type="button" aria-label={`Next ${title} value`} disabled={index === points.length - 1} onClick={() => setSelected(index + 1)}>›</button>
+        <IconButton size="small" className="size-11" icon={asIcon(RiArrowLeftSLine)} aria-label={`Previous ${title} value`} disabled={index === 0} onClick={() => setSelected(index - 1)} />
+        <IconButton size="small" className="size-11" icon={asIcon(RiArrowRightSLine)} aria-label={`Next ${title} value`} disabled={index === points.length - 1} onClick={() => setSelected(index + 1)} />
       </div>
     </div>
   </div>;

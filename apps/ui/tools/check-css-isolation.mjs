@@ -28,6 +28,8 @@ for (const f of entryCss) {
   check(!css.includes(".boardui-root"), `entry CSS ${relative(out, f)} contains BoardUI styles`);
   check(!css.includes("--tw-"), `entry CSS ${relative(out, f)} contains Tailwind output`);
 }
+// charts.tsx is shared with the Reports page, which loads without the dashboard chunk: its own classes must ship eagerly.
+for (const cls of [".dd-empty", ".dd-legend"]) check(entryCss.some((f) => readFileSync(f, "utf8").includes(cls)), `entry CSS lacks ${cls} (shared charts.tsx needs it outside the dashboard chunk)`);
 check(!dashboardCss.some((f) => entryCss.includes(f)), "dashboard CSS is part of the entry stylesheet");
 for (const f of entryJs) check(!readFileSync(f, "utf8").includes("boardui-root"), `entry JS ${relative(out, f)} contains the dashboard`);
 
