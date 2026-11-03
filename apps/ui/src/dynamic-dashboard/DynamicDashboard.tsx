@@ -10,7 +10,9 @@ import { useLiveRefresh } from "../live-refresh";
 import { useAction } from "../use-action";
 import { useMediaQuery } from "../use-media-query";
 import { useNow } from "../useDashboard";
+import { Button } from "@board/components/base/buttons/button";
 import { BoardRoot } from "./BoardRoot";
+import { EditToolbar } from "./EditToolbar";
 import { DashboardGrid } from "./DashboardGrid";
 import { WidgetBody } from "./widgets";
 import { WidgetCatalogue } from "./WidgetCatalogue";
@@ -121,15 +123,8 @@ function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
 
   const full = (draft?.length ?? 0) >= DASHBOARD_LIMITS.items;
   return <div className="dd-screen">
-    {!narrow && <div className="dd-toolbar">
-      {draft ? <>
-        <p className="dd-edit-hint">Drag by the header. Nearby edges align automatically; hold Alt to move freely.</p>
-        <button type="button" disabled={full || action.busy} title={full ? "Your dashboard is full" : undefined} onClick={() => setCatalogue(true)}>+ Add widget</button>
-        <button type="button" disabled={action.busy} onClick={onReset}>Reset to default</button>
-        <button type="button" disabled={action.busy} onClick={stopEditing}>Cancel</button>
-        <button type="button" className="primary" disabled={action.busy} onClick={onSave}>{action.busy ? "Saving…" : "Save"}</button>
-      </> : <button type="button" disabled={action.busy} onClick={onCustomise}>{action.busy ? "Loading…" : "Customise"}</button>}
-    </div>}
+    {!narrow && <EditToolbar editing={editing} busy={action.busy} full={full}
+      onCustomise={onCustomise} onAdd={() => setCatalogue(true)} onReset={onReset} onCancel={stopEditing} onSave={onSave} />}
     {narrow && editing && <p className="dd-notice" role="status">Your unsaved changes are kept in this tab. Widen the window to continue editing and save.</p>}
     {action.error && <p className="alert" role="alert">{action.error}</p>}
     {!editingGrid && dataError && <p className="alert" role="status">{dataError}</p>}
@@ -147,8 +142,8 @@ function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
         const def = widgetDef(item.widget);
         const configurable = Object.values(def.options).some(Boolean);
         return <>
-          {configurable && <button type="button" aria-label={`${def.title} settings`} onClick={() => setSettingsKey(item.key)}>Settings</button>}
-          <button type="button" aria-label={`Remove ${def.title}`} onClick={() => setDraft((d) => d && removeWidget(d, item.key))}>Remove</button>
+          {configurable && <Button variant="ghost" size="small" className="h-11" aria-label={`${def.title} settings`} onClick={() => setSettingsKey(item.key)}>Settings</Button>}
+          <Button variant="ghost" size="small" className="h-11" aria-label={`Remove ${def.title}`} onClick={() => setDraft((d) => d && removeWidget(d, item.key))}>Remove</Button>
         </>;
       }}
     />

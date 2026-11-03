@@ -1,3 +1,4 @@
+import { UNSAFE_PortalProvider as PortalProvider } from "react-aria";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useBoardThemeClass } from "./board-theme";
 import "./boardui.css";
@@ -12,6 +13,9 @@ export function BoardRoot({ children, className = "" }: { children: ReactNode; c
   const [element, setElement] = useState<HTMLElement | null>(null);
   const dark = useBoardThemeClass();
   return <div ref={setElement} className={["boardui-root", dark, className].filter(Boolean).join(" ")}>
-    <RootElement.Provider value={element}>{children}</RootElement.Provider>
+    <RootElement.Provider value={element}>
+      {/* Drawers, popovers and menus mount inside the root so they get BoardUI tokens and dark mode. */}
+      <PortalProvider getContainer={() => element}>{children}</PortalProvider>
+    </RootElement.Provider>
   </div>;
 }
