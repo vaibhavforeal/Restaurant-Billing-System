@@ -5,8 +5,9 @@ import { Icon, type IconName } from "../Icon";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { SalesDashboard } from "../SalesDashboard";
+import { loadDashboard } from "../dynamic-dashboard/load-dashboard";
 // Loaded on demand so Tailwind, BoardUI and React Aria stay out of the main POS bundle.
-const DynamicDashboard = lazy(() => import("../dynamic-dashboard/DynamicDashboard").then((m) => ({ default: m.DynamicDashboard })));
+const DynamicDashboard = lazy(() => loadDashboard(() => import("../dynamic-dashboard/DynamicDashboard")));
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
 import { useModules } from "../modules";

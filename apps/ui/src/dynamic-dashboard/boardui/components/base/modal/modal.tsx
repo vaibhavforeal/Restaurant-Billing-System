@@ -1,3 +1,4 @@
+// MasalaPOS patch: the close button's tap area is extended to 44px (after:-inset-2.5) without changing its look.
 // @ts-nocheck -- vendored BoardUI source; not written to this repo's exactOptionalPropertyTypes rules.
 "use client";
 
@@ -269,7 +270,7 @@ export function ModalHeader({
         {children}
       </div>
       {showCloseButton ? (
-        <CloseButton size="sm" aria-label={closeLabel} onClick={close} className="-me-1 shrink-0" />
+        <CloseButton size="sm" aria-label={closeLabel} onClick={close} className="relative -me-1 shrink-0 after:absolute after:-inset-2.5 after:content-['']" />
       ) : null}
     </div>
   );

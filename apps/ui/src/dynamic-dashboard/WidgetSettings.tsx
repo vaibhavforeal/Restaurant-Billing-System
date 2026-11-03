@@ -33,11 +33,11 @@ export function WidgetSettingsForm({ item, zomatoActive, onChange, onDone }: {
   return <div className="dd-settings flex flex-col gap-6">
     {def.options.period && <Select label="Period" className="w-full" triggerClassName="h-11" selectedKey={options.period}
       onSelectionChange={(key) => onChange({ period: key as DashboardPeriod })}>
-      {DASHBOARD_PERIODS.map((p) => <SelectItem key={p} id={p} textValue={PERIOD_LABELS[p]}>{PERIOD_LABELS[p]}</SelectItem>)}
+      {DASHBOARD_PERIODS.map((p) => <SelectItem className="min-h-11" key={p} id={p} textValue={PERIOD_LABELS[p]}>{PERIOD_LABELS[p]}</SelectItem>)}
     </Select>}
     {def.options.compare && <Select label="Compare with" className="w-full" triggerClassName="h-11" selectedKey={options.compare}
       onSelectionChange={(key) => onChange({ compare: key as DashboardCompare })}>
-      {DASHBOARD_COMPARES.map((c) => <SelectItem key={c} id={c} textValue={COMPARE_LABELS[c]}>{COMPARE_LABELS[c]}</SelectItem>)}
+      {DASHBOARD_COMPARES.map((c) => <SelectItem className="min-h-11" key={c} id={c} textValue={COMPARE_LABELS[c]}>{COMPARE_LABELS[c]}</SelectItem>)}
     </Select>}
     {def.options.orderType && <div className="flex flex-col gap-2">
       <span className="text-body-medium text-text-primary" id={`${item.key}-order-type`}>Order type</span>
@@ -48,7 +48,7 @@ export function WidgetSettingsForm({ item, zomatoActive, onChange, onDone }: {
     </div>}
     {def.options.topN && <Select label="How many items" className="w-full" triggerClassName="h-11" selectedKey={String(options.topN)}
       onSelectionChange={(key) => onChange({ topN: Number(key) })}>
-      {topNChoices(options.topN).map((n) => <SelectItem key={n} id={String(n)} textValue={String(n)}>{n}</SelectItem>)}
+      {topNChoices(options.topN).map((n) => <SelectItem className="min-h-11" key={n} id={String(n)} textValue={String(n)}>{n}</SelectItem>)}
     </Select>}
     <Button variant="primary" className="h-11" onClick={onDone}>Done</Button>
   </div>;
