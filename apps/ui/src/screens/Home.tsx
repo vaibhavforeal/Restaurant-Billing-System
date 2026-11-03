@@ -55,7 +55,7 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
     {!financial && error && <p className="alert" role="status">{error}</p>}
     {financial && modules.isActive("dashboard") && (modules.isActive("dynamicReports") && userCan(user, "reports.dashboard") && !unavailable
       ? <Suspense fallback={<p role="status">Loading dashboard…</p>}><DynamicDashboard onUnavailable={() => setUnavailable(true)} /></Suspense>
-      : <SalesDashboard onNavigate={onNavigate} canManage={userCan(user, "integrations.configure")} />)}
+      : <SalesDashboard />)}
     {!financial && <div className="stat-grid" aria-label="Live service counts">
       {[
         { label: "Open orders", value: stats?.orders },
