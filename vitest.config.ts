@@ -12,6 +12,7 @@ export default defineConfig({
     alias: [
       // Subpath imports resolve through each package's exports map, so folder subpaths work too.
       ...Object.entries({ ...workspaceExports(root, "domain"), ...workspaceExports(root, "core") }).filter(([spec]) => spec.split("/").length > 2).map(([find, replacement]) => ({ find, replacement })),
+      { find: /^@board\//, replacement: fileURLToPath(new URL("./apps/ui/src/dynamic-dashboard/boardui/", import.meta.url)) },
       { find: "@masalapos/domain", replacement: pkg("domain") },
       { find: "@masalapos/core", replacement: pkg("core") },
       { find: "@masalapos/license-issuer", replacement: pkg("license-issuer") },

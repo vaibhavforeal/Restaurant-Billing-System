@@ -10,6 +10,7 @@ import { useLiveRefresh } from "../live-refresh";
 import { useAction } from "../use-action";
 import { useMediaQuery } from "../use-media-query";
 import { useNow } from "../useDashboard";
+import { BoardRoot } from "./BoardRoot";
 import { DashboardGrid } from "./DashboardGrid";
 import { WidgetBody } from "./widgets";
 import { WidgetCatalogue } from "./WidgetCatalogue";
@@ -39,6 +40,10 @@ function rangeText(data: DashboardData | null, key: string): string {
 
 /** The customisable Home dashboard. Calls `onUnavailable` when the server says the feature is off or not allowed. */
 export function DynamicDashboard({ onUnavailable }: { onUnavailable(): void }) {
+  return <BoardRoot><DashboardScreen onUnavailable={onUnavailable} /></BoardRoot>;
+}
+
+function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
   const can = useCan();
   const modules = useModules();
   const narrow = !useMediaQuery("(min-width: 720px)");

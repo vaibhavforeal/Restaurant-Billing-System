@@ -1,0 +1,16 @@
+{
+  "paths": {
+    "components": "src/dynamic-dashboard/boardui/components",
+    "utils": "src/dynamic-dashboard/boardui/utils",
+    "hooks": "src/dynamic-dashboard/boardui/hooks",
+    "styles": "src/dynamic-dashboard/boardui/styles",
+    "lib": "src/dynamic-dashboard/boardui/lib"
+  },
+  "aliases": {
+    "components": "@board/components",
+    "utils": "@board/utils",
+    "hooks": "@board/hooks",
+    "styles": "@board/styles",
+    "lib": "@board/lib"
+  }
+}

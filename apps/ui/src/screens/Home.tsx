@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import type { Page } from "../NavBar";
 import { apiFetch, session, type User } from "../api";
 import { Icon, type IconName } from "../Icon";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { SalesDashboard } from "../SalesDashboard";
-import { DynamicDashboard } from "../dynamic-dashboard/DynamicDashboard";
+// Loaded on demand so Tailwind, BoardUI and React Aria stay out of the main POS bundle.
+const DynamicDashboard = lazy(() => import("../dynamic-dashboard/DynamicDashboard").then((m) => ({ default: m.DynamicDashboard })));
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
 import { useModules } from "../modules";
@@ -52,7 +53,7 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
     </div>
     {!financial && error && <p className="alert" role="status">{error}</p>}
     {financial && modules.isActive("dashboard") && (modules.isActive("dynamicReports") && userCan(user, "reports.dashboard") && !unavailable
-      ? <DynamicDashboard onUnavailable={() => setUnavailable(true)} />
+      ? <Suspense fallback={<p role="status">Loading dashboard…</p>}><DynamicDashboard onUnavailable={() => setUnavailable(true)} /></Suspense>
       : <SalesDashboard onNavigate={onNavigate} canManage={userCan(user, "integrations.configure")} />)}
     {!financial && <div className="stat-grid" aria-label="Live service counts">
       {[
