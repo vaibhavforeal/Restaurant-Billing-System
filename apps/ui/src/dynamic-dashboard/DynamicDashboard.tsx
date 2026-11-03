@@ -142,8 +142,8 @@ function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
         const def = widgetDef(item.widget);
         const configurable = Object.values(def.options).some(Boolean);
         return <>
-          {configurable && <Button variant="ghost" size="small" className="h-11" aria-label={`${def.title} settings`} onClick={() => setSettingsKey(item.key)}>Settings</Button>}
-          <Button variant="ghost" size="small" className="h-11" aria-label={`Remove ${def.title}`} onClick={() => setDraft((d) => d && removeWidget(d, item.key))}>Remove</Button>
+          {configurable && <Button variant="secondary" size="small" className="h-11" aria-label={`${def.title} settings`} onClick={() => setSettingsKey(item.key)}>Settings</Button>}
+          <Button variant="secondary" size="small" className="h-11" aria-label={`Remove ${def.title}`} onClick={() => setDraft((d) => d && removeWidget(d, item.key))}>Remove</Button>
         </>;
       }}
     />
