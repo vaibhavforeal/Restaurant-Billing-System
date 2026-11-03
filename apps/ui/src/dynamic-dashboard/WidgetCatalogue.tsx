@@ -33,13 +33,14 @@ export function CatalogueList({ defs, onPick }: { defs: readonly WidgetDef[]; on
   </div>;
 }
 
-/** Side drawer on wide screens, bottom sheet on tablets. */
+/** Side drawer on wide screens, bottom sheet on tablets. Keyed by placement: switching it while open (rotating a tablet)
+ * would otherwise leave the old drawer stuck in its exit state with an invisible overlay over the page. */
 export function WidgetCatalogue({ open, onPick, onClose }: { open: boolean; onPick(widget: DashboardWidgetId): void; onClose(): void }) {
   const can = useCan();
   const modules = useModules();
   const wide = useMediaQuery("(min-width: 1024px)");
   const visible = DASHBOARD_WIDGETS.filter((def) => widgetVisible(def, can, modules.isActive));
-  return <Drawer isOpen={open} onOpenChange={(next) => { if (!next) onClose(); }} placement={wide ? "end" : "bottom"} size="md">
+  return <Drawer key={wide ? "end" : "bottom"} isOpen={open} onOpenChange={(next) => { if (!next) onClose(); }} placement={wide ? "end" : "bottom"} size="md">
     <DrawerHeader title="Add widget" description="Pick something to put on your dashboard." />
     <DrawerBody><CatalogueList defs={visible} onPick={onPick} /></DrawerBody>
   </Drawer>;

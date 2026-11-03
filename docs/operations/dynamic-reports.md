@@ -42,9 +42,14 @@ dashboard**. Captain/waiter and kitchen accounts are unchanged.
 
 ## Use
 
-- **Customise** (top right of Home) opens the editor. **+ Add widget** opens the
-  catalogue; **Settings** on a widget sets its period, comparison, order type or the
-  number of rows, where the widget has them; **Remove** takes it off.
+- **Customise** (top right of Home) opens the editor. **Add widget** opens the
+  catalogue in a drawer; **Settings** on a widget opens its options in a drawer, where
+  the widget has any (period, comparison, order type or number of rows); **Remove**
+  takes it off. Settings apply as you change them, so the widget behind the drawer
+  updates straight away; **Done** closes the drawer. The drawers slide in from the
+  right on screens 1024 px wide or more and rise from the bottom on tablets.
+- The dashboard follows the POS light/dark switch (the toggle in the left bar). It has no
+  theme switch of its own.
 - Drag a widget by its header to move it freely, and drag its corner to resize it.
   Movement and resizing align to nearby widget edges within 12px, keeping a 12px
   gap between adjacent cards. Hold Alt while dragging or resizing to bypass
@@ -56,7 +61,7 @@ dashboard**. Captain/waiter and kitchen accounts are unchanged.
 - **Save** stores the layout. **Cancel** drops the changes. **Reset to default**
   asks first, then replaces the saved layout with the default one.
 - A layout holds at most 30 widgets. Widgets hidden from the person (see below) count
-  towards the 30. When it is full, **+ Add widget** is disabled and a save that goes
+  towards the 30. When it is full, **Add widget** is disabled and a save that goes
   over the limit says "Your dashboard is full".
 - Each widget header shows its period, the dates it covers and its order-type filter
   where supported; status widgets show "Live". The footer says when the figures were last updated.
@@ -74,6 +79,9 @@ The figures refresh about half a second after an order, kitchen ticket, QR reque
 stock level or table changes, after the connection returns, and every 60 seconds. The
 saved layout is read again when the person's access changes, after a reconnect and
 once an hour, but not while they are editing.
+
+Edit-mode controls (buttons, drag handles and the resize corner) are at least 44 px
+so they can be used by touch.
 
 ### Narrow screens
 

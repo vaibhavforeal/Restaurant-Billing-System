@@ -59,7 +59,7 @@ export function WidgetSettings({ item, onChange, onClose }: { item: DashboardIte
   const modules = useModules();
   const wide = useMediaQuery("(min-width: 1024px)");
   const def = item ? widgetDef(item.widget) : null;
-  return <Drawer isOpen={!!item} onOpenChange={(next) => { if (!next) onClose(); }} placement={wide ? "end" : "bottom"} size="sm">
+  return <Drawer key={wide ? "end" : "bottom"} isOpen={!!item} onOpenChange={(next) => { if (!next) onClose(); }} placement={wide ? "end" : "bottom"} size="sm">
     <DrawerHeader title={def ? `${def.title} settings` : "Widget settings"} />
     <DrawerBody>
       {item && <WidgetSettingsForm item={item} zomatoActive={modules.isActive("zomato")} onChange={onChange} onDone={onClose} />}
