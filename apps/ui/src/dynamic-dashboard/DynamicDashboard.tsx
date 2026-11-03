@@ -110,8 +110,8 @@ function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
       ].filter(Boolean).join(" · ")
       : "Live";
     return <header className="dd-widget-header">
-      {!editingGrid && <h3>{def.title}</h3>}
-      <span className="dd-widget-meta">{meta}</span>
+      {!editingGrid && <h3 className="text-headline-medium text-text-primary">{def.title}</h3>}
+      <span className="dd-widget-meta text-caption-1-regular text-text-secondary">{meta}</span>
     </header>;
   };
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { GRID_COLUMNS, moveItem, resizeItem, stackOrder, widgetDef, type DashboardItemValue, type GridRect } from "@masalapos/domain/dashboard";
 import { EDIT_ROW_HEIGHT_PX, GAP_PX, ROW_HEIGHT_PX, alignRect, cellFromPointer, keyboardChange } from "./grid-pointer";
+import { cx } from "@board/utils/cx";
 import "./dynamic-dashboard.css";
 
 interface Props {
@@ -12,6 +13,9 @@ interface Props {
   /** Settings and remove buttons. Shown only while editing. */
   renderTools(item: DashboardItemValue): ReactNode;
 }
+
+/** The BoardUI card surface every widget sits on. */
+const CARD = "dd-item bg-background-primary-default border border-border-button-default rounded-2xl text-text-primary shadow-xs";
 
 type Mode = "move" | "resize";
 
@@ -80,7 +84,7 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
     return (
       <div className="dd-stack">
         {stackOrder(items).map((item) => (
-          <div key={item.key} className="dd-item" style={{ minHeight: item.h * ROW_HEIGHT_PX + (item.h - 1) * GAP_PX }}>
+          <div key={item.key} className={CARD} style={{ minHeight: item.h * ROW_HEIGHT_PX + (item.h - 1) * GAP_PX }}>
             <div className="dd-body">{renderItem(item)}</div>
           </div>
         ))}
@@ -154,7 +158,7 @@ export function DashboardGrid({ items, editing, narrow, onChange, renderItem, re
         return (
           <div
             key={item.key}
-            className={`dd-item${editing ? " dd-item-editing" : ""}${active ? " dd-item-active" : ""}`}
+            className={cx(CARD, editing && "dd-item-editing", active && "dd-item-active")}
             style={placement(shown.find((shownItem) => shownItem.key === item.key) ?? item, rowHeight)}
             tabIndex={editing ? 0 : undefined}
             aria-label={editing ? `${def.title}. Arrow keys move; Shift plus arrows resize; Alt makes fine adjustments.` : undefined}

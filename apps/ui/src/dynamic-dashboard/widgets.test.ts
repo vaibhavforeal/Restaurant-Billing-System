@@ -46,3 +46,35 @@ describe("widget renderers", () => {
     expect(html).toContain("-₹15.00");
   });
 });
+
+describe("BoardUI widget styling", () => {
+  it("shows the change as a coloured chip with screen-reader direction", () => {
+    const up = render(kpiDef(), kpi(15000, 10000));
+    expect(up).toContain("bg-status-lime-background");
+    expect(up).toContain('aria-hidden="true">▲');
+    expect(up).toContain("up </span>vs");
+    const down = render(kpiDef(), kpi(10000, 15000));
+    expect(down).toContain("bg-status-rose-background");
+    expect(down).toContain('aria-hidden="true">▼');
+    expect(down).toContain("down </span>vs");
+  });
+
+  it("shows no-comparison and unchanged as neutral chips", () => {
+    expect(render(kpiDef(), kpi(15000, 15000))).toContain("bg-background-tertiary-default");
+    expect(render(kpiDef(), kpi(15000, 0))).toContain("bg-background-tertiary-default");
+  });
+
+  it("shows a BoardUI skeleton while loading, still announced as busy", () => {
+    const html = render(kpiDef(), undefined);
+    expect(html).toContain("bui-skeleton");
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain(`aria-label="Loading ${kpiDef().title}"`);
+  });
+
+  it("renders the retry action as a BoardUI secondary button", () => {
+    const html = render(kpiDef(), { ok: false, error: "Could not load" });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("border-border-button-default");
+    expect(html).toContain(">Retry<");
+  });
+});
