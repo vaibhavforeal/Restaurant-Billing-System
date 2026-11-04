@@ -20,6 +20,9 @@ export const saveOrderCopy = (userId: string, order: Order) => write(`${userId}.
 export const readOrderCopy = (userId: string, orderId: string) => read<{ order: Order; at: number }>(`${userId}.order.${orderId}`);
 export const saveCatalogCopy = (userId: string, catalog: Omit<CatalogCache, "at">) => write(`${userId}.catalog`, { ...catalog, at: Date.now() });
 export const readCatalogCopy = (userId: string) => read<CatalogCache>(`${userId}.catalog`);
+/** The ordering options (Hold orders on or off) last read from the hub. */
+export const saveOrderSettingsCopy = (userId: string, settings: { holdOrders: boolean }) => write(`${userId}.order-settings`, settings);
+export const readOrderSettingsCopy = (userId: string) => read<{ holdOrders: boolean }>(`${userId}.order-settings`);
 export const saveTablesCopy = (userId: string, data: { tables: TableInfo[]; orders: Order[] }) => write(`${userId}.tables`, { ...data, at: Date.now() });
 export const readTablesCopy = (userId: string) => read<{ tables: TableInfo[]; orders: Order[]; at: number }>(`${userId}.tables`);
 
