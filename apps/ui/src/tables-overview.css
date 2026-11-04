@@ -76,6 +76,14 @@ html[data-theme] .tables-screen.table-overview {
   .takeaway-info small { font-size: 12px; margin: 0; }
   .takeaway-info strong { display: block; margin: 2px 0 0; font-size: 16px; line-height: 1.3; text-align: left; }
   .tables-pane-switch { margin: 0; }
+  .tables-reservations .parcel-list > button { grid-template-columns: 68px minmax(0, 1fr) 16px; min-height: 0; padding: 10px 8px; }
+  .tables-reservations .reservation-panel-time { display: grid; gap: 2px; white-space: nowrap; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tables-reservations .reservation-panel-time small { font-size: 11px; margin: 0; font-weight: 400; }
+  .tables-reservations .reservation-slot { padding: 12px 16px 10px; }
+  .tables-reservations .reservation-slot h4 { font-size: 13px; }
+  .tables-reservations .reservation-slot .parcel-list { padding: 0; }
+  .tables-reservations .reservation-panel-empty { font-size: 13px; }
+  .tables-reservations .reservation-view-all { margin: 10px 16px 14px; min-height: 40px; }
 }
 
 /* The table editor now has three inputs and its Add action. */
@@ -114,7 +122,8 @@ html[data-theme] .tables-screen.table-overview {
     .tables-layout.show-tables .tables-parcels, .tables-layout.show-parcels .table-list { display: none; }
     .tables-side { flex: 1; align-self: stretch; }
     .tables-layout.show-tables .tables-side, .tables-layout.show-parcels .tables-zomato, .tables-layout.show-zomato .table-list, .tables-layout.show-zomato .tables-parcels:not(.tables-zomato) { display: none; }
-    &:has(.tables-layout.show-parcels, .tables-layout.show-zomato) .tables-filter-bar { display: none; }
+    .tables-layout.show-parcels .tables-reservations, .tables-layout.show-reservations .table-list, .tables-layout.show-reservations .tables-parcels:not(.tables-reservations) { display: none; }
+    &:has(.tables-layout.show-parcels, .tables-layout.show-zomato, .tables-layout.show-reservations) .tables-filter-bar { display: none; }
     .table-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tables-parcels { align-self: stretch; }
   }
