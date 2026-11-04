@@ -86,11 +86,12 @@
     check(navLabels.includes('marketplace') && !navLabels.includes('zomato'), 'Nav shows Marketplace and hides Zomato while Zomato is off');
 
     // Layout at 1280x720: no horizontal overflow; the page itself never scrolls; the key panels sit above the fold.
-    // The workspace scrolls internally to reach Payment collections; the overflow is recorded rather than hidden.
+    // Payment collections precedes Alerts; only the alert body may scroll.
     const workspace = document.querySelector('.workspace');
     check(document.documentElement.scrollWidth <= innerWidth && workspace.scrollWidth <= workspace.clientWidth && document.documentElement.scrollHeight <= innerHeight, 'No horizontal overflow and the page itself does not scroll');
-    check(['.dash-channels', '.dash-slots', '.dash-alerts', '.dash-stats'].every(sel => document.querySelector(sel).getBoundingClientRect().bottom <= innerHeight), 'Channel cards, slot chart, Alerts and Order Statistics are fully visible at 1280x720');
+    check(['.dash-channels', '.dash-slots', '.dash-alerts', '.dash-stats', '[aria-label="Collections by payment method"]'].every(sel => document.querySelector(sel).getBoundingClientRect().bottom <= workspace.getBoundingClientRect().bottom), 'All dashboard panels are fully visible at 1280x720');
     const workspaceOverflowPx = workspace.scrollHeight - workspace.clientHeight;
+    check(workspaceOverflowPx === 0 && alerts.getBoundingClientRect().top >= document.querySelector('[aria-label="Collections by payment method"]').getBoundingClientRect().bottom, 'Alerts sit below Payment collections without workspace scrolling');
 
     // Keyboard on the slot chart
     const chart = document.querySelector('.dash-slot-chart'); chart.focus();

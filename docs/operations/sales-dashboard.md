@@ -2,8 +2,8 @@
 
 Admins and cashiers see a sales dashboard on **Home**: a status strip, three
 channel cards (Total Sales, Dine In, Takeaway), a sales chart by four-hour slot,
-and a right-hand column with **Alerts**, **Order Statistics** and the payment
-breakdown. It shows one day at a time, today by default. Captain/waiter users
+and a right-hand column with **Order Statistics**, **Payment collections** and
+**Alerts**, in that order. It shows one day at a time, today by default. Captain/waiter users
 keep their table and service views; waiter and kitchen accounts cannot read
 financial reports. The dashboard reuses existing read-only reports and adds no
 dependencies or database tables. (The Marketplace that controls the Zomato part of
@@ -11,9 +11,9 @@ Alerts is described in [Marketplace](marketplace.md).)
 
 ## Fits the window
 
-On a window at least 1101 px wide and 640 px tall, Home fills the window with nothing
-to scroll: the sales chart stretches to the room left, and the Alerts list scrolls inside
-its own panel when there are more orders than rows. On a shorter window the Order
+On a window at least 900 px wide and 480 px tall, Home fills the window without page
+or workspace scrolling: the sales chart stretches to the room left, and the Alerts content scrolls inside
+its own panel when needed, keeping its heading visible. On a shorter window the Order
 Statistics captions and the payment footnote are hidden to leave Alerts more rows.
 Narrower or shorter windows, tablets in portrait and phones use the stacked layout and scroll as before.
 
@@ -34,7 +34,7 @@ Narrower or shorter windows, tablets in portrait and phones use the stacked layo
   no sales shows a zero axis and the note "No sales on this day".
 - **Alerts.** A red badge counts the rows. With Zomato turned on in the Marketplace,
   each open Zomato order is a row (channel tag, order number, status, payment mode,
-  amount, age), oldest first; selecting a row opens the Zomato screen. Swiggy shows
+  amount, age), oldest first; selecting a row opens Tables. Swiggy shows
   "Swiggy not connected". With Zomato off the panel says "Turn on Zomato or Swiggy in
   the Marketplace" (admins also get an **Open Marketplace** link; cashiers see "Ask an
   admin to turn on Zomato or Swiggy in the Marketplace."). Billed orders still
