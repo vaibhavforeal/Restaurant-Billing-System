@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true,
+      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true,
     });
 
     const put = await app.inject({
@@ -31,6 +31,30 @@ describe("settings", () => {
 
     const after = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
     expect(after.json().settings).toMatchObject({ gstin: "29ABCDE1234F1Z5", receiptFooter: "Thank you, visit again!" });
+  });
+
+  it("updates city, state, PIN code and phone, and keeps them when a PUT leaves them out", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const put = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token),
+      payload: { restaurantName: "Cafe", address: "FC Road", city: "Pune", stateCode: "27", pincode: "411004", phone: "020 2553 1234" } });
+    expect(put.statusCode, put.body).toBe(200);
+    expect(put.json().settings).toMatchObject({ address: "FC Road", city: "Pune", stateCode: "27", pincode: "411004", phone: "2025531234" });
+    const partial = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", address: "FC Road" } });
+    expect(partial.json().settings).toMatchObject({ city: "Pune", stateCode: "27", pincode: "411004", phone: "2025531234" });
+  });
+
+  it("refuses a malformed GSTIN, PIN code or phone, and a GSTIN from another state", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const put = (payload: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", ...payload } });
+    expect((await put({ gstin: "29ABC" })).statusCode).toBe(400);
+    expect((await put({ pincode: "0123" })).statusCode).toBe(400);
+    expect((await put({ phone: "123" })).statusCode).toBe(400);
+    expect((await put({ stateCode: "29", gstin: "27ABCDE1234F1Z5" })).statusCode).toBe(400);
+    // The state on file (Karnataka, from setup) applies when the PUT does not name one.
+    expect((await put({ gstin: "27ABCDE1234F1Z5" })).statusCode).toBe(400);
+    expect((await put({ gstin: "29ABCDE1234F1Z5" })).statusCode).toBe(200);
   });
 
   it("ignores the removed requireKitchenAcceptance field", async () => {

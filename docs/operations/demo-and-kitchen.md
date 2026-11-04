@@ -18,12 +18,16 @@ The sample restaurant includes 14 dishes, 8 tables, 5 stock ingredients,
 6 recipes, 8 paid bills, and 3 open orders with kitchen tickets. Thermal printer
 jobs are simulated in the demo server. The app displays a permanent Demo banner.
 
-| Role | Demo PIN |
-| --- | --- |
-| Admin | 1234 |
-| Cashier | 2345 |
-| Captain | 3456 |
-| Kitchen | 4567 |
+Everyone signs in with a username and password. Every demo account uses the
+password `demo1234`. The admin also has an approval PIN, typed at the counter to
+approve large discounts, voids, refunds and remote support.
+
+| Role | Username | Password |
+| --- | --- | --- |
+| Admin | `admin` | `demo1234` (approval PIN `1234`) |
+| Cashier | `cashier` | `demo1234` |
+| Captain | `captain` | `demo1234` |
+| Kitchen | `kitchen` | `demo1234` |
 
 Edits persist between sessions. For the next customer, use the desktop menu
 **Demo → Reset sample data**, or that option in the demo tray menu. Confirm the
@@ -40,8 +44,8 @@ selected by the demo launcher. Database archives remain available for inspection
 3. Enter the main PC's address. For a demo on this same PC, use
    **http://127.0.0.1:4110**. On another PC, use the main PC's LAN address,
    such as `http://192.168.1.20:4110` for Demo or port `4100` for the normal POS.
-4. Sign in with a **Kitchen** staff PIN created on the main POS. Use **4567**
-   with the sample demo restaurant.
+4. Sign in with a **Kitchen** staff username and password created on the main
+   POS. Use `kitchen` / `demo1234` with the sample demo restaurant.
 
 The address is saved in `%APPDATA%\masalapos-kitchen\connection.json` and is
 reused on launch. **Kitchen → Connect to a different POS** changes it. **F11**

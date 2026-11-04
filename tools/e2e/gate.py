@@ -27,9 +27,10 @@ def nav(page, tab):
     page.locator("nav").get_by_role("button", name=tab, exact=True).click()
 
 
-def pin_pad(page, pin):
-    for d in pin:
-        page.get_by_role("button", name=d, exact=True).click()
+def sign_in(page, username, password):
+    page.get_by_label("Username").fill(username)
+    page.get_by_label("Password", exact=True).fill(password)
+    page.get_by_role("button", name="Sign in").click()
 
 
 def main():
@@ -58,9 +59,18 @@ def main():
             step("Setup: first-run admin on scratch DB")
             page1.goto(BASE)
             expect(page1.get_by_role("heading", name="Set up MasalaPOS")).to_be_visible()
-            page1.get_by_placeholder("Restaurant name").fill("Testaurant")
+            page1.get_by_label("Restaurant name").fill("Testaurant")
+            page1.get_by_label("Street address").fill("12 MG Road")
+            page1.get_by_label("City").fill("Bengaluru")
+            page1.get_by_label("State").select_option(label="Karnataka")
+            page1.get_by_label("PIN code").fill("560001")
+            page1.get_by_label("Phone").fill("9845012345")
+            page1.get_by_role("button", name="Next").click()
             page1.get_by_placeholder("Your name (admin)").fill("Admin")
-            page1.get_by_placeholder("Admin PIN (4-6 digits)").fill("111111")
+            page1.get_by_label("Username").fill("admin")
+            page1.get_by_label("Password", exact=True).fill("admin-password")
+            page1.get_by_label("Confirm password").fill("admin-password")
+            page1.get_by_placeholder("Approval PIN (4-6 digits)").fill("111111")
             page1.get_by_role("button", name="Start").click()
             expect(page1.get_by_text("Signed in as")).to_be_visible()
 
@@ -99,10 +109,11 @@ def main():
             page1.get_by_role("button", name="Save", exact=True).click()
             expect(page1.get_by_text("Water Bottle")).to_be_visible()
 
-            step("Users: create waiter Wally (PIN 222222)")
+            step("Users: create waiter Wally (wally / wally-password)")
             nav(page1, "users")
             page1.get_by_placeholder("Name", exact=True).fill("Wally")
-            page1.get_by_placeholder("PIN (4-6 digits)", exact=True).fill("222222")
+            page1.get_by_label("Staff username").fill("wally")
+            page1.get_by_label("Staff password").fill("wally-password")
             page1.get_by_role("button", name="Add", exact=True).click()
             expect(page1.get_by_text("Wally")).to_be_visible()
 
@@ -161,12 +172,12 @@ def main():
             page_k.get_by_role("button", name="Done", exact=True).click()
             expect(page_k.get_by_text("No active KOTs.")).to_be_visible()
 
-            step("Waiter login (fresh context, PIN pad)")
+            step("Waiter login (fresh context, username and password)")
             ctx_w = browser.new_context()
             page_w = ctx_w.new_page()
             pages["waiter"] = page_w
             page_w.goto(BASE)
-            pin_pad(page_w, "222222")
+            sign_in(page_w, "wally", "wally-password")
             expect(page_w.get_by_text("Signed in as")).to_be_visible()
             expect(page_w.get_by_text("(waiter)")).to_be_visible()
 
@@ -241,7 +252,7 @@ def main():
                     "LAN origin unexpectedly has crypto.randomUUID - test would not "
                     "exercise the uuid.ts fallback"
                 )
-                pin_pad(page_l, "111111")
+                sign_in(page_l, "admin", "admin-password")
                 expect(page_l.get_by_text("Signed in as")).to_be_visible()
                 nav(page_l, "tables")
                 page_l.get_by_role("button", name="New parcel").click()

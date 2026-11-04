@@ -25,6 +25,16 @@ describe("receipts", () => {
       expect(text).toContain("PAID IN FULL"); expect(text).toContain("FSSAI: 12345678901234");
     }
   });
+  it("prints the restaurant's phone under the address, and nothing for bills issued without one", () => {
+    const sample = { ...bill, receipt: { ...bill.receipt, phone: "9845012345" } };
+    for (const width of [58, 80] as const) {
+      const text = renderBytes(receiptSlip(sample, width));
+      expect(text.indexOf("Ph: 9845012345")).toBeGreaterThan(text.indexOf("12 Market Road"));
+      expect(renderBytes(receiptSlip(bill, width))).not.toContain("Ph:");
+    }
+    expect(receiptHtml(sample)).toContain('<p class="phone">Ph: 9845012345</p>');
+    expect(receiptHtml(bill)).not.toContain('class="phone"');
+  });
   it("falls back to Classic for missing or unrecognized historic style values", () => {
     for (const receiptStyle of [undefined, 'unknown', '\" onload=alert(1)']) {
       const sample = { ...bill, receipt: { ...bill.receipt, receiptStyle } } as Bill;

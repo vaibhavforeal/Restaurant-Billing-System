@@ -5,7 +5,7 @@ import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
   type Bill, type LicenseClaims, type RecipeUpdateInput, type StockItem, type StockLink, type StockUnit, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
-import { SETUP } from "./test-helpers.js";
+import { SETUP, testLogin } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -97,9 +97,9 @@ async function fixture() {
     return { bill: issued.json().bill as Bill, payload };
   }
   async function cashier(): Promise<Headers> {
-    const created = await request("POST", "/api/users", { name: "Cashier", pin: "2345", role: "cashier" });
+    const created = await request("POST", "/api/users", { name: "Cashier", role: "cashier", ...testLogin({ name: "Cashier", pin: "2345" }) });
     expect(created.statusCode, created.body).toBe(201);
-    const login = await request("POST", "/api/login", { pin: "2345" });
+    const login = await request("POST", "/api/login", testLogin({ name: "Cashier", pin: "2345" }));
     expect(login.statusCode, login.body).toBe(200);
     return { authorization: `Bearer ${login.json().token}`, "x-masalapos-device": device };
   }

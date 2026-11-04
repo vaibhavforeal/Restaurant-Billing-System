@@ -23,7 +23,7 @@
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };
   const registerOther = async (credential, name) => {
-    const login = await api('/login', 'POST', { pin: '1234' }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
+    const login = await api('/login', 'POST', { username: 'admin', password: 'admin-password' }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
     const as = { authorization: 'Bearer ' + login.token, 'x-masalapos-device': credential, 'content-type': 'application/json' };
     await api('/license/devices', 'POST', { name }, as); return as;
   };
@@ -71,8 +71,8 @@
     await set(input('Device name'), 'Main counter'); await click('Register this device');
     await wait(() => document.body.innerText.includes('Dashboard'));
     check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
-    await api('/users', 'POST', { name: 'QA Cashier', pin: '2468', role: 'cashier' });
-    const cashier = await api('/login', 'POST', { pin: '2468' }, { 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' });
+    await api('/users', 'POST', { name: 'QA Cashier', username: 'qacashier', password: 'password-2468', role: 'cashier' });
+    const cashier = await api('/login', 'POST', { username: 'qacashier', password: 'password-2468' }, { 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' });
     const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' };
     const codes = JSON.stringify({ customerId: fixtures.customerCode, orderId: fixtures.orderCode });
     check((await originalFetch('/api/license/enroll', { method: 'POST', headers: asCashier, body: codes })).status === 403

@@ -12,7 +12,7 @@ app.setNotFoundHandler((req, reply) => req.url.startsWith("/api/") ? reply.statu
 app.get("/__qa/prints", { preHandler: app.requirePermission("printers.manage") }, async () => ({
   prints: fake.sent.map(entry => ({ connection: entry.target.connection, hex: entry.bytes.toString("hex"), text: entry.bytes.toString() })),
 }));
-const setup = await app.inject({ method: "POST", url: "/api/setup", payload: { restaurantName: "Printer QA Cafe", adminName: "Printer Admin", pin: "1234" } });
+const setup = await app.inject({ method: "POST", url: "/api/setup", payload: { restaurantName: "Printer QA Cafe", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Printer Admin", username: "admin", password: "admin-password", pin: "1234" } });
 const headers = { authorization: `Bearer ${setup.json().token}` };
 const create = await app.inject({ method: "POST", url: "/api/printers", headers,
   payload: { name: "Counter thermal", kind: "network", connection: "127.0.0.1:9100", paperWidth: 80 } });

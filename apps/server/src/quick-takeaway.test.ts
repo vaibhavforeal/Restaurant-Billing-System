@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
-import { SETUP } from "./test-helpers.js";
+import { SETUP , testLogin } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -86,8 +86,8 @@ async function fixture(gstMode: GstMode = "included") {
   }
   async function staff(role: "cashier" | "waiter" | "kitchen"): Promise<Headers> {
     const pin = { cashier: "2345", waiter: "3456", kitchen: "4567" }[role];
-    expect((await api("POST", "/api/users", { name: role, role, pin })).statusCode).toBe(201);
-    const loggedIn = await api("POST", "/api/login", { pin });
+    expect((await api("POST", "/api/users", { name: role, role, ...testLogin({ name: role, pin }) })).statusCode).toBe(201);
+    const loggedIn = await api("POST", "/api/login", testLogin({ name: role, pin }));
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
     return { authorization: `Bearer ${loggedIn.json().token}`, "x-masalapos-device": device };
   }

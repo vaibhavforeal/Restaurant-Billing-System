@@ -5,6 +5,8 @@ import { holdOrders } from "./hold-orders.js";
 import { popularItems } from "./popular-items.js";
 import { orderedTogether } from "./ordered-together.js";
 import { popularByTime } from "./popular-by-time.js";
+import { restaurantProfile } from "./restaurant-profile.js";
+import { passwordLogin } from "./password-login.js";
 
-/** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 49. */
-export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime];
+/** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 51. */
+export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin];

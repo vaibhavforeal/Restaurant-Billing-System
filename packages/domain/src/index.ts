@@ -24,7 +24,7 @@ export { migrate, type Migration } from "./migrate.js";
 export { MIGRATIONS } from "./migrations/index.js";
 export { roleFor, type RoleName } from "./roles.js";
 export { PERMISSION_AREAS, ADMIN_ONLY_PERMISSIONS, GRANTABLE_PERMISSIONS, KNOWN_PERMISSIONS, PermissionOverridesSchema, isGrantable, staffCan, effectivePermissions, roleDefaults, normaliseOverrides, type PermissionArea, type PermissionAction, type PermissionOverrides } from "./staff-permissions.js";
-export { LoginBody, SetupBody, PIN, type LoginInput, type SetupInput } from "./auth-schemas.js";
+export { LoginBody, Password, SetupBody, PIN, Username, type LoginInput, type SetupInput } from "./auth-schemas.js";
 export {
   GST_RATES,
   CategoryCreate, CategoryUpdate,
@@ -34,8 +34,10 @@ export {
   type ProductCreateInput, type ProductUpdateInput,
   type VariantCreateInput, type VariantUpdateInput,
 } from "./catalog-schemas.js";
-export { RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
+export { ADMIN_PIN_MESSAGE, RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
 export { SettingsUpdate, UpiId, type SettingsUpdateInput } from "./settings-schemas.js";
+export * from "./restaurant-profile.js";
+export * from "./restaurant-profile-schema.js";
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {

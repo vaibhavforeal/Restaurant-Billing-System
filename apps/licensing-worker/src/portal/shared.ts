@@ -36,18 +36,8 @@ export const roleCan = (role: Role, permission: Permission): boolean => (PERMISS
 /** Sales reps see only the customers, leads, orders and follow-ups assigned to them. */
 export const seesOnlyOwn = (role: Role): boolean => role === "sales";
 
-/** GST state and union-territory codes (the first two digits of a GSTIN). */
-export const GST_STATES: Record<string, string> = {
-  "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana", "07": "Delhi",
-  "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
-  "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha",
-  "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat", "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra",
-  "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry",
-  "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh",
-};
-
-/** A GSTIN's shape: state code, PAN, entity number, Z, check character. The check character itself is not verified. */
-export const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+/** GST state codes and the GSTIN shape are shared with the POS. */
+export { GST_STATES, GSTIN_PATTERN } from "@masalapos/domain/restaurant-profile";
 
 /** "Rs. 1,23,456.00": Indian digit grouping. Invoices use "Rs." because their PDF font has no rupee sign. */
 export function formatPaise(paise: number, prefix = "Rs. "): string {

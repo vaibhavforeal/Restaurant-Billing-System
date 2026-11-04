@@ -123,10 +123,10 @@
     window.confirm = () => false; const beforeClear = writes.length; await click('Save recipe'); check(writes.length === beforeClear && rows().length === 0, 'Declining clear keeps saved recipe and empty draft');
     window.confirm = () => true; await save(); check((await saved()).links.length === 0, 'Confirmed clear removes recipe without leaving editor');
     await add('Rice', 250); await add('Oil', 15); await add('Salt', 2); await save();
-    await click('Log out'); await fill(field('Staff PIN'), '2345'); await click('OK'); await wait(() => button('inventory'), 'cashier login');
+    await click('Log out'); await fill(field('Username'), 'cashier'); await fill(field('Password'), 'password-2345'); await click('Sign in'); await wait(() => button('inventory'), 'cashier login');
     await click('inventory'); await click('Recipes'); await choose(dish.name);
     check(quantity(1).disabled && !button('Add ingredient') && !button('Save recipe'), 'Cashier has read-only recipe access');
-    await click('Log out'); await fill(field('Staff PIN'), '1234'); await click('OK'); await wait(() => button('inventory'), 'admin login');
+    await click('Log out'); await fill(field('Username'), 'admin'); await fill(field('Password'), 'admin-password'); await click('Sign in'); await wait(() => button('inventory'), 'admin login');
     await click('inventory'); await click('Recipes'); await choose(dish.name);
     check(document.body.scrollWidth === window.innerWidth, 'Desktop recipe layout has no horizontal overflow');
     window.__m7Report = { status: 'passed', checks, writes, productName: dish.name }; return window.__m7Report;

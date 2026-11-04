@@ -8,11 +8,11 @@
   const tickets = () => [...document.querySelectorAll('.kitchen-ticket')];
   await wait(() => tickets().length);
   check(!document.querySelector('.sidebar') && !document.querySelector('[aria-label="Main navigation"]'), 'Dedicated kitchen has no POS navigation');
-  check((await originalFetch('/api/orders', { headers })).status === 403, 'Kitchen PIN cannot read billing orders');
+  check((await originalFetch('/api/orders', { headers })).status === 403, 'Kitchen sign-in cannot read billing orders');
   check(!localStorage.getItem('masalapos.token') && !!localStorage.getItem('masalapos.kitchen.token'), 'Kitchen sign-in uses its own session storage');
   check(tickets().every(ticket => ticket.querySelectorAll('button').length === 1 && ticket.querySelector('button').textContent.includes('Done')) && !document.body.textContent.includes('Accept order'), 'Tickets offer only Done, with no acceptance step');
   const device = localStorage.getItem('masalapos.device.v1');
-  const adminToken = (await (await originalFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin: '1234' }) })).json()).token;
+  const adminToken = (await (await originalFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ username: 'admin', password: 'demo1234' }) })).json()).token;
   const setKds = enabled => originalFetch('/api/integrations/kds', { method: 'PATCH', headers: { authorization: `Bearer ${adminToken}`, 'x-masalapos-device': device, 'content-type': 'application/json' }, body: JSON.stringify({ enabled }) });
   const before = tickets().length;
   let failRead = true, failWrite = false;

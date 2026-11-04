@@ -3,7 +3,7 @@
 This is the local enforcement layer for the cloud plus offline product.
 - Licences come from orders in the [MasalaPOS Portal](vendor-portal.md). A counter activates at setup with the **Customer ID** and **Order ID** from its setup card, and renewals arrive on their own. The portal also handles payments and GST invoices.
 - Restaurant-data synchronization is not built yet.
-- Do not expose the existing local POS API to the public internet: its PIN authentication and database are single-outlet.
+- Do not expose the existing local POS API to the public internet: its password sign-in and database are single-outlet.
 
 ## Plans
 
@@ -27,7 +27,7 @@ registration. These are browser registrations, not hardware fingerprints.
 
 - The cloud will own organizations, outlets, subscriptions, entitlement revisions,
   installation enrollment, and remote reporting. Owner login must use proper
-  cloud account authentication, not a public staff PIN endpoint.
+  cloud account authentication, not a public staff sign-in endpoint.
 - One restaurant hub owns live orders, bills, payments, stock movements, and
   printing whether the internet is available or not. Counters use that hub over
   LAN. Internet loss is supported; loss of the hub/LAN is a separate availability
@@ -60,7 +60,7 @@ both, but one build never replaces the other:
 | Installer folder | `dist/demo` | `dist/commercial` |
 | Default data | `%APPDATA%\masalapos-demo\data` | `%APPDATA%\masalapos-desktop\data` |
 | Default port | 4110 | 4100 |
-| First launch | Sample restaurant and demo PINs | Restaurant/admin setup, then license activation |
+| First launch | Sample restaurant and demo sign-ins | Restaurant/admin setup, then license activation |
 | Workspace launcher | `Start MasalaPOS Demo.cmd` | `Start MasalaPOS Customer.cmd` |
 
 Demo has a permanent banner, simulated thermal printing and a reset menu. The
@@ -187,7 +187,7 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 - **No internet? Set up now and activate later** finishes setup without a licence. Plan and devices then shows an **Activate this counter** form for the same two IDs.
 - After setup, an admin can move the counter to another order of the same customer (a trial becoming paid) from **Activation details > Use a different Order ID**. Plan and devices shows both IDs for support calls.
 - Renewals, module changes and staff adjustments made in the portal arrive with the hourly check, or at once with **Check for renewal**.
-- Setup activation is open only until the first user exists, and is throttled like wrong PINs.
+- Setup activation is open only until the first user exists, and is throttled like wrong passwords.
 
 **Without internet: a licence file.**
 
@@ -196,7 +196,7 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
    registered. **Activation details > Download activation request** creates a
    JSON file containing installation identity, current subscription scope and
    revision, and the public verification key's fingerprint. Give this file to
-   your provider. It contains no staff PINs, device credentials, or signed grant.
+   your provider. It contains no staff passwords or PINs, device credentials, or signed grant.
 2. Choose the provider's `.txt` or `.lic` file, or paste its signed text. Files
    are limited to 16 KB; UTF-8 files with a BOM and trailing newlines are supported.
 3. Select **Preview license**. The server checks the signature, installation,

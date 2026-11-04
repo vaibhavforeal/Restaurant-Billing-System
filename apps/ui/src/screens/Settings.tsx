@@ -1,7 +1,8 @@
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
+import { GST_STATES } from "@masalapos/domain/restaurant-profile";
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
@@ -18,15 +19,27 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled" | "stateCode">; label: string; inputMode?: "numeric" | "tel" }> = [
   { key: "restaurantName", label: "Restaurant name" },
-  { key: "address", label: "Address" },
+  { key: "address", label: "Street address" },
+  { key: "city", label: "City" },
+  { key: "pincode", label: "PIN code", inputMode: "numeric" },
+  { key: "phone", label: "Phone", inputMode: "tel" },
   { key: "gstin", label: "GSTIN" },
   { key: "fssai", label: "FSSAI licence no." },
   { key: "receiptFooter", label: "Receipt footer" },
 ];
+
+const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.localeCompare(b));
+
+/** City, state, PIN code and phone are required once set, so blanks are left out and the saved values stay. */
+function profileForSave(form: SettingsData) {
+  const body: Partial<SettingsData> = { ...form };
+  for (const key of ["city", "stateCode", "pincode", "phone"] as const) if (!form[key].trim()) delete body[key];
+  return body;
+}
 
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
@@ -131,7 +144,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
     setProfileStatus("");
     void run(async () => {
       try {
-        const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", { method: "PUT", body: JSON.stringify(form) });
+        const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", { method: "PUT", body: JSON.stringify(profileForSave(form)) });
         setForm(settings);
         setProfileStatus("saved");
       } catch (e) {
@@ -258,12 +271,19 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {active === "profile" && <div className="panel">
 
         <div className="settings-form">
-          {SETTINGS_FIELDS.map(({ key, label }) => (
-            <label key={key} style={{ display: "grid", gap: 4 }}>
+          {SETTINGS_FIELDS.map(({ key, label, inputMode }) => <Fragment key={key}>
+            <label style={{ display: "grid", gap: 4 }}>
               {label}
-              <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+              <input value={form[key]} inputMode={inputMode} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
             </label>
-          ))}
+            {key === "city" && <label style={{ display: "grid", gap: 4 }}>
+              State
+              <select value={form.stateCode} onChange={(e) => setForm({ ...form, stateCode: e.target.value })} disabled={busy}>
+                {!form.stateCode && <option value="">Choose the state</option>}
+                {STATE_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+              </select>
+            </label>}
+          </Fragment>)}
           <label style={{ display: "grid", gap: 4 }}>
             <span>Bill style <InfoTip id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</InfoTip></span>
             <select value={form.receiptStyle ?? "classic"} onChange={(e) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(e.target.value) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">

@@ -134,13 +134,14 @@ describe("billing and day-end", () => {
   });
   const putSettings = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", ...fields } });
   it("issues a tax invoice in included mode and keeps the receipt snapshot despite later settings and catalog edits", async () => {
-    const profile = { restaurantName: "Original", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", gstMode: "included", receiptStyle: "modern" };
+    const profile = { restaurantName: "Original", address: "12 MG Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", gstMode: "included", receiptStyle: "modern" };
     expect((await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: profile })).statusCode).toBe(200);
     const bill = await issue(await order());
     expect(bill.receipt.gstMode).toBe("included");
     expect(bill).toMatchObject({ subtotalPaise: 10500, totalPaise: 10500, cgstPaise: 250, sgstPaise: 250 });
     expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
     expect(bill.receipt.receiptStyle).toBe("modern");
+    expect(bill.receipt).toMatchObject({ address: "12 MG Road, Bengaluru, Karnataka - 560001", phone: "9845012345" });
     await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Changed", gstMode: "none", receiptStyle: "compact" } });
     app.db.prepare("UPDATE products SET name = 'Changed', price_paise = 20000 WHERE id = ?").run(productId);
     const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill;

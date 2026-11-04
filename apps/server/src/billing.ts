@@ -10,7 +10,7 @@ import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
 import { billUpiPayment, upiQrSvg } from "./print/upi.js";
-import { consumeStock, saveReportLines } from "@masalapos/domain";
+import { consumeStock, formatRestaurantAddress, saveReportLines } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
@@ -78,7 +78,10 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const limit = effectiveDiscountCap(db, actor);
   if (limit !== null && !actor.approvedBy && discount.manualPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%; an admin PIN is needed for more`, "discount_cap");
   const earned = customer && loyalty.enabled ? pointsEarned(totals.totalPaise, loyalty.pointsPer100, customer.tier?.earnMultiplier ?? 1) : 0;
-  const profile = db.prepare("SELECT restaurant_name AS restaurantName, address, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle">;
+  const { city, stateCode, pincode, ...profile } = db.prepare("SELECT restaurant_name AS restaurantName, address, city, state_code AS stateCode, pincode, phone, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as
+    Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle"> & { phone: string; city: string; stateCode: string; pincode: string };
+  // The bill keeps the address as one printed line, so later changes to the restaurant's details never alter an issued bill.
+  profile.address = formatRestaurantAddress({ address: profile.address, city, stateCode, pincode });
   const receipt: ReceiptSnapshot = { ...profile, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     ...(order.orderTypeName ? { orderTypeName: order.orderTypeName } : {}),
     ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),

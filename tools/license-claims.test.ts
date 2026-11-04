@@ -90,7 +90,7 @@ describe("with the real app", () => {
     const app = buildServer({ db, licensing: { publicKey: pair.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId } });
     try {
       const device = "b".repeat(64);
-      const setup = await app.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": device }, payload: { restaurantName: "Cafe", adminName: "Asha", pin: "1234" } });
+      const setup = await app.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": device }, payload: { restaurantName: "Cafe", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Asha", username: "admin", password: "admin-password", pin: "1234" } });
       const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
       const requestText = (await app.inject({ url: "/api/license/activation-request", headers })).body;
       const request = parseActivationRequest(requestText);

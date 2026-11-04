@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { RECEIPT_STYLES } from "./receipt-styles.js";
 import { DEFAULT_GST_RATES, GST_MODES } from "./gst.js";
+import { GSTIN_STATE_MESSAGE, gstinMatchesState } from "./restaurant-profile.js";
+import { Fssai, Gstin, Phone, Pincode, StateCode } from "./restaurant-profile-schema.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
 export const UpiId = z.string().trim().max(255).refine(
@@ -18,8 +20,12 @@ export const SettingsUpdate = z.object({
   upiId: UpiId.optional(),
   restaurantName: z.string().trim().min(1),
   address: z.string().trim().max(500).default(""),
-  gstin: z.string().trim().max(15).default(""),
-  fssai: z.string().trim().max(14).default(""),
+  city: z.string().trim().min(1, "Enter the city").max(80).optional(),
+  stateCode: StateCode.optional(),
+  pincode: Pincode.optional(),
+  phone: Phone.optional(),
+  gstin: Gstin.default(""),
+  fssai: Fssai.default(""),
   receiptFooter: z.string().trim().max(500).default(""),
   /** Whether a KOT edit prints a slip to the kitchen: staff choose ('ask'), or always / never. */
   kotEditPrint: z.enum(["ask", "always", "never"]).optional(),
@@ -31,5 +37,7 @@ export const SettingsUpdate = z.object({
   popularByTimeEnabled: z.boolean().optional(),
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: z.boolean().optional(),
+}).superRefine((s, ctx) => {
+  if (s.stateCode !== undefined && !gstinMatchesState(s.gstin, s.stateCode)) ctx.addIssue({ code: "custom", path: ["gstin"], message: GSTIN_STATE_MESSAGE });
 });
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdate>;

@@ -21,6 +21,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
   line(r.restaurantName);
   pos.size(1, 1).bold(false);
   if (r.address) line(r.address);
+  if (r.phone) line(`Ph: ${r.phone}`);
   if (r.gstin) line(`GSTIN: ${r.gstin}`);
   if (r.fssai) line(`FSSAI: ${r.fssai}`);
   pos.hr(width).bold(true);
@@ -81,7 +82,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   @page{@bottom-left{content:"${label}";font:9px Arial,sans-serif;color:#71717a}}
   </style></head><body><main class="bill" aria-label="Credit note">
   <header class="bill-header"><div><h1>${e(r.restaurantName)}</h1>
-    ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}
+    ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}${r.phone ? `<p class="phone">Ph: ${e(r.phone)}</p>` : ""}
     <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
   </div><div class="bill-identity"><p class="eyebrow">Credit note</p><p class="bill-number">${label}</p><span class="status">${unpaidVoid ? "BILL VOIDED" : note.kind === "void" ? "VOID" : "REFUND"}</span></div></header>
   <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(note.createdAt))}</dd></div><div><dt>Against bill</dt><dd>Bill #${bill.billNo}</dd></div>
