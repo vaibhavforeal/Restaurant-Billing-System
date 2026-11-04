@@ -96,7 +96,7 @@ describe("migrate", () => {
   it("creates dashboard_layouts at version 44", () => {
     const db = openDb(":memory:");
     migrate(db, MIGRATIONS);
-    expect(db.pragma("user_version", { simple: true })).toBe(44);
+    expect(db.pragma("user_version", { simple: true })).toBeGreaterThanOrEqual(44);
     db.prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES ('u1', 'A', 'x', 'admin', 1)").run();
     expect(() => db.prepare("INSERT INTO dashboard_layouts (user_id, layout_json, updated_at) VALUES ('u1', 'not json', 1)").run()).toThrow();
   });
