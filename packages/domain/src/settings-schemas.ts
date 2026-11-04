@@ -23,5 +23,7 @@ export const SettingsUpdate = z.object({
   receiptFooter: z.string().trim().max(500).default(""),
   /** Whether a KOT edit prints a slip to the kitchen: staff choose ('ask'), or always / never. */
   kotEditPrint: z.enum(["ask", "always", "never"]).optional(),
+  /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
+  holdOrdersEnabled: z.boolean().optional(),
 });
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdate>;

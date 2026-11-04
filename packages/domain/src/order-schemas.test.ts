@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TableCreate, TableUpdate,
-  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, ZOMATO_ORDER_ID,
+  OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, ZOMATO_ORDER_ID, SettingsUpdate,
 } from "./index.js";
 
 describe("table schemas", () => {
@@ -117,5 +117,19 @@ describe("zomato orders", () => {
   });
   it("exports the id schema", () => {
     expect(ZOMATO_ORDER_ID.parse(" 77 ")).toBe("77");
+  });
+});
+
+describe("hold order schemas", () => {
+  it("OrderItemsAdd and OrderItemUpdate accept held", () => {
+    expect(OrderItemsAdd.parse({ items: [{ productId: "p", qty: 1 }] }).items[0]?.held).toBeUndefined();
+    expect(OrderItemsAdd.parse({ items: [{ productId: "p", qty: 1, held: true }] }).items[0]?.held).toBe(true);
+    expect(OrderItemUpdate.parse({ held: true })).toEqual({ held: true });
+    expect(() => OrderItemUpdate.parse({ held: "yes" })).toThrow();
+  });
+
+  it("SettingsUpdate accepts holdOrdersEnabled", () => {
+    expect(SettingsUpdate.parse({ restaurantName: "X", holdOrdersEnabled: false }).holdOrdersEnabled).toBe(false);
+    expect(SettingsUpdate.parse({ restaurantName: "X" }).holdOrdersEnabled).toBeUndefined();
   });
 });
