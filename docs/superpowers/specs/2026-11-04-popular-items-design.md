@@ -99,3 +99,19 @@ Each one is a new field on `/api/menu/insights` (and on the guest menu where it 
 5. **Prep forecast:** expected quantity per item for tomorrow, from a day-of-week moving average, as a kitchen prep list.
 6. **Unusual activity alerts:** spikes in cancellations, voids or discounts by a staff member.
 7. **Optional cloud AI add-on (later, needs internet and an API key):** ask questions about sales in plain English, an end-of-day summary written for the owner, and menu descriptions written for the QR menu. It would be built as an add-on module like Dynamic Reports, so offline restaurants are not affected.
+
+## Built next: Ordered together (roadmap item 2)
+Approved in chat on 2026-11-04.
+- **Ranking:** `orderedTogether(db, now)` in `packages/domain/src/menu-insights.ts`.
+  - For each dish, it lists up to 5 dishes from **other categories** that share at least **3 bills** in the last 30 days. Each bill counts once per pair, and items inside combos don't count.
+  - Partners must be active, in stock, in an active category, and not combos.
+  - A partner with sizes is suggested in its most-ordered active size.
+  - Credit notes are ignored: a refunded dish was still ordered with the rest.
+- **Server:** `/api/menu/insights` and the guest menu add `pairs` (kept out of `menuVersion`). Setting `ordered_together_enabled` is migration 47, on by default; "Suggest dishes ordered together" in Settings.
+- **UI:** `apps/ui/src/ordered-together.ts`, function `suggestTogether`.
+  - It shows up to 3 dishes, at most one per category.
+  - It skips dishes already in the cart and categories already in the cart.
+  - Ranking: suggested by more of the cart first, then the better-ranked dish, then partners of the dish added last.
+  - Staff screen: a "Goes well with this order" row at the top of the cart footer (one-tap Add).
+  - Guest screen: a "Goes well with your order" list above the request's subtotal.
+- **E2E:** `tools/e2e/ordered-together.js` on the same fixture as the popular-items check.

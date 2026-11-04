@@ -107,3 +107,12 @@ html[data-theme] .order-screen .status.held { color: var(--pos-warning); backgro
 html[data-theme] .order-screen .fire-held { min-height: var(--control-touch); font-weight: 600; color: var(--pos-accent); }
 html[data-theme] .captain-shell .draft-row .cart-hold { grid-row: 3; grid-column: 1; justify-self: start; min-height: var(--captain-touch); min-width: var(--captain-touch); }
 html[data-theme] .captain-shell .captain-send .fire-held { margin-top: var(--space-2); width: 100%; min-height: var(--captain-touch); }
+
+/* "Goes well with this order": dishes often on the same bill (Settings: Suggest dishes ordered together). */
+.order-screen .cart-suggestions { padding: 8px 10px 4px; border-top: 1px solid var(--line); }
+.order-screen .cart-suggestions > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.order-screen .cart-suggestions > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.order-screen .cart-suggestions button { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 9px; border: 1px solid transparent; border-radius: 6px;
+  background: var(--pos-accent-soft); color: var(--pos-accent); font-size: 12px; font-weight: 600; }
+.order-screen .cart-suggestions button:hover:not(:disabled) { border-color: var(--pos-accent); }
+.order-screen .cart-suggestions .pos-money { margin-left: 2px; color: var(--ink); font-weight: 500; }

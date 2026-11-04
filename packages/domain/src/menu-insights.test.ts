@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDb, type Database } from "./db.js";
 import { migrate } from "./migrate.js";
 import { MIGRATIONS } from "./migrations/index.js";
-import { popularProductIds } from "./menu-insights.js";
+import { orderedTogether, popularProductIds } from "./menu-insights.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 10, 4, 12);
 
-describe("popularProductIds", () => {
+describe("menu insights", () => {
   let db: Database;
   let seq = 0;
 
@@ -27,9 +27,12 @@ describe("popularProductIds", () => {
   function category(id: string, active = 1) {
     db.prepare("INSERT INTO categories (id, name, sort_order, is_active) VALUES (?, ?, 0, ?)").run(id, id, active);
   }
-  function product(id: string, categoryId: string, opts: { active?: number; soldOut?: number } = {}) {
-    db.prepare("INSERT INTO products (id, category_id, name, price_paise, is_active, is_sold_out, created_at) VALUES (?, ?, ?, 10000, ?, ?, 0)")
-      .run(id, categoryId, id, opts.active ?? 1, opts.soldOut ?? 0);
+  function product(id: string, categoryId: string, opts: { active?: number; soldOut?: number; kind?: "item" | "combo" } = {}) {
+    db.prepare("INSERT INTO products (id, category_id, name, price_paise, is_active, is_sold_out, kind, created_at) VALUES (?, ?, ?, 10000, ?, ?, ?, 0)")
+      .run(id, categoryId, id, opts.active ?? 1, opts.soldOut ?? 0, opts.kind ?? "item");
+  }
+  function variant(id: string, productId: string, active = 1) {
+    db.prepare("INSERT INTO variants (id, product_id, name, price_paise, is_active) VALUES (?, ?, ?, 10000, ?)").run(id, productId, id, active);
   }
   /** One bill with the given lines: [productId, qty, totalPaise?, parentOrderItemId?, variantId?]. Returns the bill id and its order item ids. */
   function bill(at: number, lines: Array<[string, number, (number | undefined)?, (string | undefined)?, (string | undefined)?]>) {
@@ -121,5 +124,59 @@ describe("popularProductIds", () => {
     bill(NOW - 10 * DAY, [["paneer", 5], ["samosa", 2]]);
     expect(popularProductIds(db, NOW, { days: 7 })).toEqual([]);
     expect(popularProductIds(db, NOW, { perCategory: 2, minQty: 2 })).toEqual(["paneer", "samosa"]);
+  });
+
+  describe("orderedTogether", () => {
+    const together = () => orderedTogether(db, NOW);
+    /** `times` bills, each holding these products once. */
+    const bills = (times: number, products: string[], at = NOW - DAY) => { for (let n = 0; n < times; n++) bill(at, products.map((id) => [id, 1])); };
+
+    it("pairs dishes from other categories that share at least 3 bills, most shared first", () => {
+      bills(4, ["biryani", "lassi"]);
+      bills(3, ["biryani", "samosa"]);
+      bills(2, ["biryani", "paneer"]);
+      expect(together().biryani).toEqual([{ productId: "lassi", variantId: null }, { productId: "samosa", variantId: null }]);
+      expect(together().lassi).toEqual([{ productId: "biryani", variantId: null }]);
+      expect(together().paneer).toBeUndefined();
+    });
+
+    it("never pairs dishes from the same category", () => {
+      bills(5, ["biryani", "dal"]);
+      expect(together()).toEqual({});
+    });
+
+    it("skips combos, sold-out and inactive partners, and partners in inactive categories", () => {
+      product("thali", "drinks", { kind: "combo" });
+      category("desserts", 0); product("kulfi", "desserts");
+      db.prepare("UPDATE products SET is_sold_out = 1 WHERE id = 'samosa'").run();
+      db.prepare("UPDATE products SET is_active = 0 WHERE id = 'paneer'").run();
+      bills(3, ["biryani", "thali", "kulfi", "samosa", "paneer", "lassi"]);
+      expect(together().biryani).toEqual([{ productId: "lassi", variantId: null }]);
+    });
+
+    it("counts a bill once however many lines a dish has, and ignores items inside combos", () => {
+      bills(2, ["biryani", "lassi", "lassi"]);
+      bill(NOW - DAY, [["biryani", 1], ["lassi", 1, 0, "combo-line"]]);
+      expect(together()).toEqual({});
+    });
+
+    it("only counts bills from the last 30 days", () => {
+      bills(2, ["biryani", "lassi"]);
+      bills(1, ["biryani", "lassi"], NOW - 31 * DAY);
+      expect(together()).toEqual({});
+    });
+
+    it("suggests a partner's most ordered active size", () => {
+      variant("small", "lassi"); variant("large", "lassi"); variant("jumbo", "lassi", 0);
+      for (let n = 0; n < 3; n++) bill(NOW - DAY, [["biryani", 1], ["lassi", 1, undefined, undefined, n === 0 ? "small" : "jumbo"]]);
+      bill(NOW - DAY, [["lassi", 2, undefined, undefined, "large"]]);
+      expect(together().biryani).toEqual([{ productId: "lassi", variantId: "large" }]);
+    });
+
+    it("keeps at most perProduct partners and honours minBills", () => {
+      bills(3, ["biryani", "lassi", "samosa", "paneer"]);
+      expect(orderedTogether(db, NOW, { perProduct: 1 }).biryani).toEqual([{ productId: "lassi", variantId: null }]);
+      expect(orderedTogether(db, NOW, { minBills: 4 })).toEqual({});
+    });
   });
 });

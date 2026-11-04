@@ -3,7 +3,7 @@ import fastifyStatic from "@fastify/static";
 import { resolve } from "node:path";
 import { uuidv7 } from "@masalapos/domain";
 
-// Disposable in-memory restaurant with a week of billed sales: never opens the restaurant database.
+// Disposable in-memory restaurant with billed sales for the menu hints (Popular, ordered together): never opens the restaurant database.
 const { app } = freshAppWithFakeSink();
 await app.register(fastifyStatic, { root: resolve("apps/ui/dist"), setHeaders: (reply) => reply.header("Cache-Control", "no-cache") });
 app.setNotFoundHandler((req, reply) => req.method === "GET" && !req.url.startsWith("/api/") ? reply.sendFile("index.html") : reply.code(404).send({ error: "not found" }));
@@ -28,9 +28,16 @@ for (const [name, qty] of [["Samosa", 5], ["Paneer tikka", 2], ["Biryani", 4], [
   const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
   await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
 }
+// Three bills share Biryani, Samosa and Lassi, so each suggests the other two ("Goes well with").
+for (let n = 0; n < 3; n++) {
+  const { order } = await post("/api/orders", { type: "parcel", clientRef: uuidv7() });
+  await post(`/api/orders/${order.id}/items`, { items: ["Biryani", "Samosa", "Lassi"].map((name) => ({ clientRef: uuidv7(), productId: ids[name], qty: 1 })) });
+  const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
+  await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
+}
 const { table } = await post("/api/tables", { name: "T1", area: "Dining" });
 qrPath = ((await call("PUT", `/api/qr/tables/${table.id}`, { enabled: true })).table as { path: string }).path;
 await app.listen({ host: "127.0.0.1", port: 4155 });
 const close = async () => { await app.close(); app.db.close(); process.exit(0); };
 process.on("SIGINT", () => void close()); process.on("SIGTERM", () => void close());
-console.log("Popular items fixture: http://127.0.0.1:4155/ - admin 1234, waiter 3456");
+console.log("Menu hints fixture: http://127.0.0.1:4155/ - admin 1234, waiter 3456");

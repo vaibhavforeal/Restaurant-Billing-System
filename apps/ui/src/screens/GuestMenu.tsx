@@ -5,6 +5,7 @@ import { GuestServices } from "./GuestServices";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
 import { comboExtraPaise } from "../combo-cart";
 import { withPopularFirst } from "../popular-items";
+import { suggestTogether } from "../ordered-together";
 import "../guest-menu.css";
 
 type MenuProduct = GuestMenuData["products"][number];
@@ -315,6 +316,13 @@ function GuestMenuContent({ token }: { token: string }) {
   const subtotal = saved.cart.reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
   const count = saved.cart.reduce((sum, item) => sum + item.qty, 0);
   const popularIds = menu?.popularProductIds ?? [];
+  // "Goes well with your order": dishes often on the same bill as what is in the request, in the size most ordered.
+  const suggestions = !menu ? [] : suggestTogether(saved.cart, menu.pairs ?? {}, menu.products).flatMap(({ productId, variantId }) => {
+    const product = menu.products.find((p) => p.id === productId);
+    if (!product || product.combo) return [];
+    const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0] ?? null;
+    return [{ product, variant }];
+  });
   const visible = withPopularFirst(menu?.products.filter((product) => (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
     `${product.name} ${product.description} ${product.variants.map((variant) => variant.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [], popularIds);
 
@@ -366,6 +374,11 @@ function GuestMenuContent({ token }: { token: string }) {
                 <div className="guest-menu-quantity"><button aria-label={`Decrease ${item.name}`} disabled={locked} onClick={() => editItem(item.key, { qty: item.qty - 1 })}>−</button><span aria-label={`Quantity for ${item.name}`}>{item.qty}</span><button aria-label={`Increase ${item.name}`} disabled={locked || item.qty >= 20} onClick={() => editItem(item.key, { qty: item.qty + 1 })}>+</button><button className="guest-menu-remove" disabled={locked} onClick={() => editItem(item.key, { qty: 0 })} aria-label={`Remove ${item.name}`}>Remove</button></div>
                 <label className="guest-menu-item-note">Instructions for {item.name}<textarea rows={2} maxLength={200} placeholder="Optional: less spicy, no onions…" value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
               </li>)}</ul>
+              {suggestions.length > 0 && <div className="guest-menu-suggestions"><h3>Goes well with your order</h3>
+                <ul>{suggestions.map(({ product, variant }) => <li key={product.id}>
+                  <span>{product.name}{variant && <small>{variant.name}</small>}</span><strong>{money(variant?.pricePaise ?? product.pricePaise)}</strong>
+                  <button disabled={locked} onClick={() => add(product, variant?.id ?? null)} aria-label={`Also add ${product.name}${variant ? `, ${variant.name}` : ""}`}>Add <span aria-hidden="true">+</span></button>
+                </li>)}</ul></div>}
               <div className="guest-menu-cart-total"><div><span>Menu subtotal</span><strong>{money(subtotal)}</strong></div><p>No tax is added to menu prices. Your final bill is prepared at the restaurant.</p></div>
               {saved.reviewRequired && !needsRefresh && <label className="guest-menu-review"><input type="checkbox" disabled={locked} checked={false} onChange={() => save({ ...savedRef.current, reviewRequired: false })} /> I have reviewed the updated items and prices.</label>}
               <div className="guest-menu-cart-actions"><button className="guest-menu-primary" disabled={locked || saved.reviewRequired || loading} onClick={() => void submit()}>{sending ? "Sending…" : "Submit to staff"}</button><p>Staff must accept your request first. Pay at the restaurant.</p></div>

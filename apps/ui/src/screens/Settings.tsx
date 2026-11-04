@@ -18,9 +18,9 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, orderedTogetherEnabled: true };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "orderedTogetherEnabled">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -315,6 +315,11 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             <input type="checkbox" checked={form.popularItemsEnabled} disabled={busy} aria-describedby="popular-items-help"
               onChange={(e) => { setForm({ ...form, popularItemsEnabled: e.target.checked }); setProfileStatus(""); }} />
             <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.orderedTogetherEnabled} disabled={busy} aria-describedby="ordered-together-help"
+              onChange={(e) => { setForm({ ...form, orderedTogetherEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Suggest dishes ordered together <InfoTip id="ordered-together-help">Shows up to 3 dishes from other categories that often share a bill with what is already in the cart, over the last 30 days, on staff order screens and the QR table menu.</InfoTip></span>
           </label>
 
 

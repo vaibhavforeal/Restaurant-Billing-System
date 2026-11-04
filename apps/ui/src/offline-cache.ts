@@ -6,7 +6,10 @@ import type { Category, Order, Product, TableInfo } from "./types";
  * is per signed-in person and replaced on every successful load; the hub stays the source of truth.
  */
 const PREFIX = "masalapos.cache.v1.";
-export interface MenuInsights { popularProductIds: string[] }
+import type { DishPairs } from "./ordered-together";
+
+/** `pairs` is missing from copies saved before ordered-together suggestions existed. */
+export interface MenuInsights { popularProductIds: string[]; pairs?: DishPairs }
 export interface CatalogCache { categories: Category[]; products: Product[]; captains: Array<{ id: string; name: string }>; at: number }
 
 function write(key: string, value: unknown): void {

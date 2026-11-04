@@ -65,6 +65,14 @@
 .guest-menu-item-note { display: grid; gap: 5px; font-size: 11px; font-weight: 400; color: #887b81; }
 .guest-menu-item-note textarea { width: 100%; font-size: 12px; resize: vertical; min-height: 61px; border-color: #e8dfdc; }
 .guest-menu-cart-total { padding: 18px 20px; background: #fcf8f6; border-top: 1px solid #f1e9e5; }
+.guest-menu-suggestions { padding: 14px 20px 16px; border-top: 1px solid #f1e9e5; }
+.guest-menu-suggestions h3 { margin: 0 0 8px; color: #887b81; font-size: 12px; font-weight: 650; }
+.guest-menu-suggestions ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.guest-menu-suggestions li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; font-size: 13px; }
+.guest-menu-suggestions li > span { overflow-wrap: anywhere; }
+.guest-menu-suggestions small { display: block; color: #887b81; font-size: 11px; }
+.guest-menu-suggestions button { background: #fff4f3; border: 1px solid #edc4c6; color: #b52b36; display: flex; gap: 8px; align-items: center; min-height: 36px; padding: 4px 12px; }
+.guest-menu-suggestions button:hover:not(:disabled) { background: #ffe7e5; border-color: #d59399; }
 .guest-menu-cart-total > div { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
 .guest-menu-cart-total p { font-size: 11px; color: #887b81; margin: 8px 0 0; }
 .guest-menu-cart-actions { padding: 18px 20px; }

@@ -104,6 +104,8 @@ export interface SettingsData {
   holdOrdersEnabled: boolean;
   /** Popular items: badge each category's best-seller on the staff and guest menus. */
   popularItemsEnabled: boolean;
+  /** Ordered together: the carts suggest dishes often on the same bill. */
+  orderedTogetherEnabled: boolean;
 }
 
 export interface Customer {

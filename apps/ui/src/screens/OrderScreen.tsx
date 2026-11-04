@@ -17,6 +17,7 @@ import { savePreference, useShortcutLabels } from "../pos-shortcuts";
 import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readMenuInsightsCopy, readOrderSettingsCopy, saveCatalogCopy, saveMenuInsightsCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache, type MenuInsights } from "../offline-cache";
 import { withPopularFirst } from "../popular-items";
+import { suggestTogether, type DishPairs } from "../ordered-together";
 import { BILLING_CANCELLED, heldTargets, holdControls, holdPrompt, holdRefusal, punchItems, releaseCartHolds, sendableLines } from "../hold-order";
 import { useNavigationGuard } from "../navigation-guard";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
@@ -70,6 +71,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   /** Hold orders (Settings): the last value from the hub, kept on the device for offline use. */
   const [holdOrders, setHoldOrders] = useState(() => readOrderSettingsCopy(user.id)?.holdOrders ?? true);
   const [popularIds, setPopularIds] = useState<string[]>(() => readMenuInsightsCopy(user.id)?.popularProductIds ?? []);
+  const [pairs, setPairs] = useState<DishPairs>(() => readMenuInsightsCopy(user.id)?.pairs ?? {});
   const [, refreshQueue] = useState(0);
   /** When the screen shows this device's saved copy because the hub cannot be reached: the time of that copy. */
   const [copyAt, setCopyAt] = useState<number | null>(null);
@@ -242,7 +244,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   /** Popular badges are a hint: if the hub cannot be reached the last known list stays. */
   function loadMenuInsights() {
     apiFetch<MenuInsights>("/api/menu/insights")
-      .then((insights) => { setPopularIds(insights.popularProductIds); saveMenuInsightsCopy(user.id, insights); })
+      .then((insights) => { setPopularIds(insights.popularProductIds); setPairs(insights.pairs ?? {}); saveMenuInsightsCopy(user.id, insights); })
       .catch(() => { /* keep the last known list */ });
   }
 
@@ -651,6 +653,15 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   // The items inside a combo show under its line, not as lines of their own.
   const lines = order.items.filter((item) => !item.parentItemId);
   const popular = new Set(popularIds);
+  // "Goes well with": dishes often on the same bill as what this order already has, added in the size most ordered.
+  const suggestions = order.status !== "open" ? [] : suggestTogether([...lines.filter((item) => item.status !== "cancelled"), ...draft], pairs, products).flatMap(({ productId, variantId }): Array<{ productId: string; variantId: string | null; name: string; pricePaise: number }> => {
+    const dish = products.find((p) => p.id === productId);
+    if (!dish || dish.kind === "combo") return [];
+    const sizes = dish.variants.filter((v) => v.isActive);
+    const size = sizes.find((v) => v.id === variantId) ?? sizes[0];
+    if (!size) return dish.variants.length ? [] : [{ productId, variantId: null, name: dish.name, pricePaise: dish.pricePaise }];
+    return [{ productId, variantId: size.id, name: `${dish.name} (${size.name})`, pricePaise: size.pricePaise }];
+  });
   const activeProducts = withPopularFirst(products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query)), popularIds);
   const hasSentItems = order.items.some((i) => i.status === "sent");
   const canCancelOrder = order.status === "open" && !hasSentItems;
@@ -799,6 +810,9 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </div>}
         </div>
         <div className="cart-footer">
+        {suggestions.length > 0 && <div className="cart-suggestions" role="group" aria-labelledby="cart-suggestions-title"><span id="cart-suggestions-title">Goes well with this order</span>
+          <div>{suggestions.map((dish) => <button key={dish.productId} disabled={locked} aria-label={`Also add ${dish.name}, ₹${paiseToRupees(dish.pricePaise)}`} onClick={() => addToDraft(dish.productId, dish.variantId, dish.name, dish.pricePaise)}><Icon name="plus" size={14} />{dish.name}<span className="pos-money">₹{paiseToRupees(dish.pricePaise)}</span></button>)}</div>
+        </div>}
         {message && <p className="captain-message" role="status"><Icon name="check" size={16} />{message}</p>}
         {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total"><div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>

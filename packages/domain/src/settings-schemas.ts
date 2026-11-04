@@ -27,5 +27,7 @@ export const SettingsUpdate = z.object({
   holdOrdersEnabled: z.boolean().optional(),
   /** Popular items: badge each category's best-seller on the staff and guest menus. */
   popularItemsEnabled: z.boolean().optional(),
+  /** Ordered together: the carts suggest dishes often on the same bill. */
+  orderedTogetherEnabled: z.boolean().optional(),
 });
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdate>;

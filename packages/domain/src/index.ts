@@ -64,4 +64,4 @@ export { openLots, expiryDue, expiringSoon, expireRef, type LedgerEntry, type Po
 export { SegmentFilter, SegmentSave, matchesSegment, SEGMENT_PRESETS, SEGMENT_CSV_COLUMNS, type SegmentFilterInput, type SegmentFilterValue, type SegmentCustomer, type SavedSegment } from "./customer-segments.js";
 export { isRemoteToDesktop, isRemoteToServer, type RemoteToDesktop, type RemoteToServer, type RemoteMode, type IceServer } from "./remote-support.js";
 export { UPDATE_CHANNELS, isToServer, isToDesktop, type UpdateChannel, type UpdateState, type UpdateStatus, type ToDesktop, type ToServer } from "./updates.js";
-export { popularProductIds, POPULAR_DEFAULTS, type PopularOptions } from "./menu-insights.js";
+export { popularProductIds, orderedTogether, POPULAR_DEFAULTS, TOGETHER_DEFAULTS, type PopularOptions, type TogetherOptions, type PairedDish } from "./menu-insights.js";

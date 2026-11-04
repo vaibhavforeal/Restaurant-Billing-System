@@ -11,6 +11,12 @@ category's best-seller is badged Popular and listed first on the order screen wh
 category gets no badge, All items lists the best-sellers first, the QR table menu (opened in an iframe) shows the
 same badges, and with Show popular items off both menus drop the badges. It turns the setting back on at the end.
 
+The same fixture also has three bills sharing Biryani, Samosa and Lassi. Add `tools/e2e/ordered-together.js` after
+(or instead of) the popular check and require `window.__orderedTogetherResult.status === "passed"` (7 checks): an
+empty cart suggests nothing, Biryani in the staff cart suggests Lassi and Samosa under "Goes well with this order",
+one tap adds Lassi and the drinks suggestion goes, the QR request does the same (Add Biryani, then Also add Samosa),
+and with Suggest dishes ordered together off both carts drop the row. It turns the setting back on at the end.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a
