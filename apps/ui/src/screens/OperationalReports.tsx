@@ -7,11 +7,18 @@ import { downloadText } from "../download";
 import { operationalCell, operationalCsv } from "../operational-report";
 import { withTimeout } from "../abort-signal";
 
-export type ProfitReport = Omit<OperationalReport, "kind"> & { kind: "profit" };
+/** Reports built from dish costs: admin-only (`costs.read`) and part of the Dish costing module. */
+export type CostReportKind = "profit" | "menu-engineering";
+export type ProfitReport = Omit<OperationalReport, "kind"> & { kind: CostReportKind };
 type LoadedReport = OperationalReport | ProfitReport;
 export const PROFIT_REPORT_TITLE = "Food cost & profit";
+export const COST_REPORTS: Array<{ id: CostReportKind; title: string }> = [
+  { id: "profit", title: PROFIT_REPORT_TITLE },
+  { id: "menu-engineering", title: "Menu engineering" },
+];
+const isCostReport = (kind: string): kind is CostReportKind => COST_REPORTS.some((r) => r.id === kind);
 
-export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { kind: OperationalReportKind | "profit"; initialPeriod?: ReportPeriod | undefined; onPeriodChange: (period: ReportPeriod) => void }) {
+export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { kind: OperationalReportKind | CostReportKind; initialPeriod?: ReportPeriod | undefined; onPeriodChange: (period: ReportPeriod) => void }) {
   const [period, setPeriod] = useState(initialPeriod ?? recentPeriod(7));
   const [report, setReport] = useState<LoadedReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,7 +29,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     let active = true;
     const controller = new AbortController();
     setLoading(true); setReport(null); setError(""); setMessage("");
-    apiFetch<{ report: LoadedReport }>(`${kind === "profit" ? "/api/reports/profit" : `/api/reports/operations/${kind}`}?${new URLSearchParams({ from: period.from, to: period.to })}`, { signal: withTimeout(controller.signal, 15000) })
+    apiFetch<{ report: LoadedReport }>(`${isCostReport(kind) ? `/api/reports/${kind}` : `/api/reports/operations/${kind}`}?${new URLSearchParams({ from: period.from, to: period.to })}`, { signal: withTimeout(controller.signal, 15000) })
       .then(({ report }) => { if (active) setReport(report); })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load report"); })
       .finally(() => { if (active) setLoading(false); });
@@ -37,7 +44,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     } catch (e) { setError(e instanceof Error ? e.message : "Could not export report"); }
   }
   return <div className="operational-report">
-    <div className="page-header"><h3>{kind === "profit" ? PROFIT_REPORT_TITLE : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3><button disabled={!report || loading} onClick={exportReport}>Export CSV</button></div>
+    <div className="page-header"><h3>{isCostReport(kind) ? COST_REPORTS.find((r) => r.id === kind)!.title : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3><button disabled={!report || loading} onClick={exportReport}>Export CSV</button></div>
     <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((v) => v + 1); }} onRefresh={() => { invalidate(); setRevision((v) => v + 1); }} />
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {loading && <p role="status">Loading report…</p>}

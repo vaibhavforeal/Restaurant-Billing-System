@@ -127,3 +127,23 @@ Approved in plan mode on 2026-11-04.
 - **Staff screen:** an open order screen re-reads the menu hints every 15 minutes.
 - **QR menu:** works out the badge when the guest opens it.
 - **E2E:** `tools/e2e/popular-by-time.js` on the same fixture.
+
+## Built next: Menu engineering report (roadmap item 4)
+Approved in chat on 2026-11-04.
+- **Builder:** `buildMenuEngineeringReport()` in `packages/domain/src/menu-engineering.ts`.
+  - It takes the profit report's lines from `profitLines()` in `apps/server/src/costing.ts`, now shared by both reports.
+  - Each dish is its bill-line name within its category. Plates and revenue are pre-GST and net of credit notes. Food cost is the cost frozen when the dish was sold.
+  - Combos rank like dishes, because their cost comes from their items.
+- **Groups:**
+  - **High seller:** at least 70% of an even share of the category's plates, using whole-number arithmetic so the boundary is exact.
+  - **High margin:** margin per plate at or above the category average, weighted by plates, over fully costed dishes.
+  - Star, Plowhorse, Puzzle or Dog.
+  - A dish whose lines aren't all fully costed gets "Needs a recipe cost", with its plates still counted for popularity.
+- **Output:**
+  - A Summary table (dishes, plates and pre-GST revenue per group).
+  - One table per category: plates, share, Sells High/Low, price, cost and margin per plate, group, suggested action. The footer has the category's plates and average margin.
+  - Notes explain the method.
+- **Server:** `GET /api/reports/menu-engineering` uses the same guards as Profit (`costs.read` + Dish costing) and is sent `no-store`.
+- **UI:** Reports → More reports → "Menu engineering", shown through the existing `OperationalReports` screen with CSV export (`COST_REPORTS` in `OperationalReports.tsx`).
+- **No database change.**
+- **E2E:** `tools/e2e/menu-engineering-server.mts` (port 4157) and `menu-engineering.js`.
