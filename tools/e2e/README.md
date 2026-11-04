@@ -62,6 +62,17 @@ the paid void, cash short, pay-out, discount and Ravi's cancellations ("4 items 
 void names its approver and bill; By staff totals Meena; the CSV has both tables; Settings → Restaurant profile →
 Staff activity alerts shows the ₹200 default, and at ₹500 the ₹300 drawer is no longer flagged. It restores the limits.
 
+## Menu engineering
+
+Build the UI and start `node --import tsx tools/e2e/menu-engineering-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4157/` with paneer at ₹320/kg and five ₹100 Mains (no GST) sold
+today: Paneer Tikka ×6 (₹48 cost), Paneer Bhurji ×5 (₹80), Malai Kofta ×1 (₹16), Shahi Paneer ×1 (₹96) and Water ×2
+(no recipe). Sign in as `admin` / `admin-password`, add `tools/e2e/menu-engineering.js` to the page and require
+`window.__menuEngineeringResult.status === "passed"` (8 checks): Reports → More reports lists Menu engineering; Tikka
+is a Star, Bhurji a Plowhorse, Kofta a Puzzle, Shahi Paneer a Dog and Water needs a recipe cost; per-plate cost,
+margin and suggested action show; dishes are listed by plates; the summary has one dish per group; and the CSV export
+(captured from `URL.createObjectURL`) has each dish, group and action.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a

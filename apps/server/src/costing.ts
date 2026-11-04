@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { UnitCostSet, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@masalapos/domain";
+import { UnitCostSet, buildMenuEngineeringReport, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@masalapos/domain";
 import { readGstSettings } from "./gst-settings.js";
 import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
@@ -109,27 +109,7 @@ export function registerCosting(app: FastifyInstance): void {
     const { from, to, bounds } = reportRange(req.query);
     // One synchronous read transaction keeps lines, wastage and adjustments on the same snapshot.
     const { lines, wastage, adjustments } = db.transaction(() => {
-      // Sale movements that were later reversed (cancelled items) no longer count as consumption; a KOT edit's partial
-      // return (partial_of) takes its share off the sale it reduced.
-      const sales = `(SELECT m.cost_paise + COALESCE((SELECT SUM(p.cost_paise) FROM stock_moves p WHERE p.partial_of = m.id), 0) AS cost_paise
-        FROM stock_moves m WHERE (m.order_item_id = l.order_item_id OR m.order_item_id IN (SELECT id FROM order_items WHERE parent_item_id = l.order_item_id)) AND m.reason = 'sale'
-        AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id))`;
-      const recipe = `(SELECT COUNT(*) FROM ${sales}) AS saleMoves, (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves`;
-      // Issued lines by bill date (void bills too). Credit-note lines subtract their taxable value and quantity on the
-      // credit-note date with no cost (no stock comes back), keeping the credited line's recipe status so the revenue
-      // comes off the same costed / cost-unknown / no-recipe bucket.
-      const lines = (db.prepare(`SELECT categoryName, name, qty, revenuePaise, saleMoves, unknownMoves, costPaise FROM (
-          SELECT l.category_name AS categoryName, l.name, l.qty, l.taxable_paise AS revenuePaise, ${recipe},
-            (SELECT 0 - SUM(cost_paise) FROM ${sales}) AS costPaise, b.created_at AS at, l.bill_id, l.order_item_id
-          FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-          WHERE b.created_at >= ? AND b.created_at < ? AND l.parent_order_item_id IS NULL
-          UNION ALL
-          SELECT l.category_name, l.name, -cl.qty, -cl.taxable_paise, ${recipe}, 0, c.created_at, l.bill_id, l.order_item_id
-          FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
-          JOIN bill_report_lines l ON l.bill_id = c.bill_id AND l.order_item_id = cl.order_item_id
-          WHERE c.created_at >= ? AND c.created_at < ?)
-        ORDER BY categoryName COLLATE NOCASE, name COLLATE NOCASE, bill_id, order_item_id, at`).all(...bounds, ...bounds) as Array<ProfitLine & { unknownMoves: number }>)
-        .map(({ unknownMoves, ...line }): ProfitLine => ({ ...line, costPaise: unknownMoves > 0 ? null : line.costPaise }));
+      const lines = profitLines(db, bounds);
       // Opening balances (written when a stock item is created, with no cost yet) are the only adjustments without a
       // client reference; every manual count carries one. They are not count corrections, so they are left out.
       const movements = (reason: string, extra = "") => db.prepare(`SELECT COALESCE(0 - SUM(cost_paise), 0) AS costPaise, COUNT(*) - COUNT(cost_paise) AS unknownCount
@@ -141,4 +121,40 @@ export function registerCosting(app: FastifyInstance): void {
     reply.header("Cache-Control", "no-store");
     return { report };
   });
+
+  /** Menu engineering: each dish as Star / Plowhorse / Puzzle / Dog within its category, from the profit report's lines. */
+  app.get("/api/reports/menu-engineering", { preHandler: costs }, async (req, reply) => {
+    const { from, to, bounds } = reportRange(req.query);
+    const lines = db.transaction(() => profitLines(db, bounds))();
+    reply.header("Cache-Control", "no-store");
+    return { report: buildMenuEngineeringReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines }) };
+  });
+}
+
+/**
+ * Every billed line in the dates with its revenue (pre-GST) and the food cost frozen when it was sold, for the profit
+ * and menu-engineering reports. Run it inside a read transaction to keep it on one snapshot with other reads.
+ */
+function profitLines(db: FastifyInstance["db"], bounds: readonly [number, number]): ProfitLine[] {
+  // Sale movements that were later reversed (cancelled items) no longer count as consumption; a KOT edit's partial
+  // return (partial_of) takes its share off the sale it reduced.
+  const sales = `(SELECT m.cost_paise + COALESCE((SELECT SUM(p.cost_paise) FROM stock_moves p WHERE p.partial_of = m.id), 0) AS cost_paise
+    FROM stock_moves m WHERE (m.order_item_id = l.order_item_id OR m.order_item_id IN (SELECT id FROM order_items WHERE parent_item_id = l.order_item_id)) AND m.reason = 'sale'
+    AND NOT EXISTS (SELECT 1 FROM stock_moves r WHERE r.reversal_of = m.id))`;
+  const recipe = `(SELECT COUNT(*) FROM ${sales}) AS saleMoves, (SELECT COUNT(*) FROM ${sales} WHERE cost_paise IS NULL) AS unknownMoves`;
+  // Issued lines by bill date (void bills too). Credit-note lines subtract their taxable value and quantity on the
+  // credit-note date with no cost (no stock comes back), keeping the credited line's recipe status so the revenue
+  // comes off the same costed / cost-unknown / no-recipe bucket.
+  return (db.prepare(`SELECT categoryName, name, qty, revenuePaise, saleMoves, unknownMoves, costPaise FROM (
+      SELECT l.category_name AS categoryName, l.name, l.qty, l.taxable_paise AS revenuePaise, ${recipe},
+        (SELECT 0 - SUM(cost_paise) FROM ${sales}) AS costPaise, b.created_at AS at, l.bill_id, l.order_item_id
+      FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
+      WHERE b.created_at >= ? AND b.created_at < ? AND l.parent_order_item_id IS NULL
+      UNION ALL
+      SELECT l.category_name, l.name, -cl.qty, -cl.taxable_paise, ${recipe}, 0, c.created_at, l.bill_id, l.order_item_id
+      FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
+      JOIN bill_report_lines l ON l.bill_id = c.bill_id AND l.order_item_id = cl.order_item_id
+      WHERE c.created_at >= ? AND c.created_at < ?)
+    ORDER BY categoryName COLLATE NOCASE, name COLLATE NOCASE, bill_id, order_item_id, at`).all(...bounds, ...bounds) as Array<ProfitLine & { unknownMoves: number }>)
+    .map(({ unknownMoves, ...line }): ProfitLine => ({ ...line, costPaise: unknownMoves > 0 ? null : line.costPaise }));
 }

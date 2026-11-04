@@ -7,13 +7,16 @@ import { downloadText } from "../download";
 import { operationalCell, operationalCsv } from "../operational-report";
 import { withTimeout } from "../abort-signal";
 
-/** Reports read straight from `/api/reports/<kind>`: food cost & profit (Dish costing) and staff activity (admins). */
-export type DirectReportKind = "profit" | "staff-activity";
+/** Reports built from dish costs: admin-only (`costs.read`) and part of the Dish costing module. */
+export type CostReportKind = "profit" | "menu-engineering";
+/** Reports read straight from `/api/reports/<kind>`: the cost reports and staff activity (admins). */
+export type DirectReportKind = CostReportKind | "staff-activity";
 export type ProfitReport = Omit<OperationalReport, "kind"> & { kind: DirectReportKind };
 type LoadedReport = OperationalReport | ProfitReport;
 export const PROFIT_REPORT_TITLE = "Food cost & profit";
 export const STAFF_ACTIVITY_TITLE = "Staff activity";
-const DIRECT_TITLES: Record<DirectReportKind, string> = { profit: PROFIT_REPORT_TITLE, "staff-activity": STAFF_ACTIVITY_TITLE };
+const DIRECT_TITLES: Record<DirectReportKind, string> = { profit: PROFIT_REPORT_TITLE, "menu-engineering": "Menu engineering", "staff-activity": STAFF_ACTIVITY_TITLE };
+export const COST_REPORTS: Array<{ id: CostReportKind; title: string }> = (["profit", "menu-engineering"] as const).map((id) => ({ id, title: DIRECT_TITLES[id] }));
 const isDirect = (kind: string): kind is DirectReportKind => kind in DIRECT_TITLES;
 
 export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { kind: OperationalReportKind | DirectReportKind; initialPeriod?: ReportPeriod | undefined; onPeriodChange: (period: ReportPeriod) => void }) {

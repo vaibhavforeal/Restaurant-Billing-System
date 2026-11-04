@@ -499,5 +499,42 @@ describe("stock costing", () => {
       expect(res.statusCode).toBe(403);
       expect(res.json().permission).toBe("costs.read");
     });
+
+    describe("menu engineering", () => {
+      const engineering = (as = token) => request("GET", `/api/reports/menu-engineering?from=${today()}&to=${today()}`, undefined, as);
+
+      it("groups each dish by plates and margin within its category, from the costs frozen at sale", async () => {
+        const paneer = await stock(50);
+        expect((await unitCost(paneer.id, 32_000_000)).statusCode).toBe(201);
+        const cat = (await request("POST", "/api/categories", { name: "Mains" })).json().category.id as string;
+        async function mainsDish(name: string, qtyPerSale: number | null) {
+          const id = (await request("POST", "/api/products", { name, categoryId: cat, pricePaise: 10_000, gstRate: 0, kotStationId: null })).json().product.id as string;
+          if (qtyPerSale !== null) expect((await request("PUT", `/api/products/${id}/recipe`, { expectedVersion: 0, ingredients: [{ stockItemId: paneer.id, qtyPerSale }] })).statusCode).toBe(200);
+          return id;
+        }
+        // Tikka: ₹48 cost, ₹52 margin. Bhurji: ₹80 cost, ₹20 margin. Water: no recipe. Average margin (3×52 + 2×20) / 5 = ₹39.20.
+        await sellParcel(await mainsDish("Paneer Tikka", 0.15), 3);
+        await sellParcel(await mainsDish("Paneer Bhurji", 0.25), 2);
+        await sellParcel(await mainsDish("Water", null), 1);
+        const res = await engineering();
+        expect(res.statusCode, res.body).toBe(200);
+        expect(res.headers["cache-control"]).toBe("no-store");
+        const report = res.json().report as OperationalReport & { kind: string };
+        expect(report.kind).toBe("menu-engineering");
+        expect(report.tables.map((t) => t.title)).toEqual(["Summary", "Mains"]);
+        const rows = Object.fromEntries(report.tables[1]!.rows.map((row) => [row.dish, row]));
+        expect(rows["Paneer Tikka"]).toMatchObject({ plates: 3, seller: "High", price: 10_000, cost: 4_800, margin: 5_200, group: "Star" });
+        expect(rows["Paneer Bhurji"]).toMatchObject({ plates: 2, seller: "High", cost: 8_000, margin: 2_000, group: "Plowhorse" });
+        expect(rows.Water).toMatchObject({ plates: 1, seller: "Low", cost: null, group: "Needs a recipe cost" });
+        expect(report.tables[1]!.totals).toMatchObject({ plates: 6, margin: 3_920 });
+      });
+
+      it("is for admins with Dish costing, like the profit report", async () => {
+        const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+        const res = await engineering(cashier);
+        expect(res.statusCode).toBe(403);
+        expect(res.json().permission).toBe("costs.read");
+      });
+    });
   });
 });
