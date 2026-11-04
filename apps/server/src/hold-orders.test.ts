@@ -94,4 +94,109 @@ describe("hold orders", () => {
       expect((await patch(`/api/order-items/${held!.id}`, { held: false })).statusCode).toBe(200);
     });
   });
+
+  describe("kitchen send and fire", () => {
+    const send = (orderId: string, body: object) => post(`/api/orders/${orderId}/send`, { clientRef: uuidv7(), ...body });
+    const kotCount = () => (app.db.prepare("SELECT COUNT(*) AS n FROM kots").get() as { n: number }).n;
+    const byProduct = (list: Item[], productId: string) => list.find((i) => i.productId === productId && !i.parentItemId)!;
+
+    it("KOT skips held items", async () => {
+      const id = await order();
+      await punch(id, [{ productId: paneer, held: true }, { productId: naan }]);
+      const res = await sendAll(id);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().kots).toHaveLength(1);
+      expect(res.json().kots[0].items.map((i: { name: string }) => i.name)).toEqual(["Butter Naan"]);
+      const after = await items(id);
+      expect(byProduct(after, paneer)).toMatchObject({ status: "pending", held: true });
+      expect(byProduct(after, naan).status).toBe("sent");
+    });
+
+    it("skips a named held item (a stale screen cannot cook it)", async () => {
+      const id = await order();
+      const [item] = await punch(id, [{ productId: paneer }]);
+      await patch(`/api/order-items/${item!.id}`, { held: true });
+      const res = await send(id, { itemIds: [item!.id] });
+      expect(res.statusCode).toBe(409);
+      expect(res.body).toContain("nothing to send");
+      expect(byProduct(await items(id), paneer)).toMatchObject({ status: "pending", held: true });
+    });
+
+    it("skips the items of a held combo", async () => {
+      const id = await order();
+      await punch(id, [{ productId: lunch, held: true, comboPicks: [] }]);
+      const res = await sendAll(id);
+      expect(res.statusCode).toBe(409);
+      expect(res.body).toContain("nothing to send");
+    });
+
+    it("fire sends held items and clears held", async () => {
+      const id = await order();
+      const saved = await punch(id, [{ productId: paneer, held: true }, { productId: lunch, held: true, comboPicks: [] }]);
+      const res = await send(id, { itemIds: [byProduct(saved, paneer).id, byProduct(saved, lunch).id], fire: true });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().kots).toHaveLength(1);
+      const after = await items(id);
+      expect(after.every((i) => i.status === "sent" && !i.held)).toBe(true);
+    });
+
+    it("fire is idempotent on its clientRef", async () => {
+      const id = await order();
+      const [item] = await punch(id, [{ productId: paneer, held: true }]);
+      const body = { clientRef: uuidv7(), itemIds: [item!.id], fire: true };
+      const first = await post(`/api/orders/${id}/send`, body);
+      const again = await post(`/api/orders/${id}/send`, body);
+      expect(again.statusCode).toBe(200);
+      expect(again.json().kots.map((k: { id: string }) => k.id)).toEqual(first.json().kots.map((k: { id: string }) => k.id));
+      expect(kotCount()).toBe(1);
+    });
+
+    it("fire refuses an item that is not held, and needs named items", async () => {
+      const id = await order();
+      const [item] = await punch(id, [{ productId: naan }]);
+      const res = await send(id, { itemIds: [item!.id], fire: true });
+      expect(res.statusCode).toBe(409);
+      expect(res.body).toContain("Only held items can be fired");
+      expect((await send(id, { fire: true })).statusCode).toBe(400);
+    });
+
+    it("fire by item reference works for items punched offline", async () => {
+      const id = await order();
+      const ref = uuidv7();
+      await punch(id, [{ productId: paneer, held: true, clientRef: ref }]);
+      const res = await send(id, { itemRefs: [ref], fire: true });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(byProduct(await items(id), paneer)).toMatchObject({ status: "sent", held: false });
+    });
+
+    it("fire works with the setting off", async () => {
+      const id = await order();
+      const [item] = await punch(id, [{ productId: paneer, held: true }]);
+      await setHoldOrders(false);
+      const res = await send(id, { itemIds: [item!.id], fire: true });
+      expect(res.statusCode, res.body).toBe(200);
+    });
+
+    it("billing waits for held items", async () => {
+      const id = await order();
+      const [item] = await punch(id, [{ productId: paneer, held: true }]);
+      const preview = () => post(`/api/orders/${id}/bill-preview`, {});
+      const blocked = await preview();
+      expect(blocked.statusCode).toBe(409);
+      expect(blocked.body).toContain("Send kitchen items before billing");
+      expect((await send(id, { itemIds: [item!.id], fire: true })).statusCode).toBe(200);
+      expect((await preview()).statusCode).toBe(200);
+    });
+
+    it("merge keeps held", async () => {
+      const t1 = (await post("/api/tables", { name: "T1", area: null, sortOrder: 0, priceTier: "non_ac" })).json().table.id;
+      const t2 = (await post("/api/tables", { name: "T2", area: null, sortOrder: 1, priceTier: "non_ac" })).json().table.id;
+      const folded = await order("dine_in", { tableId: t1 });
+      const receiving = await order("dine_in", { tableId: t2 });
+      await punch(folded, [{ productId: paneer, held: true }]);
+      const res = await post(`/api/orders/${folded}/merge`, { clientRef: uuidv7(), targetOrderId: receiving });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(byProduct(await items(receiving), paneer).held).toBe(true);
+    });
+  });
 });
