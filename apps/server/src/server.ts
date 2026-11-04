@@ -1,3 +1,4 @@
+import { registerStaffActivity } from "./staff-activity.js";
 import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
@@ -130,6 +131,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);
+  registerStaffActivity(app);
   registerOrderSettings(app);
   registerMenuInsights(app);
   registerDiscountCaps(app);

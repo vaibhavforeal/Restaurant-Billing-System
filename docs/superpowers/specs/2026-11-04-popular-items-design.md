@@ -146,3 +146,22 @@ Approved in chat on 2026-11-04.
     - It names what it skipped: off the menu, sold out, a size gone, a combo whose items must be chosen, or a dish that now has sizes.
   - The order screen's cart-add function has a batch version, `addRowsToDraft`, which Repeat uses.
 - **E2E:** `tools/e2e/customer-usual-server.mts` (port 4156) and `customer-usual.js`.
+
+## Built next: Staff activity report (roadmap item 6)
+Approved in chat on 2026-11-04. It's on `feat/staff-activity`, stacked on `feat/customer-usual` because it needs migration 52.
+- **Where:** read-only, in Reports → More reports → "Staff activity". Admins only (`users.manage`). No dashboard alerts and no reviewed state, at the user's request.
+- **Events:** `activityEvents()` in `apps/server/src/staff-activity.ts` reads the chosen dates and the 30 days before:
+  - cancelled after KOT (not counting items cancelled by a KOT edit)
+  - KOT quantity cuts
+  - voids and refunds (asked by, approved by, whether the bill was paid)
+  - discounts (% of subtotal, approver)
+  - cash short at shift close
+  - pay-outs
+  - wastage and manual count corrections
+- **Builder:** `buildStaffActivityReport()` in `packages/domain/src/staff-activity.ts`.
+  - **Always flags:** a paid bill voided, cash short at or over the limit, a discount at or over the %, a pay-out over the limit.
+  - **Unusual:** a count per day at least the multiplier × the person's own daily rate over the 30 days before (or the restaurant's rate per person when they have no history there), with at least the minimum number of events.
+  - "Same person asked and approved" was dropped: only admins can approve, so it would only ever flag the owner.
+  - Output: a Flagged table, a By staff table, and notes.
+- **Settings:** migration 52 adds `alert_*` columns to `settings`, with defaults ₹200, 20%, ₹500, 2×, 3. They're edited in Settings → Restaurant profile → "Staff activity alerts" (`GET/PUT /api/settings/activity-alerts`, `settings.manage`).
+- **E2E:** `tools/e2e/staff-activity-server.mts` (port 4159) and `staff-activity.js`.

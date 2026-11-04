@@ -1,3 +1,4 @@
+import { ActivityAlertSettings } from "./ActivityAlertSettings";
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -365,6 +366,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             {profileStatus === "error" && profileError}
           </div>
         </div>
+        <ActivityAlertSettings />
       </div>}
 
       {/* Printers section */}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useModules } from "../modules";
 import { OPERATIONAL_REPORTS, type OperationalReportKind } from "@masalapos/domain/operational-reports";
-import { OperationalReports, PROFIT_REPORT_TITLE } from "./OperationalReports";
+import { OperationalReports, PROFIT_REPORT_TITLE, STAFF_ACTIVITY_TITLE } from "./OperationalReports";
 import { COSTING_PRO_NOTE } from "../dish-costing";
 import { useLicense } from "./LicenseSettings";
 import { OrderAnalytics } from "./OrderAnalytics";
@@ -18,7 +18,7 @@ import { OverflowMenu } from "../PosControls";
 import "../sales-dashboard.css";
 import { useCan } from "../permissions";
 
-type SalesReportsProps = { canSeeCosts: boolean; /** Cashiers and admins work a cash drawer shift; only admins (canSeeCosts) close a day. */ canSettle?: boolean; /** Admins and cashiers may open the Zomato reconciliation tab, whether Zomato is on or off (receivables from closed orders stay reconcilable). */ canSeeZomato?: boolean; initialTab?: SalesReportKind | "day-end" | "analytics" | "bills" | "zomato" | "cash" | "custom" | undefined; initialPeriod?: ReportPeriod | undefined; onOpenOrder: (id: string) => void };
+type SalesReportsProps = { canSeeCosts: boolean; /** Admins (users.manage) see the Staff activity report. */ canSeeStaff?: boolean; /** Cashiers and admins work a cash drawer shift; only admins (canSeeCosts) close a day. */ canSettle?: boolean; /** Admins and cashiers may open the Zomato reconciliation tab, whether Zomato is on or off (receivables from closed orders stay reconcilable). */ canSeeZomato?: boolean; initialTab?: SalesReportKind | "day-end" | "analytics" | "bills" | "zomato" | "cash" | "custom" | undefined; initialPeriod?: ReportPeriod | undefined; onOpenOrder: (id: string) => void };
 
 /**
  * Reports & Analytics. With the Reports & analytics module off, only what the restaurant must keep is shown: bills, the
@@ -48,13 +48,14 @@ function EssentialReports({ initialTab, initialPeriod, canSeeZomato = false, can
   </section>;
 }
 
-function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZomato = false, canSettle = false, onOpenOrder }: SalesReportsProps) {
+function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeStaff = false, canSeeZomato = false, canSettle = false, onOpenOrder }: SalesReportsProps) {
   const can = useCan();
   const [view, setView] = useState<"reports" | "analytics">(initialTab === "analytics" ? "analytics" : "reports");
-  const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | "custom" | OperationalReportKind | "profit">(initialTab === "analytics" ? "sales" : initialTab);
+  const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | "custom" | OperationalReportKind | "profit" | "staff-activity">(initialTab === "analytics" ? "sales" : initialTab);
   const { status } = useLicense();
   const profit = canSeeCosts && tab === "profit";
-  const operational = OPERATIONAL_REPORTS.some((r) => r.id === tab) || profit;
+  const staffActivity = canSeeStaff && tab === "staff-activity";
+  const operational = OPERATIONAL_REPORTS.some((r) => r.id === tab) || profit || staffActivity;
   const [detailPeriod, setDetailPeriod] = useState<ReportPeriod | undefined>(initialPeriod);
   const [day, setDay] = useState(initialPeriod?.to);
   const { period, setPeriod, report, error, loading, refresh } = useSalesReport(initialPeriod);
@@ -78,15 +79,15 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeZ
         const next = e.target.value;
         if (!next) return;
         setView(next === "analytics" ? "analytics" : "reports");
-        if (next !== "analytics") setTab(next as OperationalReportKind | "profit" | "cash" | "custom");
+        if (next !== "analytics") setTab(next as OperationalReportKind | "profit" | "staff-activity" | "cash" | "custom");
         setMessage(""); setExportError("");
       }}>
         <option value="">More reports...</option>
         <option value="analytics">Analytics</option><option value="cash">Cash &amp; day close</option><option value="custom">Custom reports</option>
-        {OPERATIONAL_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeCosts && <option value="profit">{PROFIT_REPORT_TITLE}</option>}
+        {OPERATIONAL_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeCosts && <option value="profit">{PROFIT_REPORT_TITLE}</option>}{canSeeStaff && <option value="staff-activity">{STAFF_ACTIVITY_TITLE}</option>}
       </select>
     </div>
-    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={PROFIT_REPORT_TITLE}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | "profit"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
+    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={PROFIT_REPORT_TITLE}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | "profit" | "staff-activity"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
       <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { setMessage(""); setExportError(""); setPeriod(next); }} onRefresh={() => { setMessage(""); refresh(); }} />
       {(error || exportError) && <p role="alert">{error || exportError}</p>}
       {message && <p role="status">{message}</p>}

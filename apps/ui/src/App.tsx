@@ -194,7 +194,7 @@ function StaffApp() {
           {page.name === "users" && userCan(user, "users.manage") && <Users />}
           {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
-          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}
+          {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeStaff={userCan(user, "users.manage")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <ModuleRoute id="inventory" user={user} onNavigate={go}><Inventory user={user} /></ModuleRoute>}
           {page.name === "customers" && userCan(user, "customers.read") && <CustomersRoute user={user} onNavigate={go} />}
           {page.name === "marketplace" && userCan(user, "integrations.read") && <Marketplace user={user} onNavigate={go} />}

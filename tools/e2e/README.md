@@ -51,6 +51,17 @@ Repeat last order adds Paneer tikka (Full) ×2, Butter naan and Dal tadka and na
 the menu") and the sold-out Lassi; with Suggest a customer's usual off, adding Priya again shows no row. It turns the
 setting back on at the end.
 
+## Staff activity
+
+Build the UI and start `node --import tsx tools/e2e/staff-activity-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4159/` with cashiers Meena and Ravi and planted incidents: Meena's
+paid bill voided (approved by Asha), a ₹600 pay-out and a drawer ₹300 short; Asha's 30% discount; Ravi's kebab cancelled
+after KOT 10 days ago (1) and today (4). Sign in as `admin` / `admin-password`, add `tools/e2e/staff-activity.js` and
+require `window.__staffActivityResult.status === "passed"` (8 checks): Reports → More reports → Staff activity flags
+the paid void, cash short, pay-out, discount and Ravi's cancellations ("4 items in N days; usually 0.03 a day"); the
+void names its approver and bill; By staff totals Meena; the CSV has both tables; Settings → Restaurant profile →
+Staff activity alerts shows the ₹200 default, and at ₹500 the ₹300 drawer is no longer flagged. It restores the limits.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a
