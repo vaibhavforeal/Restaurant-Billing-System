@@ -4,10 +4,10 @@ import { openDb } from "../db.js";
 import { MIGRATIONS } from "./index.js";
 import { usernameFromName } from "./password-login.js";
 
-describe("migration 48: password sign-in", () => {
+describe("migration 50: password sign-in", () => {
   it("gives existing people a unique username from their name and their PIN hash as the password", () => {
     const db = openDb(":memory:");
-    migrate(db, MIGRATIONS.filter((m) => m.version < 48));
+    migrate(db, MIGRATIONS.filter((m) => m.version < 50));
     const insert = db.prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?)");
     insert.run("a", "Asha K.", "hash-a", "admin", 1);
     insert.run("b", "asha k", "hash-b", "cashier", 2);

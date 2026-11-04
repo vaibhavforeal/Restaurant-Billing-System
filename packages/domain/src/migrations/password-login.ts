@@ -16,7 +16,7 @@ export function usernameFromName(name: string, taken: Set<string>): string {
  * an admin can then set proper passwords from Users.
  */
 export const passwordLogin: Migration = {
-  version: 48,
+  version: 50,
   name: "password_login",
   up(db) {
     db.exec("ALTER TABLE users ADD COLUMN username TEXT;");
