@@ -47,10 +47,11 @@ function build(body: OrderBody, settings: PortalSettings): { termMonths: number 
 }
 
 /** CGST and SGST when MasalaPOS and the customer are in the same state; null while either state is unknown. */
-export const intraStateFor = (settings: PortalSettings, customer: { gstin: string | null; stateCode: string | null }) => {
+const intraStateFor = (settings: PortalSettings, customer: { gstin: string | null; stateCode: string | null }) => {
   const buyer = buyerState(customer);
   return settings.seller.stateCode && buyer ? settings.seller.stateCode === buyer : null;
 };
+
 
 const SUMMARY = `o.id, o.code, o.kind, o.status, o.plan, o.term_months AS termMonths, o.term_days AS termDays, o.outlets, o.seats_used AS seatsUsed,
   o.total_paise AS totalPaise, (SELECT COALESCE(SUM(p.amount_paise), 0) FROM payments p WHERE p.order_id = o.id AND p.status = 'cleared') AS paidPaise,
@@ -74,8 +75,9 @@ export async function orderDetail(ctx: Ctx, id: string): Promise<OrderDetail> {
   const { db } = ctx.deps;
   const [extra, lines, payments, links, invoices, settings, seats, targets] = await Promise.all([
     db.prepare(`SELECT o.max_devices AS maxDevices, o.modules, o.notes, o.confirmed_at AS confirmedAt, o.paid_at AS paidAt, o.cancelled_at AS cancelledAt,
-        o.credit_approved_by AS creditApprovedBy, u.name AS creditApprovedByName, o.subtotal_paise AS storedSubtotal, o.tax_paise AS storedTax FROM orders o LEFT JOIN staff_users u ON u.id = o.credit_approved_by WHERE o.id = ?`).bind(id)
-      .first<{ maxDevices: number; modules: string; notes: string | null; confirmedAt: number | null; paidAt: number | null; cancelledAt: number | null; creditApprovedBy: string | null; creditApprovedByName: string | null; storedSubtotal: number; storedTax: number }>(),
+        o.credit_approved_by AS creditApprovedBy, u.name AS creditApprovedByName, o.subtotal_paise AS storedSubtotal, o.tax_paise AS storedTax, o.intra_state AS storedIntra
+        FROM orders o LEFT JOIN staff_users u ON u.id = o.credit_approved_by WHERE o.id = ?`).bind(id)
+      .first<{ maxDevices: number; modules: string; notes: string | null; confirmedAt: number | null; paidAt: number | null; cancelledAt: number | null; creditApprovedBy: string | null; creditApprovedByName: string | null; storedSubtotal: number; storedTax: number; storedIntra: number | null }>(),
     db.prepare(`SELECT id, kind, description, sac, quantity, unit_price_paise AS unitPricePaise, discount_paise AS discountPaise, gst_rate_bp AS gstRateBp
       FROM order_lines WHERE order_id = ? ORDER BY position`).bind(id).all<Omit<OrderLine, "taxablePaise" | "cgstPaise" | "sgstPaise" | "igstPaise">>(),
     db.prepare(`SELECT p.id, p.amount_paise AS amountPaise, p.method, p.reference, p.status, p.received_at AS receivedAt, p.note, p.recorded_by AS recordedById, u.name AS recordedByName
@@ -91,16 +93,17 @@ export async function orderDetail(ctx: Ctx, id: string): Promise<OrderDetail> {
   ]);
   const intraState = intraStateFor(settings, { gstin: row.customerGstin, stateCode: row.customerState });
   const live = computeTotals(lines.results, intraState ?? true);
-  // A priced order keeps the figures it was confirmed with: a later change to the seller's or the customer's state must not change what is
-  // owed. Only the CGST/SGST/IGST split follows the current state, and it always adds up to the stored tax.
-  const keep = row.status !== "draft", intra = intraState ?? true, taxPaise = keep ? extra!.storedTax : live.taxPaise;
+  // A priced order keeps the figures and the CGST/SGST-or-IGST split it was confirmed with: a later change to the seller's or the
+  // customer's state must not change what is owed or how it is taxed.
+  const keep = row.status !== "draft";
+  const intra = keep && extra!.storedIntra !== null ? extra!.storedIntra === 1 : intraState ?? true, taxPaise = keep ? extra!.storedTax : live.taxPaise;
   const cgstPaise = keep ? (intra ? Math.floor(taxPaise / 2) : 0) : live.cgstPaise;
   const totals = keep ? { ...live, subtotalPaise: extra!.storedSubtotal, taxPaise, cgstPaise, sgstPaise: intra ? taxPaise - cgstPaise : 0, igstPaise: intra ? 0 : taxPaise } : live;
   const { customerGstin, customerState, ...summary } = row;
   void customerGstin; void customerState;
   return {
     ...toSummary(summary), maxDevices: extra!.maxDevices, modules: parseOverrides(extra!.modules) as Record<string, boolean>, notes: extra!.notes,
-    subtotalPaise: totals.subtotalPaise, taxPaise: totals.taxPaise, cgstPaise: totals.cgstPaise, sgstPaise: totals.sgstPaise, igstPaise: totals.igstPaise, intraState,
+    subtotalPaise: totals.subtotalPaise, taxPaise: totals.taxPaise, cgstPaise: totals.cgstPaise, sgstPaise: totals.sgstPaise, igstPaise: totals.igstPaise, intraState: keep ? intra : intraState,
     lines: lines.results.map((l, i) => ({ ...l, ...totals.lines[i]! })),
     confirmedAt: extra!.confirmedAt, paidAt: extra!.paidAt, cancelledAt: extra!.cancelledAt,
     creditApprovedBy: extra!.creditApprovedBy ? { id: extra!.creditApprovedBy, name: extra!.creditApprovedByName ?? "" } : null,
@@ -226,8 +229,11 @@ export const orderRoutes: Route[] = [
       throw conflict("Choose the counters this order renews.", "no_targets");
     }
     const statements: D1StatementLike[] = [
-      db.prepare(`UPDATE orders SET status = 'confirmed', confirmed_at = ?, subtotal_paise = ?, tax_paise = ?, total_paise = ?, updated_at = ? WHERE id = ? AND status = 'draft'`)
-        .bind(now, totals.subtotalPaise, totals.taxPaise, totals.totalPaise, now, before.id),
+      // The place of supply and the CGST/SGST-or-IGST split are fixed here, with the figures, for the order and its invoice.
+      db.prepare(`UPDATE orders SET status = 'confirmed', confirmed_at = ?, subtotal_paise = ?, tax_paise = ?, total_paise = ?, supply_state = ?, intra_state = ?, updated_at = ?
+          WHERE id = ? AND status = 'draft'`)
+        .bind(now, totals.subtotalPaise, totals.taxPaise, totals.totalPaise, buyerState({ gstin: before.customerGstin, stateCode: before.customerState }),
+          intra === null ? null : intra ? 1 : 0, now, before.id),
       logBy(ctx, { action: "order.confirmed", entityType: "order", entityId: before.id, customerId: before.customerId, summary: `Confirmed order ${before.code}` }),
     ];
     if (totals.totalPaise === 0) {

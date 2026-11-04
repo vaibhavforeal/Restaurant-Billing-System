@@ -1,3 +1,4 @@
+import { timeoutSignal } from "./abort-signal";
 const TOKEN_KEY = typeof location !== "undefined" && /^\/kitchen\/?$/.test(location.pathname) ? "masalapos.kitchen.token" : "masalapos.token";
 const DEVICE_KEY = "masalapos.device.v1";
 export function deviceCredential(): string {
@@ -46,7 +47,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit, options?: { 
   const token = session.token;
   if (token) headers.set("authorization", `Bearer ${token}`);
 
-  const res = await fetch(path, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(15_000) });
+  const res = await fetch(path, { ...init, headers, signal: init?.signal ?? timeoutSignal(15_000) });
   if (res.status === 401 && !options?.keepSessionOnMessage) session.clear();
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));

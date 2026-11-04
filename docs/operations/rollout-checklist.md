@@ -38,6 +38,7 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 ## 1. Clean install on the main PC
 
 - [ ] Run the installer on the main PC. **Expect:** Windows shows an "unknown publisher" (SmartScreen) warning because the installer is not code-signed yet. Choose **More info → Run anyway**. Write down that the warning appeared.
+- [ ] After the folder page, enter the **Customer ID** and **Order ID** from the setup card (the PC must be online). **Expect:** a wrong code or no internet keeps setup on that page with the reason; correct codes continue to the install, and the order's seat count in the portal goes up by one.
 - [ ] Finish the install with the default folder. **Expect:** a MasalaPOS desktop shortcut; MasalaPOS opens to restaurant setup.
 - [ ] Complete setup: restaurant name and administrator PIN. **Expect:** you reach the license screen.
 - [ ] Import the license file. **Expect:** plan shows Basic or Pro correctly; this PC registers as a device.

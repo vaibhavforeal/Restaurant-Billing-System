@@ -95,6 +95,43 @@ describe("kots: print faults", () => {
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM kots").get()).toEqual({ n: 1 });
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get()).toEqual({ n: 0 });
   });
+
+  it("sends the ticket and reports that its slip was not printed when the station is turned off", async () => {
+    app = freshApp();
+    const { token } = await setupAdmin(app); enableIntegration(app, "kds");
+    const { biryaniId, kitchenStationId } = await fixtures(app, token);
+    const printer = await app.inject({ method: "POST", url: "/api/printers", headers: auth(token), payload: { name: "Kitchen", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } });
+    await app.inject({ method: "PATCH", url: `/api/kot-stations/${kitchenStationId}`, headers: auth(token), payload: { printerId: printer.json().printer.id, isActive: false } });
+    const order = await app.inject({ method: "POST", url: "/api/orders", headers: auth(token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } });
+    const orderId = order.json().order.id;
+    await app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers: auth(token), payload: { items: [{ productId: biryaniId, qty: 1 }] } });
+    const sent = await app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(token) });
+    expect(sent.statusCode).toBe(200);
+    expect(sent.json().kots).toHaveLength(1);
+    expect(sent.json().printErrors).toHaveLength(1);
+    expect(sent.json().printErrors[0]).toMatch(/KOT #\d+.*turned off/);
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get()).toEqual({ n: 0 });
+  });
+
+  it("reports that the slip was not printed when the station's printer is turned off, and stays quiet for a screen-only station", async () => {
+    app = freshApp();
+    const { token } = await setupAdmin(app); enableIntegration(app, "kds");
+    const { biryaniId, kitchenStationId } = await fixtures(app, token);
+    const send = async () => {
+      const order = await app.inject({ method: "POST", url: "/api/orders", headers: auth(token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } });
+      const orderId = order.json().order.id;
+      await app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers: auth(token), payload: { items: [{ productId: biryaniId, qty: 1 }] } });
+      return app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(token) });
+    };
+    expect((await send()).json().printErrors).toEqual([]); // no printer chosen: the kitchen works from the screen
+    const printer = await app.inject({ method: "POST", url: "/api/printers", headers: auth(token), payload: { name: "Kitchen", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } });
+    await app.inject({ method: "PATCH", url: `/api/kot-stations/${kitchenStationId}`, headers: auth(token), payload: { printerId: printer.json().printer.id } });
+    app.db.prepare("UPDATE printers SET is_active = 0").run();
+    const sent = await send();
+    expect(sent.statusCode).toBe(200);
+    expect(sent.json().printErrors).toEqual([expect.stringMatching(/KOT #\d+.*printer is turned off/)]);
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get()).toEqual({ n: 0 });
+  });
 });
 
 describe("kots: no acceptance step", () => {

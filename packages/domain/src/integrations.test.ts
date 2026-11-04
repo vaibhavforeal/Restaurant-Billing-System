@@ -3,7 +3,7 @@ import { INTEGRATIONS, IntegrationToggle, isIntegrationId } from "./integrations
 
 describe("integration registry", () => {
   it("lists Zomato, Swiggy (coming soon) and the Kitchen Display", () => {
-    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm"]);
+    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm", "dynamicReports"]);
     const [zomato, swiggy] = INTEGRATIONS;
     expect(zomato).toMatchObject({ status: "available", setupPage: "zomato", category: "delivery" });
     expect(swiggy).toMatchObject({ status: "coming_soon", setupPage: null, category: "delivery" });
@@ -34,5 +34,9 @@ describe("integration registry", () => {
     expect(IntegrationToggle.safeParse({ enabled: "yes" }).success).toBe(false);
     expect(IntegrationToggle.safeParse({ enabled: true, x: 1 }).success).toBe(false);
     expect(IntegrationToggle.safeParse({ enabled: false }).success).toBe(true);
+  });
+
+  it("lists Dynamic Reports in the Marketplace", () => {
+    expect(isIntegrationId("dynamicReports")).toBe(true);
   });
 });

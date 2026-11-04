@@ -19,7 +19,7 @@ export interface LicenseRow {
 export const INSTALLATION_COLUMNS = `installation_id AS installationId, license_id AS licenseId, organization_id AS organizationId, outlet_id AS outletId,
   created_at AS createdAt, revision_floor AS revisionFloor, secret_hash AS secretHash, customer_id AS customerId, order_id AS orderId,
   max_devices AS maxDevices, outlet_name AS outletName, activated_at AS activatedAt, last_seen_at AS lastSeenAt, app_version AS appVersion`;
-export const LICENSE_COLUMNS = `installation_id AS installationId, revision, plan, issued_at AS issuedAt, expires_at AS expiresAt, grace_until AS graceUntil,
+const LICENSE_COLUMNS = `installation_id AS installationId, revision, plan, issued_at AS issuedAt, expires_at AS expiresAt, grace_until AS graceUntil,
   envelope, reason, order_id AS orderId`;
 
 export const getInstallation = (db: D1Like, installationId: string) =>
@@ -87,11 +87,6 @@ export async function getOwnerSettings(db: D1Like, installationId: string): Prom
   if (!row) return { displayName: null, overrides: {}, updatedAt: null };
   return { displayName: row.displayName, overrides: parseOverrides(row.overrides), updatedAt: row.updatedAt };
 }
-
-export const upsertOwnerSettingsStatement = (db: D1Like, installationId: string, displayName: string | null, overrides: ModuleOverrides, now: number): D1StatementLike =>
-  db.prepare(`INSERT INTO owner_settings (installation_id, display_name, overrides, updated_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(installation_id) DO UPDATE SET display_name = excluded.display_name, overrides = excluded.overrides, updated_at = excluded.updated_at`)
-    .bind(installationId, displayName, JSON.stringify(overrides), now);
 
 /** Only the module choices; the display name is kept. */
 export const setOverridesStatement = (db: D1Like, installationId: string, overrides: ModuleOverrides, now: number): D1StatementLike =>

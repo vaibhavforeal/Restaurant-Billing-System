@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { MIGRATIONS, migrate, openDb, uuidv7 } from "@masalapos/domain";
-import { ZOMATO_CSV_COLUMNS, zomatoCsv, type ZomatoImportKind, type ZomatoReconciliation } from "@masalapos/domain";
+import { ZOMATO_CSV_COLUMNS, toCsv, type ZomatoImportKind, type ZomatoReconciliation } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "./server.js";
 import { auth, createUser, enableIntegration, setupAdmin } from "./test-helpers.js";
@@ -8,7 +8,7 @@ import type { ZomatoProvider } from "./zomato.js";
 
 let app: FastifyInstance;
 afterEach(async () => { if (app) { await app.close(); app.db.close(); } });
-const csv = (kind: ZomatoImportKind, rows: (string | number)[][]) => zomatoCsv([ZOMATO_CSV_COLUMNS[kind], ...rows]);
+const csv = (kind: ZomatoImportKind, rows: (string | number)[][]) => toCsv([ZOMATO_CSV_COLUMNS[kind], ...rows]);
 const order = (id = "001", total = "500.00", state = "delivered", date = "2026-10-02T12:30:00+05:30") => ["R1", id, date, state, total, "prepaid"];
 const settlement = (id = "001", entry = "S1", gross = "500.00", deductions = "100.00", paid = "400.00", date = "2026-10-03") => ["R1", id, entry, "BATCH-1", date, gross, deductions, "0", paid];
 async function fixture(provider?: ZomatoProvider) {
@@ -33,16 +33,6 @@ async function fixture(provider?: ZomatoProvider) {
 }
 
 describe("Zomato setup and reconciliation", () => {
-  it("upgrades existing data additively and reruns safely", () => {
-    const db = openDb(":memory:");
-    try {
-      migrate(db, MIGRATIONS.filter(m => m.version < 21));
-      db.prepare("UPDATE settings SET restaurant_name='Existing restaurant' WHERE id=1").run();
-      migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
-      expect(db.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Existing restaurant" });
-      expect(db.prepare("SELECT enabled,version FROM zomato_settings").get()).toEqual({ enabled: 0, version: 1 });
-    } finally { db.close(); }
-  });
   it("keeps setup honest and rejects unsupported activation and stale edits", async () => {
     const f = await fixture();
     const read = await f.api("GET", "/api/zomato/settings");

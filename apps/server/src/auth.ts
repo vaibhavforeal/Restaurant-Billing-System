@@ -31,6 +31,28 @@ export function userCan(user: AuthedUser, slug: string): boolean {
   return KNOWN_PERMISSIONS.includes(slug) ? user.permissions.includes(slug) : staffCan(user.role, {}, slug);
 }
 
+export const canSeeCustomers = (user: AuthedUser) => userCan(user, "customers.read");
+
+type WithCustomer = { customer?: unknown };
+const dropCustomer = <T extends WithCustomer>(order: T): T => (order?.customer ? { ...order, customer: null } : order);
+
+/**
+ * A response or event as sent to someone who may not view customers: every order in it (`order`, or each of `orders`) keeps
+ * everything but the attached customer's details. Screens only rely on the order itself, and reload customers through the
+ * permission-checked customer routes.
+ */
+export function withoutCustomers(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const { order, orders } = payload as { order?: WithCustomer; orders?: unknown };
+  const cleanOrders = Array.isArray(orders) && orders.some((o: WithCustomer) => o?.customer);
+  if (!order?.customer && !cleanOrders) return payload;
+  return {
+    ...payload,
+    ...(order?.customer ? { order: dropCustomer(order) } : {}),
+    ...(cleanOrders ? { orders: (orders as WithCustomer[]).map(dropCustomer) } : {}),
+  };
+}
+
 interface SessionRow {
   device: string | null;
   user_id: string;
@@ -93,6 +115,11 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     app.licensing.assertAccess(req);
   };
 
+  // Many routes hand back an order with its customer attached (reads, item changes, billing, moves...). One hook, rather than
+  // each route, keeps those customer details from anyone signed in without customers.read.
+  app.addHook("preSerialization", async (req, _reply, payload) =>
+    req.user && !canSeeCustomers(req.user) ? withoutCustomers(payload) : payload);
+
   app.decorate("requireAuth", requireAuth);
   app.decorate("requirePermission", (slug: string): preHandlerHookHandler => {
     return async (req, reply) => {
@@ -106,6 +133,9 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     };
   });
 
+  // Hashed once, on first use: what an unknown username's password is checked against.
+  let standInHashPromise: Promise<string> | undefined;
+  const standIn = () => (standInHashPromise ??= hashPassword(randomBytes(16).toString("hex")));
   const noUsers = () => (app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n === 0;
   app.get("/api/needs-setup", async () => {
     // users-count is the canonical signal; settings.setup_complete is informational only
@@ -142,7 +172,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     if (existing.n > 0) return reply.status(409).send({ error: "already set up" });
 
     const id = uuidv7();
-    const pinHash = await hashPassword(body.pin);
+    const [pinHash, passwordHash] = await Promise.all([hashPassword(body.pin), hashPassword(body.password)]);
     const write = app.db.transaction(() => {
       // TOCTOU guard: recheck user count after async hashing
       const recheck = app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
@@ -152,11 +182,11 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
         throw err;
       }
       app.db
-        .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, ?, ?, 'admin', ?)")
-        .run(id, body.adminName, pinHash, Date.now());
+        .prepare("INSERT INTO users (id, name, username, password_hash, pin_hash, role, created_at) VALUES (?, ?, ?, ?, ?, 'admin', ?)")
+        .run(id, body.adminName, body.username, passwordHash, pinHash, Date.now());
       app.db
-        .prepare("UPDATE settings SET restaurant_name = ?, setup_complete = 1 WHERE id = 1")
-        .run(body.restaurantName);
+        .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = ?, state_code = ?, pincode = ?, phone = ?, gstin = ?, fssai = ?, setup_complete = 1 WHERE id = 1")
+        .run(body.restaurantName, body.address, body.city, body.stateCode, body.pincode, body.phone, body.gstin, body.fssai);
     });
     write();
 
@@ -176,32 +206,29 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
 
   app.post("/api/login", async (req, reply) => {
     if (app.licensing.enabled && !deviceHash(req.headers["x-masalapos-device"])) return reply.status(400).send({ error: "A device credential is required" });
-    const { pin } = LoginBody.parse(req.body);
+    const { username, password } = LoginBody.parse(req.body);
     const ip = req.ip;
 
-    // Throttle: refuse while this IP is in cooldown; otherwise count the attempt as a failure now, before the async PIN
-    // checks, so parallel wrong PINs cannot all slip past this check. A right PIN clears it below.
+    // Throttle: refuse while this IP is in cooldown; otherwise count the attempt as a failure now, before the async password
+    // check, so parallel wrong guesses cannot all slip past this check. A right password clears it below.
     if (!throttle.beginPinAttempt(ip)) {
-      return reply.status(429).send({ error: "too many attempts" });
+      return reply.status(429).send({ error: "Too many attempts. Wait a minute and try again." });
     }
 
-    const users = app.db
-      .prepare("SELECT id, name, pin_hash, role FROM users WHERE is_active = 1")
-      .all() as Array<{ id: string; name: string; pin_hash: string; role: RoleName }>;
+    const user = app.db
+      .prepare("SELECT id, name, password_hash, role FROM users WHERE username = ? COLLATE NOCASE AND is_active = 1")
+      .get(username) as { id: string; name: string; password_hash: string; role: RoleName } | undefined;
 
-    // PIN alone identifies the user (POS convention). Uniqueness across all
-    // users is enforced at creation/PIN-change time — see users.ts pinInUse().
-    for (const u of users) {
-      if (await verifyPassword(pin, u.pin_hash)) {
-        // Success: reset throttle
-        throttle.clearPinFailures(ip);
-        const token = createSession(u.id, req.headers["x-masalapos-device"]);
-        return { token, user: authedUser(app.db, { id: u.id, name: u.name, role: u.role }) };
-      }
+    // An unknown username is checked against a stand-in hash, so the answer takes as long and says as little as a wrong password.
+    const valid = await verifyPassword(password, user?.password_hash || await standIn());
+    if (user?.password_hash && valid) {
+      throttle.clearPinFailures(ip);
+      const token = createSession(user.id, req.headers["x-masalapos-device"]);
+      return { token, user: authedUser(app.db, { id: user.id, name: user.name, role: user.role }) };
     }
 
     // Failure: already counted by beginPinAttempt
-    return reply.status(401).send({ error: "invalid pin" });
+    return reply.status(401).send({ error: "Wrong username or password" });
   });
 
   app.get("/api/me", { preHandler: requireAuth }, async (req) => ({ user: req.user }));

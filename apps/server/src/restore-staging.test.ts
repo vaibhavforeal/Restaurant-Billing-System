@@ -82,7 +82,7 @@ describe("restore from a file", () => {
     const message = f.sent[0] as { type: string; path: string };
     expect(message.type).toBe("restore");
     expect(message.path.startsWith(join(f.folder, "restore-incoming"))).toBe(true);
-    expect(verifyBackup(message.path)).toBe(MIGRATIONS.length);
+    expect(verifyBackup(message.path)).toBe(MIGRATIONS.at(-1)!.version);
     // The live database is untouched until the desktop app restarts the server with the staged file.
     expect(f.db.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Cafe Test" });
   });

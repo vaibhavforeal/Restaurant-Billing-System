@@ -22,9 +22,33 @@ describe("customer segments and CRM insights", () => {
     await request("POST", `/api/orders/${id}/items`, { items: [{ productId, qty, clientRef: uuidv7() }] });
     await request("PATCH", `/api/orders/${id}/customer`, { customerId });
     const preview = await request("POST", `/api/orders/${id}/bill-preview`, {});
-    expect((await request("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey })).statusCode).toBe(201);
+    const issued = await request("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey });
+    expect(issued.statusCode).toBe(201);
+    return issued.json().bill as { id: string; orderId: string; totalPaise: number };
   }
   const preview = async (filter: object) => (await request("POST", "/api/customer-segments/preview", { filter })).json();
+
+  it("counts a customer's spend the same way on every screen and report: their bills less refunds", async () => {
+    const priya = await customer("Priya", "9876543210");
+    const b = await bill(priya.id, 2);
+    expect(b.totalPaise).toBe(100_000);
+    expect((await request("POST", `/api/bills/${b.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: b.totalPaise }] })).statusCode).toBe(200);
+    const { id: orderItemId } = app.db.prepare("SELECT id FROM order_items WHERE order_id = ?").get(b.orderId) as { id: string };
+    const lines = [{ orderItemId, qty: 1 }];
+    const refunded = (await request("POST", `/api/bills/${b.id}/credit-preview`, { kind: "refund", lines })).json().preview.totals.totalPaise as number;
+    const refund = await request("POST", `/api/bills/${b.id}/refund`, { clientRef: uuidv7(), reason: "Cold food", approverPin: "1234",
+      lines, refunds: [{ mode: "cash", amountPaise: refunded }] });
+    expect(refund.statusCode, refund.body).toBe(201);
+    const today = localDateKey(Date.now()), net = b.totalPaise - refunded;
+    expect(net).toBeLessThan(b.totalPaise);
+
+    expect((await request("GET", `/api/customers/${priya.id}`)).json().stats.spendPaise).toBe(net);
+    expect((await preview({})).customers[0].spendPaise).toBe(net);
+    const report = await request("POST", "/api/custom-reports/run", { config: { source: "customers", columns: [{ field: "name" }, { field: "spend" }] }, from: today, to: today });
+    expect(report.statusCode, report.body).toBe(200);
+    expect(report.json().report.tables[0].rows[0]).toMatchObject({ name: "Priya", spend: net });
+    expect((await request("GET", `/api/reports/crm?from=${today}&to=${today}`)).json().topCustomers[0]).toMatchObject({ name: "Priya", spendPaise: net });
+  });
 
   it("previews segments by spend, visits, tags and opt-in", async () => {
     const priya = await customer("Priya", "9876543210", { tags: ["Vegan"], marketingOptIn: true });

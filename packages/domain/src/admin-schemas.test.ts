@@ -49,11 +49,17 @@ describe("catalog schemas", () => {
 });
 
 describe("user schemas", () => {
-  it("UserCreate takes name, 4-6 digit pin, and a known role", () => {
-    expect(UserCreate.parse({ name: "Ravi", pin: "4321", role: "cashier" }))
-      .toEqual({ name: "Ravi", pin: "4321", role: "cashier" });
-    expect(() => UserCreate.parse({ name: "Ravi", pin: "12", role: "cashier" })).toThrow();
-    expect(() => UserCreate.parse({ name: "Ravi", pin: "4321", role: "owner" })).toThrow();
+  it("UserCreate takes a name, a lower-case username, a password of 8+ characters and a known role", () => {
+    expect(UserCreate.parse({ name: "Ravi", username: " Ravi.K ", password: "ravi-password", role: "cashier" }))
+      .toEqual({ name: "Ravi", username: "ravi.k", password: "ravi-password", role: "cashier" });
+    expect(() => UserCreate.parse({ name: "Ravi", username: "ravi", password: "short", role: "cashier" })).toThrow();
+    expect(() => UserCreate.parse({ name: "Ravi", username: "r", password: "ravi-password", role: "cashier" })).toThrow();
+    expect(() => UserCreate.parse({ name: "Ravi", username: "ravi", password: "ravi-password", role: "owner" })).toThrow();
+  });
+
+  it("UserCreate needs an approval PIN for an admin only", () => {
+    expect(() => UserCreate.parse({ name: "Asha", username: "asha", password: "asha-password", role: "admin" })).toThrow(/approval PIN/);
+    expect(UserCreate.parse({ name: "Asha", username: "asha", password: "asha-password", role: "admin", pin: "1234" }).pin).toBe("1234");
   });
 
   it("UserUpdate accepts partial fields including pin", () => {

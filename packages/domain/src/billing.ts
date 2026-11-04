@@ -49,9 +49,9 @@ export interface ReceiptSnapshot {
   /** Absent on bills issued before UPI configuration was supported. */
   upiId?: string;
   gstMode: GstMode;
-  /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
-  taxInclusive?: boolean;
   restaurantName: string; address: string; gstin: string; fssai: string; receiptFooter: string;
+  /** The restaurant's phone; absent on bills issued before setup asked for it. */
+  phone?: string;
   orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null;
   /** Set on Zomato orders. */
   zomatoOrderId?: string;
@@ -61,8 +61,6 @@ export interface ReceiptSnapshot {
   customer?: ReceiptCustomer;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
-  /** Legacy: only on bills issued before `gstMode`; read through `receiptGstMode`. */
-  gstScheme?: "composition";
   /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;
 }
@@ -127,12 +125,13 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   const taxes = allocation.map(({ rate, amount, discount }) => {
     const gross = amount - discount;
     if (mode === "none") return { gstRate: rate, taxablePaise: gross, cgstPaise: 0, sgstPaise: 0 };
-    // Included: the discounted gross already contains the GST, so split it out.
+    // Included: the discounted gross already contains the GST, so split it out. CGST and SGST are each half the rate on the same
+    // taxable value, so they are always equal: when the rounded tax is odd, its odd paisa stays in the taxable value (each half
+    // is then still within a paisa of taxable × rate / 2), and taxable + CGST + SGST is still exactly the gross.
     const divisor = BigInt(100 + rate);
-    const taxablePaise = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
-    const tax = gross - taxablePaise;
-    const cgstPaise = Math.ceil(tax / 2);
-    return { gstRate: rate, taxablePaise, cgstPaise, sgstPaise: tax - cgstPaise };
+    const rounded = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
+    const half = Math.floor((gross - rounded) / 2);
+    return { gstRate: rate, taxablePaise: gross - 2 * half, cgstPaise: half, sgstPaise: half };
   });
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);

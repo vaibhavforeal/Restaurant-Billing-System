@@ -10,7 +10,7 @@ import { ZomatoSettingsDialog } from "./ZomatoConnection";
 import "../marketplace.css";
 import { userCan } from "../permissions";
 
-const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen", customers: "Customers" };
+const categoryLabel: Record<IntegrationInfo["category"], string> = { delivery: "Delivery", kitchen: "Kitchen", customers: "Customers", insights: "Insights" };
 
 export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (page: Page) => void }) {
   const { integrations, ready, setEnabled, refresh } = useIntegrations();

@@ -1,0 +1,3 @@
+/* Rules for the shared charts (charts.tsx), which the Reports page also uses without loading the dashboard. */
+.dd-empty { color: var(--muted); margin: 0; }
+.dd-legend { margin-top: var(--space-2); margin-bottom: var(--space-2); }

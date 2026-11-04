@@ -67,7 +67,7 @@ It lives at `https://<licensing-service>/portal/`. Setting it up (deploying, the
   - An order can be confirmed only when both states are known and the seller details are filled in.
 - **On credit.** An admin can let a confirmed order activate before payment, until a date.
   - The counters' licences end on that date.
-  - When the order is paid they get the full term from the day each activated. Extending the credit date re-signs them.
+  - When the order is paid they get the order's full term, counted from the order's first activation. Extending the credit date re-signs them.
 - **Cancel.** Only an admin, and only before any payment. Counters already active keep their licences until they end.
 
 ## Payments
@@ -107,10 +107,15 @@ Each customer's **Counters** tab and every order show the licences on one timeli
 - **Last seen** and the MasalaPOS version the counter reports.
 - **Modules** (admins change them): see [Feature controls](feature-controls.md).
 - **Change this licence** (admins): another plan, end date or number of devices, with a reason that goes into the activity log. Use it for a goodwill extension or a correction.
-- **Move to another order** (admins): for example from the trial to the paid order, when the restaurant doesn't re-enter the IDs itself. The term starts that day.
+- **Move to another order** (admins): for example from the trial to the paid order, when the restaurant doesn't re-enter the IDs itself. The counter gets the new order's term, which counts from that order's first activation; an order whose term has ended cannot take it.
 - **Release seat** (Support): for a counter that died or was reinstalled.
   - The order can then activate the new computer.
   - The old computer's licence is signed and offline, so it keeps working until it ends.
+- **Replace computer** (Support): for a counter that died after its order's term ended, so releasing the seat wouldn't help (the order can't activate another computer, but a renewal kept this counter going).
+  - The restaurant enters the Customer ID and Order ID on the new computer first. It is refused, but MasalaPOS now knows it.
+  - Enter the new computer's Installation ID (MasalaPOS shows it under Settings > Plan and devices). It takes over the seat and the current licence: same plan, end date, devices and modules. Renewals not yet paid move to it too.
+  - The new computer gets the licence at its next check, or straight away when the restaurant enters the IDs again.
+  - The old computer's licence keeps working offline until it ends, as after a release.
 - **Reset pairing** (Support): after the restaurant restored its data folder and now holds a different installation secret. The next computer to check in with that installation ID claims it.
 - **Download licence file** (Support): for a counter that can't reach the service.
 

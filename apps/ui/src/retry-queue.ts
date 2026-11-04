@@ -14,7 +14,6 @@ export type QueuedRequest = QueueEntry & {
   error?: string;
 };
 
-const V1_PREFIX = "masalapos.queue.v1.";
 const GENERATION = "masalapos.generation";
 const LEASE = "masalapos.queue-lease";
 /** How often the queue checks in with the hub even with nothing to send, which also keeps the connection status honest. */
@@ -36,7 +35,8 @@ function isEmptyKitchenSend(path: string, body: unknown): boolean {
 /** What may be saved and sent later: every request here is safe to repeat (the hub ignores repeats by reference). */
 const QUEUEABLE: Record<"POST" | "PATCH", RegExp> = {
   POST: /^\/api\/(orders|orders\/[^/]+\/(items|send|bill|cancel)|order-items\/[^/]+\/(cancel|edit-sent)|bills\/([^/]+|\{after:[a-zA-Z.]+\})\/settle)$/,
-  PATCH: /^\/api\/orders\/[^/]+\/(captain|customer|order-type)$/,
+  // A pending item's change sets absolute values (held, qty, note), so a repeat changes nothing.
+  PATCH: /^\/api\/(orders\/[^/]+\/(captain|customer|order-type)|order-items\/[^/]+)$/,
 };
 
 /** Which lane an action goes in: its order, so one order's actions stay in order and other orders never wait. */
@@ -55,11 +55,13 @@ function laneFor(path: string, body: unknown): string | null {
 let actor: string | null = null;
 let generationChecked = false;
 let pumping = false;
+/** True when the last check-in was left to another window holding the lock: that window is sending, so nothing is unreachable. */
+let sentByAnotherWindow = false;
 const windowId = uuid();
 const listeners = new Set<() => void>();
 const waiters = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
-export function notifyQueue() { listeners.forEach((listener) => listener()); }
+function notifyQueue() { listeners.forEach((listener) => listener()); }
 export function subscribeQueue(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 export function queueConnected() { return generationChecked; }
 
@@ -98,33 +100,8 @@ function settleWaiters() {
   }
 }
 
-/** Moves actions saved by the previous version of the queue into this one. */
-function migrateV1() {
-  for (const key of store.keys()) {
-    if (!key.startsWith(V1_PREFIX)) continue;
-    try {
-      const old = JSON.parse(store.get(key)!) as { id: string; userId: string; generation: string; path: string; body: string; label: string; createdAt: number; error?: string; draftKey?: string };
-      let body: unknown = null;
-      try { body = JSON.parse(old.body); } catch { /* kept as text */ }
-      const entry: QueueEntry = {
-        id: old.id, userId: old.userId, generation: old.generation, method: "POST", path: old.path, body: old.body, label: old.label,
-        lane: laneFor(old.path, body) ?? old.id, createdAt: old.createdAt, status: old.error ? "attention" : "pending", attempts: 0,
-        lastAttemptAt: null, nextAttemptAt: 0, ...(old.error ? { lastError: old.error } : {}), ...(old.draftKey ? { draftKey: old.draftKey } : {}),
-      };
-      saveEntry(store, entry);
-      store.remove(key);
-    } catch { /* leave a damaged old entry where it is for inspection */ }
-  }
-}
-
 export function startQueue(userId: string) {
-  actor = userId; generationChecked = false;
-  migrateV1();
-  // Older KOT buttons queued empty item lists. These refused requests cannot create a ticket; remove only those.
-  for (const entry of queuedRequests(userId)) {
-    try { if (entry.status === "attention" && isEmptyKitchenSend(entry.path, JSON.parse(entry.body))) discardEntry(store, entry.id, Date.now()); }
-    catch { /* keep unreadable requests for review */ }
-  }
+  actor = userId; generationChecked = false; sentByAnotherWindow = false;
   // Another window saved, sent or finished something: refresh, hear outcomes, and help send if it is now due.
   const onStorage = (event: StorageEvent) => {
     if (event.key && !event.key.startsWith("masalapos.")) return;
@@ -211,7 +188,7 @@ export function outcomeOrSaved<T>(handle: { id: string; done: Promise<T> }, pati
       if (!entry || entry.status !== "pending") return;
       const heldUp = entries.some((e) => e.lane === entry.lane && e.id !== entry.id && (e.createdAt < entry.createdAt) && (e.attempts > 0 || e.status === "attention"));
       // The last check-in could not reach the hub at all, so nothing was even tried.
-      const unreachable = !generationChecked && !pumping;
+      const unreachable = !generationChecked && !pumping && !sentByAnotherWindow;
       if (entry.attempts > 0 || heldUp || unreachable) finish(() => resolve({ saved: true }));
     };
     const unsubscribe = subscribeQueue(check);
@@ -222,19 +199,20 @@ export function outcomeOrSaved<T>(handle: { id: string; done: Promise<T> }, pati
 }
 
 /** Runs `fn` in at most one window at a time: a Web Lock where available, otherwise a short localStorage lease. */
-async function exclusively(fn: () => Promise<void>): Promise<void> {
+async function exclusively(fn: () => Promise<void>): Promise<boolean> {
   const locks = (globalThis.navigator as Navigator | undefined)?.locks;
   if (locks?.request) {
-    await locks.request("masalapos-queue", { ifAvailable: true }, async (lock) => { if (lock) await fn(); });
-    return;
+    let ran = false;
+    await locks.request("masalapos-queue", { ifAvailable: true }, async (lock) => { if (lock) { ran = true; await fn(); } });
+    return ran;
   }
   const now = Date.now();
   try {
     const lease = JSON.parse(store.get(LEASE) ?? "null") as { owner: string; until: number } | null;
-    if (lease && lease.owner !== windowId && lease.until > now) return;
+    if (lease && lease.owner !== windowId && lease.until > now) return false;
   } catch { /* a damaged lease is taken over */ }
   store.set(LEASE, JSON.stringify({ owner: windowId, until: now + 30_000 }));
-  try { await fn(); } finally { store.remove(LEASE); }
+  try { await fn(); return true; } finally { store.remove(LEASE); }
 }
 
 async function pump() {
@@ -243,7 +221,7 @@ async function pump() {
   const userId = actor, token = session.token;
   const stillCurrent = () => actor === userId && session.token === token;
   try {
-    await exclusively(async () => {
+    sentByAnotherWindow = !(await exclusively(async () => {
       const { generation } = await apiFetch<{ generation: string }>("/api/system/generation");
       if (!stillCurrent()) return;
       const previous = localStorage.getItem(GENERATION);
@@ -267,7 +245,7 @@ async function pump() {
       for (const entry of before) {
         if (readResult(store, entry.id)?.status === "done") window.dispatchEvent(new CustomEvent("masalapos:ack", { detail: entry }));
       }
-    });
+    }));
   } catch (error) {
     // The hub could not be reached for the generation check: the actions stay saved.
     if (!(error instanceof ApiError) || error.status >= 500) generationChecked = false;

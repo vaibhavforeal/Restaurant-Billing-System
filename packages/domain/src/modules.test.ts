@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MODULES, MODULE_IDS, ModuleMapSchema, allModules, planModules, resolveModuleStates, resolveModules } from "./modules.js";
+import { MODULES, MODULE_IDS, moduleDef, ModuleMapSchema, allModules, planModules, resolveModuleStates, resolveModules } from "./modules.js";
 import { PLANS, featuresFromModules } from "./licensing.js";
 
 describe("modules", () => {
@@ -33,5 +33,11 @@ describe("modules", () => {
     const { crm: _missing, ...partial } = allModules();
     expect(() => ModuleMapSchema.parse(partial)).toThrow();
     expect(() => ModuleMapSchema.parse({ ...allModules(), payroll: true })).toThrow();
+  });
+
+  it("dynamic reports is a Pro add-on that needs reports and the sales dashboard", () => {
+    expect(moduleDef("dynamicReports")).toMatchObject({ group: "addon", dependsOn: ["reports", "dashboard"], plans: { basic: false, pro: true } });
+    const states = resolveModuleStates(allModules(), (id) => id !== "dashboard");
+    expect(states.find((s) => s.id === "dynamicReports")).toMatchObject({ active: false, reason: "Needs Sales dashboard" });
   });
 });

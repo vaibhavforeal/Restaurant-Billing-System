@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHash, generateKeyPairSync, createPublicKey, verify } from "node:crypto";
 import { LicenseClaims } from "../packages/domain/src/licensing.js";
-import { buildClaims, keyFingerprint, parseActivationRequest, signClaims } from "./license-claims.js";
+import { addMonths, buildClaims, keyFingerprint, parseActivationRequest, signClaims } from "./license-claims.js";
 
 const now = Date.UTC(2026, 9, 5, 10, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
@@ -90,7 +90,7 @@ describe("with the real app", () => {
     const app = buildServer({ db, licensing: { publicKey: pair.publicKey.export({ type: "spki", format: "pem" }).toString(), installationId } });
     try {
       const device = "b".repeat(64);
-      const setup = await app.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": device }, payload: { restaurantName: "Cafe", adminName: "Asha", pin: "1234" } });
+      const setup = await app.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": device }, payload: { restaurantName: "Cafe", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Asha", username: "admin", password: "admin-password", pin: "1234" } });
       const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
       const requestText = (await app.inject({ url: "/api/license/activation-request", headers })).body;
       const request = parseActivationRequest(requestText);
@@ -107,5 +107,14 @@ describe("with the real app", () => {
       expect(renewed.statusCode, renewed.body).toBe(200);
       expect(renewed.json()).toMatchObject({ plan: "basic", maxDevices: 2, revision: 2 });
     } finally { await app.close(); db.close(); }
+  });
+});
+
+describe("addMonths", () => {
+  it("clamps to the last day of a shorter target month", () => {
+    expect(addMonths(Date.UTC(2026, 0, 31, 10), 1)).toBe(Date.UTC(2026, 1, 28, 10));
+    expect(addMonths(Date.UTC(2027, 11, 31, 10), 2)).toBe(Date.UTC(2028, 1, 29, 10));
+    expect(addMonths(Date.UTC(2027, 7, 31, 10), 1)).toBe(Date.UTC(2027, 8, 30, 10));
+    expect(addMonths(Date.UTC(2026, 9, 5, 10), 12)).toBe(Date.UTC(2027, 9, 5, 10));
   });
 });

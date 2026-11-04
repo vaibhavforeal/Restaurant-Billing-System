@@ -8,8 +8,8 @@ export interface Slot { key: string; id?: string; name: string; fixed: boolean; 
 
 let nextKey = 0;
 const key = () => `slot-${nextKey++}`;
-export const emptyOption = (): SlotOption => ({ key: key(), productId: "", variantId: null, qty: "1", extra: "" });
-export const emptySlot = (fixed: boolean): Slot => ({ key: key(), name: fixed ? "Included" : "", fixed, minPicks: "1", maxPicks: "1", options: [emptyOption()] });
+const emptyOption = (): SlotOption => ({ key: key(), productId: "", variantId: null, qty: "1", extra: "" });
+const emptySlot = (fixed: boolean): Slot => ({ key: key(), name: fixed ? "Included" : "", fixed, minPicks: "1", maxPicks: "1", options: [emptyOption()] });
 
 /** The editor's rows for a saved combo; a new combo starts with one fixed slot. */
 export function slotsFromGroups(groups: ComboGroup[] | undefined): Slot[] {

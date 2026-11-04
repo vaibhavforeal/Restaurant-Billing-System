@@ -78,6 +78,8 @@ export interface PrintJobInfo {
 export interface AdminUser {
   id: string;
   name: string;
+  /** What they type to sign in; empty for someone who has never had one. */
+  username: string;
   role: "admin" | "cashier" | "waiter" | "kitchen";
   isActive: boolean;
   createdAt: number;
@@ -94,12 +96,26 @@ export interface SettingsData {
   receiptStyle: ReceiptStyle;
   upiId: string;
   restaurantName: string;
+  /** The street line; city, state and PIN code are kept apart and joined on bills. */
   address: string;
+  city: string;
+  /** GST state code, e.g. "29" for Karnataka. */
+  stateCode: string;
+  pincode: string;
+  phone: string;
   gstin: string;
   fssai: string;
   receiptFooter: string;
   /** Whether a change to a sent item prints a slip to the kitchen: staff choose, or always / never. */
   kotEditPrint: "ask" | "always" | "never";
+  /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
+  holdOrdersEnabled: boolean;
+  /** Popular items: badge each category's best-seller on the staff and guest menus. */
+  popularItemsEnabled: boolean;
+  /** Popular follows the clock: each category's best-seller around this hour, else all day. */
+  popularByTimeEnabled: boolean;
+  /** Ordered together: the carts suggest dishes often on the same bill. */
+  orderedTogetherEnabled: boolean;
 }
 
 export interface Customer {
@@ -162,6 +178,8 @@ export interface OrderItem {
   kotId: string | null;
   /** Set on an item inside a combo: the combo's own line. */
   parentItemId?: string | null;
+  /** Held back from the kitchen until staff fire it (pending items only; a combo's line holds its items). */
+  held?: boolean;
 }
 
 export interface Order {

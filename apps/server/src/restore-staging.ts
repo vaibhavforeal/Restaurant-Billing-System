@@ -9,7 +9,7 @@ import { parseBackupName, syncFile, verifyBackup } from "./backups.js";
 import { httpError } from "./http-error.js";
 
 /** Larger than any realistic restaurant database, small enough to refuse a runaway upload. */
-export const MAX_RESTORE_BYTES = 4 * 1024 ** 3;
+const MAX_RESTORE_BYTES = 4 * 1024 ** 3;
 
 /**
  * Holds at most one candidate backup in `<data>/restore-incoming` while an admin reviews what it contains.

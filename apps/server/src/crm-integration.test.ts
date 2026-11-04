@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
-import { auth, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("CRM & Loyalty as a Marketplace add-on", () => {
   let app: FastifyInstance; let token: string; let productId: string;
@@ -60,5 +60,33 @@ describe("CRM & Loyalty as a Marketplace add-on", () => {
     const loyal = await bill(third);
     expect(loyal.receipt.customer).toMatchObject({ name: "Priya", pointsEarned: 10 });
     expect(loyal.feedbackUrl).toBeDefined();
+  });
+
+  it("leaves the attached customer out of order responses for someone who may not view customers", async () => {
+    enableIntegration(app, "crm");
+    const priya = (await request("POST", "/api/customers", { name: "Priya", phone: "9876543210", email: "priya@example.com" })).json().customer;
+    const id = await order();
+    await request("PATCH", `/api/orders/${id}/customer`, { customerId: priya.id });
+    const waiter = await createUser(app, token, { name: "Wren", pin: "5678", role: "waiter" });
+    const as = (user: string, method: "GET" | "POST", url: string, payload?: object) =>
+      app.inject({ method, url, headers: auth(user), ...(payload ? { payload } : {}) });
+
+    // A waiter can view customers by default and sees who the order is for.
+    expect((await as(waiter.token, "GET", `/api/orders/${id}`)).json().order.customer).toMatchObject({ id: priya.id, phone: "9876543210" });
+
+    expect((await request("PUT", `/api/users/${waiter.id}/permissions`, { overrides: { "customers.read": false } })).statusCode).toBe(200);
+    const one = await as(waiter.token, "GET", `/api/orders/${id}`);
+    expect(one.statusCode).toBe(200);
+    expect(one.json().order).toMatchObject({ id, customer: null });
+    const list = (await as(waiter.token, "GET", "/api/orders")).json().orders as Array<{ id: string; customer: unknown }>;
+    expect(list.find((o) => o.id === id)).toMatchObject({ customer: null });
+    expect(JSON.stringify(list)).not.toContain("9876543210");
+    // Routes that hand back the changed order are covered too, not just the two reads.
+    const added = await as(waiter.token, "POST", `/api/orders/${id}/items`, { items: [{ productId, qty: 1, clientRef: uuidv7() }] });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().order).toMatchObject({ id, customer: null });
+
+    // The admin still sees everything.
+    expect((await request("GET", `/api/orders/${id}`)).json().order.customer).toMatchObject({ id: priya.id, email: "priya@example.com" });
   });
 });

@@ -1,3 +1,5 @@
+import { overLimit } from "../limits.js";
+import { newToken } from "../secret.js";
 import { z } from "zod";
 import type { Env } from "../env.js";
 import type { Deps } from "../issue.js";
@@ -14,7 +16,7 @@ export const SESSION_MS = 12 * 60 * 60 * 1000;
 export const IDLE_MS = 2 * 60 * 60 * 1000;
 const TOUCH_EVERY_MS = 60_000;
 /** Five wrong passwords lock the account for 15 minutes, whatever address they come from. */
-export const LOCK_AFTER = 5;
+const LOCK_AFTER = 5;
 export const LOCK_MS = 15 * 60 * 1000;
 
 const USER_COLUMNS = `u.id, u.email, u.name, u.role, u.must_change_password AS mustChangePassword`;
@@ -23,24 +25,16 @@ type UserRecord = Omit<StaffUser, "mustChangePassword"> & { mustChangePassword: 
 const toUser = (r: UserRecord): StaffUser => ({ id: r.id, email: r.email, name: r.name, role: r.role, mustChangePassword: r.mustChangePassword === 1 });
 
 const cookie = (value: string, maxAgeSeconds: number) => `${COOKIE}=${value}; Path=/portal; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
-export const sessionToken = (request: Request): string | null =>
+const sessionToken = (request: Request): string | null =>
   request.headers.get("cookie")?.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{43})(?:;|$)`))?.[1] ?? null;
-function newToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
 const Credentials = z.object({ email: z.string().trim().min(3).max(254), password: z.string().min(1).max(512) }).strict();
 export const NewPassword = z.string().min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`).max(200);
 
 /** The one answer to every refused sign-in: an unknown address, a wrong password and a locked account look alike. */
 const SIGN_IN_FAILED = "Wrong email or password, or the account is locked for a few minutes after repeated mistakes";
 
-async function limited(env: Env, request: Request): Promise<boolean> {
-  const limiter = env.LOGIN_LIMITER ?? env.LIMITER;
-  // Fails open like the licensing routes; the per-account lock below does not depend on it.
-  try { return !(await limiter.limit({ key: `portal:${request.headers.get("cf-connecting-ip") ?? "unknown"}` })).success; } catch { return false; }
-}
+// Fails open like the licensing routes; the per-account lock below does not depend on it.
+const limited = (env: Env, request: Request) => overLimit(env.LOGIN_LIMITER ?? env.LIMITER, request, "portal");
 
 export async function signIn(deps: Deps, env: Env, request: Request): Promise<Response> {
   if (await limited(env, request)) throw new HttpError(429, "Too many sign-in attempts. Try again in a minute.");
@@ -57,8 +51,12 @@ export async function signIn(deps: Deps, env: Env, request: Request): Promise<Re
     throw new HttpError(401, SIGN_IN_FAILED);
   }
   if (!(await verifyPassword(password, row.passwordHash))) {
-    const failed = row.failedAttempts + 1, lock = failed >= LOCK_AFTER;
-    await db.prepare(`UPDATE staff_users SET failed_attempts = ?, locked_until = ? WHERE id = ?`).bind(lock ? 0 : failed, lock ? now + LOCK_MS : null, row.id).run();
+    // Counted in one statement from the stored value, so wrong passwords sent at the same moment each count; a failure that passed the
+    // lock check before a parallel one set the lock leaves it in place.
+    await db.prepare(`UPDATE staff_users SET
+        failed_attempts = CASE WHEN failed_attempts + 1 >= ? THEN 0 ELSE failed_attempts + 1 END,
+        locked_until = CASE WHEN failed_attempts + 1 >= ? THEN ? ELSE locked_until END
+      WHERE id = ?`).bind(LOCK_AFTER, LOCK_AFTER, now + LOCK_MS, row.id).run();
     throw new HttpError(401, SIGN_IN_FAILED);
   }
   const token = newToken();

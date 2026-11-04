@@ -24,7 +24,7 @@ const stocks: Array<{ id: string; name: string }> = [];
 app.get("/__qa/recipes", async () => ({ products, stocks, basic: grant("basic", 2), pro: grant("pro", 3) }));
 app.addHook("onClose", () => db.close());
 const headers = { "x-masalapos-device": "a".repeat(64), authorization: "" };
-const setup = await app.inject({ method: "POST", url: "/api/setup", headers, payload: { restaurantName: "Recipe QA Cafe", adminName: "Test Admin", pin: "1234" } });
+const setup = await app.inject({ method: "POST", url: "/api/setup", headers, payload: { restaurantName: "Recipe QA Cafe", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Test Admin", username: "admin", password: "admin-password", pin: "1234" } });
 if (setup.statusCode !== 201) throw new Error(setup.body);
 headers.authorization = `Bearer ${setup.json().token}`;
 app.licensing.activate(grant("pro", 1));
@@ -34,7 +34,7 @@ async function post(url: string, payload: object) {
   return result.json();
 }
 await post("/api/license/devices", { name: "Fixture counter" });
-await post("/api/users", { name: "Cashier", pin: "2345", role: "cashier" });
+await post("/api/users", { name: "Cashier", username: "cashier", password: "password-2345", role: "cashier" });
 const { category } = await post("/api/categories", { name: "Main course" });
 for (const name of ["Vegetable biryani", "Jeera rice", "Dal tadka", "Paneer butter masala", "Butter naan", "Masala tea", "Sweet lassi", "Gulab jamun"]) {
   products.push((await post("/api/products", { name, categoryId: category.id, pricePaise: 12000, gstRate: 5, kotStationId: null,

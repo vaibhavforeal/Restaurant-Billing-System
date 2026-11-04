@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { ErrorBoundary } from "./ErrorBoundary";
 import "./styles.css";
 import "./theme.css";
 import "./pos-tokens.css";
@@ -14,4 +15,4 @@ if (!/^\/(menu\/?|feedback\/.+)$/.test(window.location.pathname)) applyTheme(rea
 startCaptainPwa();
 startKitchenPwa();
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<ErrorBoundary><App /></ErrorBoundary>);

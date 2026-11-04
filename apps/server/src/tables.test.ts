@@ -235,4 +235,25 @@ describe("tables", () => {
     const res = await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) });
     expect(res.json().tables[0]).toMatchObject({ status: "free", activeOrders: [] });
   });
+  it("saves a new table order in one go, and refuses a list that no longer matches the tables", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const [a, b, c] = [await addTable(admin.token, "A", null, 0), await addTable(admin.token, "B", null, 0), await addTable(admin.token, "C", null, 0)].map((r) => r.table.id);
+    const reorder = (ids: unknown, token = admin.token) => app.inject({ method: "PUT", url: "/api/tables/order", payload: { ids }, headers: auth(token) });
+    const names = async () => ((await app.inject({ method: "GET", url: "/api/tables", headers: auth(admin.token) })).json().tables as Array<{ name: string; sortOrder: number }>)
+      .map((t) => [t.name, t.sortOrder]);
+
+    const saved = await reorder([c, a, b]);
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(await names()).toEqual([["C", 1], ["A", 2], ["B", 3]]);
+
+    // A stale list (a table missing, unknown or repeated) changes nothing.
+    for (const ids of [[a, b], [a, b, c, uuidv7()], [a, a, b, c], [a, b, b]]) {
+      expect((await reorder(ids)).statusCode).toBe(409);
+    }
+    expect(await names()).toEqual([["C", 1], ["A", 2], ["B", 3]]);
+
+    const waiter = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
+    expect((await reorder([a, b, c], waiter.token)).statusCode).toBe(403);
+  });
 });

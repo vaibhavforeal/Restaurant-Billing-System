@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { expireRef, expiringSoon, expiryDue, openLots, type LedgerEntry } from "./loyalty-expiry.js";
 
 let seq = 0;
-const row = (kind: LedgerEntry["kind"], points: number, createdAt: number, expiresAt: number | null = null, clientRef: string | null = null): LedgerEntry =>
-  ({ id: `l${String(++seq).padStart(3, "0")}`, kind, points, createdAt, expiresAt, clientRef });
+const row = (kind: LedgerEntry["kind"], points: number, createdAt: number, expiresAt: number | null = null, clientRef: string | null = null, billId: string | null = null): LedgerEntry =>
+  ({ id: `l${String(++seq).padStart(3, "0")}`, kind, points, createdAt, expiresAt, clientRef, billId });
 
 describe("points expiry", () => {
   it("spends the oldest points first and expires what is left of a lot", () => {
@@ -40,5 +40,20 @@ describe("points expiry", () => {
     expect(expiryDue(entries, 10_000).map((d) => d.points)).toEqual([20, 5]);
     expect(expiringSoon(entries, 500, 1_000)).toEqual({ points: 20, firstAt: 1_000 });
     expect(expiringSoon(entries, 2_000, 1_000)).toEqual({ points: 0, firstAt: null });
+  });
+
+  it("takes a voided bill's points back from the lot that bill earned, not the oldest lot", () => {
+    const a = row("earn", 100, 0, 30, null, "b1"), b = row("earn", 50, 10, 400, null, "b2");
+    const entries = [a, b, row("reverse", -50, 11, null, null, "b2")];
+    expect(openLots(entries).map((l) => [l.id, l.remaining])).toEqual([[a.id, 100]]);
+    expect(expiryDue(entries, 31)).toEqual([{ lotId: a.id, points: 100, expiredAt: 30 }]);
+  });
+
+  it("takes a voided bill's points back from its own lot even after that lot expired, so they are not lost twice", () => {
+    const a = row("earn", 100, 0, 30, null, "b1");
+    const entries = [a, row("reverse", -100, 31, null, null, "b1")];
+    expect(expiryDue(entries, 40)).toEqual([]);
+    // No debt is left behind for later points to pay off.
+    expect(openLots([...entries, row("earn", 20, 50, null)]).map((l) => l.remaining)).toEqual([20]);
   });
 });

@@ -145,7 +145,7 @@ describe("combos", () => {
       { name: "Veg Burger", qty: 1, total_paise: 0, parent_order_item_id: line.id },
     ]);
 
-    const day = new Date().toISOString().slice(0, 10);
+    const day = new Date().toLocaleDateString("en-CA"); // the local day, as reports use
     const report = await app.inject({ url: `/api/reports/operations/items?from=${day}&to=${day}`, headers: auth(token) });
     expect(report.statusCode, report.body).toBe(200);
     const tables = report.json().report.tables as Array<{ title: string; rows: Array<{ name: string; qty: number }> }>;
@@ -161,7 +161,7 @@ describe("combos", () => {
     await app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(token) });
     const preview = await post(`/api/orders/${orderId}/bill-preview`, {});
     expect((await post(`/api/orders/${orderId}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey })).statusCode).toBe(201);
-    const day = new Date().toISOString().slice(0, 10);
+    const day = new Date().toLocaleDateString("en-CA"); // the local day, as reports use
     const profit = await app.inject({ url: `/api/reports/profit?from=${day}&to=${day}`, headers: auth(token) });
     expect(profit.statusCode, profit.body).toBe(200);
     const tables = profit.json().report.tables as Array<{ title: string; rows: Array<Record<string, unknown>> }>;

@@ -175,6 +175,51 @@ describe("POST /v1/enroll", () => {
     expect(await seats(theirs)).toBe(0);
   });
 
+  it("an order's term runs from its first activation: a later counter gets the same end date", async () => {
+    const order = await seedOrder(env.DB, customer, { outlets: 2 });
+    await enrolled(A, order);
+    vi.setSystemTime(T0 + 30 * DAY_MS);
+    const later = keys.claims((await enrolled(B, order)).license!);
+    expect(later).toMatchObject({ expiresAt: addMonths(T0, 12), graceUntil: addMonths(T0, 12) + GRACE_MS });
+  });
+
+  it("moving between orders never restarts a term, and a used-up trial is not given again", async () => {
+    const trial = await seedOrder(env.DB, customer, { kind: "trial" });
+    const paid = await seedOrder(env.DB, customer);
+    const first = await enrolled(A, trial);
+    vi.setSystemTime(T0 + 3 * DAY_MS);
+    const moved = await enrolled(A, paid, { ...heldBy(first.license!), currentRevision: 1 });
+    expect([await seats(trial), await seats(paid)]).toEqual([0, 1]);
+    // Thirteen months on the paid licence has ended. The trial's free seat must not give a fresh trial, nor its move back a fresh year.
+    vi.setSystemTime(addMonths(T0, 13));
+    const held = { ...heldBy(moved.license!), currentRevision: 2 };
+    const back = await enroll(A, customer.code, trial.code, held);
+    expect(back.status).toBe(409);
+    expect(await back.json()).toMatchObject({ error: "order_expired", message: expect.stringMatching(/\w+ \w+/) });
+    expect((await enroll(B, customer.code, trial.code)).status).toBe(409);
+    expect([await seats(trial), await seats(paid)]).toEqual([0, 1]);
+    expect((await latestLicense(env.DB, A))!.revision).toBe(2);
+  });
+
+  it("a counter cannot hop between two paid orders for a fresh year", async () => {
+    const one = await seedOrder(env.DB, customer), two = await seedOrder(env.DB, customer);
+    const first = await enrolled(A, one);
+    vi.setSystemTime(T0 + DAY_MS);
+    const second = await enrolled(A, two, { ...heldBy(first.license!), currentRevision: 1 });
+    expect(keys.claims(second.license!).expiresAt).toBe(addMonths(T0 + DAY_MS, 12));
+    vi.setSystemTime(addMonths(T0, 12) + DAY_MS);
+    const res = await enroll(A, customer.code, one.code, { ...heldBy(second.license!), currentRevision: 2 });
+    expect((await res.json() as { error: string }).error).toBe("order_expired");
+    expect((await latestLicense(env.DB, A))!.revision).toBe(2);
+  });
+
+  it("a counter re-enrolling on its own ended order still gets its newest licence", async () => {
+    const order = await seedOrder(env.DB, customer);
+    const first = await enrolled(A, order);
+    vi.setSystemTime(addMonths(T0, 13));
+    expect((await enrolled(A, order)).license).toBe(first.license);
+  });
+
   it("keeps the identifiers a counter already holds from a hand-issued licence", async () => {
     const order = await seedOrder(env.DB, customer);
     const held = { licenseId: "33333333-3333-4333-8333-333333333333", organizationId: "44444444-4444-4444-8444-444444444444", outletId: "55555555-5555-4555-8555-555555555555" };

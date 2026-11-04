@@ -1,30 +1,21 @@
 // The restaurant's side of support chat. The counter's POS server (holding the installation secret) asks for a one-time link and opens it
 // in the browser; the link turns into an mp_support cookie that speaks for that counter's chats, and nothing else, for a day.
+import { overLimit } from "../limits.js";
+import { newToken } from "../secret.js";
 import { z } from "zod";
 import type { Env } from "../env.js";
 import type { Deps } from "../issue.js";
-import { HttpError, json, readBody } from "../portal/http.js";
+import { HttpError, json, readBody, SECURITY_HEADERS, serveSpa } from "../portal/http.js";
 import { getInstallation } from "../store.js";
 import { activityStatement } from "../store.js";
 import { sha256Hex, verifyInstallationSecret } from "../secret.js";
 import { insertMessageStatement, lastMessageId, MESSAGE_MAX, openChatId, publishChat, touchChatStatement, visitorChat } from "./chats.js";
 
 const COOKIE = "mp_support";
-export const LINK_TTL_MS = 10 * 60_000;
-export const VISITOR_TTL_MS = 24 * 60 * 60_000;
+const LINK_TTL_MS = 10 * 60_000;
+const VISITOR_TTL_MS = 24 * 60 * 60_000;
 
-/** The chat page's own policy: like the portal's, and it may be opened from anywhere but framed by no one. */
-export const SUPPORT_SECURITY_HEADERS: Record<string, string> = {
-  "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "x-frame-options": "DENY",
-  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-};
-const respond = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
-  json(body, status, { ...SUPPORT_SECURITY_HEADERS, ...headers });
 
-function newToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 const LinkRequest = z.object({ installationId: z.string().uuid() }).passthrough();
@@ -64,9 +55,7 @@ const NewMessage = z.object({
   phone: z.string().trim().max(20).regex(/^[0-9+ ()-]*$/, "Use digits only").optional(),
 }).strict();
 
-async function limited(env: Env, request: Request): Promise<boolean> {
-  try { return !(await env.LIMITER.limit({ key: `support:${request.headers.get("cf-connecting-ip") ?? "unknown"}` })).success; } catch { return false; }
-}
+const limited = (env: Env, request: Request) => overLimit(env.LIMITER, request, "support");
 
 /** Everything under /support: the link exchange, the chat page's API, and the page itself. */
 export async function supportRoute(request: Request, env: Env, deps: Deps): Promise<Response> {
@@ -74,16 +63,16 @@ export async function supportRoute(request: Request, env: Env, deps: Deps): Prom
   try {
     if (request.method === "GET" && url.pathname === "/support/start") return await start(deps, url);
     if (url.pathname.startsWith("/support/api/")) return await api(request, env, deps, url);
-    return await page(request, env, url);
+    return await serveSpa(request, env, url, "/support", "support page");
   } catch (error) {
-    if (error instanceof HttpError) return respond({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
+    if (error instanceof HttpError) return json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
     throw error;
   }
 }
 
 async function start(deps: Deps, url: URL): Promise<Response> {
   const token = url.searchParams.get("t") ?? "", now = deps.now();
-  const back = (query: string) => new Response(null, { status: 303, headers: { location: `${url.origin}/support/${query}`, "cache-control": "no-store", ...SUPPORT_SECURITY_HEADERS } });
+  const back = (query: string) => new Response(null, { status: 303, headers: { location: `${url.origin}/support/${query}`, "cache-control": "no-store", ...SECURITY_HEADERS } });
   if (!TOKEN.test(token)) return back("?link=expired");
   const hash = await sha256Hex(token);
   const link = await deps.db.prepare(`SELECT installation_id AS installationId FROM support_links WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`)
@@ -109,7 +98,7 @@ async function api(request: Request, env: Env, deps: Deps, url: URL): Promise<Re
   const p = url.pathname.slice("/support/api".length);
   if (request.method === "GET" && p === "/chat") {
     const after = Number(url.searchParams.get("after") ?? 0);
-    return respond({ ...(await visitorChat(deps.db, visitor.installationId, Number.isSafeInteger(after) && after > 0 ? after : 0)), live: env.LIVE !== undefined });
+    return json({ ...(await visitorChat(deps.db, visitor.installationId, Number.isSafeInteger(after) && after > 0 ? after : 0)), live: env.LIVE !== undefined });
   }
   if (request.method === "POST" && p === "/messages") {
     if (await limited(env, request)) throw new HttpError(429, "That's a lot of messages at once. Wait a moment and send again.");
@@ -136,20 +125,9 @@ async function api(request: Request, env: Env, deps: Deps, url: URL): Promise<Re
       ]);
     }
     await publishChat(db, env.LIVE, chatId, after);
-    return respond({ ...(await visitorChat(db, visitor.installationId)), live: env.LIVE !== undefined }, 201);
+    return json({ ...(await visitorChat(db, visitor.installationId)), live: env.LIVE !== undefined }, 201);
   }
   throw new HttpError(404, "Not found", "not_found");
 }
 
 /** The chat page (apps/portal's support entry, built into dist/support). */
-async function page(request: Request, env: Env, url: URL): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "HEAD") return respond({ error: "not_found" }, 404);
-  if (url.pathname === "/support") return Response.redirect(`${url.origin}/support/${url.search}`, 308);
-  if (!env.ASSETS) return new Response("The support page is not built. Run: npm run build -w @masalapos/portal", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", ...SUPPORT_SECURITY_HEADERS } });
-  const file = /\/[^/]+\.[a-z0-9]+$/i.test(url.pathname);
-  const asset = await env.ASSETS.fetch(file ? request : new Request(new URL("/support/", url), request));
-  const response = new Response(asset.body, asset);
-  for (const [name, value] of Object.entries(SUPPORT_SECURITY_HEADERS)) response.headers.set(name, value);
-  if (!file) response.headers.set("cache-control", "no-cache");
-  return response;
-}

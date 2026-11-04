@@ -25,6 +25,16 @@ describe("receipts", () => {
       expect(text).toContain("PAID IN FULL"); expect(text).toContain("FSSAI: 12345678901234");
     }
   });
+  it("prints the restaurant's phone under the address, and nothing for bills issued without one", () => {
+    const sample = { ...bill, receipt: { ...bill.receipt, phone: "9845012345" } };
+    for (const width of [58, 80] as const) {
+      const text = renderBytes(receiptSlip(sample, width));
+      expect(text.indexOf("Ph: 9845012345")).toBeGreaterThan(text.indexOf("12 Market Road"));
+      expect(renderBytes(receiptSlip(bill, width))).not.toContain("Ph:");
+    }
+    expect(receiptHtml(sample)).toContain('<p class="phone">Ph: 9845012345</p>');
+    expect(receiptHtml(bill)).not.toContain('class="phone"');
+  });
   it("falls back to Classic for missing or unrecognized historic style values", () => {
     for (const receiptStyle of [undefined, 'unknown', '\" onload=alert(1)']) {
       const sample = { ...bill, receipt: { ...bill.receipt, receiptStyle } } as Bill;
@@ -148,11 +158,6 @@ describe("receipts", () => {
         expect(fits(thermal(plain, width), width)).toBe(true);
       }
     }
-  });
-  it("reads the heading of a bill saved before gstMode existed from its legacy flags", () => {
-    const { gstMode: _gstMode, ...legacy } = bill.receipt;
-    expect(renderBytes(receiptSlip({ ...bill, receipt: legacy as Bill["receipt"] }, 58))).toContain("TAX INVOICE");
-    expect(renderBytes(receiptSlip({ ...bill, receipt: { ...legacy, gstScheme: "composition" } as Bill["receipt"] }, 58))).toContain("BILL OF SUPPLY");
   });
   it.each(RECEIPT_STYLES)("labels a %s Zomato bill with the section 9(5) note and no GST lines", (receiptStyle) => {
     const totals = calculateBill([{ pricePaise: 25000, qty: 1, gstRate: 5 }], 0, "none");

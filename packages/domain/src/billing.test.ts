@@ -10,8 +10,8 @@ describe("GST billing", () => {
   it("included: mixed rates share the discount", () => {
     const bill = calculateBill([{ pricePaise: 20000, qty: 1, gstRate: 5 }, { pricePaise: 10000, qty: 1, gstRate: 18 }], 3000);
     expect(bill.taxes).toEqual([
-      { gstRate: 5, taxablePaise: 17143, cgstPaise: 429, sgstPaise: 428 },
-      { gstRate: 18, taxablePaise: 7627, cgstPaise: 687, sgstPaise: 686 },
+      { gstRate: 5, taxablePaise: 17144, cgstPaise: 428, sgstPaise: 428 },
+      { gstRate: 18, taxablePaise: 7628, cgstPaise: 686, sgstPaise: 686 },
     ]);
     expect(bill.totalPaise).toBe(27000);
     expect(bill.taxes.reduce((sum, t) => sum + t.taxablePaise + t.cgstPaise + t.sgstPaise, 0)).toBe(27000);
@@ -52,7 +52,18 @@ describe("GST billing", () => {
       expect(taxable + bill.cgstPaise + bill.sgstPaise + bill.roundingPaise).toBe(bill.totalPaise);
       expect(bill.roundingPaise).toBeGreaterThanOrEqual(-49);
       expect(bill.roundingPaise).toBeLessThanOrEqual(50);
-      expect(bill.taxes.every((t) => t.taxablePaise >= 0 && Math.abs(t.cgstPaise - t.sgstPaise) <= 1)).toBe(true);
+      expect(bill.taxes.every((t) => t.taxablePaise >= 0 && t.cgstPaise === t.sgstPaise)).toBe(true);
+    }
+  });
+  it("splits GST into equal CGST and SGST, each within a paisa of the taxable value times half the rate", () => {
+    // ₹100.10 at 5%: taxable 9533 would leave 477 of tax, which can't halve; the odd paisa stays in the taxable value.
+    const bill = calculateBill([{ pricePaise: 10010, qty: 1, gstRate: 5 }]);
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 9534, cgstPaise: 238, sgstPaise: 238 }]);
+    for (const rate of [5, 12, 18, 28]) for (let gross = 1; gross < 5000; gross += 13) {
+      const [t] = calculateBill([{ pricePaise: gross, qty: 1, gstRate: rate }]).taxes;
+      expect(t!.cgstPaise).toBe(t!.sgstPaise);
+      expect(t!.taxablePaise + t!.cgstPaise + t!.sgstPaise).toBe(gross);
+      expect(Math.abs(t!.cgstPaise - (t!.taxablePaise * rate) / 200)).toBeLessThanOrEqual(1);
     }
   });
   it("validates reasons, references, positive payment rows and empty zero settlements", () => {

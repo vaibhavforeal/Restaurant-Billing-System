@@ -22,10 +22,14 @@ export function moduleOverrides(allow = "", deny = ""): ModuleOverrides {
   return overrides;
 }
 
-/** Adds calendar months in UTC, keeping the time of day. */
-function addMonths(ms: number, months: number): number {
+/** Adds calendar months in UTC, keeping the time of day; the 31st of January plus one month is the last day of February. */
+export function addMonths(ms: number, months: number): number {
   const date = new Date(ms);
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
   date.setUTCMonth(date.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
   return date.getTime();
 }
 

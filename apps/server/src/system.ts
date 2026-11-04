@@ -13,7 +13,7 @@ import { httpError } from "./http-error.js";
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 /** The desktop window on the main POS PC talks to the server over loopback; counters and tablets use the LAN. */
-export function fromMainPc(req: FastifyRequest): boolean {
+function fromMainPc(req: FastifyRequest): boolean {
   return LOOPBACK.has(req.socket.remoteAddress ?? "");
 }
 /** e.g. "MasalaPOS backup - Spice Garden - 2026-10-31 1430.db": ASCII so every browser keeps the name. */
@@ -33,7 +33,7 @@ export function edgeShortcut(url: string): string {
   return `$edge = [Environment]::GetFolderPath('ProgramFilesX86') + '\\Microsoft\\Edge\\Application\\msedge.exe'\r\nif (!(Test-Path -LiteralPath $edge)) { $edge = [Environment]::GetFolderPath('ProgramFiles') + '\\Microsoft\\Edge\\Application\\msedge.exe' }\r\nif (!(Test-Path -LiteralPath $edge)) { throw 'Install Microsoft Edge first.' }\r\n$shell = New-Object -ComObject WScript.Shell\r\n$link = $shell.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\\MasalaPOS.lnk')\r\n$link.TargetPath = $edge\r\n$link.Arguments = '--app=${url}'\r\n$link.IconLocation = $edge + ',0'\r\n$link.Save()\r\n`;
 }
 /** Copied into the UI build by tools/build-desktop.mjs when the Android app has been built. */
-export const CAPTAIN_APK_PATH = "/captain/android/MasalaPOS-Captain.apk";
+const CAPTAIN_APK_PATH = "/captain/android/MasalaPOS-Captain.apk";
 /** QR payload for the Android Captain app: the POS origin and, for HTTPS, the restaurant CA it must pin. */
 export function captainPairingUri(origin: string, fingerprint?: string): string {
   const params = new URLSearchParams({ server: origin });
@@ -87,8 +87,8 @@ export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4
   const { staging, desktop } = restore;
   /** Restore stops every counter, so it is started only from the main PC's desktop app. */
   const restoreBlocked = (req: FastifyRequest): string | null =>
-    !desktop || !staging ? "Restore runs in the MasalaPOS desktop app on the main POS PC. Use the tray menu â†’ Restore backup."
-      : !fromMainPc(req) ? "To restore, open Settings â†’ Backups on the main POS PC." : null;
+    !desktop || !staging ? "Restore runs in the MasalaPOS desktop app on the main POS PC. Use the tray menu → Restore backup."
+      : !fromMainPc(req) ? "To restore, open Settings → Backups on the main POS PC." : null;
   const requireRestore = (req: FastifyRequest) => { const reason = restoreBlocked(req); if (reason) throw httpError(409, reason); return staging!; };
   const backupStatus = (req: FastifyRequest, status: ReturnType<Backups["status"]>) => ({ ...status, restoreBlockedReason: restoreBlocked(req) });
   const restaurantName = () => (app.db.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name: string } | undefined)?.restaurant_name ?? "";

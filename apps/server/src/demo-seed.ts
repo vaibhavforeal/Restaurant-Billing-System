@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 
+/** Every demo account (admin, cashier, captain, kitchen) signs in with this password; the demo admin approves with PIN 1234. */
+export const DEMO_PASSWORD = "demo1234";
+
 /** Uses normal business APIs. Never call against a restaurant database. */
 export async function seedDemo(app: FastifyInstance) {
   const db = app.db;
@@ -18,10 +21,10 @@ export async function seedDemo(app: FastifyInstance) {
     if (response.statusCode >= 400) throw new Error(`Demo setup ${url}: ${response.body}`);
     return response.json();
   }
-  token = (await request("/api/setup", { restaurantName: "MasalaPOS Demo Restaurant", adminName: "Demo Admin", pin: "1234" })).token;
-  await request("/api/users", { name: "Demo Cashier", pin: "2345", role: "cashier" });
-  const captain = (await request("/api/users", { name: "Suraj (demo)", pin: "3456", role: "waiter" })).user;
-  await request("/api/users", { name: "Demo Kitchen", pin: "4567", role: "kitchen" });
+  token = (await request("/api/setup", { restaurantName: "MasalaPOS Demo Restaurant", address: "14, 80 Feet Road, Koramangala 4th Block", city: "Bengaluru", stateCode: "29", pincode: "560034", phone: "9845012345", adminName: "Demo Admin", username: "admin", password: DEMO_PASSWORD, pin: "1234" })).token;
+  await request("/api/users", { name: "Demo Cashier", username: "cashier", password: DEMO_PASSWORD, role: "cashier" });
+  const captain = (await request("/api/users", { name: "Suraj (demo)", username: "captain", password: DEMO_PASSWORD, role: "waiter" })).user;
+  await request("/api/users", { name: "Demo Kitchen", username: "kitchen", password: DEMO_PASSWORD, role: "kitchen" });
   await request("/api/integrations/kds", { enabled: true }, "PATCH");
   const station = db.prepare("SELECT id FROM kot_stations ORDER BY id LIMIT 1").get() as { id: string };
   const tables: Array<{ id: string }> = [];

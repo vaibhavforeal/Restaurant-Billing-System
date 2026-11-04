@@ -13,6 +13,7 @@
     "./operational-reports": "./src/operational-reports.ts",
     "./custom-reports": "./src/custom-reports.ts",
     "./catalog-csv": "./src/catalog-csv.ts",
+    "./csv": "./src/csv.ts",
     "./zomato": "./src/zomato.ts",
     "./integrations": "./src/integrations.ts",
     "./licensing": "./src/licensing.ts",
@@ -22,7 +23,10 @@
     "./customer-segments": "./src/customer-segments.ts",
     "./updates": "./src/updates.ts",
     "./vendor-codes": "./src/vendor-codes.ts",
-    "./remote-support": "./src/remote-support.ts"
+    "./remote-support": "./src/remote-support.ts",
+    "./dashboard": "./src/dashboard/index.ts",
+    "./menu-insights": "./src/menu-insights.ts",
+    "./restaurant-profile": "./src/restaurant-profile.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -1,0 +1,35 @@
+/* The dashboard's only entry into Tailwind and BoardUI. Imported by DynamicDashboard.tsx alone, so the
+ * styles ship in the dashboard's lazy chunk. No preflight and no global element rules (see boardui/styles/globals.css). */
+@import "./boardui/styles/globals.css";
+/* Generate utilities only for classes used inside this folder (the stylesheet above turns off auto-detection). */
+@source "./";
+
+.boardui-root {
+  /* Larger touch targets in the dashboard only; the POS-wide token stays 40px. */
+  --control-touch: 44px;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+/* The POS styles bare button/input/select/textarea/label globally (styles.css, pos.css). BoardUI controls are built
+ * from Tailwind utilities that set only some properties, so the POS values for the rest (min-height, padding, border,
+ * background, radius, shadow) would show through. These !important resets are in a layer ordered after `utilities`;
+ * for !important declarations the earlier layer wins, so BoardUI's own utilities still override them. */
+@layer boardui-controls {
+  .boardui-root :is(button, input, select, textarea) {
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 solid !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: inherit !important;
+    font: inherit !important;
+    opacity: 1 !important;
+  }
+  .boardui-root label {
+    color: inherit !important;
+    font: inherit !important;
+  }
+}

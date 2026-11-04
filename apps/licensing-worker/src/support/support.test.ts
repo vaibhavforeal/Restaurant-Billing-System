@@ -46,7 +46,16 @@ function open(peer: Peer) {
   return { socket, say: (message: unknown) => connection.onMessage(JSON.stringify(message)), close: () => connection.onClose() };
 }
 /** Lets the hub's fire-and-forget handlers finish. */
+/** A short pause, for checking that something did NOT happen. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+/** Waits until `done` holds (the hub answers asynchronously, and slower under a loaded test run), failing after two seconds. */
+async function until(done: () => boolean | Promise<boolean>, what: string): Promise<void> {
+  // Counted in attempts, not by the clock, which these tests stop.
+  for (let tries = 0; !(await done()); tries++) {
+    if (tries > 400) throw new Error(`Timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
 
 async function link(secret = TEST_SECRET): Promise<Response> {
   return send(env, "POST", "/v1/support/link", { installationId }, withSecret({}, secret));
@@ -121,6 +130,21 @@ describe("live chat", () => {
     expect(second.chat).toMatchObject({ number: 1002, status: "waiting" });
   });
 
+  it("keeps showing the newest messages once a chat passes 500", async () => {
+    const v = await visitor();
+    await v.call("POST", "/messages", { body: "first", name: "Ravi" });
+    const chatId = (await support.ok<{ chats: ChatSummary[] }>("GET", "/chats")).chats[0]!.id;
+    const rows = Array.from({ length: 520 }, (_, i) => env.DB.prepare(`INSERT INTO support_chat_messages (chat_id, author_type, body, created_at) VALUES (?, 'customer', ?, ?)`).bind(chatId, `m${i}`, T0));
+    await env.DB.batch(rows);
+    const staff = (await support.ok<{ chat: ChatDetail }>("GET", `/chats/${chatId}`)).chat.messages;
+    expect(staff.at(-1)!.body).toBe("m519");
+    const seen = (await (await v.call("GET", "/chat")).json() as VisitorChat).chat!.messages;
+    expect(seen.at(-1)!.body).toBe("m519");
+    await v.call("POST", "/messages", { body: "newest" });
+    const polled = (await (await v.call("GET", `/chat?after=${seen.at(-1)!.id}`)).json() as VisitorChat).chat!.messages;
+    expect(polled.map((m) => m.body)).toEqual(["newest"]);
+  });
+
   it("is for support and admins only, and the restaurant needs its cookie", async () => {
     const sales = await as(env, "sales");
     expect((await sales.call("GET", "/chats")).status).toBe(403);
@@ -153,7 +177,7 @@ describe("live chat", () => {
     expect(update.messages).toHaveLength(1);
 
     page.say({ type: "typing" });
-    await settle();
+    await until(() => staffSocket.socket.of("chat.typing").length > 0, "chat.typing");
     expect(staffSocket.socket.of("chat.typing")[0]).toMatchObject({ installationId });
 
     await support.ok("POST", `/chats/${update.chat.id}/messages`, { body: "Hi!" });
@@ -186,6 +210,31 @@ describe("live socket sign-in", () => {
   });
 });
 
+describe("open live sockets", () => {
+  const upgrade = (path: string, headers: Record<string, string>) => authorizeLive(new Request(`${ORIGIN}${path}`, { headers }), env, { db: env.DB, now: Date.now, uuid: () => crypto.randomUUID() });
+  const sweepMinute = async () => { for (let i = 0; i < 12; i++) await hub.sweep(); };
+
+  it("close when the visitor's session expires", async () => {
+    const v = await visitor();
+    const page = open((await upgrade("/support/live", { cookie: v.cookie, origin: ORIGIN }))!);
+    await sweepMinute();
+    expect(page.socket.closed).toBeNull();
+    vi.setSystemTime(T0 + 24 * 60 * 60_000 + 1);
+    await sweepMinute();
+    expect(page.socket.closed).toBe(4001);
+  });
+
+  it("close when the staff session has been idle too long", async () => {
+    const peer = (await upgrade("/portal/api/live", { cookie: support.cookie, origin: ORIGIN }))!;
+    const staff = open(peer);
+    await sweepMinute();
+    expect(staff.socket.closed).toBeNull();
+    vi.setSystemTime(T0 + 2 * 60 * 60_000 + 1);
+    await sweepMinute();
+    expect(staff.socket.closed).toBe(4001);
+  });
+});
+
 describe("remote sessions", () => {
   const staffPeer = (who: { id: string; name: string }, role: "support" | "admin" = "support"): Peer =>
     ({ kind: "staff", user: { id: who.id, name: who.name, email: "", role, mustChangePassword: false }, tokenHash: "x" });
@@ -201,7 +250,7 @@ describe("remote sessions", () => {
     expect((await ask()).status).toBe(409);
 
     counter.say({ type: "remote.answer", sessionId: session.id, decision: "control", approvedBy: "Owner" });
-    await settle();
+    await until(() => counter.socket.of("remote.start").length > 0, "remote.start");
     const start = counter.socket.of("remote.start")[0] as { token: string; mode: string; iceServers: Array<{ urls: string[]; username?: string }> };
     expect(start.mode).toBe("view");
     expect(start.iceServers.find((s) => s.username)?.urls).toEqual(["turn:relay.test:3478?transport=udp", "turns:relay.test:5349"]);
@@ -213,7 +262,7 @@ describe("remote sessions", () => {
     const counter = open({ kind: "counter", installationId, customerId: "c" });
     const { session } = await (await ask()).json() as { session: RemoteSession };
     counter.say({ type: "remote.answer", sessionId: session.id, decision: "control", approvedBy: "Owner" });
-    await settle();
+    await until(() => counter.socket.of("remote.start").length > 0, "remote.start");
     const { token } = counter.socket.of("remote.start")[0] as { token: string };
 
     const authorize = (t: string) => authorizeLive(new Request(`${ORIGIN}/v1/remote/agent?t=${t}`), env, { db: env.DB, now: Date.now, uuid: () => crypto.randomUUID() });
@@ -225,23 +274,23 @@ describe("remote sessions", () => {
     viewer.say({ type: "remote.watch", sessionId: session.id });
     const stranger = open(staffPeer({ id: crypto.randomUUID(), name: "Other" }));
     stranger.say({ type: "remote.watch", sessionId: session.id });
-    await settle();
+    await until(() => stranger.socket.of("remote.refused").length > 0, "remote.refused");
     expect(stranger.socket.of("remote.refused")).toHaveLength(1);
 
     const agent = open(peer!);
-    await settle();
+    await until(() => agent.socket.of("remote.peer").length > 0, "remote.peer");
     expect(agent.socket.of("remote.peer")).toHaveLength(1);
     expect((await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${session.id}`)).session.status).toBe("active");
 
     agent.say({ type: "remote.signal", data: { sdp: "offer" } });
     viewer.say({ type: "remote.signal", sessionId: session.id, data: { sdp: "answer" } });
     stranger.say({ type: "remote.signal", sessionId: session.id, data: { sdp: "sneaky" } });
-    await settle();
+    await until(() => viewer.socket.of("remote.signal").length > 0 && agent.socket.of("remote.signal").length > 0, "remote.signal");
     expect(viewer.socket.of("remote.signal")[0]).toMatchObject({ data: { sdp: "offer" } });
     expect(agent.socket.of("remote.signal").map((e) => e.data)).toEqual([{ sdp: "answer" }]);
 
     agent.close();
-    await settle();
+    await until(() => counter.socket.of("remote.ended").length > 0, "remote.ended");
     const ended = (await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${session.id}`)).session;
     expect(ended).toMatchObject({ status: "ended", endReason: "Screen sharing stopped" });
     expect(counter.socket.of("remote.ended")[0]).toMatchObject({ sessionId: session.id });
@@ -255,7 +304,7 @@ describe("remote sessions", () => {
 
     const first = (await (await ask("control", chatId)).json() as { session: RemoteSession }).session;
     counter.say({ type: "remote.answer", sessionId: first.id, decision: "deny", approvedBy: "Ravi" });
-    await settle();
+    await until(async () => (await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${first.id}`)).session.status === "denied", "the denial");
     expect((await support.ok<{ session: RemoteSession }>("GET", `/remote-sessions/${first.id}`)).session.status).toBe("denied");
 
     const second = (await (await ask("control", chatId)).json() as { session: RemoteSession }).session;

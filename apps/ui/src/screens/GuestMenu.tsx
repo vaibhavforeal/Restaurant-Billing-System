@@ -4,6 +4,8 @@ import { uuid } from "../uuid";
 import { GuestServices } from "./GuestServices";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
 import { comboExtraPaise } from "../combo-cart";
+import { withPopularFirst } from "../popular-items";
+import { suggestTogether } from "../ordered-together";
 import "../guest-menu.css";
 
 type MenuProduct = GuestMenuData["products"][number];
@@ -313,8 +315,16 @@ function GuestMenuContent({ token }: { token: string }) {
   const locked = !!saved.request || sending || needsRefresh || loading;
   const subtotal = saved.cart.reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
   const count = saved.cart.reduce((sum, item) => sum + item.qty, 0);
-  const visible = menu?.products.filter((product) => (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
-    `${product.name} ${product.description} ${product.variants.map((variant) => variant.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [];
+  const popularIds = menu?.popularProductIds ?? [];
+  // "Goes well with your order": dishes often on the same bill as what is in the request, in the size most ordered.
+  const suggestions = !menu ? [] : suggestTogether(saved.cart, menu.pairs ?? {}, menu.products).flatMap(({ productId, variantId }) => {
+    const product = menu.products.find((p) => p.id === productId);
+    if (!product || product.combo) return [];
+    const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0] ?? null;
+    return [{ product, variant }];
+  });
+  const visible = withPopularFirst(menu?.products.filter((product) => (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
+    `${product.name} ${product.description} ${product.variants.map((variant) => variant.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [], popularIds);
 
   return <main className="guest-menu">
     <header className="guest-menu-header"><div className="guest-menu-header-inner">
@@ -351,7 +361,7 @@ function GuestMenuContent({ token }: { token: string }) {
             <div className="guest-menu-categories" aria-label="Menu categories"><button aria-pressed={category === "all"} onClick={() => setCategory("all")}>All dishes</button>
               {menu.categories.map((item) => <button key={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.name}</button>)}
             </div>
-            <div className="guest-menu-products">{visible.map((product) => <ProductCard key={`${menu.menuVersion}:${product.id}`} product={product} orderingAvailable={menu.orderingAvailable} locked={locked} onAdd={add} />)}</div>
+            <div className="guest-menu-products">{visible.map((product) => <ProductCard key={`${menu.menuVersion}:${product.id}`} product={product} popular={popularIds.includes(product.id)} orderingAvailable={menu.orderingAvailable} locked={locked} onAdd={add} />)}</div>
             {!visible.length && <div className="guest-menu-empty"><h3>{menu.products.length ? "No dishes found" : "The menu is being prepared"}</h3><p>{menu.products.length ? "Try another search or category." : "Please ask our team about today's menu."}</p></div>}
           </section>
           {menu.orderingAvailable && !receipt && <aside className="guest-menu-cart" aria-label="Your request" ref={cartRef} id="guest-cart" tabIndex={-1}>
@@ -364,6 +374,11 @@ function GuestMenuContent({ token }: { token: string }) {
                 <div className="guest-menu-quantity"><button aria-label={`Decrease ${item.name}`} disabled={locked} onClick={() => editItem(item.key, { qty: item.qty - 1 })}>−</button><span aria-label={`Quantity for ${item.name}`}>{item.qty}</span><button aria-label={`Increase ${item.name}`} disabled={locked || item.qty >= 20} onClick={() => editItem(item.key, { qty: item.qty + 1 })}>+</button><button className="guest-menu-remove" disabled={locked} onClick={() => editItem(item.key, { qty: 0 })} aria-label={`Remove ${item.name}`}>Remove</button></div>
                 <label className="guest-menu-item-note">Instructions for {item.name}<textarea rows={2} maxLength={200} placeholder="Optional: less spicy, no onions…" value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
               </li>)}</ul>
+              {suggestions.length > 0 && <div className="guest-menu-suggestions"><h3>Goes well with your order</h3>
+                <ul>{suggestions.map(({ product, variant }) => <li key={product.id}>
+                  <span>{product.name}{variant && <small>{variant.name}</small>}</span><strong>{money(variant?.pricePaise ?? product.pricePaise)}</strong>
+                  <button disabled={locked} onClick={() => add(product, variant?.id ?? null)} aria-label={`Also add ${product.name}${variant ? `, ${variant.name}` : ""}`}>Add <span aria-hidden="true">+</span></button>
+                </li>)}</ul></div>}
               <div className="guest-menu-cart-total"><div><span>Menu subtotal</span><strong>{money(subtotal)}</strong></div><p>No tax is added to menu prices. Your final bill is prepared at the restaurant.</p></div>
               {saved.reviewRequired && !needsRefresh && <label className="guest-menu-review"><input type="checkbox" disabled={locked} checked={false} onChange={() => save({ ...savedRef.current, reviewRequired: false })} /> I have reviewed the updated items and prices.</label>}
               <div className="guest-menu-cart-actions"><button className="guest-menu-primary" disabled={locked || saved.reviewRequired || loading} onClick={() => void submit()}>{sending ? "Sending…" : "Submit to staff"}</button><p>Staff must accept your request first. Pay at the restaurant.</p></div>
@@ -389,14 +404,14 @@ function GuestMenuContent({ token }: { token: string }) {
   </main>;
 }
 
-function ProductCard({ product, orderingAvailable, locked, onAdd }: { product: MenuProduct; orderingAvailable: boolean; locked: boolean; onAdd: (product: MenuProduct, variantId: string | null) => void }) {
+function ProductCard({ product, popular, orderingAvailable, locked, onAdd }: { product: MenuProduct; popular: boolean; orderingAvailable: boolean; locked: boolean; onAdd: (product: MenuProduct, variantId: string | null) => void }) {
   const [variantId, setVariantId] = useState(product.variants[0]?.id ?? null);
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const variant = product.variants.find((item) => item.id === variantId);
   const photo = localPhoto(product.photoUrl);
   return <article className={`guest-menu-product${product.isSoldOut ? " guest-menu-product-soldout" : ""}`}>
     {photo && failedPhoto !== photo && <img className="guest-menu-product-photo" src={photo} alt={product.name} loading="lazy" decoding="async" onError={() => setFailedPhoto(photo)} />}
-    <div className={`guest-menu-diet${product.isVeg ? "" : " guest-menu-nonveg"}`}><span aria-hidden="true">●</span>{product.isVeg ? "Vegetarian" : "Non-vegetarian"}</div>
+    <div className={`guest-menu-diet${product.isVeg ? "" : " guest-menu-nonveg"}`}><span aria-hidden="true">●</span>{product.isVeg ? "Vegetarian" : "Non-vegetarian"}{popular && <strong className="guest-menu-popular">Popular</strong>}</div>
     <h3>{product.name}</h3>
     {product.description && <p className="guest-menu-product-description">{product.description}</p>}
     {product.combo && <p className="guest-menu-combo-contents">{product.combo.map((group) => group.options.length === 1 || group.minPicks >= group.options.length
@@ -438,7 +453,7 @@ function ReceiptCard({ receipt, error, onNew, orderingAvailable }: { receipt: Gu
 function EarlierRequests({ requests, errors, truncated }: { requests: SavedRequest[]; errors: Record<string, string>; truncated: boolean }) {
   return <section className="guest-menu-earlier" aria-label="Your earlier order requests">
     <h2>Your earlier requests</h2>
-    {requests.toReversed().map(({ receipt }) => receipt && <details key={receipt.id}>
+    {[...requests].reverse().map(({ receipt }) => receipt && <details key={receipt.id}>
       <summary><span>Request {receipt.id.slice(-6).toUpperCase()} <small>{new Date(receipt.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</small></span><span className={`guest-menu-preparation-state guest-menu-preparation-${receipt.preparation?.state ?? "queued"}`} role="status">{receipt.preparation ? PREPARATION_LABELS[receipt.preparation.state] : "Accepted · Updating"}</span></summary>
       {receipt.preparation ? <div className="guest-menu-preparation"><ul>{receipt.preparation.items.map((item, index) => <li key={`${index}:${item.name}`}><span>{item.qty} × {item.name}</span><span>{PREPARATION_LABELS[item.state]}</span></li>)}</ul>
         {receipt.preparation.hasChanges && <p className="guest-menu-small">Our team updated some items or quantities. Please check with staff about the changes.</p>}

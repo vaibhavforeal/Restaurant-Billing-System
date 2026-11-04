@@ -1,5 +1,6 @@
 // Remote sessions: staff ask, the PC answers, the sharing window connects, someone ends it. Every step is a row update guarded by the
 // state it expects, so a late or repeated message changes nothing; every step is in the activity log and, when there is one, the chat.
+import { newToken } from "../secret.js";
 import type { D1Like } from "../env.js";
 import type { Env } from "../env.js";
 import type { LiveHub } from "../live/types.js";
@@ -12,7 +13,7 @@ import { addSystemMessage, counterName, firstName } from "./chats.js";
 /** The PC shows the request for 60 seconds; the service gives up a little later. */
 export const REQUEST_TTL_MS = 75_000;
 /** After it is allowed, the sharing window must connect within this. */
-export const START_TTL_MS = 2 * 60_000;
+const START_TTL_MS = 2 * 60_000;
 /** A session ends on its own after an hour. */
 export const SESSION_MAX_MS = 60 * 60_000;
 /** The path the sharing window connects to with its one-time token. */
@@ -77,11 +78,6 @@ export async function requestRemote(deps: RemoteDeps & { uuid: () => string }, s
   deps.live?.toStaff({ type: "remote.updated", session });
   if (ask.chatId) await addSystemMessage(db, deps.live, ask.chatId, `${firstName(staff.name)} asked to ${ask.mode === "control" ? "see and control" : "see"} this PC: ${ask.reason}`, now);
   return session;
-}
-
-export function newToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /**

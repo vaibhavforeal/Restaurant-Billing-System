@@ -8,14 +8,16 @@ import { httpError } from "./http-error.js";
 import { reverseStock } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { cancelSlip } from "./print/templates.js";
-import { readProfile } from "./print/profile.js";
-import { bestEffortPrint } from "./print/best-effort.js";
+import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { integrationEnabled } from "./integrations.js";
 import { takeawayOrderType } from "./order-types.js";
 import { assertModuleActive } from "./modules.js";
 import { userCan } from "./auth.js";
+import { holdOrdersEnabled } from "./order-settings.js";
+
+const HOLD_OFF = "Hold orders is turned off in Settings";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -172,9 +174,10 @@ export function registerOrders(app: FastifyInstance): void {
       throw httpError(409, "order is not open");
     }
 
-    const toAdd = body.items.filter((item) => !(item.clientRef && existingRefs.has(item.clientRef)))
-      .map((item) => ({ clientRef: item.clientRef ?? null, priced: priceOrderItem(app.db, order.price_tier, item) }));
-    if (toAdd.length > 0) app.db.transaction(() => { for (const item of toAdd) insertOrderItem(app.db, id, item.priced, { clientRef: item.clientRef }); })();
+    const fresh = body.items.filter((item) => !(item.clientRef && existingRefs.has(item.clientRef)));
+    if (fresh.some((item) => item.held) && !holdOrdersEnabled(app.db)) throw httpError(409, HOLD_OFF);
+    const toAdd = fresh.map((item) => ({ clientRef: item.clientRef ?? null, held: item.held === true, priced: priceOrderItem(app.db, order.price_tier, item) }));
+    if (toAdd.length > 0) app.db.transaction(() => { for (const item of toAdd) insertOrderItem(app.db, id, item.priced, { clientRef: item.clientRef, held: item.held }); })();
 
     const result = orderWithDetails(id)!;
     app.broadcast("order.updated", { order: result });
@@ -194,9 +197,12 @@ export function registerOrders(app: FastifyInstance): void {
 
     const qty = body.qty ?? item.qty;
     const note = body.note === undefined ? item.note : body.note;
+    // Un-holding always works, so dishes held before the setting was turned off are never stuck.
+    if (body.held === true && item.held !== 1 && !holdOrdersEnabled(app.db)) throw httpError(409, HOLD_OFF);
+    const held = body.held === undefined ? item.held : body.held ? 1 : 0;
 
     app.db.transaction(() => {
-      app.db.prepare("UPDATE order_items SET qty = ?, note = ? WHERE id = ?").run(qty, note, id);
+      app.db.prepare("UPDATE order_items SET qty = ?, note = ?, held = ? WHERE id = ?").run(qty, note, held, id);
       // A combo's items follow its quantity and cooking note; each holds a whole number of units per combo.
       app.db.prepare("UPDATE order_items SET qty = qty / ? * ?, note = ? WHERE parent_item_id = ? AND status != 'cancelled'").run(item.qty, qty, note, id);
     })();
@@ -263,39 +269,11 @@ export function registerOrders(app: FastifyInstance): void {
     const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
     // The combined label (e.g. "T3, T4") so the kitchen matches the slip to the tickets on screen.
     const tableName = orderTableLabel(app.db, order.id);
-    const stationRow = app.db
-      .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
-      .get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
-    if (!stationRow) return null;
-    const printerRow = stationRow.printer_id
-      ? (app.db
-          .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
-          .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
-      : undefined;
-    if (!printerRow) return null;
-
-    // Build context line using kitchen-board rule
-    let contextLine: string;
-    if (order.type === "parcel") {
-      contextLine = order.order_type_name ?? "Parcel";
-    } else if (order.type === "zomato") {
-      contextLine = `Zomato #${order.zomato_order_id}`;
-    } else if (tableName) {
-      if (order.split_label === null || order.split_label === "A") {
-        contextLine = tableName;
-      } else {
-        contextLine = `${tableName} / ${order.split_label}`;
-      }
-    } else {
-      contextLine = "Table";
-    }
-
-    const label = `Cancel — KOT #${kot.kot_no} — ${contextLine}`;
-
-    const rendered = bestEffortPrint(app.log, `Cancel slip for KOT #${kot.kot_no}`, () => cancelSlip(
+    const context = jobContext(order, tableName);
+    return printStationSlip(app, kot.station_id, "cancel", `Cancel — KOT #${kot.kot_no} — ${context}`, (target) => cancelSlip(
       {
         kotNo: kot.kot_no,
-        stationName: stationRow.name,
+        stationName: target.stationName,
         orderType: order.type,
         orderTypeName: order.order_type_name ?? null,
         zomatoOrderId: order.zomato_order_id ?? null,
@@ -305,12 +283,9 @@ export function registerOrders(app: FastifyInstance): void {
         reason,
         atMs: Date.now(),
       },
-      printerRow.paper_width as 58 | 80,
-      readProfile(printerRow.kot_profile),
-    ));
-    if (rendered.error) return rendered.error;
-    app.enqueuePrint(kot.station_id, "cancel", label, rendered.value!);
-    return null;
+      target.paperWidth,
+      target.profile,
+    )).error;
   }
 
   app.post("/api/orders/:id/cancel", { preHandler: update }, async (req) => {

@@ -1,5 +1,5 @@
 import {
-  LoyaltyTierCreate, LoyaltyTierUpdate, addMonths, expireRef, expiringSoon, expiryDue, tierFor, uuidv7,
+  LoyaltyTierCreate, LoyaltyTierUpdate, addMonths, expireRef, expiringSoon, expiryDue, openLots, tierFor, uuidv7,
   type Database, type LedgerEntry, type TierRule,
 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
@@ -36,11 +36,15 @@ export const loyaltyTiers = (db: Database): LoyaltyTier[] =>
     .map((r) => ({ id: r.id, name: r.name, minSpendPaise: r.min_spend_paise, earnMultiplier: r.earn_multiplier, isActive: r.is_active === 1 }));
 
 /** What a customer spent since `since`: bill totals less refunds, leaving out void bills. */
+/**
+ * What one bill adds to its customer's spend: its total less any refunds on it. Every screen and report that shows a customer's spend
+ * (profile, tiers, segments, the CRM report, custom reports) sums this over the customer's bills that are not void, so they agree.
+ */
+export const billSpendSql = (bill: string) => `(${bill}.total_paise - COALESCE((SELECT SUM(cn.total_paise) FROM credit_notes cn WHERE cn.bill_id = ${bill}.id), 0))`;
+
 export function customerSpend(db: Database, customerId: string, since = 0): number {
-  return (db.prepare(`SELECT COALESCE(SUM(b.total_paise), 0)
-      - COALESCE((SELECT SUM(cn.total_paise) FROM credit_notes cn JOIN bills x ON x.id = cn.bill_id
-          WHERE x.customer_id = ? AND x.status <> 'void' AND x.created_at >= ?), 0) AS n
-    FROM bills b WHERE b.customer_id = ? AND b.status <> 'void' AND b.created_at >= ?`).get(customerId, since, customerId, since) as { n: number }).n;
+  return (db.prepare(`SELECT COALESCE(SUM(${billSpendSql("b")}), 0) AS n FROM bills b WHERE b.customer_id = ? AND b.status <> 'void' AND b.created_at >= ?`)
+    .get(customerId, since) as { n: number }).n;
 }
 
 export interface CustomerTier { id: string; name: string; earnMultiplier: number; windowSpendPaise: number; next: { name: string; minSpendPaise: number } | null }
@@ -57,7 +61,29 @@ export function currentTier(db: Database, customerId: string, now = Date.now(), 
 }
 
 const ledgerOf = (db: Database, customerId: string) =>
-  db.prepare(`SELECT id, kind, points, created_at AS createdAt, expires_at AS expiresAt, client_ref AS clientRef FROM loyalty_ledger WHERE customer_id = ?`).all(customerId) as LedgerEntry[];
+  db.prepare(`SELECT id, kind, points, created_at AS createdAt, expires_at AS expiresAt, client_ref AS clientRef, bill_id AS billId
+    FROM loyalty_ledger WHERE customer_id = ?`).all(customerId) as LedgerEntry[];
+
+/**
+ * The points a bill redeemed, split by the expiry of the lots they came out of (oldest first). Points the redemption took
+ * with no lot left to come from are not listed.
+ */
+export function redeemedLots(db: Database, customerId: string, billId: string): Array<{ points: number; expiresAt: number | null }> {
+  const entries = ledgerOf(db, customerId);
+  const before = (a: LedgerEntry, b: LedgerEntry) => a.createdAt < b.createdAt || (a.createdAt === b.createdAt && a.id < b.id);
+  const pieces: Array<{ points: number; expiresAt: number | null }> = [];
+  for (const redeem of entries.filter((e) => e.kind === "redeem" && e.billId === billId).sort((a, b) => (before(a, b) ? -1 : 1))) {
+    const prior = entries.filter((e) => before(e, redeem));
+    const after = new Map(openLots([...prior, redeem]).map((l) => [l.id, l.remaining]));
+    for (const lot of openLots(prior)) {
+      const points = lot.remaining - (after.get(lot.id) ?? 0);
+      if (!points) continue;
+      const same = pieces.find((p) => p.expiresAt === lot.expiresAt);
+      if (same) same.points += points; else pieces.push({ points, expiresAt: lot.expiresAt });
+    }
+  }
+  return pieces;
+}
 
 /**
  * Writes an `expire` row for each lot of the customer's points that has passed its expiry date. The row's `client_ref`

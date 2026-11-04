@@ -23,6 +23,7 @@ export function AlertsPanel({ rows, truncated = false, operational, ready = true
       <h3><Icon name="alert" size={18} />Alerts</h3>
       {count > 0 && <span className="dash-badge" aria-label={`${alertBadge(count, truncated)} alerts`}>{alertBadge(count, truncated)}</span>}
     </header>
+    <div className="dash-alerts-body" role="region" aria-label="Alert details" tabIndex={0}>
     {zomatoEnabled && rows.length > 0 && <ul className="dash-alert-list" aria-label="Open delivery orders">
       {rows.map((row) => <li key={`${row.channel}:${row.orderId}`}>
         <button type="button" className="dash-alert-row" onClick={onOpenTables} aria-label={`${channelName[row.channel]} order ${row.orderId}, ${statusText(row.status)}, ${reportMoney(row.amountPaise)}, ${row.statusText}`}>
@@ -40,6 +41,7 @@ export function AlertsPanel({ rows, truncated = false, operational, ready = true
     {operational.length > 0 && <ul className="dash-alert-list dash-operational" aria-label="Counter alerts">
       {operational.map((alert) => <li key={alert.key} className="dash-alert-op"><Icon name="bills" size={16} /><span>{alert.message}</span></li>)}
     </ul>}
-    {count === 0 && settled && <p className="dash-alert-empty">Nothing needs attention right now.</p>}
+    {count === 0 && settled && !error && <p className="dash-alert-empty">Nothing needs attention right now.</p>}
+    </div>
   </section>;
 }

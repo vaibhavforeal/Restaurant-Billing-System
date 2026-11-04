@@ -9,8 +9,6 @@ npmRebuild: false
 asar: true
 asarUnpack:
   - "node_modules/better-sqlite3/**/*"
-  # Remote support's input injection (Windows SendInput through FFI); native, so it must sit outside the asar.
-  - "node_modules/koffi/**/*"
 files:
   - "**/*"
   - "!**/*.map"

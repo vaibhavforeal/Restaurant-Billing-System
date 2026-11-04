@@ -1,12 +1,14 @@
 import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "@fastify/websocket";
-import { sessionUser } from "./auth.js";
+import { canSeeCustomers, sessionUser, withoutCustomers } from "./auth.js";
 
 interface ClientInfo {
   token: string;
   userId: string;
   device: unknown;
+  /** Whether this person may view customers; refreshed whenever sockets are revalidated. */
+  canSeeCustomers: boolean;
 }
 
 /** How often connected screens hear from the hub, even when nothing else happens. */
@@ -17,8 +19,10 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
 
   app.decorate("broadcast", (event: string, data: unknown) => {
     const msg = JSON.stringify({ event, data });
-    for (const ws of clients.keys()) {
-      if (ws.readyState === ws.OPEN) ws.send(msg);
+    let redacted: string | undefined;
+    for (const [ws, info] of clients.entries()) {
+      if (ws.readyState !== ws.OPEN) continue;
+      ws.send(info.canSeeCustomers ? msg : (redacted ??= JSON.stringify({ event, data: withoutCustomers(data) })));
     }
   });
 
@@ -31,12 +35,14 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
       } else if (!app.licensing.sessionAllowed(info.token, info.device) || !app.licensing.status(info.device).canOperate) {
         ws.close(4403, "device or license unavailable");
         clients.delete(ws);
+      } else {
+        info.canSeeCustomers = canSeeCustomers(user);
       }
     }
   });
 
-  // Sessions and licenses are rechecked every 60s, and immediately by the code that revokes them (logout,
-  // user changes, license/device changes). Broadcasts do not recheck: that cost every client's session and
+  // Sessions, licenses and permissions are rechecked every 60s, and immediately by the code that changes them (logout,
+  // user and permission changes, license/device changes). Broadcasts do not recheck: that cost every client's session and
   // license verification on each event.
   const revalidateInterval = setInterval(() => {
     app.wsRevalidate();
@@ -79,7 +85,7 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
 
           clearTimeout(timeout);
           authenticated = true;
-          clients.set(socket, { token: frame.token, userId: user.id, device: frame.device });
+          clients.set(socket, { token: frame.token, userId: user.id, device: frame.device, canSeeCustomers: canSeeCustomers(user) });
           socket.send(JSON.stringify({ event: "auth.ok", data: {} }));
         } catch {
           socket.close(4401, "unauthenticated");

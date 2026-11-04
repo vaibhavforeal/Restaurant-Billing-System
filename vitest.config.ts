@@ -1,5 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { workspaceExports } from "./tools/workspace-exports.mjs";
+
+const root = fileURLToPath(new URL(".", import.meta.url));
 
 const pkg = (name: string) =>
   fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url));
@@ -7,8 +10,9 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: [
-      // Subpath exports (e.g. "@masalapos/domain/gst") resolve to their own source file, not under the index.
-      { find: /^@masalapos\/domain\/(.+)$/, replacement: fileURLToPath(new URL("./packages/domain/src/$1.ts", import.meta.url)) },
+      // Subpath imports resolve through each package's exports map, so folder subpaths work too.
+      ...Object.entries({ ...workspaceExports(root, "domain"), ...workspaceExports(root, "core") }).filter(([spec]) => spec.split("/").length > 2).map(([find, replacement]) => ({ find, replacement })),
+      { find: /^@board\//, replacement: fileURLToPath(new URL("./apps/ui/src/dynamic-dashboard/boardui/", import.meta.url)) },
       { find: "@masalapos/domain", replacement: pkg("domain") },
       { find: "@masalapos/core", replacement: pkg("core") },
       { find: "@masalapos/license-issuer", replacement: pkg("license-issuer") },

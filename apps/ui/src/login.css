@@ -1,0 +1,4 @@
+/* Sign-in: the show-password tick sits on one line, unlike the stacked field labels. */
+.auth-form label.login-show-password { display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: -6px; }
+.auth-form label.login-show-password input { width: auto; min-height: 0; height: auto; }
+.auth-form .login-help { margin: 16px 0 0; font-size: 12px; }

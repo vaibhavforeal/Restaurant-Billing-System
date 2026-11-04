@@ -16,7 +16,7 @@ See [Zomato setup, CSV templates and activation requirements](docs/operations/zo
 **Customer demo and Kitchen display:** Use **Start MasalaPOS Demo.cmd** for an
 isolated sample restaurant with reset, and **Start MasalaPOS Kitchen.cmd** for
 the separate Windows kitchen client. Tablets and browsers use the main server's
-`/kitchen/` address. See [setup, demo PINs, installers and reset instructions](docs/operations/demo-and-kitchen.md).
+`/kitchen/` address. See [setup, demo sign-ins, installers and reset instructions](docs/operations/demo-and-kitchen.md).
 
 **Detailed reports and captains:** Reports now includes item/category sales,
 cashier collections, hourly sales, KOT performance, cancellation details and stock
@@ -29,8 +29,9 @@ Blank service prices use the item's existing price. See
 [service pricing](docs/operations/service-pricing.md) for setup and CSV fields.
 
 Commercial direction: **cloud plus offline**, with Basic (2 devices) and Pro
-(5 devices, recipe editing and QR ordering entitlements). A counter activates at
-setup with the Customer ID and Order ID from MasalaPOS's setup card. Licences,
+(5 devices, recipe editing and QR ordering entitlements). The Windows setup file asks for
+the Customer ID and Order ID from MasalaPOS's setup card and activates the PC
+before installing. Licences,
 renewals, payments, GST invoices, leads and support are run from the
 [MasalaPOS Portal](docs/operations/vendor-portal.md). Local licensing includes
 verified file import, renewal previews, device management and change history;

@@ -6,6 +6,8 @@ import { registerWs } from "./ws.js";
 import { registerCatalog } from "./catalog.js";
 import { registerUsers } from "./users.js";
 import { registerSettings } from "./settings.js";
+import { registerOrderSettings } from "./order-settings.js";
+import { registerMenuInsights } from "./menu-insights.js";
 import { registerDiscountCaps } from "./discount-caps.js";
 import { registerKotEdits } from "./kot-edit.js";
 import { registerOrderTypes } from "./order-types.js";
@@ -30,6 +32,7 @@ import { registerSalesReports } from "./sales-reports.js";
 import { registerOperationalReports } from "./operational-reports.js";
 import { registerCustomReports } from "./custom-reports.js";
 import { registerOrderAnalytics } from "./order-analytics.js";
+import { registerDashboard } from "./dashboard.js";
 import { registerStock } from "./stock.js";
 import { registerCosting } from "./costing.js";
 import { registerGuestOrdering } from "./guest-ordering.js";
@@ -40,7 +43,6 @@ import { CloudBackups, type CloudBackupProvider } from "./cloud-backups.js";
 import { RestoreStaging } from "./restore-staging.js";
 import { realSend, type SinkSend } from "./print/sinks.js";
 import { PrintQueue } from "./print/queue.js";
-import { readProfile } from "./print/profile.js";
 import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discovery.js";
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
 import { registerSupport, type SupportOptions } from "./support.js";
@@ -98,33 +100,6 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   app.addHook("onReady", async () => queue.start());
   app.addHook("preClose", async () => queue.close());
 
-  app.decorate("enqueuePrint", (stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer) => {
-    interface StationRow {
-      printer_id: string | null;
-    }
-    const station = app.db
-      .prepare("SELECT printer_id FROM kot_stations WHERE id = ? AND is_active = 1")
-      .get(stationId) as StationRow | undefined;
-
-    if (!station || !station.printer_id) return;
-
-    interface PrinterRow {
-      id: string;
-      name: string;
-      kind: "network" | "windows" | "bluetooth";
-      connection: string;
-      is_active: number;
-      kot_profile: string;
-    }
-    const printer = app.db
-      .prepare("SELECT id, name, kind, connection, is_active, kot_profile FROM printers WHERE id = ?")
-      .get(station.printer_id) as PrinterRow | undefined;
-
-    if (!printer || printer.is_active !== 1) return;
-
-    queue.enqueue(printer, kind, label, bytes, readProfile(printer.kot_profile).copies);
-  });
-
   app.setErrorHandler((err: unknown, _req, reply) => {
     if (err instanceof ZodError) {
       return reply.status(400).send({ error: "validation", issues: err.issues });
@@ -155,6 +130,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);
+  registerOrderSettings(app);
+  registerMenuInsights(app);
   registerDiscountCaps(app);
   registerKotEdits(app);
   registerOrderTypes(app);
@@ -178,6 +155,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCustomReports(app);
   registerCrmReports(app);
   registerOrderAnalytics(app);
+  registerDashboard(app);
   registerStock(app);
   registerCosting(app);
   registerGuestOrdering(app, opts.port);
@@ -203,6 +181,5 @@ declare module "fastify" {
   interface FastifyInstance {
     db: Database;
     printQueue: PrintQueue;
-    enqueuePrint(stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string, bytes: Buffer): void;
   }
 }

@@ -70,5 +70,3 @@ export function statusText(status: string): string {
   const text = status.replaceAll("_", " ").trim();
   return text ? text[0]!.toUpperCase() + text.slice(1) : "Unknown";
 }
-
-export const paymentText = { prepaid: "Prepaid", cod: "COD", unknown: "Payment unknown" } as const;

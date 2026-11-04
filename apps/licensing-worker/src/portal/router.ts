@@ -4,7 +4,7 @@ import type { Deps } from "../issue.js";
 import { activityRoutes } from "./activity.js";
 import { changePassword, currentUser, signIn, signOut } from "./auth.js";
 import { assertCan, type Route } from "./context.js";
-import { HttpError, json, notFound, SECURITY_HEADERS } from "./http.js";
+import { HttpError, json, notFound, serveSpa } from "./http.js";
 import { customersRoutes } from "./customers.js";
 import { installationsRoutes } from "./installations.js";
 import { followUpRoutes } from "./followups.js";
@@ -29,7 +29,7 @@ const ROUTES: Route[] = [...usersRoutes, ...settingsRoutes, ...activityRoutes, .
 /** Everything under /portal: the JSON API for signed-in staff, and the web app itself. */
 export async function portalRoute(request: Request, env: Env, deps: Deps): Promise<Response> {
   const url = new URL(request.url);
-  return url.pathname.startsWith("/portal/api/") ? api(request, env, deps, url) : serveApp(request, env, url);
+  return url.pathname.startsWith("/portal/api/") ? api(request, env, deps, url) : serveSpa(request, env, url, "/portal", "portal app");
 }
 
 async function api(request: Request, env: Env, deps: Deps, url: URL): Promise<Response> {
@@ -59,20 +59,3 @@ async function api(request: Request, env: Env, deps: Deps, url: URL): Promise<Re
   }
 }
 
-/**
- * The portal web app from Workers Static Assets (apps/portal, built into dist/portal). A path without a file extension is a page of
- * the app, so it gets the app's index; the Worker adds the security headers, which asset responses cannot carry by themselves.
- */
-async function serveApp(request: Request, env: Env, url: URL): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "not_found" }, 404);
-  if (url.pathname === "/portal") return Response.redirect(`${url.origin}/portal/`, 308);
-  if (!env.ASSETS) return new Response("The portal app is not built. Run: npm run build -w @masalapos/portal", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", ...SECURITY_HEADERS } });
-  const file = /\/[^/]+\.[a-z0-9]+$/i.test(url.pathname);
-  // "/portal/" and not "/portal/index.html": the assets layer redirects the latter to the former.
-  const asset = await env.ASSETS.fetch(file ? request : new Request(new URL("/portal/", url), request));
-  const response = new Response(asset.body, asset);
-  for (const [name, value] of Object.entries(SECURITY_HEADERS)) response.headers.set(name, value);
-  // Pages always revalidate so a deploy reaches staff at once; the hashed scripts and styles they load can be cached.
-  if (!file) response.headers.set("cache-control", "no-cache");
-  return response;
-}

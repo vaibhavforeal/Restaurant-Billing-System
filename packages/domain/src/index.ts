@@ -7,7 +7,8 @@ export * from "./combos.js";
 export { OPERATIONAL_REPORTS, type OperationalReportKind, type OperationalReport, type ReportTable, type ReportColumn, type ReportCell } from "./operational-reports.js";
 export * from "./custom-reports.js";
 export { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, type Reservation, type ReservationInput, type ReservationList } from "./reservations.js";
-export { CATALOG_CSV_LIMIT, CATALOG_CSV_COLUMNS, catalogCsv, parseCatalogCsv, type CatalogImportPreview } from "./catalog-csv.js";
+export { CATALOG_CSV_LIMIT, CATALOG_CSV_COLUMNS, parseCatalogCsv, type CatalogImportPreview } from "./catalog-csv.js";
+export { csvField, parseCsv, toCsv, unescapeCsvField, type CsvCell } from "./csv.js";
 export { GuestSubmission, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "./guest-ordering.js";
 export { ServiceSubmission, type ServiceReceipt, type ServiceRequest } from "./guest-services.js";
 export { RecipeUpdate, type RecipeUpdateInput } from "./stock-schemas.js";
@@ -17,13 +18,13 @@ export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, Stock
 export { stockJson, appendStockMove, consumeStock, reverseStock, returnPartialStock, orderStockWarnings, type StockRow } from "./stock.js";
 export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";
 export { BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type PaymentMode, type BillTotals, type ReceiptSnapshot, type ReceiptCustomer, type Bill, type BillCreditNote } from "./billing.js";
-export { GST_MODES, DEFAULT_GST_RATES, effectiveGstRate, receiptGstMode, type GstMode, type DefaultGstRate } from "./gst.js";
+export { GST_MODES, DEFAULT_GST_RATES, effectiveGstRate, type GstMode, type DefaultGstRate } from "./gst.js";
 export { openDb, type Database } from "./db.js";
 export { migrate, type Migration } from "./migrate.js";
 export { MIGRATIONS } from "./migrations/index.js";
 export { roleFor, type RoleName } from "./roles.js";
 export { PERMISSION_AREAS, ADMIN_ONLY_PERMISSIONS, GRANTABLE_PERMISSIONS, KNOWN_PERMISSIONS, PermissionOverridesSchema, isGrantable, staffCan, effectivePermissions, roleDefaults, normaliseOverrides, type PermissionArea, type PermissionAction, type PermissionOverrides } from "./staff-permissions.js";
-export { LoginBody, SetupBody, PIN, type LoginInput, type SetupInput } from "./auth-schemas.js";
+export { LoginBody, Password, SetupBody, PIN, Username, type LoginInput, type SetupInput } from "./auth-schemas.js";
 export {
   GST_RATES,
   CategoryCreate, CategoryUpdate,
@@ -33,12 +34,14 @@ export {
   type ProductCreateInput, type ProductUpdateInput,
   type VariantCreateInput, type VariantUpdateInput,
 } from "./catalog-schemas.js";
-export { RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
+export { ADMIN_PIN_MESSAGE, RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
 export { SettingsUpdate, UpiId, type SettingsUpdateInput } from "./settings-schemas.js";
+export * from "./restaurant-profile.js";
+export * from "./restaurant-profile-schema.js";
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {
-  TableCreate, TableUpdate,
+  TableCreate, TableUpdate, TableOrder,
   OrderCreate, OrderItemsAdd, OrderItemUpdate, ItemCancel, SentItemEdit, ZOMATO_ORDER_ID, ORDER_TYPE_KINDS, OrderTypeCreate, OrderTypeUpdate, OrderTypeChange,
   type TableCreateInput, type TableUpdateInput,
   type OrderType, type OrderCreateInput, type OrderItemsAddInput, type OrderItemUpdateInput, type ItemCancelInput, type SentItemEditInput, type OrderTypeKind,
@@ -63,3 +66,4 @@ export { openLots, expiryDue, expiringSoon, expireRef, type LedgerEntry, type Po
 export { SegmentFilter, SegmentSave, matchesSegment, SEGMENT_PRESETS, SEGMENT_CSV_COLUMNS, type SegmentFilterInput, type SegmentFilterValue, type SegmentCustomer, type SavedSegment } from "./customer-segments.js";
 export { isRemoteToDesktop, isRemoteToServer, type RemoteToDesktop, type RemoteToServer, type RemoteMode, type IceServer } from "./remote-support.js";
 export { UPDATE_CHANNELS, isToServer, isToDesktop, type UpdateChannel, type UpdateState, type UpdateStatus, type ToDesktop, type ToServer } from "./updates.js";
+export { popularProductIds, orderedTogether, POPULAR_DEFAULTS, POPULAR_HOUR_WINDOW, TOGETHER_DEFAULTS, type PopularOptions, type TogetherOptions, type PairedDish } from "./menu-insights.js";

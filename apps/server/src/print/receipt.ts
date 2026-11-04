@@ -1,4 +1,4 @@
-import { receiptGstMode, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
+import { resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { contextLine } from "./templates.js";
@@ -36,12 +36,12 @@ const compositionNote = "Composition taxable person, not eligible to collect tax
  */
 function billHeading(r: Bill["receipt"]): { thermal: string; html: string; declaration: string | null } {
   if (r.gstPaidBy === "zomato") return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
-  if (receiptGstMode(r) === "included") return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
+  if (r.gstMode === "included") return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
   if (r.gstin.trim()) return { thermal: "BILL OF SUPPLY", html: "Bill of supply", declaration: compositionNote };
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
 /** The per-rate GST shown after the total: only a tax invoice carries it. */
-const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && receiptGstMode(bill.receipt) === "included" ? bill.taxes : [];
+const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && bill.receipt.gstMode === "included" ? bill.taxes : [];
 
 function wrapText(value: string, width: number): string[] {
   return value.split(/\r?\n/).flatMap((part) => {
@@ -91,6 +91,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   line(r.restaurantName);
   pos.size(1, 1).bold(false);
   if (r.address) line(r.address);
+  if (r.phone) line(`Ph: ${r.phone}`);
   if (r.gstin) line(`GSTIN: ${r.gstin}`);
   if (r.fssai) line(`FSSAI: ${r.fssai}`);
   if (style !== "compact") pos.line();
@@ -187,7 +188,7 @@ export function receiptHtml(bill: Bill): string {
   @page{@bottom-left{content:"Bill #${bill.billNo}";font:9px Arial,sans-serif;color:#71717a}}
   </style></head><body><main class="bill bill--${style}" aria-label="Restaurant bill">
   <header class="bill-header"><h1>${e(r.restaurantName)}</h1>
-    ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}
+    ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}${r.phone ? `<p class="phone">Ph: ${e(r.phone)}</p>` : ""}
     <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
     <h2>${heading.declaration ? `${heading.html}<small class="supply-note">${heading.declaration}</small>` : heading.html}</h2></header>
   <dl class="bill-meta"><div class="date"><dt>Date</dt><dd>${e(dateTime(bill.createdAt))}</dd></div>

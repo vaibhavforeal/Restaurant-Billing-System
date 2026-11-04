@@ -1,4 +1,4 @@
-// Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150), signed in as admin (1234).
+// Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150), signed in as admin (admin / admin-password).
 // Zomato and the Kitchen Display are ON in the fixture; "Paneer tikka" costs 300 base, 260 Takeaway and 240 Zomato on a kitchen station.
 // Punches in Zomato order E2E-1, runs it Preparing, Ready, Picked up, then checks the bill, the duplicate refusal, the
 // dashboard card, the day-end receivable and the reconciliation row. Who sees the section is zomato-desk-roles.js. The result is window.__zomatoDeskResult
@@ -23,7 +23,7 @@
     return { status: r.status, json: await r.json().catch(() => null) };
   };
   const ownToken = localStorage.getItem('masalapos.token');
-  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin }) })).json()).token;
+  const login = async (username, password) => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ username, password }) })).json()).token;
   const setValue = (e, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, value); e.dispatchEvent(new Event('input', { bubbles: true })); };
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const goto = async label => { await wait(() => navItem(label) && !navItem(label).disabled, 'nav ' + label); navItem(label).click(); await sleep(80); };
@@ -49,7 +49,7 @@
     // ---------- Who sees the Zomato section ----------
     await goto('tables'); await wait(() => document.querySelector('.tables-zomato'), 'Zomato panel');
     check(!!document.querySelector('.tables-zomato .zomato-desk-new') && document.querySelector('.tables-zomato h3').textContent === 'Zomato' && !!document.querySelector('.zomato-desk-empty'), 'Admin sees the Zomato section with + New and no open orders');
-    const waiterToken = await login('3456'), cashierToken = await login('2345');
+    const waiterToken = await login('ravi', 'password-3456'), cashierToken = await login('counter', 'password-2345');
     check((await call('POST', '/api/orders', waiterToken, { clientRef: 'w-' + Date.now(), type: 'zomato', zomatoOrderId: 'W-1' })).status === 403, 'The server refuses a waiter creating a Zomato order');
     check((await call('POST', '/api/orders', cashierToken, { clientRef: 'c-' + Date.now(), type: 'zomato', zomatoOrderId: 'C-0' })).status < 300, 'A cashier may punch in a Zomato order');
     const strayId = (await zomatoApi()).find(o => o.zomatoOrderId === 'C-0').id;

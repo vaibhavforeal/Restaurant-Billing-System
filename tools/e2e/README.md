@@ -1,5 +1,54 @@
 # MasalaPOS E2E Gate
 
+## Signing in to the fixtures
+
+Everyone signs in with a username and password. Only admins have a PIN, the
+approval PIN, typed at the counter to approve discounts, voids, refunds and
+remote support.
+
+| Where | Admin | Staff |
+| --- | --- | --- |
+| Fixture servers (`*-server.mts`) and browser setups | `admin` / `admin-password`, approval PIN `1234` | name in lower case / `password-<old PIN>`, e.g. `counter` / `password-2345` (cashier), `ravi` / `password-3456` (waiter), `kitchen` / `password-4567` |
+| Demo (port 4110) | `admin` / `demo1234`, approval PIN `1234` | `cashier`, `captain`, `kitchen`, each with `demo1234` |
+
+Older notes below name people by their old PIN (admin **1234**, cashier **2345**,
+waiter **3456**, kitchen **4567**); use the matching sign-in from this table.
+When a guide says to complete setup with admin PIN `1234`, set the username
+`admin`, password `admin-password` and approval PIN `1234`.
+
+## Popular items
+
+Build the UI and start `node --import tsx tools/e2e/popular-items-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4155/` with billed takeaway sales: Samosa leads Starters,
+Biryani leads Mains, and Lassi is alone in Drinks. Table T1 has its QR menu on (`GET /__qa/qr` gives its address).
+PINs: admin **1234**, waiter **3456**. Sign in as admin, add `tools/e2e/popular-items.js` to the page (Playwright
+`page.addScriptTag({ path })`) and require `window.__popularItemsResult.status === "passed"` (7 checks): each
+category's best-seller is badged Popular and listed first on the order screen while the rest stay A–Z, a one-dish
+category gets no badge, All items lists the best-sellers first, the QR table menu (opened in an iframe) shows the
+same badges, and with Show popular items off both menus drop the badges. It turns the setting back on at the end.
+
+The same fixture also has three bills sharing Biryani, Samosa and Lassi. Add `tools/e2e/ordered-together.js` after
+(or instead of) the popular check and require `window.__orderedTogetherResult.status === "passed"` (7 checks): an
+empty cart suggests nothing, Biryani in the staff cart suggests Lassi and Samosa under "Goes well with this order",
+one tap adds Lassi and the drinks suggestion goes, the QR request does the same (Add Biryani, then Also add Samosa),
+and with Suggest dishes ordered together off both carts drop the row. It turns the setting back on at the end.
+
+The fixture also sold 20 Paneer tikka 12 hours ago, outside the time-of-day band. Add `tools/e2e/popular-by-time.js`
+and require `window.__popularByTimeResult.status === "passed"` (4 checks): Match the time of day is on by default
+and Starters shows Samosa as Popular; with it off, Paneer tikka (the all-day best-seller) becomes Popular and first,
+live; turning it back on returns Samosa. It turns the setting back on at the end.
+
+## Hold orders
+
+Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4153/` with three kitchen dishes, mineral water
+(no station), tables T1–T4 and a fake kitchen printer (`GET /__qa/prints`). PINs: admin **1234**,
+cashier **2345**, waiter **3456**. Sign in as admin, add `tools/e2e/hold-order.js` to the page (Playwright
+`page.addScriptTag({ path })`) and require `window.__holdOrderResult.status === "passed"` (11 checks):
+KOT leaves a held dish out, billing asks and fires it, a held takeaway is saved on the hub with its held
+dish, and with Hold orders off the Hold controls hide while Fire stays. It answers the billing prompt
+by replacing `window.confirm` and restores it afterwards.
+
 ## Zomato desk
 
 Build the UI and start `node --import tsx tools/e2e/zomato-desk-server.mts`. It is a
@@ -608,7 +657,7 @@ fixture: the gate creates menu items, orders and payments.
 
 ## Running gates through the Playwright MCP
 
-Where agent-browser is not installed, sign in by typing the PIN into the "Staff PIN" box,
+Where agent-browser is not installed, sign in by typing the username and password into the sign-in boxes,
 then add the gate with `page.addScriptTag({ path })` and wait for its result global with
 `page.waitForFunction`. Gates that download CSVs (sales-dashboard, zomato) close the MCP browser
 when the real download starts: first run

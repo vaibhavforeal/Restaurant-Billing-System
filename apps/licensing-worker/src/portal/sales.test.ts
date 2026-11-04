@@ -249,6 +249,79 @@ describe("counters", () => {
     const check = await send(env, "POST", "/v1/activate", activation(OTHER_COUNTER, fingerprint, { ...held(offline.license), currentRevision: 1 }), withSecret({}, TEST_SECRET));
     expect(await check.json()).toEqual({ license: null, enrolled: true });
   });
+
+  it("an offline request whose licence doesn't match the counter's record is refused without taking a seat", async () => {
+    const customer = await newCustomer(admin);
+    const order = await newOrder(admin, customer.id, { outlets: 2, pricePerOutletPaise: 0 });
+    await admin.ok("POST", `/orders/${order.id}/confirm`);
+    expect((await enrol(COUNTER, customer.code, order.code)).status).toBe(200);
+    const other = await newOrder(admin, customer.id, { outlets: 1, pricePerOutletPaise: 0 });
+    await admin.ok("POST", `/orders/${other.id}/confirm`);
+    // The counter now holds a hand-issued licence with other identifiers: a licence signed for its record would be refused on the counter.
+    const handIssued = { licenseId: "33333333-3333-4333-8333-333333333333", organizationId: "44444444-4444-4444-8444-444444444444", outletId: "55555555-5555-4555-8555-555555555555" };
+    const request = JSON.stringify(activation(COUNTER, fingerprint, { ...handIssued, currentRevision: 5 }));
+    const res = await admin.call("POST", `/orders/${other.id}/offline-licence`, { activationRequest: request });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "mismatch" });
+    expect(await env.DB.prepare(`SELECT seats_used AS used FROM orders WHERE id = ?`).bind(other.id).first()).toEqual({ used: 0 });
+    expect((await latestLicense(env.DB, COUNTER))!.revision).toBe(1);
+  });
+
+  it("support replaces a dead counter: the new computer takes over its seat and licence, even after the order's own term ended", async () => {
+    const { customer, order } = await enrolledCounter();
+    // A renewal keeps the counter going for a second year, past the end of the order it activated on.
+    const renewal = await newOrder(admin, customer.id, { kind: "renewal", outlets: 0, pricePerOutletPaise: 0, installationIds: [COUNTER] });
+    await admin.ok("POST", `/orders/${renewal.id}/confirm`);
+    const kept = (await latestLicense(env.DB, COUNTER))!;
+    expect(kept.expiresAt).toBe(addMonths(addMonths(T0, 12), 12));
+
+    // Fourteen months in, the counter's computer dies. The new one can't enrol: the order's term is over.
+    vi.setSystemTime(addMonths(T0, 14));
+    const support = await as(env, "support");
+    const refused = await enrol(OTHER_COUNTER, customer.code, order.code);
+    expect(await refused.json()).toMatchObject({ error: "order_expired" });
+
+    for (const [body, code] of [[{ installationId: COUNTER }, "same_counter"], [{ installationId: "99999999-9999-4999-8999-999999999999" }, undefined]] as const) {
+      const bad = await support.call("POST", `/installations/${COUNTER}/replace`, body);
+      expect(bad.status).toBeGreaterThanOrEqual(400);
+      if (code) expect(await bad.json()).toMatchObject({ code });
+    }
+    expect((await (await as(env, "sales")).call("POST", `/installations/${COUNTER}/replace`, { installationId: OTHER_COUNTER })).status).toBe(403);
+
+    const replaced = await support.ok<{ installation: InstallationDetail }>("POST", `/installations/${COUNTER}/replace`, { installationId: OTHER_COUNTER });
+    expect(replaced.installation).toMatchObject({ id: OTHER_COUNTER, order: { id: order.id }, customer: { id: customer.id } });
+    expect(await getInstallation(env.DB, COUNTER)).toMatchObject({ orderId: null });
+    expect(await env.DB.prepare(`SELECT seats_used AS used FROM orders WHERE id = ?`).bind(order.id).first()).toEqual({ used: 1 });
+    const moved = (await latestLicense(env.DB, OTHER_COUNTER))!;
+    expect(moved).toMatchObject({ plan: kept.plan, expiresAt: kept.expiresAt, graceUntil: kept.graceUntil, orderId: kept.orderId });
+    expect(keys.claims(moved.envelope)).toMatchObject({ installationId: OTHER_COUNTER });
+    expect(keys.claims(moved.envelope).trial).not.toBe(true);
+
+    // The new computer now gets that licence when it enrols with the same IDs.
+    const now = await enrol(OTHER_COUNTER, customer.code, order.code);
+    expect(now.status).toBe(200);
+    expect(keys.claims(((await now.json()) as { license: string }).license).installationId).toBe(OTHER_COUNTER);
+    // A second replace of the old counter finds nothing to hand over.
+    expect((await support.call("POST", `/installations/${COUNTER}/replace`, { installationId: OTHER_COUNTER })).status).toBe(409);
+  });
+
+  it("an order whose term has ended takes no more counters, by a move or an offline request", async () => {
+    const customer = await newCustomer(admin);
+    const trial = await newOrder(admin, customer.id, { kind: "trial" });
+    expect((await enrol(COUNTER, customer.code, trial.code)).status).toBe(200);
+    const paid = await newOrder(admin, customer.id, { outlets: 1, pricePerOutletPaise: 0 });
+    await admin.ok("POST", `/orders/${paid.id}/confirm`);
+    await admin.ok("POST", `/installations/${COUNTER}/move`, { orderId: paid.id });
+    vi.setSystemTime(T0 + 30 * DAY_MS);
+    const later = await signIn(env, admin.staff);
+    const back = await later.call("POST", `/installations/${COUNTER}/move`, { orderId: trial.id });
+    expect(back.status).toBe(409);
+    expect(await back.json()).toMatchObject({ code: "order_expired" });
+    const offline = await later.call("POST", `/orders/${trial.id}/offline-licence`, { activationRequest: JSON.stringify(activation(OTHER_COUNTER, fingerprint)) });
+    expect(offline.status).toBe(409);
+    expect(await offline.json()).toMatchObject({ code: "order_expired" });
+    expect(await env.DB.prepare(`SELECT seats_used AS used FROM orders WHERE id = ?`).bind(trial.id).first()).toEqual({ used: 0 });
+  });
 });
 
 describe("who may do what", () => {

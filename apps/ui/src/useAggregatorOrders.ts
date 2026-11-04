@@ -4,6 +4,7 @@ import { aggregatorAlerts, type AlertRow } from "./dashboard-data";
 import type { Order } from "./types";
 import { useNow } from "./useDashboard";
 import { connectWs } from "./ws";
+import { withTimeout } from "./abort-signal";
 
 const none: AlertRow[] = [];
 interface AggregatorOrders { rows: AlertRow[]; error: string; loaded: boolean }
@@ -29,7 +30,7 @@ export function useAggregatorOrders(enabled: boolean): AggregatorOrders {
     const current = new AbortController(); controller.current = current;
     try {
       const { orders } = await apiFetch<{ orders: Order[] }>("/api/orders", {
-        signal: AbortSignal.any([current.signal, AbortSignal.timeout(15000)]), cache: "no-store",
+        signal: withTimeout(current.signal, 15000), cache: "no-store",
       });
       if (request === revision.current) setState({ orders, error: "", loaded: true });
     } catch (error) {

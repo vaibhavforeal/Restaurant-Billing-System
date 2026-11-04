@@ -6,8 +6,7 @@ import { httpError } from "./http-error.js";
 import { assertKdsActive } from "./kds.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { kotSlip } from "./print/templates.js";
-import { readProfile } from "./print/profile.js";
-import { bestEffortPrint } from "./print/best-effort.js";
+import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { orderTableLabel } from "./table-label.js";
 
 export function registerKots(app: FastifyInstance): void {
@@ -23,8 +22,12 @@ export function registerKots(app: FastifyInstance): void {
       clientRef: z.uuid(),
       itemIds: z.array(z.uuid()).min(1).max(500).optional(),
       itemRefs: z.array(z.string().min(8).max(64)).min(1).max(500).optional(),
+      /** Fire: send the named held items (and only held ones), clearing their hold. */
+      fire: z.literal(true).optional(),
     }).refine((b) => !!b.itemIds !== !!b.itemRefs, "Name the items by id or by reference").optional().parse(req.body);
-    const fingerprint = !parsed ? "" : parsed.itemIds ? JSON.stringify([...new Set(parsed.itemIds)].sort()) : `refs:${JSON.stringify([...new Set(parsed.itemRefs)].sort())}`;
+    const fire = parsed?.fire === true;
+    const named = !parsed ? "" : parsed.itemIds ? JSON.stringify([...new Set(parsed.itemIds)].sort()) : `refs:${JSON.stringify([...new Set(parsed.itemRefs)].sort())}`;
+    const fingerprint = fire ? `fire:${named}` : named;
     let body: { clientRef: string; itemIds: string[] } | undefined;
     if (parsed?.itemIds) body = { clientRef: parsed.clientRef, itemIds: parsed.itemIds };
     if (parsed) {
@@ -50,19 +53,25 @@ export function registerKots(app: FastifyInstance): void {
       product_id: string;
       station_id: string | null;
       parent_item_id: string | null;
+      /** 1 when the item, or the combo it is in, is held back from the kitchen. */
+      held: number;
     }
     const allPending = app.db
       .prepare(
-        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id, oi.parent_item_id
+        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id, oi.parent_item_id, MAX(oi.held, COALESCE(parent.held, 0)) AS held
          FROM order_items oi
          JOIN products p ON p.id = oi.product_id
+         LEFT JOIN order_items parent ON parent.id = oi.parent_item_id
          WHERE oi.order_id = ? AND oi.status = 'pending'
          ORDER BY oi.id`,
       )
       .all(id) as PendingItem[];
     // Naming a combo sends the items in it.
-    const pendingItems = allPending.filter((item) => !body || body.itemIds.includes(item.id) || (item.parent_item_id !== null && body.itemIds.includes(item.parent_item_id)));
+    const namedItems = allPending.filter((item) => !body || body.itemIds.includes(item.id) || (item.parent_item_id !== null && body.itemIds.includes(item.parent_item_id)));
     if (body && new Set(body.itemIds).size !== allPending.filter((item) => body.itemIds.includes(item.id)).length) throw httpError(409, "Kitchen items changed; review the order before sending again");
+    if (fire && allPending.some((item) => body!.itemIds.includes(item.id) && !item.held)) throw httpError(409, "Only held items can be fired");
+    // A KOT leaves held dishes for later, even when a screen that has not seen the hold names them; Fire sends them.
+    const pendingItems = fire ? namedItems : namedItems.filter((item) => !item.held);
 
     const byStation = new Map<string, string[]>();
     for (const item of pendingItems) {
@@ -100,6 +109,7 @@ export function registerKots(app: FastifyInstance): void {
       const combos = [...new Set(pendingItems.filter((item) => item.station_id && item.parent_item_id).map((item) => item.parent_item_id!))];
       changedStockIds.push(...consumeStock(app.db, combos, req.user.id));
       for (const comboId of combos) app.db.prepare("UPDATE order_items SET status = 'sent' WHERE id = ? AND status = 'pending'").run(comboId);
+      if (fire) for (const itemId of body!.itemIds) app.db.prepare("UPDATE order_items SET held = 0 WHERE id = ?").run(itemId);
       // A new Zomato order enters the kitchen; a Ready one goes back (new items to cook). Only when a KOT was created.
       if (createdKots.length > 0) {
         app.db.prepare("UPDATE orders SET zomato_status = 'preparing' WHERE id = ? AND type = 'zomato' AND (zomato_status IS NULL OR zomato_status = 'ready')").run(id);
@@ -123,46 +133,14 @@ export function registerKots(app: FastifyInstance): void {
       });
 
       // Print each KOT
+      const context = jobContext(orderResult, tableName);
       for (const ck of createdKots) {
         const kotRow = allKots.find((k) => k.id === ck.id)!;
-        const stationRow = app.db
-          .prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?")
-          .get(ck.stationId) as { name: string; printer_id: string | null } | undefined;
-
-        if (!stationRow) continue;
-
-        const printerRow = stationRow.printer_id
-          ? (app.db
-              .prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1")
-              .get(stationRow.printer_id) as { paper_width: number; kot_profile: string } | undefined)
-          : undefined;
-
-        if (!printerRow) continue;
-
         const kotItemsForPrint = allItems.filter((i) => i.kot_id === ck.id);
-
-        // Build context line using kitchen-board rule
-        let contextLine: string;
-        if (orderResult.type === "parcel") {
-          contextLine = orderResult.order_type_name ?? "Parcel";
-        } else if (orderResult.type === "zomato") {
-          contextLine = `Zomato #${orderResult.zomato_order_id}`;
-        } else if (tableName) {
-          if (orderResult.split_label === null || orderResult.split_label === "A") {
-            contextLine = tableName;
-          } else {
-            contextLine = `${tableName} / ${orderResult.split_label}`;
-          }
-        } else {
-          contextLine = "Table";
-        }
-
-        const label = `KOT #${kotRow.kot_no} — ${contextLine}`;
-
-        const rendered = bestEffortPrint(app.log, `KOT #${kotRow.kot_no}`, () => kotSlip(
+        const { error: printError } = printStationSlip(app, ck.stationId, "kot", `KOT #${kotRow.kot_no} — ${context}`, (target) => kotSlip(
           {
             kotNo: kotRow.kot_no,
-            stationName: stationRow.name,
+            stationName: target.stationName,
             orderType: orderResult.type,
             orderTypeName: orderResult.order_type_name ?? null,
             zomatoOrderId: orderResult.zomato_order_id ?? null,
@@ -176,11 +154,10 @@ export function registerKots(app: FastifyInstance): void {
             })),
             atMs: kotRow.created_at,
           },
-          printerRow.paper_width as 58 | 80,
-          readProfile(printerRow.kot_profile),
+          target.paperWidth,
+          target.profile,
         ));
-        if (rendered.error) printErrors.push(rendered.error);
-        else app.enqueuePrint(ck.stationId, "kot", label, rendered.value!);
+        if (printError) printErrors.push(printError);
       }
       return kotsWithContext;
     })();

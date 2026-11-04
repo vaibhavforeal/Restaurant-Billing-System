@@ -73,6 +73,25 @@ describe("offline payments", () => {
     expect((await pay(accounts, order.id, 100)).status).toBe(409);
   });
 
+  it("a payment whose settlement failed is kept, and the settle action completes the order once", async () => {
+    const { order } = await confirmedOrder();
+    const realBatch = env.DB.batch.bind(env.DB);
+    let failures = 1;
+    vi.spyOn(env.DB, "batch").mockImplementation(async (statements) => {
+      if (failures > 0 && (statements as unknown as Array<{ sql: string }>).some((s) => s.sql.includes("SET status = 'paid'"))) { failures--; throw new Error("D1 is down"); }
+      return realBatch(statements);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await pay(accounts, order.id, order.totalPaise);
+    expect(res.status).toBe(201);
+    expect((await res.json() as { order: OrderDetail }).order).toMatchObject({ status: "confirmed", paidPaise: order.totalPaise, invoices: [] });
+    expect((await (await as(env, "sales")).call("POST", `/orders/${order.id}/settle`)).status).toBe(403);
+    const settled = (await accounts.ok<{ order: OrderDetail }>("POST", `/orders/${order.id}/settle`)).order;
+    expect(settled).toMatchObject({ status: "paid" });
+    expect(settled.invoices).toHaveLength(1);
+    expect((await accounts.ok<{ order: OrderDetail }>("POST", `/orders/${order.id}/settle`)).order.invoices).toHaveLength(1);
+  });
+
   it("only accounts and admins record payments, and never on a draft or a trial", async () => {
     const { order } = await confirmedOrder();
     for (const role of ["sales", "support"] as const) expect((await pay(await as(env, role), order.id, 100)).status).toBe(403);
@@ -101,6 +120,17 @@ describe("offline payments", () => {
     await pay(accounts, order.id, 1_180_000);
     expect(await latestLicense(env.DB, COUNTER)).toMatchObject({ revision: 2, expiresAt: addMonths(T0, 12) });
   });
+
+  it("paying an order on credit ends every counter on the order's own end date, including one that joined later", async () => {
+    const { customer, order } = await confirmedOrder({ outlets: 2 });
+    await admin.ok("POST", `/orders/${order.id}/credit`, { until: T0 + 10 * DAY_MS });
+    await enrol(COUNTER, customer, order);
+    vi.setSystemTime(T0 + 3 * DAY_MS);
+    await enrol(OTHER, customer, order);
+    accounts = Object.assign(await signIn(env, accounts.staff), { staff: accounts.staff });
+    expect((await pay(accounts, order.id, 2_360_000)).status).toBe(201);
+    for (const id of [COUNTER, OTHER]) expect((await latestLicense(env.DB, id))!.expiresAt).toBe(addMonths(T0, 12));
+  });
 });
 
 describe("GST invoices", () => {
@@ -117,6 +147,31 @@ describe("GST invoices", () => {
     await pay(accounts, third.order.id, 1_180_000);
     expect((await invoices()).map((i) => i.number)).toEqual(["FF/27-28/00001", "FF/26-27/00002", "FF/26-27/00001"]);
     expect([financialYear(Date.UTC(2027, 2, 31, 18, 29)), financialYear(Date.UTC(2027, 2, 31, 18, 31)), financialYear(Date.UTC(2027, 0, 5))]).toEqual(["26-27", "27-28", "26-27"]);
+  });
+
+  it("keep the tax split the order was confirmed with, so the invoice total is the order total", async () => {
+    // At 18% on 10,000.03 rupees, CGST plus SGST round to 1,800.00 but IGST rounds to 1,800.01.
+    const { customer, order } = await confirmedOrder({ pricePerOutletPaise: 1_000_003 });
+    expect(order).toMatchObject({ intraState: true, taxPaise: 180_000, totalPaise: 1_180_003 });
+    await admin.ok("PATCH", `/customers/${customer.id}`, { businessName: "Spice Route", contactName: "Meera", phone: "98220 12345", email: "meera@spiceroute.in",
+      gstin: "29AABCU7781K1ZP", address: "FC Road", city: "Bengaluru", stateCode: "", pincode: "560001", notes: "" });
+    const paid = (await (await pay(accounts, order.id, order.totalPaise)).json() as { order: OrderDetail }).order;
+    expect(paid.invoices[0]!.totalPaise).toBe(paid.totalPaise);
+    const { invoice } = await admin.ok<{ invoice: InvoiceDetail }>("GET", `/invoices/${paid.invoices[0]!.id}`);
+    expect(invoice).toMatchObject({ totalPaise: 1_180_003, cgstPaise: 90_000, sgstPaise: 90_000, igstPaise: 0, intraState: true });
+    expect(invoice).toMatchObject({ placeOfSupply: "Maharashtra (27)", buyer: { stateCode: "27" } });
+  });
+
+  it("keep the place of supply and split from confirmation even when either split gives the same tax", async () => {
+    // At a round price CGST plus SGST equals IGST, so the stored tax alone can't tell which one the order was confirmed with.
+    const { customer, order } = await confirmedOrder();
+    expect(order).toMatchObject({ intraState: true });
+    await admin.ok("PATCH", `/customers/${customer.id}`, { businessName: "Spice Route", contactName: "Meera", phone: "98220 12345", email: "meera@spiceroute.in",
+      gstin: "29AABCU7781K1ZP", address: "FC Road", city: "Bengaluru", stateCode: "", pincode: "560001", notes: "" });
+    expect((await admin.ok<{ order: OrderDetail }>("GET", `/orders/${order.id}`)).order).toMatchObject({ intraState: true, cgstPaise: 90_000, igstPaise: 0 });
+    const paid = (await (await pay(accounts, order.id, order.totalPaise)).json() as { order: OrderDetail }).order;
+    const { invoice } = await admin.ok<{ invoice: InvoiceDetail }>("GET", `/invoices/${paid.invoices[0]!.id}`);
+    expect(invoice).toMatchObject({ intraState: true, cgstPaise: 90_000, sgstPaise: 90_000, igstPaise: 0, placeOfSupply: "Maharashtra (27)", buyer: { stateCode: "27" } });
   });
 
   it("copy the seller, buyer and lines as they were, with CGST and SGST or IGST and the amount in words", async () => {
@@ -254,15 +309,17 @@ describe("payments that land together, and orders that change underneath a reque
     expect(await invoices()).toHaveLength(1);
   });
 
-  it("a payment is recorded and the order completed even when the invoice cannot be built; the invoice follows once the state is fixed", async () => {
-    const { customer, order } = await confirmedOrder();
+  it("a payment is recorded and the order completed even when the invoice cannot be built; the invoice follows once the seller is fixed", async () => {
+    const { order } = await confirmedOrder();
     await admin.ok("POST", `/orders/${order.id}/payment-link`);
-    await env.DB.prepare(`UPDATE customers SET gstin = NULL, state_code = NULL WHERE id = ?`).bind(customer.id).run();
+    // The order keeps the buyer's state from confirmation, so what can still stop an invoice is the seller's details going missing.
+    const setSellerState = (code: string) => env.DB.prepare(`UPDATE portal_settings SET data = json_set(data, '$.seller.stateCode', ?) WHERE id = 1`).bind(code).run();
+    await setSellerState("");
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const res = await webhook("payment_link.paid", "evt_s", "plink_Test1abc", { id: "pay_S", amount: order.totalPaise });
     expect([res.status, await res.json()]).toEqual([200, { outcome: "paid" }]);
     expect(await rows(admin, order.id)).toMatchObject({ status: "paid", paidPaise: order.totalPaise, invoices: [] });
-    await env.DB.prepare(`UPDATE customers SET state_code = '27' WHERE id = ?`).bind(customer.id).run();
+    await setSellerState("27");
     await admin.ok("POST", `/orders/${order.id}/invoice`);
     expect(await invoices()).toHaveLength(1);
   });
@@ -296,7 +353,8 @@ describe("payments that land together, and orders that change underneath a reque
     expect(order.intraState).toBe(true);
     await env.DB.prepare(`UPDATE customers SET gstin = NULL, state_code = '29' WHERE id = ?`).bind(customer.id).run();
     const after = await rows(admin, order.id);
-    expect(after.intraState).toBe(false);
+    // The split stays the one it was confirmed with, so it still adds up to the stored tax (and matches the invoice).
+    expect(after.intraState).toBe(true);
     expect([after.subtotalPaise, after.taxPaise, after.totalPaise]).toEqual([order.subtotalPaise, order.taxPaise, order.totalPaise]);
     expect(after.subtotalPaise + after.taxPaise).toBe(after.totalPaise);
     expect(after.cgstPaise + after.sgstPaise + after.igstPaise).toBe(after.taxPaise);

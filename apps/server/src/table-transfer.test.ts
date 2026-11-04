@@ -186,6 +186,18 @@ describe("moving an order to another table", () => {
     expect(texts.some((t) => t.includes("Grill"))).toBe(true);
   });
 
+  it("moves the order and reports that the table-change slip was not printed at a turned-off station", async () => {
+    const orderId = await openOrder(tables["T3"]!);
+    await addAndSend(orderId, [kitchenProductId]);
+    const jobsBefore = (app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get() as { n: number }).n;
+    app.db.prepare("UPDATE kot_stations SET is_active = 0 WHERE id = ?").run(kitchenStationId);
+    const res = await move(orderId, tables["T7"]!);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().printErrors).toHaveLength(1);
+    expect(res.json().printErrors[0]).toMatch(/Table change.*turned off/);
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get()).toEqual({ n: jobsBefore });
+  });
+
   it("broadcasts order, table and kitchen ticket updates and survives a slip that cannot be rendered", async () => {
     const orderId = await openOrder(tables["T3"]!);
     await addAndSend(orderId, [kitchenProductId]);

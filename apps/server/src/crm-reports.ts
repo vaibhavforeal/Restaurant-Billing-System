@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { requireIntegration } from "./integrations.js";
-import { loyaltySettings, loyaltyTiers } from "./loyalty.js";
+import { billSpendSql, loyaltySettings, loyaltyTiers } from "./loyalty.js";
 import { reportRange } from "./sales-reports.js";
 import { segmentCustomers } from "./customer-segments.js";
 import { requireModule } from "./modules.js";
@@ -16,7 +16,7 @@ export function registerCrmReports(app: FastifyInstance): void {
     const { from, to, bounds: [start, end] } = reportRange(req.query);
     const bills = db.prepare(`SELECT COUNT(*) AS bills, COUNT(customer_id) AS withCustomer FROM bills WHERE status <> 'void' AND created_at >= ? AND created_at < ?`)
       .get(start, end) as { bills: number; withCustomer: number };
-    const visitors = db.prepare(`SELECT b.customer_id AS id, COUNT(*) AS visits, SUM(b.total_paise) AS spend,
+    const visitors = db.prepare(`SELECT b.customer_id AS id, COUNT(*) AS visits, SUM(${billSpendSql("b")}) AS spend,
         (SELECT MIN(x.created_at) FROM bills x WHERE x.customer_id = b.customer_id AND x.status <> 'void') AS first
       FROM bills b WHERE b.customer_id IS NOT NULL AND b.status <> 'void' AND b.created_at >= ? AND b.created_at < ? GROUP BY b.customer_id`)
       .all(start, end) as Array<{ id: string; visits: number; spend: number; first: number }>;

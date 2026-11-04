@@ -3,6 +3,7 @@ import { ServiceSubmission, uuidv7, type ServiceReceipt, type ServiceRequest } f
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { guestRateLimiter } from "./guest-rate.js";
 import { moduleActive } from "./modules.js";
 
 const TTL = 10 * 60 * 1000;
@@ -31,17 +32,7 @@ export function registerGuestServices(app: FastifyInstance) {
     if (result.changes) changed();
   }
 
-  const rates = new Map<string, { until: number; count: number }>();
-  function rate(req: FastifyRequest, action: "submit" | "status", limit: number) {
-    const now = Date.now(), key = `${action}:${req.ip}`;
-    if (rates.size >= 10_000) {
-      for (const [entry, value] of rates) if (value.until <= now) rates.delete(entry);
-      if (rates.size >= 10_000 && !rates.has(key)) throw httpError(429, "Please wait a minute and try again");
-    }
-    let value = rates.get(key);
-    if (!value || value.until <= now) { value = { until: now + 60_000, count: 0 }; rates.set(key, value); }
-    if (++value.count > limit) throw httpError(429, "Please wait a minute and try again");
-  }
+  const rate = guestRateLimiter();
   function requireGuestPlan() {
     const status = app.licensing.status();
     if (!["development", "active", "grace"].includes(status.state)) throw httpError(403, "The restaurant is temporarily unavailable. Please ask a member of staff.");

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey } from "@masalapos/domain";
+import { localDateKey, type Database } from "@masalapos/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { requireModule } from "./modules.js";
@@ -33,65 +33,76 @@ export function reportRange(query: unknown) {
   return { from, to, dates, bounds: [start.getTime(), end.getTime()] as const };
 }
 
+export type ReportRange = ReturnType<typeof reportRange>;
+
+export interface SalesReport {
+  from: string; to: string; today: string; timezone: string; generatedAt: number;
+  sales: Sales; creditNotePaise: number; netTotalPaise: number; collections: Collections; zomatoReceivablePaise: number;
+  daily: Array<{ date: string; sales: Sales; creditNotePaise: number; netTotalPaise: number; collections: Collections; zomatoReceivablePaise: number }>;
+}
+
 /**
  * Read-only aggregation of stored bills/payments. Does not recalculate bills. Sales are every bill issued that day
  * (void ones too); credit notes subtract on their own date, and refunds subtract from collections on their date by method.
  */
+export function salesReport(db: Database, range: ReportRange): SalesReport {
+  const { from, to, dates, bounds } = range;
+  const localDate = (column: string) => `strftime('%Y-%m-%d', ${column} / 1000, 'unixepoch', 'localtime')`;
+  const { sales, credits, collections, refunds, collectedBills, receivables } = db.transaction(() => ({
+    sales: db.prepare(`SELECT ${localDate("created_at")} AS date,
+      COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise,
+      SUM(cgst_paise) AS cgstPaise, SUM(sgst_paise) AS sgstPaise, SUM(rounding_paise) AS roundingPaise,
+      SUM(total_paise) AS totalPaise, SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END) AS outstandingPaise
+      FROM bills WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<Sales & { date: string }>,
+    credits: db.prepare(`SELECT ${localDate("created_at")} AS date, SUM(total_paise) AS totalPaise
+      FROM credit_notes WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<{ date: string; totalPaise: number }>,
+    collections: db.prepare(`SELECT ${localDate("created_at")} AS date, COUNT(DISTINCT bill_id) AS billCount,
+      SUM(CASE WHEN mode = 'cash' THEN amount_paise ELSE 0 END) AS cashPaise,
+      SUM(CASE WHEN mode = 'upi' THEN amount_paise ELSE 0 END) AS upiPaise,
+      SUM(CASE WHEN mode = 'card' THEN amount_paise ELSE 0 END) AS cardPaise, SUM(amount_paise) AS totalPaise
+      FROM payments WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato' GROUP BY date`).all(...bounds) as Array<Omit<Collections, "refundPaise"> & { date: string }>,
+    refunds: db.prepare(`SELECT ${localDate("created_at")} AS date,
+      SUM(CASE WHEN mode = 'cash' THEN amount_paise ELSE 0 END) AS cashPaise,
+      SUM(CASE WHEN mode = 'upi' THEN amount_paise ELSE 0 END) AS upiPaise,
+      SUM(CASE WHEN mode = 'card' THEN amount_paise ELSE 0 END) AS cardPaise, SUM(amount_paise) AS totalPaise
+      FROM refund_payments WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<{ date: string; cashPaise: number; upiPaise: number; cardPaise: number; totalPaise: number }>,
+    // A bill appearing on multiple collection dates must count only once in the range.
+    collectedBills: (db.prepare("SELECT COUNT(DISTINCT bill_id) AS count FROM payments WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato'").get(...bounds) as { count: number }).count,
+    // Zomato bills close as a receivable from Zomato, not money received: reported beside collections so that
+    // sales = collections + Zomato receivable + still unpaid (before refunds and credit notes).
+    receivables: db.prepare(`SELECT ${localDate("created_at")} AS date, SUM(amount_paise) AS amountPaise
+      FROM payments WHERE created_at >= ? AND created_at < ? AND mode = 'zomato' GROUP BY date`).all(...bounds) as Array<{ date: string; amountPaise: number }>,
+  }))();
+  const salesByDate = new Map(sales.map(({ date, ...values }) => [date, values]));
+  const creditByDate = new Map(credits.map((row) => [row.date, row.totalPaise]));
+  const collectionsByDate = new Map(collections.map(({ date, ...values }) => [date, values]));
+  const refundsByDate = new Map(refunds.map(({ date, ...values }) => [date, values]));
+  const receivableByDate = new Map(receivables.map((row) => [row.date, row.amountPaise]));
+  const daily = dates.map((date) => {
+    const daySales = salesByDate.get(date) ?? emptySales();
+    const creditNotePaise = creditByDate.get(date) ?? 0;
+    const paid = collectionsByDate.get(date), refunded = refundsByDate.get(date);
+    const collections: Collections = paid ? { ...paid, refundPaise: 0 } : emptyCollections();
+    if (refunded) {
+      collections.cashPaise -= refunded.cashPaise; collections.upiPaise -= refunded.upiPaise; collections.cardPaise -= refunded.cardPaise;
+      collections.totalPaise -= refunded.totalPaise; collections.refundPaise = refunded.totalPaise;
+    }
+    return { date, sales: daySales, creditNotePaise, netTotalPaise: daySales.totalPaise - creditNotePaise, collections, zomatoReceivablePaise: receivableByDate.get(date) ?? 0 };
+  });
+  const salesTotal = emptySales(), collectionTotal = emptyCollections();
+  let creditNotePaise = 0, zomatoReceivablePaise = 0;
+  for (const day of daily) {
+    for (const key of Object.keys(salesTotal) as Array<keyof Sales>) salesTotal[key] += day.sales[key];
+    for (const key of Object.keys(collectionTotal) as Array<keyof Collections>) collectionTotal[key] += day.collections[key];
+    creditNotePaise += day.creditNotePaise; zomatoReceivablePaise += day.zomatoReceivablePaise;
+  }
+  collectionTotal.billCount = collectedBills;
+  return { from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(),
+    sales: salesTotal, creditNotePaise, netTotalPaise: salesTotal.totalPaise - creditNotePaise, collections: collectionTotal, zomatoReceivablePaise, daily };
+}
+
 export function registerSalesReports(app: FastifyInstance) {
   app.get("/api/reports/sales", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req) => {
-    const { from, to, dates, bounds } = reportRange(req.query);
-    const db = app.db;
-    const localDate = (column: string) => `strftime('%Y-%m-%d', ${column} / 1000, 'unixepoch', 'localtime')`;
-    const { sales, credits, collections, refunds, collectedBills, receivables } = db.transaction(() => ({
-      sales: db.prepare(`SELECT ${localDate("created_at")} AS date,
-        COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise,
-        SUM(cgst_paise) AS cgstPaise, SUM(sgst_paise) AS sgstPaise, SUM(rounding_paise) AS roundingPaise,
-        SUM(total_paise) AS totalPaise, SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END) AS outstandingPaise
-        FROM bills WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<Sales & { date: string }>,
-      credits: db.prepare(`SELECT ${localDate("created_at")} AS date, SUM(total_paise) AS totalPaise
-        FROM credit_notes WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<{ date: string; totalPaise: number }>,
-      collections: db.prepare(`SELECT ${localDate("created_at")} AS date, COUNT(DISTINCT bill_id) AS billCount,
-        SUM(CASE WHEN mode = 'cash' THEN amount_paise ELSE 0 END) AS cashPaise,
-        SUM(CASE WHEN mode = 'upi' THEN amount_paise ELSE 0 END) AS upiPaise,
-        SUM(CASE WHEN mode = 'card' THEN amount_paise ELSE 0 END) AS cardPaise, SUM(amount_paise) AS totalPaise
-        FROM payments WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato' GROUP BY date`).all(...bounds) as Array<Omit<Collections, "refundPaise"> & { date: string }>,
-      refunds: db.prepare(`SELECT ${localDate("created_at")} AS date,
-        SUM(CASE WHEN mode = 'cash' THEN amount_paise ELSE 0 END) AS cashPaise,
-        SUM(CASE WHEN mode = 'upi' THEN amount_paise ELSE 0 END) AS upiPaise,
-        SUM(CASE WHEN mode = 'card' THEN amount_paise ELSE 0 END) AS cardPaise, SUM(amount_paise) AS totalPaise
-        FROM refund_payments WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<{ date: string; cashPaise: number; upiPaise: number; cardPaise: number; totalPaise: number }>,
-      // A bill appearing on multiple collection dates must count only once in the range.
-      collectedBills: (db.prepare("SELECT COUNT(DISTINCT bill_id) AS count FROM payments WHERE created_at >= ? AND created_at < ? AND mode <> 'zomato'").get(...bounds) as { count: number }).count,
-      // Zomato bills close as a receivable from Zomato, not money received: reported beside collections so that
-      // sales = collections + Zomato receivable + still unpaid (before refunds and credit notes).
-      receivables: db.prepare(`SELECT ${localDate("created_at")} AS date, SUM(amount_paise) AS amountPaise
-        FROM payments WHERE created_at >= ? AND created_at < ? AND mode = 'zomato' GROUP BY date`).all(...bounds) as Array<{ date: string; amountPaise: number }>,
-    }))();
-    const salesByDate = new Map(sales.map(({ date, ...values }) => [date, values]));
-    const creditByDate = new Map(credits.map((row) => [row.date, row.totalPaise]));
-    const collectionsByDate = new Map(collections.map(({ date, ...values }) => [date, values]));
-    const refundsByDate = new Map(refunds.map(({ date, ...values }) => [date, values]));
-    const receivableByDate = new Map(receivables.map((row) => [row.date, row.amountPaise]));
-    const daily = dates.map((date) => {
-      const daySales = salesByDate.get(date) ?? emptySales();
-      const creditNotePaise = creditByDate.get(date) ?? 0;
-      const paid = collectionsByDate.get(date), refunded = refundsByDate.get(date);
-      const collections: Collections = paid ? { ...paid, refundPaise: 0 } : emptyCollections();
-      if (refunded) {
-        collections.cashPaise -= refunded.cashPaise; collections.upiPaise -= refunded.upiPaise; collections.cardPaise -= refunded.cardPaise;
-        collections.totalPaise -= refunded.totalPaise; collections.refundPaise = refunded.totalPaise;
-      }
-      return { date, sales: daySales, creditNotePaise, netTotalPaise: daySales.totalPaise - creditNotePaise, collections, zomatoReceivablePaise: receivableByDate.get(date) ?? 0 };
-    });
-    const salesTotal = emptySales(), collectionTotal = emptyCollections();
-    let creditNotePaise = 0, zomatoReceivablePaise = 0;
-    for (const day of daily) {
-      for (const key of Object.keys(salesTotal) as Array<keyof Sales>) salesTotal[key] += day.sales[key];
-      for (const key of Object.keys(collectionTotal) as Array<keyof Collections>) collectionTotal[key] += day.collections[key];
-      creditNotePaise += day.creditNotePaise; zomatoReceivablePaise += day.zomatoReceivablePaise;
-    }
-    collectionTotal.billCount = collectedBills;
-    return { report: { from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(),
-      sales: salesTotal, creditNotePaise, netTotalPaise: salesTotal.totalPaise - creditNotePaise, collections: collectionTotal, zomatoReceivablePaise, daily } };
+    return { report: salesReport(app.db, reportRange(req.query)) };
   });
 }

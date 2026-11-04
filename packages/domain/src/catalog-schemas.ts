@@ -5,7 +5,8 @@ import { ComboDefinition } from "./combos.js";
 export const GST_RATES = [0, 5, 12, 18, 28] as const;
 
 const GstRate = z.number().refine((r) => (GST_RATES as readonly number[]).includes(r), "invalid GST rate");
-const Paise = z.number().int().min(0);
+/** A bill cannot pass ₹1 crore (calculateBill), so neither can one unit of an item. */
+const Paise = z.number().int().min(0).max(1_000_000_000);
 const Name = z.string().trim().min(1);
 const Photo = z.string().max(550_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/, "Choose a JPEG photo").nullable();
 

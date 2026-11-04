@@ -1,10 +1,11 @@
 import { build } from "esbuild";
+import { resolveWorkspace } from "./workspace-exports.mjs";
 import { createRequire } from "node:module";
-import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync, rmSync, realpathSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
-import { desktopBuildConfig } from "./desktop-build-config.mjs";
+import { desktopBuildConfig, installerActivationScript, installerConfig } from "./desktop-build-config.mjs";
 import { stageCaptainAndroid } from "./captain-android-release.mjs";
 import { googleOAuthClient } from "./google-oauth-client.mjs";
 
@@ -44,11 +45,6 @@ function copyDependency(name, from, parent = stage) {
   return manifest.version;
 }
 for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
-// Remote support's input injection runs in the main process: koffi, from the desktop workspace, with only the Windows x64 binary.
-deps["koffi"] = copyDependency("koffi", join(root, "apps/desktop"));
-for (const platform of readdirSync(join(stage, "node_modules/koffi/build/koffi"))) {
-  if (platform !== "win32_x64") rmSync(join(stage, "node_modules/koffi/build/koffi", platform), { recursive: true, force: true });
-}
 const google = googleOAuthClient(root);
 console.log(google.clientId ? `Google Drive backup: enabled (${google.clientId.split("-")[0]}…, from ${google.source === "environment" ? "environment" : relative(root, google.source)})` : "Google Drive backup: not configured (no Google OAuth client)");
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
@@ -56,27 +52,29 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
     // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
     __MASALAPOS_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __MASALAPOS_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
   // Workspace packages are bundled from source, including subpath imports (@masalapos/domain/vendor-codes): the installer ships no copy of them.
-  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)(\/[a-z0-9-]+)?$/ }, (args) => {
-    const [, pkg, sub] = args.path.split("/");
-    return { path: join(root, "packages", pkg, "src", `${sub ?? "index"}.ts`) };
-  }); } }],
+  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)(\/[a-z0-9-]+)?$/ }, (args) => ({ path: resolveWorkspace(root, args.path) })); } }],
 });
 // The installer has no workspace packages: an import of one left in the bundle means a server that cannot start.
 const leftover = readFileSync(join(stage, "server/main.mjs"), "utf8").match(/from\s*["']@masalapos\/[^"']*["']/g);
 if (leftover) throw new Error(`The server bundle still imports workspace packages: ${[...new Set(leftover)].join(", ")}`);
-await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater", "koffi"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) } });
-// Preloads run sandboxed, so they are CommonJS; the remote-support sharing page is a plain browser script.
-for (const [entry, out] of [["preload.ts", "preload.cjs"], ["remote/agent-preload.ts", "remote-agent-preload.cjs"], ["remote/banner-preload.ts", "remote-banner-preload.cjs"]]) {
-  await build({ entryPoints: [join(root, "apps/desktop/src", entry)], outfile: join(stage, out), bundle: true, platform: "node", format: "cjs", target: "node24", external: ["electron"] });
-}
-await build({ entryPoints: [join(root, "apps/desktop/src/remote/agent-page.ts")], outfile: join(stage, "remote-agent.js"), bundle: true, platform: "browser", format: "iife", target: "chrome140" });
-writeFileSync(join(stage, "remote-agent.html"), `<!doctype html><html><head><meta charset="utf-8"><title>MasalaPOS remote support</title></head><body><script src="remote-agent.js"></script></body></html>
-`);
+await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) } });
+// The preload runs sandboxed, so it is CommonJS. Remote support is the separate Support Connector (tools/build-connector.mjs).
+await build({ entryPoints: [join(root, "apps/desktop/src/preload.ts")], outfile: join(stage, "preload.cjs"), bundle: true, platform: "node", format: "cjs", target: "node24", external: ["electron"] });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
 // The Captain Android app, when built for this release by tools/build-captain-android.mjs.
 console.log(stageCaptainAndroid(join(root, "apps/captain-android/app/build/outputs/apk/release"), join(stage, "ui"), pkg.version));
 writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "masalapos-demo" : "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "MasalaPOS customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));
-writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint }, null, 2));
+writeFileSync(join(stage, "build-info.json"), JSON.stringify({ edition, version: pkg.version, verificationKeyFingerprint, ...(commercial ? { serviceUrl: serviceUrl.replace(/\/+$/, "") } : {}) }, null, 2));
+// The customer installer asks for the Customer ID and Order ID and activates before installing (tools/installer.nsh). Its script
+// and settings sit outside the app stage, so they are compiled into the setup file but never shipped inside the app.
+if (commercial) {
+  const installerDir = join(root, "build", "desktop", "installer");
+  rmSync(installerDir, { recursive: true, force: true }); mkdirSync(installerDir, { recursive: true });
+  const script = installerActivationScript(readFileSync(join(root, "tools/installer-activate.ps1"), "utf8"), { serviceUrl, verificationKeyFingerprint, appVersion: pkg.version });
+  writeFileSync(join(installerDir, "installer-activate.ps1"), script);
+  writeFileSync(join(installerDir, "installer-config.nsh"), installerConfig(join(installerDir, "installer-activate.ps1"), !!serviceUrl));
+  console.log(serviceUrl ? "Installer: asks for the Customer ID and Order ID and activates before installing" : "Installer: no licensing service URL, so setup does not ask for activation codes");
+}
 
 // Small MasalaPOS M icon, rendered without extra image or native build tools.
 const M_MARK = [[36,32],[46,32],[54,48],[62,32],[72,32],[72,76],[62,76],[62,50],[54,64],[46,50],[46,76],[36,76]];

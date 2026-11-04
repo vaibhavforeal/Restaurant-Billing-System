@@ -7,6 +7,12 @@ export const SECRET_HEADER = "x-masalapos-installation-secret";
 const SECRET_FORMAT = /^[a-f0-9]{64}$/;
 export const isWellFormedSecret = (value: string | null): value is string => value !== null && SECRET_FORMAT.test(value);
 
+/** 32 random bytes, base64url: a session, link or invitation token. */
+export function newToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
 export async function sha256Hex(text: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");

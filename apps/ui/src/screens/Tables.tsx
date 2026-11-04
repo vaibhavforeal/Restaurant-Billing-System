@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReservationList } from "@masalapos/domain";
 import { ApiError, apiFetch, session, type User } from "../api";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
+import { movedTableOrder } from "../table-order";
 import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readTablesCopy, saveOrderCopy, saveTablesCopy, withOrdersStartedHere } from "../offline-cache";
 import { Icon } from "../Icon";
@@ -12,6 +14,7 @@ import { receivingLabel, tableCardNote, tableOpenTargets } from "../table-transf
 import { QrRequests, QrTableManager } from "./QrRequests";
 import { ServiceRequests } from "./ServiceRequests";
 import { Reservations } from "./Reservations";
+import { TableOrderPanel } from "./TableOrderPanel";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
@@ -22,13 +25,14 @@ import "../tables-screen.css";
 import "../tables-overview.css";
 import { useModules } from "../modules";
 import { userCan } from "../permissions";
+import { reservationSlots } from "../reservation-panel";
 
 export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false }: { user: User; qrInbox?: number | undefined; onOpenOrder: (orderId: string) => void; onTakeaway: () => void; captain?: boolean }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [filter, setFilter] = useState<"all" | TableInfo["status"]>("all");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
-  const [mobilePane, setMobilePane] = useState<"tables" | "parcels" | "zomato">("tables");
+  const [mobilePane, setMobilePane] = useState<"tables" | "reservations" | "parcels" | "zomato">("tables");
   const { isEnabled } = useIntegrations();
   const [zomatoDialog, setZomatoDialog] = useState(false);
   const [loadedTables, setTables] = useState<TableInfo[]>([]);
@@ -60,23 +64,39 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const [actionBusy, setActionBusy] = useState(false);
   const actionLock = useRef(false);
   const [pickerTableId, setPickerTableId] = useState<string | null>(null);
+  const [bookings, setBookings] = useState<ReservationList | null>(null);
+  /** The running order shown in the side panel after a table is tapped (wide screens only). */
+  const [selected, setSelected] = useState<{ orderId: string; tableId: string } | null>(null);
+  const [orderPanelBusy, setOrderPanelBusy] = useState(false);
+  const orderPanelLock = useRef(false);
+  const onOrderPanelBusy = useCallback((value: boolean) => { orderPanelLock.current = value; setOrderPanelBusy(value); }, []);
+  const closeOrderPanel = useCallback(() => { if (!orderPanelLock.current) setSelected(null); }, []);
 
   useNavigationGuard(() => {
-    if (!actionLock.current && !qrLock.current && !qrManagerLock.current && !serviceLock.current && !reservationLock.current) {
+    if (!actionLock.current && !qrLock.current && !qrManagerLock.current && !serviceLock.current && !reservationLock.current && !orderPanelLock.current) {
       return !reservationDirtyLock.current || window.confirm("Discard the unsaved reservation changes?");
     }
     window.alert("Wait for the table request to finish saving before leaving.");
     return false;
   });
   useEffect(() => {
-    if (!actionBusy && !qrBusy && !qrManagerBusy && !serviceBusy && !reservationBusy && !reservationDirty) return;
+    if (!actionBusy && !qrBusy && !qrManagerBusy && !serviceBusy && !reservationBusy && !reservationDirty && !orderPanelBusy) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [actionBusy, qrBusy, qrManagerBusy, serviceBusy, reservationBusy, reservationDirty]);
+  }, [actionBusy, qrBusy, qrManagerBusy, serviceBusy, reservationBusy, reservationDirty, orderPanelBusy]);
+  // Esc puts the side panel back to reservations, unless a dialog on top is handling it.
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("dialog[open]")) closeOrderPanel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, closeOrderPanel]);
 
   function openOrder(orderId: string) {
-    if (!qrLock.current && !qrManagerLock.current && !serviceLock.current && !reservationLock.current) onOpenOrder(orderId);
+    if (!qrLock.current && !qrManagerLock.current && !serviceLock.current && !reservationLock.current && !orderPanelLock.current) onOpenOrder(orderId);
   }
 
   async function reload() {
@@ -96,6 +116,11 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     }
   }
 
+  /** Today's bookings for the side panel; a failed load keeps the last list rather than showing an error. */
+  async function loadBookings() {
+    try { setBookings(await apiFetch<ReservationList>("/api/reservations")); } catch { /* the panel keeps its last list */ }
+  }
+
   /** Starts an order with an id this counter chooses, so it opens at once even while the hub is unreachable. */
   async function startOrder(type: "dine_in" | "parcel", table: TableInfo | null): Promise<string> {
     const id = uuid(), clientRef = uuid();
@@ -108,14 +133,16 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
 
   useEffect(() => {
     reload().catch(() => setError("Failed to load tables"));
+    void loadBookings();
     const dispose = connectWs({
       onEvent: (event) => {
         if (event === "table.changed" || event === "order.updated" || (captain && event === "kot.updated")) void reload().catch(() => {});
+        if (event === "reservation.changed" || event === "table.changed" || event === "order.updated") void loadBookings();
       },
-      onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
+      onStatus: (connected) => { if (connected) { void reload().catch(() => {}); void loadBookings(); } },
       onAuthFail: () => session.clear(),
     });
-    const timer = window.setInterval(() => { void reload().catch(() => {}); }, 30000);
+    const timer = window.setInterval(() => { void reload().catch(() => {}); void loadBookings(); }, 30000);
     return () => { dispose(); window.clearInterval(timer); };
   }, [captain]);
 
@@ -149,13 +176,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }
 
   function move(table: TableInfo, dir: -1 | 1) {
-    const i = tables.findIndex((t) => t.id === table.id);
-    const neighbor = tables[i + dir];
-    if (!neighbor) return;
-    void run(async () => {
-      await apiFetch(`/api/tables/${table.id}`, { method: "PATCH", body: JSON.stringify({ sortOrder: neighbor.sortOrder }) });
-      await apiFetch(`/api/tables/${neighbor.id}`, { method: "PATCH", body: JSON.stringify({ sortOrder: table.sortOrder }) });
-    });
+    const ids = movedTableOrder(tables, table.id, dir);
+    if (!ids) return;
+    void run(() => apiFetch("/api/tables/order", { method: "PUT", body: JSON.stringify({ ids }) }));
   }
 
   function rename(table: TableInfo) {
@@ -163,8 +186,11 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     if (name && name !== table.name) patchTable(table.id, { name });
   }
 
-  function openTable(table: TableInfo) {
-    if (qrLock.current || qrManagerLock.current || serviceLock.current || reservationLock.current) return;
+  /** Wide screens show a running table's order beside the grid; phones have no room, so a tap opens the order. */
+  const summaryOnTap = () => !captain && !window.matchMedia("(max-width: 700px)").matches;
+
+  function openTable(table: TableInfo, direct = false) {
+    if (qrLock.current || qrManagerLock.current || serviceLock.current || reservationLock.current || orderPanelLock.current) return;
     if (table.status === "reserved") { setReservationView({ tableId: table.id }); return; }
     const targets = tableOpenTargets(table);
     if (targets.length === 0) {
@@ -179,8 +205,11 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
         }
       });
     } else if (targets.length === 1) {
-      // Fast path: one bill (a split, or the combined order of a linked table), open directly
-      openOrder(targets[0]!.orderId);
+      // One bill (a split, or the combined order of a linked table): show it beside the grid; a second tap, a double-click
+      // or Edit items opens it.
+      const orderId = targets[0]!.orderId;
+      if (direct || !summaryOnTap() || selected?.orderId === orderId) openOrder(orderId);
+      else setSelected({ orderId, tableId: table.id });
     } else {
       // Multiple splits: show picker
       setPickerTableId(table.id);
@@ -233,8 +262,14 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const zomatoOn = canQuickBill && isEnabled("zomato");
   const showZomatoPanel = zomatoOn || zomatoList.length > 0;
   const takeaways = openTakeaways(orders, zomatoList);
-  const hasSide = takeaways.length > 0 || showZomatoPanel;
-  const busy = creating || actionBusy || qrBusy || qrManagerBusy || serviceBusy || reservationBusy;
+  const now = Date.now();
+  const bookingSlots = reservationSlots(bookings?.reservations ?? [], now, bookings?.timezone);
+  const bookingCount = bookingSlots.current.reservations.length + bookingSlots.upcoming.reservations.length;
+  const showBookings = !!bookings && (modules.isActive("reservations") || bookingCount > 0);
+  const bookingTime = (ms: number) => new Date(ms).toLocaleTimeString("en-IN", { timeZone: bookings?.timezone, hour: "2-digit", minute: "2-digit" });
+  const hasSide = !!selected || showBookings || takeaways.length > 0 || showZomatoPanel;
+  const othersBusy = creating || actionBusy || qrBusy || qrManagerBusy || serviceBusy || reservationBusy;
+  const busy = othersBusy || orderPanelBusy;
   const active = tables.filter((table) => table.isActive);
   const areas = Array.from(new Set(active.map((table) => table.area ?? "Main")));
   const query = search.toLocaleLowerCase().trim();
@@ -246,9 +281,12 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     list.push(table); grouped.set(area, list);
   }
   const pickerTable = tables.find((table) => table.id === pickerTableId);
+  // The highlighted card follows the selected order, so it moves with a Move table.
+  const selectedTableId = selected ? tables.find((table) => tableOpenTargets(table).some((target) => target.orderId === selected.orderId))?.id ?? selected.tableId : null;
   const showParcels = mobilePane === "parcels" && takeaways.length > 0;
   const showZomato = mobilePane === "zomato" && showZomatoPanel;
-  const visiblePane = showParcels ? "parcels" : showZomato ? "zomato" : "tables";
+  const showReservations = mobilePane === "reservations" && showBookings;
+  const visiblePane = showReservations ? "reservations" : showParcels ? "parcels" : showZomato ? "zomato" : "tables";
   return <section className="screen tables-screen table-overview">
     <div className="page-header tables-header"><div className="tables-heading"><h2>{captain ? "Tables" : "Tables & orders"}</h2><p><span className="tables-available-dot" aria-hidden="true" />{active.filter((table) => table.status === "free").length} available <span aria-hidden="true">·</span> {active.length} tables across {areas.length} {areas.length === 1 ? "area" : "areas"}</p></div><div className="actions">
       <button disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>Reservations</button>
@@ -266,6 +304,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     </div>
     {hasSide && <div className="tables-pane-switch" aria-label="Tables view">
       <button aria-pressed={visiblePane === "tables"} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>
+      {showBookings && <button aria-pressed={visiblePane === "reservations"} aria-controls="reservation-list" onClick={() => setMobilePane("reservations")}>Bookings · {bookingCount}</button>}
       {takeaways.length > 0 && <button aria-pressed={visiblePane === "parcels"} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {takeaways.length}</button>}
       {showZomatoPanel && <button aria-pressed={visiblePane === "zomato"} aria-controls="zomato-list" onClick={() => setMobilePane("zomato")}>Zomato · {zomatoList.length}</button>}
     </div>}
@@ -285,7 +324,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
           const note = tableCardNote(t), combined = receivingLabel(t, tables), targetCount = tableOpenTargets(t).length;
           const ready = captain && running.some((order) => order.kots.some((kot) => kot.doneAt));
           const saved = savedFor(tableOpenTargets(t).map((target) => target.orderId));
-          return <button key={t.id} className={`table-card ${t.status}`} onClick={() => openTable(t)} disabled={busy}>
+          return <button key={t.id} className={`table-card ${t.status}${selectedTableId === t.id ? " selected" : ""}`} aria-pressed={selected ? selectedTableId === t.id : undefined} onClick={() => openTable(t)} onDoubleClick={() => openTable(t, true)} disabled={busy}>
           <div className="table-card-heading"><strong>{combined ?? t.name}</strong><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span>{saved.length > 0 && <span className={`status saved-actions${saved.some((r) => r.status === "attention") ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{saved.some((r) => r.status === "attention") ? "Review" : "Saved"}</span>}</div>
           <span className="table-state"><span aria-hidden="true" />{({ free: "Available", occupied: "Occupied", reserved: "Reserved", billed: "Billed" })[t.status]}</span>
           <div className="table-card-detail">
@@ -295,12 +334,31 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
             {note && <span className="table-ready-label">{note}</span>}
             {t.reservation && <span className="table-reservation-note"><span>{t.status === "reserved" ? "Reserved for" : "Next booking:"} {t.reservation.customerName}</span><small>{t.reservation.startsLocal.replace("T", " ")} · {t.reservation.partySize} guests</small></span>}
           </div>
-          <div className="table-card-footer"><span><Icon name="tables" size={16} />{ready ? "Kitchen ready" : targetCount > 1 ? `${targetCount} split bills` : t.status === "billed" ? "Awaiting payment" : targetCount ? "View order" : t.status === "reserved" ? "View reservation" : "Open table"}</span><Icon name={ready ? "check" : "arrow"} size={14} /></div>
+          <div className="table-card-footer"><span><Icon name="tables" size={16} />{ready ? "Kitchen ready" : targetCount > 1 ? `${targetCount} split bills` : t.status === "billed" ? "Awaiting payment" : targetCount ? selectedTableId === t.id ? "Tap again to open" : "View order" : t.status === "reserved" ? "View reservation" : "Open table"}</span><Icon name={ready ? "check" : "arrow"} size={14} /></div>
         </button>; })}</div>
       </section>)}
       {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables using Manage tables." : "Ask an admin to add tables."}</p></div>}
       </div>
-      {hasSide && <div className="tables-side">
+      {hasSide && <div className={`tables-side${showBookings || selected ? " has-reservations" : ""}`}>
+      {selected && <TableOrderPanel user={user} orderId={selected.orderId} disabled={othersBusy}
+        onEditItems={openOrder}
+        onSelectOrder={(id) => setSelected((old) => old && { ...old, orderId: id })}
+        onClose={closeOrderPanel} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}
+        onBusyChange={onOrderPanelBusy} />}
+      {!selected && showBookings && <aside className="tables-parcels tables-reservations" aria-label="Current and upcoming reservations">
+        <div className="panel-title"><h3>Reservations</h3><button type="button" disabled={busy} onClick={() => { void loadBookings(); void reload().catch(() => setError("Failed to refresh tables")); }}>Refresh</button></div>
+        <div className="reservation-slots" id="reservation-list" role="region" aria-label="Reservations by half hour" tabIndex={0}>
+          {([["Current", bookingSlots.current], ["Upcoming", bookingSlots.upcoming]] as const).map(([label, slot]) => <section className={`reservation-slot ${label.toLowerCase()}`} key={label} aria-label={`${label} slot`}>
+            <h4><span>{bookingTime(slot.start)} – {bookingTime(slot.end)}</span><span className="reservation-slot-badge">{label}</span></h4>
+            {slot.reservations.length === 0 ? <p className="reservation-panel-empty">No reservations for this slot</p>
+              : <div className="parcel-list">{slot.reservations.map((r) => <button key={r.id} disabled={busy} title="View this reservation" onClick={() => setReservationView({ tableId: r.tableId })}>
+                <span className="reservation-panel-time">{bookingTime(r.startsAt)}<small>to {bookingTime(r.endsAt)}</small></span>
+                <span className="takeaway-info">{r.customerName}<small>{r.tableName}{r.area ? ` · ${r.area}` : ""} · {r.partySize} {r.partySize === 1 ? "guest" : "guests"}{r.startsAt <= now ? " · due now" : ""}</small></span>
+                <Icon name="arrow" size={13} /></button>)}</div>}
+          </section>)}
+        </div>
+        <button type="button" className="reservation-view-all" disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>View all reservations</button>
+      </aside>}
       {takeaways.length > 0 && <aside className="tables-parcels" aria-label="Open takeaways"><div className="panel-title"><h3>Open takeaways</h3><span>{takeaways.length}</span></div><div className="parcel-list" id="parcel-list" role="region" aria-label="Takeaway orders" tabIndex={0}>
         {takeaways.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">{order.type === "zomato" ? `Zomato #${order.zomatoOrderId}` : `Takeaway ${order.clientRef.slice(0, 8)}`}<small>{order.type === "zomato" ? ZOMATO_PILL[order.zomatoStatus ?? "new"] : order.status === "billed" ? "Awaiting payment" : "Open order"}{savedFor([order.id]).length > 0 && " · saved on this device"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
       </div></aside>}
@@ -310,7 +368,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     {canQuickBill && <NewZomatoOrderDialog open={zomatoDialog} orders={zomatoList} onClose={() => setZomatoDialog(false)} onCreated={(orderId) => { setZomatoDialog(false); openOrder(orderId); }} />}
     {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId}
       onClose={() => setReservationView(null)} onOpenOrder={(id) => { setReservationView(null); openOrder(id); }}
-      onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}
+      onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); void loadBookings(); }}
       onBusyChange={onReservationBusy} onDirtyChange={onReservationDirty} />}
     {isAdmin && <WorkspaceDialog open={managing} title="Manage tables" onClose={() => { if (!busy) setManaging(false); }} busy={busy} className="table-manager-dialog">
       {error && <p className="error-message" role="alert">{error}</p>}

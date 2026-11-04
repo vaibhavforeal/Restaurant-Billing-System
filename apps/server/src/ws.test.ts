@@ -172,3 +172,61 @@ describe("WebSocket auth handshake", () => {
     ws.terminate();
   });
 });
+
+describe("WebSocket broadcasts respect the recipient's permissions", () => {
+  const order = { id: "o1", status: "open", customer: { id: "c1", name: "Priya", phone: "9876543210", email: "priya@example.com", birthDate: "1990-04-01" } };
+
+  async function collect(ws: import("@fastify/websocket").WebSocket) {
+    const messages: Array<{ event: string; data: { order?: { customer: unknown } } }> = [];
+    ws.on("message", (raw: Buffer) => {
+      const msg = JSON.parse(raw.toString());
+      if (msg.event !== "auth.ok") messages.push(msg);
+    });
+    return messages;
+  }
+
+  it("leaves customer contact details out of orders sent to people who cannot view customers", async () => {
+    const db = openDb(":memory:");
+    migrate(db, MIGRATIONS);
+    app = buildServer({ db });
+    await app.ready();
+    const admin = await setupAdmin(app);
+    const kitchen = await createUser(app, admin.token, { name: "Kiran", pin: "5678", role: "kitchen" });
+
+    const adminWs = await wsAuth(app, admin.token);
+    const kitchenWs = await wsAuth(app, kitchen.token);
+    const toAdmin = await collect(adminWs);
+    const toKitchen = await collect(kitchenWs);
+
+    app.broadcast("order.updated", { order });
+    app.broadcast("table.changed", { tableId: "t1" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(toAdmin).toEqual([{ event: "order.updated", data: { order } }, { event: "table.changed", data: { tableId: "t1" } }]);
+    expect(toKitchen).toEqual([{ event: "order.updated", data: { order: { ...order, customer: null } } }, { event: "table.changed", data: { tableId: "t1" } }]);
+    expect(JSON.stringify(toKitchen)).not.toContain("9876543210");
+    adminWs.terminate();
+    kitchenWs.terminate();
+  });
+
+  it("follows a person's permission changes on an open socket", async () => {
+    const db = openDb(":memory:");
+    migrate(db, MIGRATIONS);
+    app = buildServer({ db });
+    await app.ready();
+    const admin = await setupAdmin(app);
+    const waiter = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
+
+    const ws = await wsAuth(app, waiter.token);
+    const messages = await collect(ws);
+    const revoke = await app.inject({ method: "PUT", url: `/api/users/${waiter.id}/permissions`, payload: { overrides: { "customers.read": false } }, headers: auth(admin.token) });
+    expect(revoke.statusCode).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    messages.length = 0;
+
+    app.broadcast("order.updated", { order });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(messages).toEqual([{ event: "order.updated", data: { order: { ...order, customer: null } } }]);
+    ws.terminate();
+  });
+});

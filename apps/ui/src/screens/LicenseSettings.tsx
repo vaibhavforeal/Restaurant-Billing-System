@@ -8,6 +8,7 @@ import { useNavigationGuard } from "../navigation-guard";
 import { SystemSettings } from "./SystemSettings";
 import "../license-settings.css";
 import { userCan } from "../permissions";
+import { timeoutSignal } from "../abort-signal";
 
 interface LicenseContextValue { status: LicenseStatus | null; error: string; refresh(): Promise<void> }
 const LicenseContext = createContext<LicenseContextValue | null>(null);
@@ -127,7 +128,7 @@ export function LicenseSettings() {
   const online = status?.mode === "commercial" && status.onlineActivation;
   // Customer ID and Order ID from MasalaPOS's setup card: the first activation, or moving to another order (a trial becoming paid).
   const enrollForm = <form className="license-device-form" onSubmit={(e) => { e.preventDefault(); void run(async () => {
-    const result = await apiFetch<{ customer: { name: string }; order: { code: string } }>("/api/license/enroll", { method: "POST", body: JSON.stringify(codes), signal: AbortSignal.timeout(30_000) });
+    const result = await apiFetch<{ customer: { name: string }; order: { code: string } }>("/api/license/enroll", { method: "POST", body: JSON.stringify(codes), signal: timeoutSignal(30_000) });
     setCodes({ customerId: "", orderId: "" }); setMessage(`Activated with order ${result.order.code} for ${result.customer.name}.`);
   }); }}><label>Customer ID<input required maxLength={40} placeholder="FC-XXXX-XXX" autoComplete="off" spellCheck={false} value={codes.customerId} disabled={busy}
       onChange={(e) => setCodes({ ...codes, customerId: e.target.value })} /></label>

@@ -14,8 +14,11 @@ import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
-import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, saveCatalogCopy, saveOrderCopy, type CatalogCache } from "../offline-cache";
+import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
+import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readMenuInsightsCopy, readOrderSettingsCopy, saveCatalogCopy, saveMenuInsightsCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache, type MenuInsights } from "../offline-cache";
+import { withPopularFirst } from "../popular-items";
+import { suggestTogether, type DishPairs } from "../ordered-together";
+import { BILLING_CANCELLED, heldTargets, holdControls, holdPrompt, holdRefusal, punchItems, releaseCartHolds, sendableLines } from "../hold-order";
 import { useNavigationGuard } from "../navigation-guard";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
 import { cartRowForKitchen, comboContents, comboExtraPaise, isComboLine, kitchenLines } from "../combo-cart";
@@ -33,6 +36,9 @@ function carriedStatusFor(orderId: string): string {
   return carriedStatus && carriedStatus.orderId === orderId && Date.now() - carriedStatus.at < 5000 ? carriedStatus.text : "";
 }
 
+/** How often an open order screen re-reads the menu hints (Popular follows the time of day). */
+const INSIGHTS_REFRESH_MS = 15 * 60 * 1000;
+
 interface DraftItem {
   clientRef: string;
   productId: string;
@@ -44,6 +50,8 @@ interface DraftItem {
   /** A combo's chosen options, and what it holds for the cart to show. */
   comboPicks?: string[];
   contents?: string[];
+  /** Held back from the kitchen: KOT leaves it for later, Fire sends it. */
+  held?: boolean;
 }
 
 export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling = false, onNextTakeaway, onHold, captain = false }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void; quickBilling?: boolean; onNextTakeaway?: () => void; onHold?: () => void; captain?: boolean }) {
@@ -51,7 +59,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const { shortcut, shortcutProps } = useShortcutLabels();
   const draftKey = `masalapos.draft.${user.id}.${orderId}`;
   function readDraft(): DraftItem[] {
-    try { return JSON.parse(localStorage.getItem(draftKey) ?? localStorage.getItem(`masalapos.draft.${orderId}`) ?? "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(draftKey) ?? "[]"); } catch { return []; }
   }
   const [order, setOrder] = useState<Order | null>(null);
   const [captains, setCaptains] = useState<Array<{ id: string; name: string }>>([]);
@@ -63,6 +71,10 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftItem[]>(readDraft);
+  /** Hold orders (Settings): the last value from the hub, kept on the device for offline use. */
+  const [holdOrders, setHoldOrders] = useState(() => readOrderSettingsCopy(user.id)?.holdOrders ?? true);
+  const [popularIds, setPopularIds] = useState<string[]>(() => readMenuInsightsCopy(user.id)?.popularProductIds ?? []);
+  const [pairs, setPairs] = useState<DishPairs>(() => readMenuInsightsCopy(user.id)?.pairs ?? {});
   const [, refreshQueue] = useState(0);
   /** When the screen shows this device's saved copy because the hub cannot be reached: the time of that copy. */
   const [copyAt, setCopyAt] = useState<number | null>(null);
@@ -108,7 +120,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       const text = lostCart
         ? `This bill was merged into ${label}. Your unsaved items were not added — add them again on the combined bill.`
         : `Merged into ${label}`;
-      if (lostCart) { localStorage.removeItem(draftKey); localStorage.removeItem(`masalapos.draft.${orderId}`); }
+      if (lostCart) localStorage.removeItem(draftKey);
       setMessage(text);
       carryStatus(mergedInto, text, false);
       onOpenOrder(mergedInto);
@@ -131,11 +143,18 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     return false;
   };
   useNavigationGuard(canLeave);
-  function holdOrder() {
+  /** Hold saves the cart to the hub first, so any counter or captain tablet can pick the order up. */
+  async function holdOrder() {
     if (!canLeave()) return;
     if (isQuick && queuedRequests(user.id).some((request) => request.lane === orderId)) {
       setError("Review this order's saved actions before holding it and starting another takeaway.");
       return;
+    }
+    if (readDraft().length) {
+      actionLock.current = true; setPending(true); setError("");
+      try { await punchDraft(); }
+      catch (error) { setError(error instanceof Error ? error.message : "Could not save this cart. Please retry."); return; }
+      finally { actionLock.current = false; setPending(false); }
     }
     try {
       if (isQuick && onHold) onHold(); else onBack();
@@ -171,6 +190,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   /** Shows a change the hub has not confirmed yet, and keeps it in this device's copy of the order. */
   function keepLocally(next: Order) { setOrder(next); saveOrderCopy(user.id, next); }
   const WHEN_BACK = "sends when the connection returns";
+  const SAVED_NOT_BILLED = "Saved on this device. Connect to the hub to review the bill.";
 
   function show(current: Order, catalog: Omit<CatalogCache, "at">) {
     setOrder(current);
@@ -211,8 +231,32 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     show(o.order, catalog);
   }
 
+  // Hold orders turned off: release cart rows held earlier, or every punch of this cart would be refused.
+  useEffect(() => {
+    if (holdOrders) return;
+    const released = releaseCartHolds(readDraft());
+    if (released.changed) saveDraft(released.rows);
+  }, [holdOrders]);
+
+  function loadOrderSettings() {
+    apiFetch<{ holdOrders: boolean }>("/api/order-settings")
+      .then((settings) => { setHoldOrders(settings.holdOrders); saveOrderSettingsCopy(user.id, settings); })
+      .catch(() => { /* keep the last known value */ });
+  }
+
+  /** Popular badges are a hint: if the hub cannot be reached the last known list stays. */
+  function loadMenuInsights() {
+    apiFetch<MenuInsights>("/api/menu/insights")
+      .then((insights) => { setPopularIds(insights.popularProductIds); setPairs(insights.pairs ?? {}); saveMenuInsightsCopy(user.id, insights); })
+      .catch(() => { /* keep the last known list */ });
+  }
+
   useEffect(() => {
     reload().catch(() => setError("Failed to load order"));
+    loadOrderSettings();
+    loadMenuInsights();
+    // Popular follows the clock, so a screen left open picks up the next hour's best-sellers.
+    const insightsTimer = window.setInterval(loadMenuInsights, INSIGHTS_REFRESH_MS);
     const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
     const unsub = subscribeQueue(refresh);
     const acknowledged = () => { refresh(); void reload().catch(() => {}); };
@@ -222,19 +266,19 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
         if (event === "table.changed") void reload().catch(() => {});
         if (event === "stock.changed") void reload().catch(() => {});
-        if (event === "catalog.changed") void reload().catch(() => {});
+        if (event === "catalog.changed") { void reload().catch(() => {}); loadMenuInsights(); }
+        if (event === "settings.changed") { loadOrderSettings(); loadMenuInsights(); }
         if (event === "kot.updated" && (data as { kot: { orderId: string } }).kot.orderId === orderId) void reload().catch(() => {});
       },
-      onStatus: (connected) => { if (connected) void reload().catch(() => {}); },
+      onStatus: (connected) => { if (connected) { void reload().catch(() => {}); loadOrderSettings(); } },
       onAuthFail: () => session.clear(),
     });
-    return () => { reloadRevision.current++; dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
+    return () => { reloadRevision.current++; dispose(); unsub(); window.clearInterval(insightsTimer); window.removeEventListener("masalapos:ack", acknowledged); };
   }, [orderId, draftKey, captain]);
 
   function saveDraft(next: DraftItem[]): boolean {
     try {
       localStorage.setItem(draftKey, JSON.stringify(next));
-      localStorage.removeItem(`masalapos.draft.${orderId}`);
       setDraft(next); return true;
     } catch { setError("Cannot save this cart on the device. Free browser storage before adding items."); return false; }
   }
@@ -311,7 +355,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     setComboPicking(null);
   }
 
-  function updateDraft(clientRef: string, update: Partial<Pick<DraftItem, "qty" | "note">>) {
+  function updateDraft(clientRef: string, update: Partial<Pick<DraftItem, "qty" | "note" | "held">>) {
     if (actionLock.current || billingLock.current) return;
     if (!queuedRefs.has(clientRef)) saveDraft(readDraft().map((item) => (item.clientRef === clientRef ? { ...item, ...update } : item)));
   }
@@ -331,14 +375,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     const already = laneState().punchedRefs;
     const fresh = current.filter((d) => !already.has(d.clientRef));
     if (!fresh.length) return { saved: current.length > 0 };
-    const items = fresh.map((d) => ({
-      clientRef: d.clientRef,
-      productId: d.productId,
-      variantId: d.variantId,
-      qty: d.qty,
-      note: d.note || undefined,
-      ...(d.comboPicks ? { comboPicks: d.comboPicks } : {}),
-    }));
+    const items = punchItems(fresh);
     if (!saveDraft(current)) throw new Error("Cart could not be saved");
     const result = await queued({ path: `/api/orders/${orderId}/items`, body: { items }, label: `Add ${items.length} ${items.length === 1 ? "item" : "items"}`, draftKey });
     setDraft(readDraft());
@@ -369,11 +406,12 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (current.status !== "open") throw new Error("This order is no longer open. Return to tables to check its status.");
     const waiting = laneState().kitchenRefs;
     // A combo is named by its own line; the hub sends the kitchen dishes in it.
-    const pendingItems = kitchenLines(current.items, catalog).filter((item) => !(item.clientRef && waiting.has(item.clientRef)));
+    // Held dishes wait for Fire.
+    const pendingItems = sendableLines(current.items, catalog).filter((item) => !(item.clientRef && waiting.has(item.clientRef)));
     const onOrder = new Set(current.items.map((item) => item.clientRef));
     const itemRefs = [
       ...pendingItems.flatMap((item) => item.clientRef ? [item.clientRef] : []),
-      ...cart.filter((row) => cartRowForKitchen(row, catalog) && !onOrder.has(row.clientRef) && !waiting.has(row.clientRef)).map((row) => row.clientRef),
+      ...cart.filter((row) => !row.held && cartRowForKitchen(row, catalog) && !onOrder.has(row.clientRef) && !waiting.has(row.clientRef)).map((row) => row.clientRef),
     ];
     const itemIds = pendingItems.filter((item) => !item.clientRef).map((item) => item.id);
     const outcome = { kots: 0, printErrors: [] as string[], saved: punched.saved, none: !itemRefs.length && !itemIds.length };
@@ -390,8 +428,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current) throw new Error("Wait for the order to finish saving");
     actionLock.current = true; setPending(true); setError("");
     try {
+      // Held dishes are cooked before the customer pays: ask, then fire them.
+      const waiting = order ? heldTargets(order.items, readDraft(), products).count : 0;
+      if (waiting > 0) {
+        if (!window.confirm(holdPrompt(waiting))) throw new Error(BILLING_CANCELLED);
+        if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED);
+      }
       const sent = await sendPending("Send takeaway to kitchen");
-      if (sent.saved) throw new Error("Saved on this device. Connect to the hub to review the bill.");
+      if (sent.saved) throw new Error(SAVED_NOT_BILLED);
       await reload();
     } finally { actionLock.current = false; setPending(false); }
   }
@@ -453,6 +497,58 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       if (sent.saved) setMessage(sent.none ? `Items saved on this device · ${WHEN_BACK}` : "Saved on this device · the kitchen ticket prints when the connection returns");
       else if (sent.none) setMessage("Order saved. No items are waiting for a kitchen ticket.");
       else setMessage(`Sent to kitchen · ${sent.kots} ${sent.kots === 1 ? "ticket" : "tickets"}${sent.printErrors.length ? `. Not printed: ${sent.printErrors.join("; ")}` : ""}`);
+    });
+  }
+
+  /** Sends held dishes to the kitchen. Named by reference where they have one, so a fire can wait behind an offline punch. */
+  async function fireTargets(targets: { itemIds: string[]; itemRefs: string[] }): Promise<{ saved: boolean; kots: number; printErrors: string[] }> {
+    const outcome = { saved: false, kots: 0, printErrors: [] as string[] };
+    for (const items of [targets.itemIds.length ? { itemIds: targets.itemIds } : null, targets.itemRefs.length ? { itemRefs: targets.itemRefs } : null]) {
+      if (!items) continue;
+      const sent = await queued<{ kots: Array<{ id: string }>; printErrors?: string[] }>({ path: `/api/orders/${orderId}/send`, body: { clientRef: uuid(), ...items, fire: true }, label: "Fire held items" });
+      if (!sent) { outcome.saved = true; continue; }
+      outcome.kots += sent.kots.length; outcome.printErrors.push(...(sent.printErrors ?? []));
+    }
+    return outcome;
+  }
+
+  /** Saves the cart, then fires every held dish (on the order and in the cart). Targets are read before the punch clears the cart. */
+  async function fireHeld(): Promise<{ saved: boolean; kots: number; printErrors: string[] }> {
+    if (!order) throw new Error("Order is still loading");
+    if (laneState().needsReview) throw new Error("A saved action for this order needs review first. Open Saved actions above.");
+    const targets = heldTargets(order.items, readDraft(), products);
+    const punched = await punchDraft();
+    const fired = await fireTargets(targets);
+    return { ...fired, saved: fired.saved || punched.saved };
+  }
+
+  function fireMessage(fired: { saved: boolean; kots: number; printErrors: string[] }) {
+    setMessage(fired.saved ? "Fire saved · prints when the connection returns"
+      : `Fired · ${fired.kots} ${fired.kots === 1 ? "ticket" : "tickets"}${fired.printErrors.length ? `. Not printed: ${fired.printErrors.join("; ")}` : ""}`);
+  }
+
+  function fireAll() { void run(async () => fireMessage(await fireHeld())); }
+
+  function fireItem(item: OrderItem) {
+    void run(async () => fireMessage(await fireTargets(item.clientRef ? { itemIds: [], itemRefs: [item.clientRef] } : { itemIds: [item.id], itemRefs: [] })));
+  }
+
+  /** Holds a saved dish back from the kitchen, or releases it for the next KOT. */
+  function toggleHeld(item: OrderItem) {
+    const held = !item.held;
+    const label = `${held ? "Hold" : "Release"} ${item.name}`;
+    void run(async () => {
+      const request = enqueueRequest({ method: "PATCH", path: `/api/order-items/${item.id}`, body: { held }, lane: orderId, label });
+      try {
+        if ((await outcomeOrSaved(request)).saved) setMessage(`${label} saved · ${WHEN_BACK}`);
+      } catch (error) {
+        const words = error instanceof Error ? holdRefusal(error.message, item.name) : null;
+        if (!words) throw error;
+        // Retrying cannot change the answer: drop the action so it does not hold up this order's KOT and Fire.
+        discardRequest(request.id);
+        await reload().catch(() => {});
+        throw new Error(words);
+      }
     });
   }
 
@@ -561,7 +657,17 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const query = search.toLocaleLowerCase().trim();
   // The items inside a combo show under its line, not as lines of their own.
   const lines = order.items.filter((item) => !item.parentItemId);
-  const activeProducts = products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query));
+  const popular = new Set(popularIds);
+  // "Goes well with": dishes often on the same bill as what this order already has, added in the size most ordered.
+  const suggestions = order.status !== "open" ? [] : suggestTogether([...lines.filter((item) => item.status !== "cancelled"), ...draft], pairs, products).flatMap(({ productId, variantId }): Array<{ productId: string; variantId: string | null; name: string; pricePaise: number }> => {
+    const dish = products.find((p) => p.id === productId);
+    if (!dish || dish.kind === "combo") return [];
+    const sizes = dish.variants.filter((v) => v.isActive);
+    const size = sizes.find((v) => v.id === variantId) ?? sizes[0];
+    if (!size) return dish.variants.length ? [] : [{ productId, variantId: null, name: dish.name, pricePaise: dish.pricePaise }];
+    return [{ productId, variantId: size.id, name: `${dish.name} (${size.name})`, pricePaise: size.pricePaise }];
+  });
+  const activeProducts = withPopularFirst(products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query)), popularIds);
   const hasSentItems = order.items.some((i) => i.status === "sent");
   const canCancelOrder = order.status === "open" && !hasSentItems;
   const total = order.items.filter((i) => i.status !== "cancelled").reduce((sum, i) => sum + i.pricePaise * i.qty, 0);
@@ -575,7 +681,12 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   });
   const draftTotal = order.status === "open" ? pricedDraft.reduce((sum, item) => sum + item.pricePaise * item.qty, 0) : 0;
   const itemCount = (order.status === "open" ? draft.reduce((sum, item) => sum + item.qty, 0) : 0) + lines.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.qty, 0);
-  const hasKitchenPending = kitchenLines(order.items, products).length > 0;
+  const hasKitchenPending = sendableLines(order.items, products).length > 0;
+  /** KOT has something to do: an un-held cart row, or a saved kitchen dish that is not held. */
+  const canSendKitchen = draft.some((row) => !row.held) || hasKitchenPending;
+  const held = heldTargets(order.items, draft, products);
+  const { showHold, showFire } = holdControls(holdOrders, held.count);
+  const kitchenLineIds = new Set(kitchenLines(order.items, products).map((item) => item.id));
   const kotDone = (item: OrderItem) => order.kots.some((kot) => kot.id === item.kotId && kot.doneAt);
   // A combo is ready when every kitchen dish in it is.
   const itemStatus = (item: OrderItem) => {
@@ -605,7 +716,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </select></label>}
         {isQuick && order.status === "open" && <p className="muted">Select items, then checkout. Kitchen items are sent automatically.</p>}</div>
       {captain ? <OverflowMenu label="More">
-        {order.status === "open" && <button {...shortcutProps("hold")} title={shortcut("hold", "Hold and return to tables")} disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>Hold & return to tables</button>}
+        {order.status === "open" && showHold && <button {...shortcutProps("hold")} title={shortcut("hold", "Save this order for any device and return to tables")} disabled={locked} onClick={() => void holdOrder()}>Hold & return to tables</button>}
         {order.status === "open" && draft.length > 0 && <button disabled={locked} {...shortcutProps("save_items")} title={shortcut("save_items", "Save without sending to kitchen")} onClick={punch}>Save items only</button>}
         {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => void newSplit()}>New split on this table</button>}
         {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => openTransfer("move")}>Move table…</button>}
@@ -614,7 +725,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       </OverflowMenu> : <div className="actions">
       <TerminalClock />
       <span className="pos-order-meta">{PRICE_TIER_LABELS[order.priceTier]} · {user.name}</span>
-      {order.status === "open" && <button {...shortcutProps("hold")} title={shortcut("hold", isQuick ? "Keep this order in Open takeaways and free Takeaway for the next customer" : "Hold this order and return to tables")} disabled={locked} onClick={holdOrder}>{shortcut("hold", "Hold")}</button>}
+      {order.status === "open" && showHold && <button {...shortcutProps("hold")} title={shortcut("hold", isQuick ? "Keep this order in Open takeaways and free Takeaway for the next customer" : "Save this order for any device and return to tables")} disabled={locked} onClick={() => void holdOrder()}>{shortcut("hold", "Hold")}</button>}
       {order.type === "dine_in" && order.status === "open" && <button onClick={() => void newSplit()} disabled={locked}>+ Split</button>}
       {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("move")} disabled={locked}>Move table…</button>}
       {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("merge")} disabled={locked}>Merge…</button>}
@@ -669,10 +780,10 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </div>
         <div className="menu-results" ref={menuResults} role="region" tabIndex={0} aria-label="Menu items"><div className="menu-grid">{activeProducts.flatMap((p) => {
           const variants = p.variants.filter((v) => v.isActive);
-          const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
-          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
-          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
-          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{popular.has(p.id) && <span className="menu-popular-label">Popular</span>}{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
+          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
+          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
         })}</div>
         {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3><p>Try another name or category.</p></div>}</div>
       </section>}
@@ -686,6 +797,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong>{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : captain && <small>Add cooking note</small>}</button>
             <QtyStepper name={d.name} value={d.qty} disabled={locked || queuedRefs.has(d.clientRef)} onChange={(qty) => updateDraft(d.clientRef, { qty })} />
             <span className="pos-money">₹{paiseToRupees(d.pricePaise * d.qty)}</span>
+            {showHold && cartRowForKitchen(d, products) && <button className="cart-hold" aria-pressed={!!d.held} title={d.held ? `Release ${d.name} for the next KOT` : `Hold ${d.name} back from the kitchen`} aria-label={`${d.held ? "Release" : "Hold"} ${d.name}`} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => updateDraft(d.clientRef, { held: !d.held })}>{d.held ? "Held" : "Hold"}</button>}
             <button className="cart-remove" title={"Remove " + d.name} aria-label={"Remove " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => removeDraft(d.clientRef)}>×</button>
             {queuedRefs.has(d.clientRef) && <small className="cart-row-notice">{lane.kitchenRefs.has(d.clientRef) ? "Saved · goes to the kitchen when back online" : "Saved to send"}</small>}
           </div>)}
@@ -693,19 +805,24 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {lines.length > 0 && <div className="cart-section">
           <h3>{captain ? "Saved items" : "Punched items"}</h3>
           {lines.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
-            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong>{isComboLine(order.items, item) && <small className="cart-combo-contents">{comboContents(order.items, item).join(", ")}</small>}<span className={`status ${itemStatus(item)}`}>{itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
+            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong>{isComboLine(order.items, item) && <small className="cart-combo-contents">{comboContents(order.items, item).join(", ")}</small>}<span className={`status ${item.held && item.status === "pending" ? "held" : itemStatus(item)}`}>{item.held && item.status === "pending" ? "held" : itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
+            {order.status === "open" && item.status === "pending" && item.held && <button className="saved-item-fire" title={`Send ${item.name} to the kitchen now`} aria-label={`Fire ${item.name}`} disabled={locked} onClick={() => fireItem(item)}>Fire</button>}
+            {order.status === "open" && item.status === "pending" && showHold && (item.held || kitchenLineIds.has(item.id)) && <button className="cart-hold" aria-pressed={!!item.held} title={item.held ? `Release ${item.name} for the next KOT` : `Hold ${item.name} back from the kitchen`} aria-label={`${item.held ? "Release" : "Hold"} ${item.name}`} disabled={locked} onClick={() => toggleHeld(item)}>{item.held ? "Held" : "Hold"}</button>}
             {order.status === "open" && item.status === "sent" && !isComboLine(order.items, item) && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
             {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || userCan(user, "orders.cancel_sent")) && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
           </div>)}
         </div>}
         </div>
         <div className="cart-footer">
+        {suggestions.length > 0 && <div className="cart-suggestions" role="group" aria-labelledby="cart-suggestions-title"><span id="cart-suggestions-title">Goes well with this order</span>
+          <div>{suggestions.map((dish) => <button key={dish.productId} disabled={locked} aria-label={`Also add ${dish.name}, ₹${paiseToRupees(dish.pricePaise)}`} onClick={() => addToDraft(dish.productId, dish.variantId, dish.name, dish.pricePaise)}><Icon name="plus" size={14} />{dish.name}<span className="pos-money">₹{paiseToRupees(dish.pricePaise)}</span></button>)}</div>
+        </div>}
         {message && <p className="captain-message" role="status"><Icon name="check" size={16} />{message}</p>}
         {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total"><div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
-        {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || (!draft.length && !hasKitchenPending)}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button></div> : <div className="cart-actions">{!isQuick && draft.length > 0 && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked}>{shortcut("save_items", "Punch")}</button>}{!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || (!draft.length && !hasKitchenPending)}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}{canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}</div>)}
-        {!captain && userCan(user, "bills.create") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
+        {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">{!isQuick && draft.length > 0 && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked}>{shortcut("save_items", "Punch")}</button>}{!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}{canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}</div>)}
+        {!captain && userCan(user, "bills.create") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} heldCount={held.count} onFireHeld={async () => { if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED); await reload(); }} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
         {isQuick && order.status === "settled" && onNextTakeaway && <button className="primary next-takeaway" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Next takeaway")} disabled={locked} onClick={() => { if (canLeave()) onNextTakeaway(); }}>Next takeaway</button>}
         </div>
       </aside>

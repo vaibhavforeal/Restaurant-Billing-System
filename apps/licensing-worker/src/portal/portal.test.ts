@@ -65,6 +65,16 @@ describe("portal sign-in", () => {
     expect((await login(staff.email, PASSWORD)).status).toBe(200);
   });
 
+  it("counts wrong passwords sent at the same moment one by one, so a burst still locks the account", async () => {
+    const staff = await seedStaff(env, "accounts");
+    const burst = await Promise.all(Array.from({ length: 5 }, (_, i) => login(staff.email, `wrong ${i}`, { "cf-connecting-ip": `203.0.113.${i}` })));
+    expect(burst.map((r) => r.status)).toEqual([401, 401, 401, 401, 401]);
+    expect((await login(staff.email, PASSWORD)).status).toBe(401);
+    // Failures that were already past the lock check when it was set must not lift it.
+    const row = await env.DB.prepare(`SELECT locked_until AS lockedUntil FROM staff_users WHERE id = ?`).bind(staff.id).first<{ lockedUntil: number }>();
+    expect(row!.lockedUntil).toBe(T0 + LOCK_MS);
+  });
+
   it("is rate limited per address, by the sign-in limiter when there is one", async () => {
     const keys: string[] = [];
     env.LOGIN_LIMITER = { limit: async ({ key }) => { keys.push(key); return { success: false } } };

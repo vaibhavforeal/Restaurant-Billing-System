@@ -1,3 +1,4 @@
+import { overLimit } from "./limits.js";
 import { connectorRoute } from "./connector/routes.js";
 import { webCryptoSigner } from "@masalapos/license-issuer";
 import { handleActivate } from "./activate.js";
@@ -24,15 +25,6 @@ function signerFor(env: Env): Promise<SignerPair> {
   return cachedSigner.promise;
 }
 
-// Fails open: an unavailable rate limiter must not take licensing down. Only the error message is logged (no IP, headers or body).
-async function rateLimited(request: Request, env: Env): Promise<boolean> {
-  try { return !(await env.LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success; }
-  catch (error) {
-    console.error("licensing-worker: rate limiter unavailable:", error instanceof Error ? error.name : "unknown error");
-    return false;
-  }
-}
-
 async function readJson(request: Request): Promise<{ ok: true; body: unknown } | { ok: false }> {
   try { return { ok: true, body: await request.json() }; } catch { return { ok: false }; }
 }
@@ -46,16 +38,16 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/portal" || url.pathname.startsWith("/portal/")) return portalRoute(request, env, await deps());
   if (url.pathname === "/support" || url.pathname.startsWith("/support/")) return supportRoute(request, env, await deps());
   if (method === "POST" && url.pathname === "/v1/support/link") {
-    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    if (await overLimit(env.LIMITER, request, "")) return json({ error: "rate_limited" }, 429);
     return handleSupportLink(await deps(), request, request.headers.get(SECRET_HEADER));
   }
   if (method === "POST" && url.pathname === "/v1/activate") {
-    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    if (await overLimit(env.LIMITER, request, "")) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);
     return body.ok ? handleActivate({ ...(await deps()), log: (message) => console.warn(message) }, body.body, request.headers.get(SECRET_HEADER)) : json({ error: "bad_request" }, 400);
   }
   if (method === "POST" && url.pathname === "/v1/enroll") {
-    if (await rateLimited(request, env)) return json({ error: "rate_limited" }, 429);
+    if (await overLimit(env.LIMITER, request, "")) return json({ error: "rate_limited" }, 429);
     const body = await readJson(request);
     return body.ok ? handleEnroll(await deps(), body.body, request.headers.get(SECRET_HEADER)) : json({ error: "bad_request" }, 400);
   }

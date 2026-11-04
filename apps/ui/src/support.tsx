@@ -14,14 +14,14 @@ declare global {
   }
 }
 /** Only the desktop app's own window answers remote-access requests: never a browser or tablet elsewhere on the network. */
-export const onThisPc = () => window.masalaposDesktop?.remoteSupport === true;
+const onThisPc = () => window.masalaposDesktop?.remoteSupport === true;
 
 export interface PendingRequest { sessionId: string; agentName: string; reason: string; mode: "view" | "control"; expiresAt: number; connectorUrl?: string }
 export interface ActiveSession { sessionId: string; agentName: string; mode: "view" | "control"; startedAt: number | null }
 export interface SupportStatus { online: boolean; available: boolean; canShare: boolean; remoteEnabled: boolean; pending: PendingRequest | null; active: ActiveSession | null }
 
 /** Opens the support chat in the browser. Outside the desktop app a tab is opened first, while the click still counts, then pointed at the chat. */
-export function useOpenSupport() {
+function useOpenSupport() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const open = useCallback(async () => {
@@ -54,7 +54,7 @@ export function GetSupportButton({ className = "nav-item support-link" }: { clas
 }
 
 /** Keeps the support status current: pushed over the POS socket, and checked every few seconds on the PC itself. */
-export function useSupportStatus(poll: boolean): [SupportStatus | null, (s: SupportStatus) => void] {
+function useSupportStatus(poll: boolean): [SupportStatus | null, (s: SupportStatus) => void] {
   const [status, setStatus] = useState<SupportStatus | null>(null);
   useEffect(() => {
     let alive = true;

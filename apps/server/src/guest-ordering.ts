@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { z } from "zod";
 import { assertTableNotReserved } from "./reservation-rules.js";
 import { httpError } from "./http-error.js";
+import { guestRateLimiter } from "./guest-rate.js";
 import { loadOrderJson, type OrderRow } from "./mappers.js";
 import { lanUrls } from "./system.js";
 import { menuPhotoUrl } from "./menu-photo.js";
@@ -12,6 +13,7 @@ import { readGstSettings } from "./gst-settings.js";
 import { moduleActive, requireModule } from "./modules.js";
 import { comboGroupsByCombo } from "./combos.js";
 import { insertOrderItem, priceOrderItem } from "./order-items.js";
+import { menuPairs, menuPopularIds } from "./menu-insights.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 const TTL = 2 * 60 * 60 * 1000;
@@ -27,7 +29,7 @@ interface RequestRow {
 function preparation(db: Database, request: RequestRow): GuestPreparation | null {
   if (request.status !== "accepted") return null;
   type Row = {
-    id: string; name_snapshot: string; qty: number; status: string; note: string | null; client_ref: string; parent_item_id: string | null;
+    id: string; name_snapshot: string; qty: number; status: string; note: string | null; client_ref: string | null; parent_item_id: string | null;
     kot_id: string | null; done_at: number | null; kot_station_id: string | null; order_status: string;
   };
   const select = `SELECT i.id, i.name_snapshot, i.qty, i.status, i.note, i.client_ref, i.parent_item_id, i.kot_id, k.done_at,
@@ -44,7 +46,7 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
   const original = JSON.parse(request.items_json) as GuestRequestItem[];
   let hasChanges = rows.length !== original.length;
   const items = rows.map((row) => {
-    const index = Number(row.client_ref.slice(`guest:${request.id}:`.length));
+    const index = row.client_ref === null ? -1 : Number(row.client_ref.slice(`guest:${request.id}:`.length));
     const before = original[index];
     if (!before || before.qty !== row.qty || before.name !== row.name_snapshot || before.note !== (row.note ?? "")) hasChanges = true;
     const held = inCombos.filter((item) => item.parent_item_id === row.id);
@@ -85,17 +87,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
 
   // Bounded, server-local protection. A restaurant Wi-Fi shares an IP, so reads
   // have a higher allowance than submissions; pending requests are also capped.
-  const rates = new Map<string, { until: number; count: number }>();
-  function rate(req: FastifyRequest, action: string, limit: number) {
-    const now = Date.now(), key = `${action}:${req.ip}`;
-    if (rates.size >= 10_000) {
-      for (const [k, value] of rates) if (value.until <= now) rates.delete(k);
-      if (rates.size >= 10_000 && !rates.has(key)) throw httpError(429, "Please wait a minute and try again");
-    }
-    let value = rates.get(key);
-    if (!value || value.until <= now) { value = { until: now + 60_000, count: 0 }; rates.set(key, value); }
-    if (++value.count > limit) throw httpError(429, "Please wait a minute and try again");
-  }
+  const rate = guestRateLimiter();
   // Guest capabilities never call requireAuth or register a staff device.
   function guestLicense(ordering = false) {
     const status = app.licensing.status();
@@ -131,7 +123,9 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     const snapshot = { categories, products: visible };
     const pricing = { ...snapshot, products: visible.map(({ description: _description, photoUrl: _photoUrl, ...p }) => p) };
     return { restaurantName: settings.restaurant_name, table: { id: table.id, name: table.name, area: table.area },
-      orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot };
+      orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot,
+      // Hints only: kept out of the version so a change in what sells never asks guests to review their cart.
+      popularProductIds: menuPopularIds(app.db), pairs: menuPairs(app.db) };
   }
   function snapshotItems(current: GuestMenu, items: GuestSubmission["items"]): GuestRequestItem[] {
     return items.map((item) => {

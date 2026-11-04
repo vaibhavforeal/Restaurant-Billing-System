@@ -10,12 +10,3 @@ export type DefaultGstRate = typeof DEFAULT_GST_RATES[number];
 export function effectiveGstRate(itemRate: number | null, defaultRate: number): number {
   return itemRate ?? defaultRate;
 }
-
-/**
- * Reads the mode of a stored receipt. All fields are optional because snapshots written
- * before `gstMode` existed carry only the legacy flags.
- */
-export function receiptGstMode(receipt: { gstMode?: GstMode; gstPaidBy?: "zomato"; gstScheme?: "composition"; taxInclusive?: boolean }): GstMode {
-  if (receipt.gstMode) return receipt.gstMode;
-  return receipt.gstScheme === "composition" || receipt.gstPaidBy === "zomato" ? "none" : "included";
-}

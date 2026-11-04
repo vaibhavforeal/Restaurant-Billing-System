@@ -20,11 +20,14 @@ back on later. A restaurant can never switch on a module MasalaPOS has not inclu
 | Zomato | Add-on | — | Included | Included |
 | Kitchen Display (KDS) | Add-on | — | — | Included |
 | CRM & Loyalty | Add-on | — | Included | Included |
+| Dynamic Reports | Add-on | Reports & analytics, Sales dashboard | — | Included |
 
 The plan columns are the starting point for a new restaurant. MasalaPOS can allow or
 block any module for any restaurant on top of its plan.
 
 Billing, tables, the menu catalogue, staff and settings are core: they are always on.
+
+The `reports.dashboard` permission ("Customise own dashboard") is admin-only by default and can be granted per person. See [Dynamic Reports](dynamic-reports.md).
 
 A module works when all three hold:
 

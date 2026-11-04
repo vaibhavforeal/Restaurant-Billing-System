@@ -1,15 +1,17 @@
+import { overLimit } from "../limits.js";
 import { z } from "zod";
 import type { Env } from "../env.js";
 import type { Deps } from "../issue.js";
 import { path, type Route } from "../portal/context.js";
 import { conflict, HttpError, json, notFound, readBody } from "../portal/http.js";
 import { addSystemMessage, chatSummary } from "../support/chats.js";
-import { changed, newToken, remoteSession, SESSION_MAX_MS } from "../support/remote.js";
+import { changed, remoteSession, SESSION_MAX_MS } from "../support/remote.js";
+import { newToken } from "../secret.js";
 import { sha256Hex } from "../secret.js";
 import { iceServersFor } from "../live/turn.js";
 import { activityStatement } from "../store.js";
 
-export const INVITATION_MS = 30 * 60_000;
+const INVITATION_MS = 30 * 60_000;
 export const CONSENT_MS = 15 * 60_000;
 export interface ConnectorManifest { version: string; size: number; sha256: string; url: string; signature: string; }
 export interface ConnectorDistribution {
@@ -82,9 +84,8 @@ export async function connectorRoute(request: Request, env: Env, deps: Deps): Pr
   try {
     const distribution = available(env), url = new URL(request.url), { db } = deps, at = deps.now();
     const limiter = env.CONNECTOR_LIMITER ?? env.LOGIN_LIMITER ?? env.LIMITER;
-    let limited = true;
-    try { limited = !(await limiter.limit({ key: `connector:${request.headers.get("cf-connecting-ip") ?? "unknown"}` })).success; } catch { /* fail closed */ }
-    if (limited) return json({ error: "Too many attempts. Try again shortly." }, 429);
+    // Fails closed: it hands out remote access.
+    if (await overLimit(limiter, request, "connector", true)) return json({ error: "Too many attempts. Try again shortly." }, 429);
     if (request.method === "GET" && url.pathname === "/support/connector-runtime/latest.json") return json(await distribution.manifest());
     if (request.method === "GET" && url.pathname === "/support/connector") {
       const token = credential.safeParse(url.searchParams.get("t"));

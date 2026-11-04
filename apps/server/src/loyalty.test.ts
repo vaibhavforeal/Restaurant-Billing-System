@@ -128,6 +128,46 @@ describe("CRM profiles, tiers and points expiry", () => {
     expect((await profile(priya.id)).customer.pointsBalance).toBe(0);
   });
 
+  const voidBill = async (billId: string) =>
+    expect((await request("POST", `/api/bills/${billId}/void`, { clientRef: uuidv7(), reason: "Wrong order", refunds: [] })).statusCode).toBe(201);
+
+  it("takes a voided bill's points back from the lot that bill earned, not from older points about to expire", async () => {
+    await loyalty({ expiryMonths: 1 });
+    const priya = await customer();
+    await bill(await order(priya.id, 2)); // 10 points, expire 15 Feb
+    travel(new Date(2026, 1, 1, 12));
+    await voidBill((await bill(await order(priya.id, 2))).id); // 10 points, expire 1 Mar, taken straight back
+    travel(new Date(2026, 1, 20, 12));
+    expect(sweepAllExpiry(app.db)).toBe(10);
+    expect((await profile(priya.id)).customer.pointsBalance).toBe(0);
+  });
+
+  it("records points that expired before a void as expired instead of taking them back as well", async () => {
+    await loyalty({ expiryMonths: 1 });
+    const priya = await customer();
+    const first = await bill(await order(priya.id, 2)); // 10 points, expire 15 Feb
+    travel(new Date(2026, 1, 20, 12)); // no sweep has run yet
+    await voidBill(first.id);
+    const body = await profile(priya.id);
+    expect(body.customer.pointsBalance).toBe(0);
+    expect((body.ledger as Array<{ kind: string; points: number }>).filter((l) => l.kind !== "earn").map((l) => [l.kind, l.points])).toEqual([["expire", -10]]);
+  });
+
+  it("returns redeemed points on a void with the expiry of the points they were redeemed from", async () => {
+    await loyalty({ expiryMonths: 1 });
+    const priya = await customer();
+    await bill(await order(priya.id, 2)); // 10 points, expire 15 Feb
+    travel(new Date(2026, 1, 1, 12));
+    const second = await bill(await order(priya.id), { redeemPoints: 10 });
+    await voidBill(second.id);
+    const ledger = (await profile(priya.id)).ledger as Array<{ kind: string; points: number; expiresAt: number | null }>;
+    const earned = ledger.findLast((l) => l.kind === "earn")!; // the first bill's
+    expect(ledger.filter((l) => l.kind === "reverse" && l.points > 0).map((l) => [l.points, l.expiresAt])).toEqual([[10, earned.expiresAt]]);
+    travel(new Date(2026, 1, 20, 12));
+    expect(sweepAllExpiry(app.db)).toBe(10);
+    expect((await profile(priya.id)).customer.pointsBalance).toBe(0);
+  });
+
   it("caps how much of a bill points may pay and reports the most that can be redeemed", async () => {
     await loyalty({ maxRedeemPercent: 20 });
     const priya = await customer();

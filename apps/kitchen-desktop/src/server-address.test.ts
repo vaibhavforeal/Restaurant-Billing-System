@@ -6,6 +6,10 @@ describe("Kitchen POS addresses", () => {
     expect(kitchenAddress(" http://127.0.0.1:4110 ")).toBe("http://127.0.0.1:4110/kitchen/");
     expect(kitchenAddress("https://pos.local:4443/kitchen/")).toBe("https://pos.local:4443/kitchen/");
   });
+  it("keeps a typed default port instead of switching to 4100", () => {
+    expect(kitchenAddress("pos.local:80")).toBe("http://pos.local/kitchen/");
+    expect(kitchenAddress("192.168.1.20:80")).toBe("http://192.168.1.20/kitchen/");
+  });
   it.each(["file:///c:/secret", "ftp://pos.local", "http://user:pass@pos.local", "http://pos.local/settings", "http://pos.local/?token=secret", "http://pos.local/#secret", "", "http://pos.local\\settings"])("rejects invalid or credential-bearing address %s", value => {
     expect(() => kitchenAddress(value)).toThrow();
   });

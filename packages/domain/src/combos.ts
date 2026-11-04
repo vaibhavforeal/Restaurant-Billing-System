@@ -6,8 +6,8 @@ import { z } from "zod";
  * options are always included and nobody is asked. An option can cost extra on top of the combo price.
  */
 
-export const COMBO_MAX_GROUPS = 12;
-export const COMBO_MAX_OPTIONS = 30;
+const COMBO_MAX_GROUPS = 12;
+const COMBO_MAX_OPTIONS = 30;
 
 export const ComboOptionInput = z.object({
   /** An existing option's id keeps it, so carts punched before an edit still match. */

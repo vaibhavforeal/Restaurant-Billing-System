@@ -1,13 +1,14 @@
 import { FeedbackSubmit, uuidv7, type Database } from "@masalapos/domain";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { guestRateLimiter } from "./guest-rate.js";
 import { crmEnabled, requireIntegration } from "./integrations.js";
 import { loyaltySettings } from "./loyalty.js";
 import { lanUrls } from "./system.js";
 
 /** How long after the bill a guest may still rate the visit through the receipt's QR code. */
-export const FEEDBACK_WINDOW_MS = 7 * 86_400_000;
+const FEEDBACK_WINDOW_MS = 7 * 86_400_000;
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 
 let serverPort = 4100;
@@ -41,14 +42,7 @@ export function registerFeedback(app: FastifyInstance, port = 4100): void {
   const submitted = (billId: string) => db.prepare("SELECT 1 FROM customer_feedback WHERE bill_id = ?").get(billId) !== undefined;
 
   // A restaurant Wi-Fi shares one IP, so the limits allow a busy dining room; tokens are unguessable either way.
-  const rates = new Map<string, { until: number; count: number }>();
-  function rate(req: FastifyRequest, action: string, limit: number) {
-    const now = Date.now(), key = `${action}:${req.ip}`;
-    if (rates.size >= 10_000) for (const [k, value] of rates) if (value.until <= now) rates.delete(k);
-    let value = rates.get(key);
-    if (!value || value.until <= now) { value = { until: now + 60_000, count: 0 }; rates.set(key, value); }
-    if (++value.count > limit) throw httpError(429, "Please wait a minute and try again");
-  }
+  const rate = guestRateLimiter();
 
   app.get("/api/guest/feedback/:token", async (req, reply) => {
     reply.header("Cache-Control", "no-store"); rate(req, "feedback-read", 240);

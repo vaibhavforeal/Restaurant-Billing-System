@@ -16,7 +16,7 @@ export interface CaptainHttpsInfo {
   enabled: boolean; port?: number; addresses?: string[]; fingerprint?: string;
   expiresAt?: string; certificate?: Buffer; error?: string;
 }
-export interface CaptainTls {
+interface CaptainTls {
   port: number; tls: ServerOptions; info: CaptainHttpsInfo;
 }
 export function loadCaptainHttps(dataDir: string): CaptainTls | null {

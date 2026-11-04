@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { uuidv7, type Bill, type BillCreditNote, type PayMode } from "@masalapos/domain";
-import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
 import { loadBillCredit, resolveApprover } from "./credit-notes.js";
 
 describe("credit preview, approval and bill credit data", () => {
@@ -666,15 +666,15 @@ describe("credit preview, approval and bill credit data", () => {
       const req = requestOf({ id: cashier.id, name: "Cara", role: "cashier" }, "127.0.0.1");
       for (let i = 0; i < 5; i++) expect(await status(resolveApprover(app, req, "0000"))).toBe(401);
       // the same address can still sign in (login has its own counter) and that sign-in clears only login failures
-      const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "5678" } });
+      const login = await app.inject({ method: "POST", url: "/api/login", payload: testLogin({ name: "Cara", pin: "5678" }) });
       expect(login.statusCode).toBe(200);
       expect(await status(resolveApprover(app, req, "1234"))).toBe(429);
     });
 
-    it("does not let wrong approval PINs count against login, nor wrong login PINs against approval", async () => {
+    it("does not let wrong approval PINs count against login, nor wrong passwords against approval", async () => {
       const req = requestOf({ id: cashier.id, name: "Cara", role: "cashier" }, "127.0.0.1");
-      for (let i = 0; i < 5; i++) await app.inject({ method: "POST", url: "/api/login", payload: { pin: "0000" } });
-      expect((await app.inject({ method: "POST", url: "/api/login", payload: { pin: "5678" } })).statusCode).toBe(429);
+      for (let i = 0; i < 5; i++) await app.inject({ method: "POST", url: "/api/login", payload: { ...testLogin({ name: "Cara", pin: "5678" }), password: "wrong-password" } });
+      expect((await app.inject({ method: "POST", url: "/api/login", payload: testLogin({ name: "Cara", pin: "5678" }) })).statusCode).toBe(429);
       expect(await resolveApprover(app, req, "1234")).toEqual({ id: admin.user.id, name: "Asha" });
     });
 

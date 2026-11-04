@@ -6,11 +6,11 @@ import type { ChatMessage, ChatSummary, VisitorChat, VisitorMessage } from "../p
 export const MESSAGE_MAX = 2000;
 
 interface SummaryRow {
-  id: string; number: number; status: ChatSummary["status"]; customerId: string; customerName: string; installationId: string | null; outletName: string | null;
+  id: string; number: number; status: ChatSummary["status"]; customerId: string; customerName: string; customerCode: string; installationId: string | null; outletName: string | null;
   visitorName: string | null; visitorPhone: string | null; assigneeId: string | null; assigneeName: string | null; ticketId: string | null; ticketNumber: number | null;
   createdAt: number; lastMessageAt: number; closedAt: number | null; lastAuthor: ChatMessage["author"] | null; lastBody: string | null;
 }
-const SUMMARY = `s.id, s.number, s.status, s.customer_id AS customerId, c.business_name AS customerName, s.installation_id AS installationId, i.outlet_name AS outletName,
+const SUMMARY = `s.id, s.number, s.status, s.customer_id AS customerId, c.business_name AS customerName, c.code AS customerCode, s.installation_id AS installationId, i.outlet_name AS outletName,
   s.visitor_name AS visitorName, s.visitor_phone AS visitorPhone, s.assignee_id AS assigneeId, a.name AS assigneeName, s.ticket_id AS ticketId, t.number AS ticketNumber,
   s.created_at AS createdAt, s.last_message_at AS lastMessageAt, s.closed_at AS closedAt,
   (SELECT author_type FROM support_chat_messages m WHERE m.chat_id = s.id ORDER BY m.id DESC LIMIT 1) AS lastAuthor,
@@ -21,7 +21,7 @@ const FROM = `FROM support_chats s JOIN customers c ON c.id = s.customer_id LEFT
 export const counterName = (installationId: string, outletName: string | null) => outletName ?? `Counter ${installationId.slice(0, 8)}`;
 
 const toSummary = (r: SummaryRow): ChatSummary => ({
-  id: r.id, number: r.number, status: r.status, customer: { id: r.customerId, name: r.customerName },
+  id: r.id, number: r.number, status: r.status, customer: { id: r.customerId, name: r.customerName, code: r.customerCode },
   installation: r.installationId ? { id: r.installationId, name: counterName(r.installationId, r.outletName) } : null,
   visitorName: r.visitorName, visitorPhone: r.visitorPhone, assignee: r.assigneeId ? { id: r.assigneeId, name: r.assigneeName ?? "Former staff" } : null,
   ticket: r.ticketId && r.ticketNumber !== null ? { id: r.ticketId, number: r.ticketNumber } : null,
@@ -38,9 +38,13 @@ export async function chatSummary(db: D1Like, id: string): Promise<ChatSummary |
   return (await chatsWhere(db, "s.id = ?", [id], "s.id", 1))[0] ?? null;
 }
 
+/** Up to 500 messages: the newest ones when asked for the whole chat (afterId 0), else the next ones after `afterId`, oldest first. */
 export async function chatMessages(db: D1Like, chatId: string, afterId = 0): Promise<ChatMessage[]> {
-  const { results } = await db.prepare(`SELECT m.id, m.author_type AS author, m.author_id AS staffId, u.name AS staffName, m.body, m.created_at AS createdAt
-    FROM support_chat_messages m LEFT JOIN staff_users u ON u.id = m.author_id WHERE m.chat_id = ? AND m.id > ? ORDER BY m.id LIMIT 500`)
+  const columns = `m.id, m.author_type AS author, m.author_id AS staffId, u.name AS staffName, m.body, m.created_at AS createdAt`;
+  const from = `FROM support_chat_messages m LEFT JOIN staff_users u ON u.id = m.author_id WHERE m.chat_id = ? AND m.id > ?`;
+  const sql = afterId > 0 ? `SELECT ${columns} ${from} ORDER BY m.id LIMIT 500`
+    : `SELECT * FROM (SELECT ${columns} ${from} ORDER BY m.id DESC LIMIT 500) ORDER BY id`;
+  const { results } = await db.prepare(sql)
     .bind(chatId, afterId).all<{ id: number; author: ChatMessage["author"]; staffId: string | null; staffName: string | null; body: string; createdAt: number }>();
   return results.map(({ staffId, staffName, ...m }) => ({ ...m, staff: staffId ? { id: staffId, name: staffName ?? "Support" } : null }));
 }

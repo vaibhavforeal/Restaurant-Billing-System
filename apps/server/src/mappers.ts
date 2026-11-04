@@ -42,6 +42,8 @@ export interface OrderItemRow {
   cancelled_by: string | null;
   /** Set on an item inside a combo: the combo's own line. */
   parent_item_id: string | null;
+  /** 1 while a pending item is held back from the kitchen (a combo's line carries it for its items). */
+  held: number;
 }
 
 export interface KotRow {
@@ -54,7 +56,7 @@ export interface KotRow {
   done_at: number | null;
 }
 
-export function orderItemJson(r: OrderItemRow) {
+function orderItemJson(r: OrderItemRow) {
   return {
     id: r.id,
     clientRef: r.client_ref,
@@ -69,6 +71,7 @@ export function orderItemJson(r: OrderItemRow) {
     cancelReason: r.cancel_reason,
     kotId: r.kot_id,
     parentItemId: r.parent_item_id,
+    held: r.held === 1,
   };
 }
 
@@ -104,7 +107,7 @@ export function kotWithContextJson(
 /** Points the customer can spend now: expired points are left out even before a sweep records them. */
 export const pointsBalance = (db: Database, customerId: string) => spendableBalance(db, customerId);
 
-export const customerTags = (db: Database, customerId: string) =>
+const customerTags = (db: Database, customerId: string) =>
   (db.prepare("SELECT tag FROM customer_tags WHERE customer_id = ? ORDER BY tag COLLATE NOCASE").all(customerId) as Array<{ tag: string }>).map((r) => r.tag);
 
 /** A customer as staff screens show them: profile, tags, type name, current tier (when tiers are on) and points balance. */

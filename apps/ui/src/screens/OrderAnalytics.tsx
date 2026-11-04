@@ -9,6 +9,7 @@ import { recentPeriod, reportMoney, type ReportPeriod } from "../sales-report";
 import { analyticsCsv, analyticsMetrics, averageOrder, orderShare, orderTypeLabel, rankedItems, type ItemRanking } from "../order-analytics";
 import { BusyHours, OrderTrend } from "../OrderAnalyticsCharts";
 import "../order-analytics.css";
+import { withTimeout } from "../abort-signal";
 
 const orderOptions = [{ value: "all", label: "All orders" }, { value: "parcel", label: "Quick takeaway" }, { value: "dine_in", label: "Table orders" }] as const;
 const rankingOptions = [{ value: "quantity", label: "Quantity" }, { value: "sales", label: "Sales" }] as const;
@@ -28,7 +29,7 @@ export function OrderAnalytics({ initialPeriod, onPeriodChange }: { initialPerio
     const controller = new AbortController();
     setLoading(true); setReport(null); setError(""); setMessage("");
     const query = new URLSearchParams({ type: orderType, ...(period ? { from: period.from, to: period.to } : {}) });
-    void apiFetch<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?${query}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
+    void apiFetch<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?${query}`, { signal: withTimeout(controller.signal, 15000) })
       .then(({ report: result }) => { if (active) setReport(result); })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load order analytics"); })
       .finally(() => { if (active) setLoading(false); });

@@ -9,10 +9,11 @@ import { prepareDatabase } from "./startup.js";
 import { lockDataDirectory } from "./data-lock.js";
 
 const folders: string[] = [], databases: Database[] = [];
-function fixture(version = MIGRATIONS.length) {
+const LATEST = MIGRATIONS.at(-1)!.version;
+function fixture() {
   const folder = mkdtempSync(join(tmpdir(), "masalapos-backup-test-")); folders.push(folder);
   const db = openDb(join(folder, "masalapos.db")); databases.push(db);
-  migrate(db, MIGRATIONS.slice(0, version));
+  migrate(db, MIGRATIONS);
   return { folder, db };
 }
 afterEach(() => { vi.restoreAllMocks(); databases.splice(0).forEach((db) => { if (db.open) db.close(); }); folders.splice(0).forEach((folder) => rmSync(folder, { recursive: true, force: true })); });
@@ -23,7 +24,7 @@ it("captures committed WAL data in a standalone verified snapshot", () => {
   const backups = new Backups(db, folder);
   const result = backups.create("manual");
   const path = join(backups.folder, result.name);
-  expect(verifyBackup(path)).toBe(MIGRATIONS.length);
+  expect(verifyBackup(path)).toBe(LATEST);
   const copy = openDb(path); databases.push(copy);
   expect(copy.prepare("SELECT restaurant_name FROM settings").get()).toEqual({ restaurant_name: "Snapshot Cafe" });
   expect(backups.download("../masalapos.db")).toBeNull();
@@ -53,18 +54,25 @@ it("keeps the local snapshot when a second location fails, then retries the dail
   expect(backups.status().secondError).toContain("second copy failed");
   expect(backups.list()).toHaveLength(1);
   rmSync(second); mkdirSync(second); backups.daily();
-  expect(backups.status().secondError).toBeNull(); expect(verifyBackup(join(second, backups.list()[0]!.name))).toBe(MIGRATIONS.length);
+  expect(backups.status().secondError).toBeNull(); expect(verifyBackup(join(second, backups.list()[0]!.name))).toBe(LATEST);
 });
-it("backs up before migrating or changing app version and fails closed if the snapshot fails", () => {
-  const { folder, db } = fixture(6); const backups = new Backups(db, folder);
+it("backs up before a new app version starts and fails closed if the snapshot fails", () => {
+  const { folder, db } = fixture(); const backups = new Backups(db, folder);
   const fail = vi.spyOn(backups, "create").mockImplementation(() => { throw new Error("disk full"); });
   expect(() => prepareDatabase(db, backups, "0.6.0")).toThrow("disk full");
-  expect(db.pragma("user_version", { simple: true })).toBe(6);
+  expect(existsSync(join(folder, "app-version.json"))).toBe(false);
   fail.mockRestore(); prepareDatabase(db, backups, "0.6.0");
-  expect(verifyBackup(join(backups.folder, backups.list()[0]!.name))).toBe(6);
-  expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
+  expect(verifyBackup(join(backups.folder, backups.list()[0]!.name))).toBe(LATEST);
   prepareDatabase(db, backups, "0.6.0"); expect(backups.list()).toHaveLength(1);
   prepareDatabase(db, backups, "0.6.1"); expect(backups.list()).toHaveLength(2);
+});
+it("refuses a database or backup from a pre-release build older than the baseline migration", () => {
+  const { folder, db } = fixture(); const backups = new Backups(db, folder);
+  db.pragma("user_version = 6");
+  expect(() => prepareDatabase(db, backups, "0.6.0")).toThrow();
+  expect(db.pragma("user_version", { simple: true })).toBe(6);
+  db.close();
+  expect(() => verifyBackup(join(folder, "masalapos.db"))).toThrow("not supported");
 });
 it("rejects newer database versions without migration or a backup rewrite", () => {
   const { folder, db } = fixture(); db.pragma("user_version = 999");
@@ -95,7 +103,7 @@ it("resumes interrupted archive and install phases without losing the old databa
   renameSync(join(folder, "masalapos.db"), join(archive, "masalapos.db"));
   atomicJson(join(folder, "restore-pending.json"), { archive, phase: "archive" });
   expect(restoreDatabase(folder)).toBe(archive);
-  expect(verifyBackup(join(folder, "masalapos.db"))).toBe(MIGRATIONS.length);
+  expect(verifyBackup(join(folder, "masalapos.db"))).toBe(LATEST);
   expect(restoreDatabase(folder)).toBeNull();
 });
 it("rejects a second writer lock and allows restart after release", async () => {

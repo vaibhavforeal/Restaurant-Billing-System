@@ -18,7 +18,7 @@ export interface AppOptions {
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 /** The real client address. Only a proxy on this machine (Caddy) may name it through X-Forwarded-For; anyone else is who the socket says. */
-export function clientIp(req: Pick<IncomingMessage, "socket" | "headers">): string {
+function clientIp(req: Pick<IncomingMessage, "socket" | "headers">): string {
   const peer = req.socket.remoteAddress ?? "unknown";
   const forwarded = LOOPBACK.has(peer) ? req.headers["x-forwarded-for"] : undefined;
   const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();

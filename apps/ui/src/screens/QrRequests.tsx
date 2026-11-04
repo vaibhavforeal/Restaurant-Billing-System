@@ -11,6 +11,7 @@ import { QrNotificationControls } from "../QrNotifications";
 import "../qr-staff.css";
 import "../tables-requests.css";
 import { useModules } from "../modules";
+import { withTimeout } from "../abort-signal";
 
 type RequestStatus = GuestRequest["status"];
 const money = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
@@ -54,7 +55,7 @@ export function QrRequests({ tables, disabled, onOpenOrder, onChanged, onBusyCha
     if (lock.current) return;
     const controller = new AbortController();
     readController.current = controller;
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]);
+    const signal = withTimeout(controller.signal, 12_000);
     setLoading(true);
     const pendingFetch = apiFetch<{ requests: GuestRequest[] }>("/api/qr/requests?status=pending", { signal });
     const historyFetch = filter !== "pending" && expanded
@@ -211,7 +212,7 @@ export function QrTableManager({ disabled, onBusyChange }: { disabled: boolean; 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    void apiFetch<{ tables: QrTable[]; origins: string[] }>("/api/qr/tables", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) }).then((result) => {
+    void apiFetch<{ tables: QrTable[]; origins: string[] }>("/api/qr/tables", { signal: withTimeout(controller.signal, 15_000) }).then((result) => {
       if (controller.signal.aborted) return;
       setTables(result.tables); setOrigins(result.origins); setError("");
       setOrigin((current) => result.origins.includes(current) ? current : result.origins.find((value) => !isLoopbackOrigin(value)) ?? result.origins[0] ?? "");
@@ -229,7 +230,7 @@ export function QrTableManager({ disabled, onBusyChange }: { disabled: boolean; 
     const requestedTableId = table.id;
     const requestedPath = table.path;
     setCodeLoading(true);
-    void apiFetch<{ url: string; qr: string }>(`/api/qr/tables/${table.id}/image?origin=${encodeURIComponent(origin)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) }).then((result) => {
+    void apiFetch<{ url: string; qr: string }>(`/api/qr/tables/${table.id}/image?origin=${encodeURIComponent(origin)}`, { signal: withTimeout(controller.signal, 15_000) }).then((result) => {
       if (!controller.signal.aborted) setCode({ ...result, tableId: requestedTableId, path: requestedPath, origin });
     }).catch((e: unknown) => { if (!controller.signal.aborted) setCodeError(e instanceof Error ? e.message : "Could not generate this QR code"); })
       .finally(() => { if (!controller.signal.aborted) setCodeLoading(false); });

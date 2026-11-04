@@ -26,6 +26,9 @@ export const TableUpdate = z.object({
 });
 export type TableUpdateInput = z.infer<typeof TableUpdate>;
 
+/** Every table's id, in the new display order. */
+export const TableOrder = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(1000) }).strict();
+
 export const OrderCreate = z
   .object({
     clientRef: ClientRef,
@@ -61,6 +64,8 @@ export const OrderItemsAdd = z.object({
         note: z.string().trim().max(200).optional(),
         /** The options chosen for a combo's slots. */
         comboPicks: ComboPicks.optional(),
+        /** Held back from the kitchen: a KOT skips it until staff fire it. */
+        held: z.boolean().optional(),
       }),
     )
     .min(1),
@@ -70,6 +75,7 @@ export type OrderItemsAddInput = z.infer<typeof OrderItemsAdd>;
 export const OrderItemUpdate = z.object({
   qty: z.number().int().min(1).max(99).optional(),
   note: z.string().trim().max(200).nullable().optional(),
+  held: z.boolean().optional(),
 });
 export type OrderItemUpdateInput = z.infer<typeof OrderItemUpdate>;
 

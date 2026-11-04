@@ -12,7 +12,7 @@ their own configuration. These settings do not change staff permissions.
 | Discount / bill options | F4 |
 | Save items (punch without kitchen send) | F6 |
 | Takeaway | F7 |
-| Hold order | F8 |
+| Hold order (only while Settings → Hold orders is on) | F8 |
 | Send to kitchen | F9 |
 | Billing / payment | F10 |
 

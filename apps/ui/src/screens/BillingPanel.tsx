@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
 import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
-import { receiptGstMode } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
@@ -30,7 +30,7 @@ type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string;
 export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
   const rates = billTaxRates(value, gst);
   // Nothing GST-related is shown for a bill issued without GST or one whose GST Zomato pays.
-  const noGst = gst !== undefined && (gst.gstPaidBy === "zomato" || receiptGstMode(gst) === "none");
+  const noGst = gst !== undefined && (gst.gstPaidBy === "zomato" || gst.gstMode === "none");
   const includedPaise = value.cgstPaise + value.sgstPaise;
   const breakdown = <>
     {gst && <p>{gstNote(gst)}</p>}
@@ -49,7 +49,7 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
 
 const WHEN_BACK = "it reaches the hub when the connection returns";
 
-export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
+export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount = 0, onFireHeld, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; /** Dishes held back from the kitchen; billing asks to fire them first. */ heldCount?: number; onFireHeld?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -173,6 +173,10 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, disabled =
     if (onPrepare) {
       setMessage("Saving your takeaway and sending kitchen items…");
       await onPrepare();
+    } else if (heldCount > 0 && onFireHeld) {
+      if (!window.confirm(holdPrompt(heldCount))) throw new Error(BILLING_CANCELLED);
+      setMessage("Sending held dishes to the kitchen…");
+      await onFireHeld();
     }
     const pin = discountPaise > 0 ? approverPin.trim() : "";
     const redeemPoints = redeem.trim() ? Number(redeem) : 0;

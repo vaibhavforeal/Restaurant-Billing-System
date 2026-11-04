@@ -6,6 +6,7 @@ import { apiFetch } from "../api";
 import { COSTING_PRO_NOTE, costingPriceNote, formatTierPrice, sortDishes } from "../dish-costing";
 import { formatMovementCost } from "../stock-costs";
 import { useIntegrations } from "../integrations";
+import { withTimeout } from "../abort-signal";
 
 const TIERS = ["non_ac", "ac", "takeaway", "zomato"] as const;
 const cell = { padding: "6px 10px", verticalAlign: "top" } as const;
@@ -20,7 +21,7 @@ export function DishCosting({ fullRecipe, refresh }: { fullRecipe: boolean; refr
   useEffect(() => {
     if (!fullRecipe) { setData(null); setError(""); return; }
     const controller = new AbortController();
-    apiFetch<{ dishes: DishCost[]; gstMode: GstMode }>("/api/costing/dishes", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+    apiFetch<{ dishes: DishCost[]; gstMode: GstMode }>("/api/costing/dishes", { signal: withTimeout(controller.signal, 15_000) })
       .then((result) => { if (!controller.signal.aborted) { setData(result); setError(""); } })
       .catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not load dish costing"); });
     return () => controller.abort();

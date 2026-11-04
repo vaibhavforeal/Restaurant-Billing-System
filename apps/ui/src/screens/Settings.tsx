@@ -1,6 +1,8 @@
+import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
+import { GST_STATES } from "@masalapos/domain/restaurant-profile";
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
@@ -17,15 +19,27 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask" };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled" | "stateCode">; label: string; inputMode?: "numeric" | "tel" }> = [
   { key: "restaurantName", label: "Restaurant name" },
-  { key: "address", label: "Address" },
+  { key: "address", label: "Street address" },
+  { key: "city", label: "City" },
+  { key: "pincode", label: "PIN code", inputMode: "numeric" },
+  { key: "phone", label: "Phone", inputMode: "tel" },
   { key: "gstin", label: "GSTIN" },
   { key: "fssai", label: "FSSAI licence no." },
   { key: "receiptFooter", label: "Receipt footer" },
 ];
+
+const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.localeCompare(b));
+
+/** City, state, PIN code and phone are required once set, so blanks are left out and the saved values stay. */
+function profileForSave(form: SettingsData) {
+  const body: Partial<SettingsData> = { ...form };
+  for (const key of ["city", "stateCode", "pincode", "phone"] as const) if (!form[key].trim()) delete body[key];
+  return body;
+}
 
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
@@ -56,8 +70,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   const [checkedJobs, setCheckedJobs] = useState<Record<string, boolean>>({});
 
   // Common
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAction();
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     if (!loaded) return; // the sections render only after the settings load
@@ -127,43 +140,28 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   }
 
   // Profile actions
-  async function saveProfile() {
-    if (busy) return;
-    setBusy(true);
+  function saveProfile() {
     setProfileStatus("");
-    try {
-      const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify(form),
-      });
-      setForm(settings);
-      setProfileStatus("saved");
-    } catch (e) {
-      setProfileError(e instanceof Error ? e.message : "Could not save restaurant settings");
-      setProfileStatus("error");
-    } finally {
-      setBusy(false);
-    }
+    void run(async () => {
+      try {
+        const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", { method: "PUT", body: JSON.stringify(profileForSave(form)) });
+        setForm(settings);
+        setProfileStatus("saved");
+      } catch (e) {
+        setProfileError(e instanceof Error ? e.message : "Could not save restaurant settings");
+        setProfileStatus("error");
+      }
+    });
   }
 
   // Printer actions
-  async function addPrinter() {
-    if (busy) return;
-    if (!newPrinter.name.trim() || !newPrinter.connection.trim()) {
-      setError("Printer name and connection are required");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
+  function addPrinter() {
+    if (!newPrinter.name.trim() || !newPrinter.connection.trim()) return setError("Printer name and connection are required");
+    void run(async () => {
       await apiFetch("/api/printers", { method: "POST", body: JSON.stringify(newPrinter) });
       setNewPrinter(EMPTY_PRINTER);
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add printer");
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to add printer");
   }
 
   function startEditPrinter(p: PrinterInfo) {
@@ -173,124 +171,63 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   }
 
   async function savePrinter(id: string) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
+    const saved = await run(async () => {
       await apiFetch(`/api/printers/${id}`, { method: "PATCH", body: JSON.stringify(editPrinter) });
       setEditingPrinterId(null);
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update printer");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to update printer");
+    if (!saved) await loadAll();
   }
 
   async function togglePrinter(p: PrinterInfo) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/printers/${p.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: !p.isActive }),
-      });
+    const saved = await run(async () => {
+      await apiFetch(`/api/printers/${p.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !p.isActive }) });
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to toggle printer");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to toggle printer");
+    if (!saved) await loadAll();
   }
 
-  async function testPrint(printerId: string, profile: "receipt" | "kot" = "receipt") {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
+  function testPrint(printerId: string, profile: "receipt" | "kot" = "receipt") {
+    void run(async () => {
       await apiFetch(`/api/printers/${printerId}/test-print`, { method: "POST", body: JSON.stringify({ profile }) });
       await loadJobs();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Test print failed");
-    } finally {
-      setBusy(false);
-    }
+    }, "Test print failed");
   }
 
   // Station actions
-  async function addStation() {
-    if (busy) return;
+  function addStation() {
     const name = newStationName.trim();
-    if (!name) {
-      setError("Station name is required");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
+    if (!name) return setError("Station name is required");
+    void run(async () => {
       await apiFetch("/api/kot-stations", { method: "POST", body: JSON.stringify({ name }) });
       setNewStationName("");
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add station");
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to add station");
   }
 
   async function updateStationPrinter(stationId: string, printerId: string) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/kot-stations/${stationId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ printerId: printerId || null }),
-      });
+    const saved = await run(async () => {
+      await apiFetch(`/api/kot-stations/${stationId}`, { method: "PATCH", body: JSON.stringify({ printerId: printerId || null }) });
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update station");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to update station");
+    if (!saved) await loadAll();
   }
 
   async function toggleStation(s: StationInfo) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/kot-stations/${s.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: !s.isActive }),
-      });
+    const saved = await run(async () => {
+      await apiFetch(`/api/kot-stations/${s.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !s.isActive }) });
       await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to toggle station");
-      await loadAll();
-    } finally {
-      setBusy(false);
-    }
+    }, "Failed to toggle station");
+    if (!saved) await loadAll();
   }
 
   // Job actions
-  async function retryJob(jobId: string, action: "retry" | "confirm-printed" = "retry") {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
+  function retryJob(jobId: string, action: "retry" | "confirm-printed" = "retry") {
+    void run(async () => {
       await apiFetch(`/api/print-jobs/${jobId}/${action}`, { method: "POST", body: JSON.stringify({ checkedPaper: checkedJobs[jobId] === true }) });
       setCheckedJobs(previous => ({ ...previous, [jobId]: false }));
       await loadJobs();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Retry failed");
-    } finally {
-      setBusy(false);
-    }
+    }, "Retry failed");
   }
 
   // Helper for printer connection placeholder
@@ -334,12 +271,19 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {active === "profile" && <div className="panel">
 
         <div className="settings-form">
-          {SETTINGS_FIELDS.map(({ key, label }) => (
-            <label key={key} style={{ display: "grid", gap: 4 }}>
+          {SETTINGS_FIELDS.map(({ key, label, inputMode }) => <Fragment key={key}>
+            <label style={{ display: "grid", gap: 4 }}>
               {label}
-              <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+              <input value={form[key]} inputMode={inputMode} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
             </label>
-          ))}
+            {key === "city" && <label style={{ display: "grid", gap: 4 }}>
+              State
+              <select value={form.stateCode} onChange={(e) => setForm({ ...form, stateCode: e.target.value })} disabled={busy}>
+                {!form.stateCode && <option value="">Choose the state</option>}
+                {STATE_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+              </select>
+            </label>}
+          </Fragment>)}
           <label style={{ display: "grid", gap: 4 }}>
             <span>Bill style <InfoTip id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</InfoTip></span>
             <select value={form.receiptStyle ?? "classic"} onChange={(e) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(e.target.value) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">
@@ -381,6 +325,26 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               <option value="always">Always print</option>
               <option value="never">Never print</option>
             </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.holdOrdersEnabled} disabled={busy} aria-describedby="hold-orders-help"
+              onChange={(e) => { setForm({ ...form, holdOrdersEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Hold orders <InfoTip id="hold-orders-help">Staff can hold an order to finish later on any device, and hold dishes back from the kitchen until they fire them.</InfoTip></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.popularItemsEnabled} disabled={busy} aria-describedby="popular-items-help"
+              onChange={(e) => { setForm({ ...form, popularItemsEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 24 }}>
+            <input type="checkbox" checked={form.popularByTimeEnabled} disabled={busy || !form.popularItemsEnabled} aria-describedby="popular-by-time-help"
+              onChange={(e) => { setForm({ ...form, popularByTimeEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Match the time of day <InfoTip id="popular-by-time-help">Popular follows the clock: each category's best-seller from 2 hours either side of now over the last 30 days, or its all-day best-seller when there were too few sales at this hour.</InfoTip></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.orderedTogetherEnabled} disabled={busy} aria-describedby="ordered-together-help"
+              onChange={(e) => { setForm({ ...form, orderedTogetherEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Suggest dishes ordered together <InfoTip id="ordered-together-help">Shows up to 3 dishes from other categories that often share a bill with what is already in the cart, over the last 30 days, on staff order screens and the QR table menu.</InfoTip></span>
           </label>
 
 

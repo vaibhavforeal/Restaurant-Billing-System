@@ -43,7 +43,7 @@ async function checkOwner(ctx: Ctx, ownerId: string | null | undefined): Promise
   if (!row) throw new HttpError(400, "Assign the customer to an active admin or sales rep");
 }
 
-export async function customerDetail(ctx: Ctx, id: string): Promise<CustomerDetail> {
+async function customerDetail(ctx: Ctx, id: string): Promise<CustomerDetail> {
   await visibleCustomer(ctx, id);
   const row = await ctx.deps.db.prepare(`SELECT ${SUMMARY}, c.gstin, c.address, c.pincode, c.notes, c.updated_at AS updatedAt,
       (SELECT COALESCE(SUM(p.amount_paise), 0) FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.customer_id = c.id AND p.status = 'cleared') AS paidPaise,

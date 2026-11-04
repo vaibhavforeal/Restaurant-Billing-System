@@ -1,6 +1,7 @@
 import { CashMovementCreate, DayClose, ShiftClose, ShiftOpen, localDateKey, uuidv7, type Database } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { dayBounds, dayEndReport } from "./reports.js";
 import { reportRange } from "./sales-reports.js";
@@ -91,11 +92,7 @@ export function registerShifts(app: FastifyInstance): void {
     const body = CashMovementCreate.parse(req.body);
     const requestJson = JSON.stringify({ shiftId: id, ...body });
     const created = db.transaction(() => {
-      const replay = db.prepare("SELECT request_json FROM cash_movements WHERE client_ref = ?").get(body.clientRef) as { request_json: string } | undefined;
-      if (replay) {
-        if (replay.request_json !== requestJson) throw httpError(409, "Cash movement reference already used for a different request");
-        return false;
-      }
+      if (priorRequest(db, "cash_movements", body.clientRef, requestJson, "Cash movement reference already used for a different request")) return false;
       const shift = ownShift(req, id);
       if (shift.closed_at !== null) throw httpError(409, "This shift is closed");
       db.prepare("INSERT INTO cash_movements (id, shift_id, kind, amount_paise, reason, created_at, created_by, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")

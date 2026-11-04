@@ -1,9 +1,9 @@
 import { SentItemEdit, returnPartialStock, uuidv7 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
-import { bestEffortPrint } from "./print/best-effort.js";
-import { readProfile } from "./print/profile.js";
+import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { contextLine, editSlip } from "./print/templates.js";
 import { publishStock } from "./stock.js";
 import { orderTableLabel } from "./table-label.js";
@@ -11,8 +11,11 @@ import { userCan } from "./auth.js";
 
 type KotEditPrint = "ask" | "always" | "never";
 
-/** Copied onto the cancelled item that holds a quantity cut; every other column keeps the original item's value. */
-const SPLIT_OVERRIDES = new Set(["id", "qty", "status", "cancel_reason", "cancelled_by", "cancelled_at", "client_ref"]);
+/**
+ * Set afresh on the cancelled item that holds a quantity cut; every other column keeps the original item's value.
+ * guest_request_id is cleared because a QR guest's items are matched back to their request through client_ref, which the copy cannot share.
+ */
+const SPLIT_OVERRIDES = new Set(["id", "qty", "status", "cancel_reason", "cancelled_by", "cancelled_at", "client_ref", "guest_request_id"]);
 
 /**
  * Editing an item after it was sent to the kitchen (GoFrugal's "KOT edit"). A note change needs `orders.update`;
@@ -35,9 +38,8 @@ export function registerKotEdits(app: FastifyInstance): void {
 
     let printError: string | null = null;
     const result = db.transaction(() => {
-      const replay = db.prepare("SELECT order_id, request_json FROM kot_edits WHERE client_ref = ?").get(body.clientRef) as { order_id: string; request_json: string } | undefined;
+      const replay = priorRequest<{ order_id: string }>(db, "kot_edits", body.clientRef, requestJson, "Edit reference already used for a different request", "order_id");
       if (replay) {
-        if (replay.request_json !== requestJson) throw httpError(409, "Edit reference already used for a different request");
         return { orderId: replay.order_id, created: false, stockIds: [] as string[], kot: null };
       }
       const item = db.prepare("SELECT * FROM order_items WHERE id = ?").get(id) as OrderItemRow | undefined;
@@ -62,8 +64,8 @@ export function registerKotEdits(app: FastifyInstance): void {
         // The removed units become their own cancelled item, so bills, cancellation reports and the kitchen see them as cancelled.
         cancelledItemId = uuidv7();
         const columns = (db.prepare("PRAGMA table_info(order_items)").all() as Array<{ name: string }>).map((c) => c.name).filter((c) => !SPLIT_OVERRIDES.has(c));
-        db.prepare(`INSERT INTO order_items (id, qty, status, cancel_reason, cancelled_by, cancelled_at, client_ref, ${columns.join(", ")})
-          SELECT ?, ?, 'cancelled', ?, ?, ?, NULL, ${columns.join(", ")} FROM order_items WHERE id = ?`)
+        db.prepare(`INSERT INTO order_items (id, qty, status, cancel_reason, cancelled_by, cancelled_at, client_ref, guest_request_id, ${columns.join(", ")})
+          SELECT ?, ?, 'cancelled', ?, ?, ?, NULL, NULL, ${columns.join(", ")} FROM order_items WHERE id = ?`)
           .run(cancelledItemId, item.qty - newQty, reason, req.user.id, now, id);
         stockIds = returnPartialStock(db, { orderItemId: id, cancelledItemId, currentQty: item.qty, removedQty: item.qty - newQty, actorId: req.user.id, note: reason ?? "KOT edit" });
       }
@@ -87,16 +89,11 @@ export function registerKotEdits(app: FastifyInstance): void {
 
     /** Queues the edit slip on the ticket's station printer. Returns whether a slip was queued; a render failure is reported, not thrown. */
     function printEditSlip(kot: KotRow, order: OrderRow, tableName: string | null, change: { name: string; oldQty: number; newQty: number; oldNote: string | null; newNote: string | null; reason: string | null; atMs: number }): boolean {
-      const station = db.prepare("SELECT name, printer_id FROM kot_stations WHERE id = ?").get(kot.station_id) as { name: string; printer_id: string | null } | undefined;
-      const printer = station?.printer_id
-        ? db.prepare("SELECT paper_width, kot_profile FROM printers WHERE id = ? AND is_active = 1").get(station.printer_id) as { paper_width: 58 | 80; kot_profile: string } | undefined
-        : undefined;
-      if (!printer) return false;
       const context = contextLine(order.type, tableName, order.split_label, order.zomato_order_id ?? null, order.order_type_name ?? null);
-      const rendered = bestEffortPrint(app.log, `Edit slip for KOT #${kot.kot_no}`, () => editSlip({ kotNo: kot.kot_no, context, ...change }, printer.paper_width, readProfile(printer.kot_profile)));
-      if (rendered.error) { printError = rendered.error; return false; }
-      app.enqueuePrint(kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${context}`, rendered.value!);
-      return true;
+      const slip = printStationSlip(app, kot.station_id, "edit", `Changed — KOT #${kot.kot_no} — ${jobContext(order, tableName)}`,
+        (target) => editSlip({ kotNo: kot.kot_no, context, ...change }, target.paperWidth, target.profile));
+      printError = slip.error;
+      return slip.queued;
     }
 
     const order = loadOrderJson(db, result.orderId)!;

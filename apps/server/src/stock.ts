@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { StockCreate, StockUpdate, StockAdjust, StockLinkUpdate, RecipeUpdate, stockMilli, stockJson, appendStockMove, uuidv7,
   type StockRow, type StockLink, type StockMove, type StockCostChange } from "@masalapos/domain";
+import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { assertModuleActive, moduleActive, requireModule } from "./modules.js";
 import { userCan } from "./auth.js";
@@ -78,11 +79,8 @@ export function registerStock(app: FastifyInstance) {
       assertModuleActive(db, "costing");
     }
     const result = db.transaction(() => {
-      const old = db.prepare("SELECT id, request_json FROM stock_moves WHERE client_ref = ?").get(body.clientRef) as { id: string; request_json: string } | undefined;
-      if (old) {
-        if (old.request_json !== requestJson) throw httpError(409, "Stock movement reference already used for another request");
-        return { moveId: old.id, created: false };
-      }
+      const old = priorRequest<{ id: string }>(db, "stock_moves", body.clientRef, requestJson, "Stock movement reference already used for another request", "id");
+      if (old) return { moveId: old.id, created: false };
       const row = item(id); versionCheck(row.version, body.expectedVersion);
       if (!row.is_active) throw httpError(409, "Reactivate this stock item before adjusting it");
       const amount = stockMilli(body.quantity);

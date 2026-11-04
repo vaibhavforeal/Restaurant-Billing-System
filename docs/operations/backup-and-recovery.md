@@ -130,7 +130,7 @@ pauses its queue until it is opened and the staff member signs in again.
 For LAN devices, scan **Settings → Connect another device**, or download the
 PowerShell shortcut creator and run it on the counter PC. It creates a desktop
 `.lnk` launching Edge in app mode. Reserve the server's IP address in the router.
-Use a private Windows network profile. All devices still require a staff PIN.
+Use a private Windows network profile. All devices still require a staff username and password.
 
 The watchdog checks the identity of its own server process, retries crashes with
 backoff and shows a recovery dialog after repeated failure. Diagnostics rotate

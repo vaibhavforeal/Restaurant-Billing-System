@@ -7,7 +7,7 @@ interface ThrottleState {
   cooldownUntil: number;
 }
 
-export interface PinThrottle {
+interface PinThrottle {
   /** True while this IP is cooling down after repeated wrong PINs. */
   pinCooldown(ip: string): boolean;
   recordPinFailure(ip: string): void;

@@ -7,6 +7,7 @@ import { useNavigationGuard } from "../navigation-guard";
 import { Icon } from "../Icon";
 import { defaultRecipeUnit, displayRecipeAmount, recipeAmount, recipeIsDirty, recipeUnits, recipeWrite, switchRecipeUnit, type RecipeDraftRow } from "../recipe-quantities";
 import { RecipeIngredientPicker } from "./RecipeIngredientPicker";
+import { withTimeout } from "../abort-signal";
 
 interface Recipe { version: number; links: StockLink[] }
 interface Props {
@@ -58,7 +59,7 @@ export function RecipeEditor({ productId, items, canManage, fullRecipe, refresh,
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setLoadFailed(false); setError(""); setMessage("");
-    void apiFetch<Recipe>(`/api/products/${productId}/stock-links`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) }).then((recipe) => {
+    void apiFetch<Recipe>(`/api/products/${productId}/stock-links`, { signal: withTimeout(controller.signal, 15_000) }).then((recipe) => {
       if (controller.signal.aborted) return;
       setBase(recipe); setRows(draftRows(recipe)); setFieldErrors({}); setConflict(false); setExternalChange(false);
     }).catch((cause: unknown) => {

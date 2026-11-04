@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MIGRATIONS, migrate, openDb, uuidv7, type Reservation } from "@masalapos/domain";
+import { uuidv7, type Reservation } from "@masalapos/domain";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 import { localMinute } from "./reservation-rules.js";
 
@@ -30,17 +30,6 @@ async function fixture() {
 }
 
 describe("table reservations", () => {
-  it("upgrades an existing database without changing tables and safely reruns migrations", () => {
-    const db = openDb(":memory:");
-    try {
-      migrate(db, MIGRATIONS.filter((m) => m.version < 12));
-      db.prepare("INSERT INTO dining_tables (id, name, area, sort_order) VALUES ('existing', 'Window', 'Patio', 8)").run();
-      migrate(db, MIGRATIONS); migrate(db, MIGRATIONS);
-      expect(db.prepare("SELECT * FROM dining_tables WHERE id='existing'").get()).toMatchObject({ name: "Window", area: "Patio", sort_order: 8 });
-      expect(db.prepare("SELECT count(*) AS n FROM reservations").get()).toEqual({ n: 0 });
-    } finally { db.close(); }
-  });
-
   it("creates and lists normalized customer details with restaurant time", async () => {
     const f = await fixture();
     const r = await f.create({ customerName: "  Asha  ", notes: "  Window seat  " });
