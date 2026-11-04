@@ -16,7 +16,7 @@ import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
 import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readOrderSettingsCopy, saveCatalogCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache } from "../offline-cache";
-import { heldTargets, holdControls, punchItems, sendableLines } from "../hold-order";
+import { BILLING_CANCELLED, heldTargets, holdControls, holdPrompt, punchItems, sendableLines } from "../hold-order";
 import { useNavigationGuard } from "../navigation-guard";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
 import { cartRowForKitchen, comboContents, comboExtraPaise, isComboLine, kitchenLines } from "../combo-cart";
@@ -183,6 +183,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   /** Shows a change the hub has not confirmed yet, and keeps it in this device's copy of the order. */
   function keepLocally(next: Order) { setOrder(next); saveOrderCopy(user.id, next); }
   const WHEN_BACK = "sends when the connection returns";
+  const SAVED_NOT_BILLED = "Saved on this device. Connect to the hub to review the bill.";
 
   function show(current: Order, catalog: Omit<CatalogCache, "at">) {
     setOrder(current);
@@ -403,8 +404,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current) throw new Error("Wait for the order to finish saving");
     actionLock.current = true; setPending(true); setError("");
     try {
+      // Held dishes are cooked before the customer pays: ask, then fire them.
+      const waiting = order ? heldTargets(order.items, readDraft(), products).count : 0;
+      if (waiting > 0) {
+        if (!window.confirm(holdPrompt(waiting))) throw new Error(BILLING_CANCELLED);
+        if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED);
+      }
       const sent = await sendPending("Send takeaway to kitchen");
-      if (sent.saved) throw new Error("Saved on this device. Connect to the hub to review the bill.");
+      if (sent.saved) throw new Error(SAVED_NOT_BILLED);
       await reload();
     } finally { actionLock.current = false; setPending(false); }
   }
@@ -776,7 +783,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total"><div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
         {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">{!isQuick && draft.length > 0 && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked}>{shortcut("save_items", "Punch")}</button>}{!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}{canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}</div>)}
-        {!captain && userCan(user, "bills.create") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
+        {!captain && userCan(user, "bills.create") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} heldCount={held.count} onFireHeld={async () => { if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED); await reload(); }} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
         {isQuick && order.status === "settled" && onNextTakeaway && <button className="primary next-takeaway" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Next takeaway")} disabled={locked} onClick={() => { if (canLeave()) onNextTakeaway(); }}>Next takeaway</button>}
         </div>
       </aside>

@@ -306,6 +306,11 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               <option value="never">Never print</option>
             </select>
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.holdOrdersEnabled} disabled={busy} aria-describedby="hold-orders-help"
+              onChange={(e) => { setForm({ ...form, holdOrdersEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Hold orders <InfoTip id="hold-orders-help">Staff can hold an order to finish later on any device, and hold dishes back from the kitchen until they fire them.</InfoTip></span>
+          </label>
 
 
           <button

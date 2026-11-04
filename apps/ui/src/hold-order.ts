@@ -37,5 +37,8 @@ export function heldTargets(items: OrderItem[], cart: HoldDraftRow[], catalog: P
 
 export const holdPrompt = (n: number) => `Send ${n} held ${n === 1 ? "item" : "items"} to the kitchen and continue?`;
 
+/** Shown when staff answer No to `holdPrompt` at billing. */
+export const BILLING_CANCELLED = "Billing cancelled. The held dishes are still waiting.";
+
 /** Hold controls follow the setting; Fire stays while anything is held, so nothing held before it was turned off is stuck. */
 export const holdControls = (enabled: boolean, heldCount: number) => ({ showHold: enabled, showFire: heldCount > 0 });
