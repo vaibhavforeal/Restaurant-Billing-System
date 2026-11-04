@@ -14,9 +14,9 @@ import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
+import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readOrderSettingsCopy, saveCatalogCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache } from "../offline-cache";
-import { BILLING_CANCELLED, heldTargets, holdControls, holdPrompt, punchItems, sendableLines } from "../hold-order";
+import { BILLING_CANCELLED, heldTargets, holdControls, holdPrompt, holdRefusal, punchItems, releaseCartHolds, sendableLines } from "../hold-order";
 import { useNavigationGuard } from "../navigation-guard";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
 import { cartRowForKitchen, comboContents, comboExtraPaise, isComboLine, kitchenLines } from "../combo-cart";
@@ -223,6 +223,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     setCopyAt(null);
     show(o.order, catalog);
   }
+
+  // Hold orders turned off: release cart rows held earlier, or every punch of this cart would be refused.
+  useEffect(() => {
+    if (holdOrders) return;
+    const released = releaseCartHolds(readDraft());
+    if (released.changed) saveDraft(released.rows);
+  }, [holdOrders]);
 
   function loadOrderSettings() {
     apiFetch<{ holdOrders: boolean }>("/api/order-settings")
@@ -512,16 +519,18 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   /** Holds a saved dish back from the kitchen, or releases it for the next KOT. */
   function toggleHeld(item: OrderItem) {
     const held = !item.held;
+    const label = `${held ? "Hold" : "Release"} ${item.name}`;
     void run(async () => {
+      const request = enqueueRequest({ method: "PATCH", path: `/api/order-items/${item.id}`, body: { held }, lane: orderId, label });
       try {
-        const result = await queued({ method: "PATCH", path: `/api/order-items/${item.id}`, body: { held }, lane: orderId, label: `${held ? "Hold" : "Release"} ${item.name}` });
-        if (result === null) setMessage(`${held ? "Hold" : "Release"} of ${item.name} saved · ${WHEN_BACK}`);
+        if ((await outcomeOrSaved(request)).saved) setMessage(`${label} saved · ${WHEN_BACK}`);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 409 && /not pending/.test(error.message)) {
-          await reload().catch(() => {});
-          throw new Error(`${item.name} was already sent to the kitchen`);
-        }
-        throw error;
+        const words = error instanceof Error ? holdRefusal(error.message, item.name) : null;
+        if (!words) throw error;
+        // Retrying cannot change the answer: drop the action so it does not hold up this order's KOT and Fire.
+        discardRequest(request.id);
+        await reload().catch(() => {});
+        throw new Error(words);
       }
     });
   }

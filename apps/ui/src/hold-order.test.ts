@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComboGroup } from "@masalapos/domain/combos";
-import { heldLines, heldTargets, holdControls, holdPrompt, punchItems, sendableLines, type HoldDraftRow } from "./hold-order";
+import { heldLines, heldTargets, holdControls, holdPrompt, holdRefusal, punchItems, releaseCartHolds, sendableLines, type HoldDraftRow } from "./hold-order";
 import { readOrderSettingsCopy, saveOrderSettingsCopy } from "./offline-cache";
 import type { OrderItem, Product } from "./types";
 
@@ -56,6 +56,21 @@ describe("hold order helpers", () => {
   it("holdControls hides Hold when the setting is off but keeps Fire for held dishes", () => {
     expect(holdControls(false, 2)).toEqual({ showHold: false, showFire: true });
     expect(holdControls(true, 0)).toEqual({ showHold: true, showFire: false });
+  });
+
+  it("holdRefusal turns the hub's refusal of a hold into words for staff, and ignores other errors", () => {
+    expect(holdRefusal("item is not pending", "Paneer tikka")).toBe("Paneer tikka was already sent to the kitchen");
+    expect(holdRefusal("Hold orders is turned off in Settings", "Paneer tikka")).toBe("Hold orders is turned off in Settings");
+    expect(holdRefusal("Failed to fetch", "Paneer tikka")).toBeNull();
+  });
+
+  it("releaseCartHolds clears holds in the cart when Hold orders is turned off", () => {
+    const rows = [row("r1", "dal", { held: true }), row("r2", "naan")];
+    const released = releaseCartHolds(rows);
+    expect(released.changed).toBe(true);
+    expect(released.rows.map((r) => r.held)).toEqual([undefined, undefined]);
+    expect(released.rows[0]).toMatchObject({ clientRef: "r1", productId: "dal" });
+    expect(releaseCartHolds([row("r2", "naan")]).changed).toBe(false);
   });
 
   it("keeps the last order settings on the device", () => {
