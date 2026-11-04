@@ -42,6 +42,8 @@ export interface OrderItemRow {
   cancelled_by: string | null;
   /** Set on an item inside a combo: the combo's own line. */
   parent_item_id: string | null;
+  /** 1 while a pending item is held back from the kitchen (a combo's line carries it for its items). */
+  held: number;
 }
 
 export interface KotRow {
@@ -69,6 +71,7 @@ function orderItemJson(r: OrderItemRow) {
     cancelReason: r.cancel_reason,
     kotId: r.kot_id,
     parentItemId: r.parent_item_id,
+    held: r.held === 1,
   };
 }
 

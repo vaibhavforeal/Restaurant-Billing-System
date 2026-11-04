@@ -60,13 +60,14 @@ export function priceOrderItem(db: Database, tier: PriceTier, item: ItemRequest)
  * Saves a priced line on an order, and a combo's items as ₹0 lines under it with the combo's GST rate and note, so each
  * goes to its own kitchen station. Returns the line's id. Call inside a transaction.
  */
-export function insertOrderItem(db: Database, orderId: string, item: PricedItem, ref: { clientRef: string | null; guestRequestId?: string | null }): string {
+export function insertOrderItem(db: Database, orderId: string, item: PricedItem, ref: { clientRef: string | null; guestRequestId?: string | null; held?: boolean }): string {
   const insert = db.prepare(`INSERT INTO order_items (id, order_id, client_ref, product_id, variant_id, name_snapshot, price_paise_snapshot,
-    gst_rate_snapshot, qty, note, guest_request_id, parent_item_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    gst_rate_snapshot, qty, note, guest_request_id, parent_item_id, held) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const id = uuidv7();
-  insert.run(id, orderId, ref.clientRef, item.productId, item.variantId, item.name, item.pricePaise, item.gstRate, item.qty, item.note, ref.guestRequestId ?? null, null);
+  insert.run(id, orderId, ref.clientRef, item.productId, item.variantId, item.name, item.pricePaise, item.gstRate, item.qty, item.note, ref.guestRequestId ?? null, null, ref.held ? 1 : 0);
+  // A combo's items follow its line's hold; only the line carries the flag.
   for (const component of item.components) {
-    insert.run(uuidv7(), orderId, null, component.productId, component.variantId, component.name, 0, item.gstRate, component.qty * item.qty, item.note, null, id);
+    insert.run(uuidv7(), orderId, null, component.productId, component.variantId, component.name, 0, item.gstRate, component.qty * item.qty, item.note, null, id, 0);
   }
   return id;
 }
