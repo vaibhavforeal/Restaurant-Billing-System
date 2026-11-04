@@ -1,4 +1,4 @@
-// Companion to zomato-desk.js. Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150), signed in as admin (1234).
+// Companion to zomato-desk.js. Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150), signed in as admin (admin / admin-password).
 // Checks the colour of a Zomato card on the desk (zomato-age-ok / warn / late) against the restaurant's amber and red minutes (defaults 15 and 25).
 // It punches in a temporary order AGE-<timestamp> through the API, then back-dates it 30 minutes through the fixture-only hook POST /__e2e/age-order
 // (no app code, no waiting). It sets amber/red through the real Marketplace, Zomato card, Settings dialog once, and through the API for the live

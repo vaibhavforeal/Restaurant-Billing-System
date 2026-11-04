@@ -13,18 +13,18 @@
     const res = await fetch('/api' + path, { method, headers: { authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const result = await res.json(); if (!res.ok) throw new Error(JSON.stringify(result)); return result;
   };
-  const login = async (pin) => {
+  const login = async (username, password) => {
     if (document.querySelector('.reservations-dialog')) await click('Close Reservations');
-    await click('Log out'); await wait(() => document.querySelector('[aria-label="Staff PIN"]'));
-    await set(document.querySelector('[aria-label="Staff PIN"]'), pin); await click('OK');
+    await click('Log out'); await wait(() => document.querySelector('[aria-label="Username"]'));
+    await set(document.querySelector('[aria-label="Username"]'), username); await set(document.querySelector('[aria-label="Password"]'), password); await click('Sign in');
     await wait(() => !!document.querySelector('nav')); await click('tables'); await click('Reservations');
     await wait(() => !document.querySelector('.reservations-dialog [role="status"]'));
   };
   const users = (await api('/users')).users;
-  for (const [role, pin] of [['cashier', '2345'], ['waiter', '3456']]) {
-    if (!users.some((u) => u.name === 'Reservation QA ' + role)) await api('/users', 'POST', { name: 'Reservation QA ' + role, role, pin });
+  for (const role of ['cashier', 'waiter']) {
+    if (!users.some((u) => u.name === 'Reservation QA ' + role)) await api('/users', 'POST', { name: 'Reservation QA ' + role, role, username: 'reservationqa' + role, password: 'password-' + role });
   }
-  await login('2345'); await click('New reservation');
+  await login('reservationqacashier', 'password-cashier'); await click('New reservation');
   const now = await api('/reservations'), guest = 'No-show QA ' + Date.now();
   await set(input('Guest name'), guest); await set(input('Table'), fixture.secondTableId); await set(input('Date and time'), now.nowLocal);
   const dialog = document.querySelector('.reservations-dialog'), form = document.querySelector('.reservation-form');
@@ -39,7 +39,7 @@
   try { window.confirm = () => true; [...card.querySelectorAll('button')].find((b) => b.textContent === 'No-show').click(); await wait(() => card.innerText.includes('No-show') && !card.querySelector('button')); }
   finally { window.confirm = originalConfirm; }
   check((await api('/tables')).tables.find((t) => t.id === fixture.secondTableId).status === 'free', 'Cashier marking no-show releases the table');
-  await login('3456');
+  await login('reservationqawaiter', 'password-waiter');
   await wait(() => !!document.querySelector('.reservation-card'));
   check(document.querySelector('.reservations-dialog').innerText.includes(fixture.guest), 'Waiter can view saved reservations');
   check(!button('New reservation') && !button('Edit') && !button('Seat & open bill') && !button('No-show') && !button('Cancel reservation'), 'Waiter view has no reservation management controls');

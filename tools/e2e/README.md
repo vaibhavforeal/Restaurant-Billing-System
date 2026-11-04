@@ -1,5 +1,21 @@
 # MasalaPOS E2E Gate
 
+## Signing in to the fixtures
+
+Everyone signs in with a username and password. Only admins have a PIN, the
+approval PIN, typed at the counter to approve discounts, voids, refunds and
+remote support.
+
+| Where | Admin | Staff |
+| --- | --- | --- |
+| Fixture servers (`*-server.mts`) and browser setups | `admin` / `admin-password`, approval PIN `1234` | name in lower case / `password-<old PIN>`, e.g. `counter` / `password-2345` (cashier), `ravi` / `password-3456` (waiter), `kitchen` / `password-4567` |
+| Demo (port 4110) | `admin` / `demo1234`, approval PIN `1234` | `cashier`, `captain`, `kitchen`, each with `demo1234` |
+
+Older notes below name people by their old PIN (admin **1234**, cashier **2345**,
+waiter **3456**, kitchen **4567**); use the matching sign-in from this table.
+When a guide says to complete setup with admin PIN `1234`, set the username
+`admin`, password `admin-password` and approval PIN `1234`.
+
 ## Zomato desk
 
 Build the UI and start `node --import tsx tools/e2e/zomato-desk-server.mts`. It is a
@@ -608,7 +624,7 @@ fixture: the gate creates menu items, orders and payments.
 
 ## Running gates through the Playwright MCP
 
-Where agent-browser is not installed, sign in by typing the PIN into the "Staff PIN" box,
+Where agent-browser is not installed, sign in by typing the username and password into the sign-in boxes,
 then add the gate with `page.addScriptTag({ path })` and wait for its result global with
 `page.waitForFunction`. Gates that download CSVs (sales-dashboard, zomato) close the MCP browser
 when the real download starts: first run

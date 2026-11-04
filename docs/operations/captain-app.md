@@ -1,6 +1,6 @@
 # Captain App
 
-The Captain App is MasalaPOS's tablet and phone interface for tables, orders and KOTs. It uses the existing staff PIN, waiter permissions, database, retry queue and kitchen printers. Open `/captain/` on the restaurant server. Waiters signing into the ordinary POS address enter Captain automatically.
+The Captain App is MasalaPOS's tablet and phone interface for tables, orders and KOTs. It uses the existing staff sign-in (username and password), waiter permissions, database, retry queue and kitchen printers. Open `/captain/` on the restaurant server. Waiters signing into the ordinary POS address enter Captain automatically.
 
 ## Implementation plan and audit
 
@@ -20,7 +20,7 @@ Captain tokens extend the existing palette and spacing: 44px touch controls, 48p
 `apps/captain-android` is a small Kotlin app that opens the POS's own `/captain/` screens, so tablets always match the POS release and no order logic is duplicated. Compared with installing the PWA from Chrome, it:
 
 - pairs by scanning a code in **Settings → Backups & connections → Android Captain app**. The code carries the POS address and the SHA-256 fingerprint of the restaurant CA. The app downloads `/captain/restaurant-ca.cer`, checks that fingerprint, and from then on accepts only server certificates issued by that CA for the paired address. Tablets need no certificate installed in Android settings.
-- accepts a typed address too. It tries `https://<address>:4443` first, then `http://<address>:4100`. A typed HTTPS address shows the fingerprint for staff to compare with POS Settings. A plain HTTP connection warns that PINs and orders are unencrypted.
+- accepts a typed address too. It tries `https://<address>:4443` first, then `http://<address>:4100`. A typed HTTPS address shows the fingerprint for staff to compare with POS Settings. A plain HTTP connection warns that passwords and orders are unencrypted.
 - keeps the screen on, closes Captain dialogs and leaves orders with the Android back button, and shows a native reconnect screen with **Change POS server**.
 - updates itself. Each MasalaPOS build ships the matching APK at `/captain/android/MasalaPOS-Captain.apk` with `version.json`. The app checks on start and every six hours, verifies the SHA-256, and asks Android to install it. The first update asks staff to allow installs from MasalaPOS Captain.
 
@@ -30,7 +30,7 @@ The app does not use the PWA service worker. Drafts and the retry queue stay in 
 
 1. On the POS, open **Settings → Backups & connections → Android Captain app**.
 2. On the tablet, scan the download code (plain LAN HTTP, because the tablet does not trust the CA yet) and install the APK. Android asks once to allow installs from the browser.
-3. Open MasalaPOS Captain, tap **Scan pairing code**, scan the pairing code and sign in with a waiter PIN.
+3. Open MasalaPOS Captain, tap **Scan pairing code**, scan the pairing code and sign in with a captain's username and password.
 
 Run the Captain HTTPS setup below first, so pairing codes are encrypted. Without it, pairing codes use the unencrypted desktop address.
 
@@ -80,7 +80,7 @@ Run this once; check for an existing rule with the same name first. The setup sc
 
 1. Transfer **only the public restaurant CA certificate** to the tablet and compare its SHA-256 fingerprint with the POS settings. Android menu wording varies: **Settings → Security & privacy → More security settings → Encryption & credentials → Install a certificate → CA certificate**. A device PIN may be required; managed tablets may need their administrator.
 2. In Chrome, open the HTTPS Captain URL. Confirm there is no certificate warning.
-3. Choose **Install Captain** from the Captain account panel, or **Install app / Add to Home screen** in Chrome's menu. Open the installed app and sign in with an existing waiter PIN.
+3. Choose **Install Captain** from the Captain account panel, or **Install app / Add to Home screen** in Chrome's menu. Open the installed app and sign in with an existing captain's username and password.
 
 ### iPad
 

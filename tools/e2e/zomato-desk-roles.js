@@ -1,5 +1,5 @@
 // Companion to zomato-desk.js. Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150)
-// AFTER signing in through the app as the waiter (PIN 3456), and again after signing out and in as the cashier (PIN 2345).
+// AFTER signing in through the app as the waiter (ravi / password-3456), and again after signing out and in as the cashier (counter / password-2345).
 // The script detects the role from /api/me. Through the API it punches in a temporary Zomato order as admin first, so a
 // hidden Zomato section cannot pass just because there is nothing to show, and it cancels that order again in `finally`.
 // The result is window.__zomatoDeskRolesResult (progress in window.__zomatoDeskRolesProgress). It is independent of
@@ -23,7 +23,7 @@
     return { status: r.status, json: await r.json().catch(() => null) };
   };
   const ownToken = localStorage.getItem('masalapos.token');
-  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin }) })).json()).token;
+  const login = async (username, password) => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ username, password }) })).json()).token;
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const newButtons = () => [...document.querySelectorAll('button')].filter(b => /^\+?\s*New$/.test(b.textContent.trim()) && (b.classList.contains('zomato-desk-new') || b.closest('.tables-zomato') || /zomato/i.test(b.getAttribute('aria-label') ?? '')));
   const zomatoHeadings = () => [...document.querySelectorAll('h1, h2, h3, h4, [role="heading"]')].filter(h => /zomato/i.test(h.textContent));
@@ -34,7 +34,7 @@
   const id = 'ROLE-' + Date.now().toString(36).toUpperCase();
   let adminToken = null, orderId = null;
   try {
-    adminToken = await login('1234');
+    adminToken = await login('admin', 'admin-password');
     const products = (await call('GET', '/api/products', adminToken)).json.products;
     const product = products.find(p => p.name === 'Paneer tikka');
     const created = await call('POST', '/api/orders', adminToken, { clientRef: 'roles-' + id, type: 'zomato', zomatoOrderId: id });

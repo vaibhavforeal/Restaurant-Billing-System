@@ -34,7 +34,7 @@ for (let i = 1; i <= 14; i++) {
   if (i === 6) await post("/api/reservations", { clientRef: randomUUID(), tableId: table.id, customerName: "Meera Shah", partySize: 4, startsLocal: localMinute(Date.now()), durationMinutes: 90 });
 }
 await open(null, 2, 8); await open(null, 3, 14); await open(null, 1, 19, true);
-await post("/api/users", { name: "Captain", pin: "2345", role: "waiter" });
+await post("/api/users", { name: "Captain", username: "captain", password: "password-2345", role: "waiter" });
 await app.listen({ host: "127.0.0.1", port: 4149 });
 const close = async () => { await app.close(); app.db.close(); process.exit(0); };
 process.on("SIGINT", () => void close()); process.on("SIGTERM", () => void close());

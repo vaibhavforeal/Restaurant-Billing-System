@@ -27,9 +27,9 @@ try {
   const health = await (await fetch(base + "/api/health")).json(); assert.equal(health.ok, true);
   checks.push("Packaged Electron runtime starts the bundled SQLite server");
   const needsSetup = (await (await fetch(base + "/api/needs-setup")).json()).needsSetup;
-  const login = await fetch(base + (needsSetup ? "/api/setup" : "/api/login"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(needsSetup ? { restaurantName: "Packaged QA Cafe", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Test Admin", pin: "1234" } : { pin: "1234" }) });
+  const login = await fetch(base + (needsSetup ? "/api/setup" : "/api/login"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(needsSetup ? { restaurantName: "Packaged QA Cafe", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Test Admin", username: "admin", password: "admin-password", pin: "1234" } : { username: "admin", password: "admin-password" }) });
   assert.ok(login.ok); const { token } = await login.json();
-  checks.push("First-run setup and PIN login work inside the package");
+  checks.push("First-run setup and password sign-in work inside the package");
   const headers = { authorization: `Bearer ${token}` };
   const backup = await fetch(base + "/api/system/backups", { method: "POST", headers }); assert.ok(backup.ok);
   const snapshot = await backup.json(); assert.ok(snapshot.name); checks.push("Packaged server creates a verified backup");

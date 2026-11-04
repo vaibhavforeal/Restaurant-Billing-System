@@ -1,5 +1,5 @@
 // Run with agent-browser eval --stdin on the disposable sales-dashboard fixture (tools/e2e/sales-dashboard-server.mts),
-// signed in as admin (1234) OR as cashier (2345): the script detects the role and runs that role's checks.
+// signed in as admin (admin / admin-password) OR as cashier (counter / password-2345): the script detects the role and runs that role's checks.
 // The fixture starts with Zomato OFF in the Marketplace and one open POS Zomato order (#000201, still New). Every run ends with
 // Zomato OFF again, so the gate can be repeated. Never run this against a restaurant database.
 (async () => {
@@ -21,8 +21,8 @@
   };
   const ownToken = localStorage.getItem('masalapos.token');
   // A second counter: an admin session obtained through the API, never touching this browser's own session.
-  const login = async pin => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ pin }) })).json()).token;
-  const adminToken = await login('1234');
+  const login = async (username, password) => (await (await nativeFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-masalapos-device': device }, body: JSON.stringify({ username, password }) })).json()).token;
+  const adminToken = await login('admin', 'admin-password');
   const setZomato = async enabled => { const r = await call('PATCH', '/api/integrations/zomato', adminToken, { enabled }); if (r.status !== 200) throw new Error('Fixture PATCH failed: ' + r.status); };
   const setKds = async enabled => { const r = await call('PATCH', '/api/integrations/kds', adminToken, { enabled }); if (r.status !== 200) throw new Error('Fixture KDS PATCH failed: ' + r.status); };
   const me = (await call('GET', '/api/me', ownToken)).json.user;
@@ -207,7 +207,7 @@
       await setKds(true); await wait(() => !!navItem('kitchen'), 'Kitchen tab shown');
       await setKds(false); await wait(() => !navItem('kitchen'), 'Kitchen tab hidden again');
       check(window.__marketplaceNoReload === true, 'Cashier Kitchen tab follows the admin KDS switch live');
-    } else throw new Error('Run as admin (1234) or cashier (2345)');
+    } else throw new Error('Run as admin (admin) or cashier (counter)');
     window.__marketplaceResult = { status: 'passed', role: me.role, checks };
     return window.__marketplaceResult;
   } catch (error) { window.__marketplaceResult = { status: 'failed', role: me.role, checks, error: String(error) }; throw error; }

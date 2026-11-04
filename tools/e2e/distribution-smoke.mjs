@@ -41,7 +41,7 @@ for (const edition of ["demo", "commercial"]) {
     const setup = await (await api("/api/needs-setup")).json();
     if (edition === "demo") {
       assert.deepEqual(setup, { needsSetup: false, demo: true });
-      const login = await api("/api/login", "POST", { pin: "1234" });
+      const login = await api("/api/login", "POST", { username: "admin", password: "demo1234" });
       assert.equal(login.status, 200);
       headers.authorization = `Bearer ${(await login.json()).token}`;
       const tables = await (await api("/api/tables")).json();
@@ -49,7 +49,7 @@ for (const edition of ["demo", "commercial"]) {
       console.log("Demo: sample login and 8 sample tables verified in isolated data.");
     } else {
       assert.deepEqual(setup, { needsSetup: true });
-      const created = await api("/api/setup", "POST", { restaurantName: "Distribution QA", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "QA admin", pin: "9876" });
+      const created = await api("/api/setup", "POST", { restaurantName: "Distribution QA", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "QA admin", username: "admin", password: "admin-password", pin: "9876" });
       assert.equal(created.status, 201);
       headers.authorization = `Bearer ${(await created.json()).token}`;
       const status = await (await api("/api/license")).json();
