@@ -1,4 +1,5 @@
 import { registerStaffActivity } from "./staff-activity.js";
+import { registerPrepForecast } from "./prep-forecast.js";
 import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
@@ -159,6 +160,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerOrderAnalytics(app);
   registerDashboard(app);
   registerStock(app);
+  registerPrepForecast(app);
   registerCosting(app);
   registerGuestOrdering(app, opts.port);
   registerFeedback(app, opts.port);

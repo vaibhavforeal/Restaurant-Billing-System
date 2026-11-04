@@ -9,14 +9,15 @@ import { formatMovementCost, formatUnitCost, amountPaidToPaise, mergeCostChanges
 import { PerUnitHint, SetUnitCostForm } from "./StockCostControls";
 import { RecipeEditor } from "./RecipeEditor";
 import { DishCosting } from "./DishCosting";
+import { PrepForecastPanel } from "./PrepForecast";
 import { useLicense } from "./LicenseSettings";
 import { Icon } from "../Icon";
 import "../recipes.css";
 import { useModules } from "../modules";
 import { userCan } from "../permissions";
 
-type InventoryTab = "stock" | "recipes" | "costing";
-const TAB_LABELS: Record<InventoryTab, string> = { stock: "Stock", recipes: "Recipes", costing: "Dish costing" };
+type InventoryTab = "stock" | "recipes" | "prep" | "costing";
+const TAB_LABELS: Record<InventoryTab, string> = { stock: "Stock", recipes: "Recipes", prep: "Prep forecast", costing: "Dish costing" };
 const UNITS: StockUnit[] = ["pcs", "kg", "g", "L", "ml"];
 const quantity = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const panel = { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-panel)", padding: "var(--space-6)", marginTop: "var(--space-4)" };
@@ -67,7 +68,8 @@ export function Inventory({ user }: { user: User }) {
   const valueSummary = costData ? stockValueSummary(costData.items) : null;
   // Dish costing shows cost data, so only administrators get the tab (Basic plans see the upgrade prompt inside it).
   // The Recipes tab always shows (without the Recipes module it offers simple stock links); Dish costing needs its module.
-  const tabs: InventoryTab[] = canSeeCosts ? ["stock", "recipes", "costing"] : ["stock", "recipes"];
+  // Prep forecast works from sales and stock links, so everyone who can view stock gets it.
+  const tabs: InventoryTab[] = canSeeCosts ? ["stock", "recipes", "prep", "costing"] : ["stock", "recipes", "prep"];
   function canLeaveRecipe() {
     if (recipeBusy) return false;
     return !recipeDirty || window.confirm("Discard your unsaved recipe or stock-item changes?");
@@ -131,6 +133,8 @@ export function Inventory({ user }: { user: User }) {
     {tab === "recipes" ? <div id="inventory-recipes-panel" role="tabpanel" aria-labelledby="inventory-recipes-tab">
       <RecipesWorkspace products={products} items={items} loading={loading} canManage={canManage && status?.canOperate === true} fullRecipe={recipesOn} refresh={recipeRefresh}
         onDirtyChange={setRecipeDirty} onBusyChange={setRecipeBusy} canLeave={canLeaveRecipe} onStockCreated={(item) => setItems((old) => [...old.filter((entry) => entry.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name)))} />
+    </div> : tab === "prep" ? <div id="inventory-prep-panel" role="tabpanel" aria-labelledby="inventory-prep-tab">
+      <PrepForecastPanel refresh={historyVersion} />
     </div> : tab === "costing" && canManage ? <div id="inventory-costing-panel" role="tabpanel" aria-labelledby="inventory-costing-tab">
       <DishCosting fullRecipe={modules.isActive("costing")} refresh={recipeRefresh} />
     </div> : <div id="inventory-stock-panel" role="tabpanel" aria-labelledby="inventory-stock-tab">

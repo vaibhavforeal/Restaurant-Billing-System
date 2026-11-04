@@ -70,3 +70,4 @@ export { popularProductIds, orderedTogether, POPULAR_DEFAULTS, POPULAR_HOUR_WIND
 export { customerUsual, customerLastOrder, USUAL_DEFAULTS, type UsualOptions, type UsualDish, type LastOrder } from "./customer-usual.js";
 export { buildStaffActivityReport, DEFAULT_ACTIVITY_THRESHOLDS, type ActivityEvent, type ActivityKind, type ActivityThresholds, type StaffActivityReport } from "./staff-activity.js";
 export { buildMenuEngineeringReport, ENGINEERING_GROUPS, type EngineeringGroup, type MenuEngineeringReport } from "./menu-engineering.js";
+export { prepForecast, PREP_WEEKS, type PrepForecast } from "./prep-forecast.js";
