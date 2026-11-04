@@ -181,8 +181,9 @@ function StaffApp() {
           {/* Outside the licence gate: support must reach a counter whose licence stopped billing. */}
           <RemoteConsent user={user} />
           <LicenseGate key={user.id} user={user}>
-          <ConnectionStatus key={user.id} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
-          <QrNotifications key={user.id} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
+          {/* Sibling keys must differ; each still starts afresh when another staff member signs in. */}
+          <ConnectionStatus key={`connection-${user.id}`} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
+          <QrNotifications key={`qr-${user.id}`} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
           {page.name === "tables" && <Tables user={user} captain={captain} qrInbox={page.qrInbox} onOpenOrder={onOpenOrder} onTakeaway={() => go({ name: "takeaway" })} />}
