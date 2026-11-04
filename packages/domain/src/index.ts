@@ -36,6 +36,8 @@ export {
 } from "./catalog-schemas.js";
 export { RoleEnum, UserCreate, UserUpdate, type UserCreateInput, type UserUpdateInput } from "./user-schemas.js";
 export { SettingsUpdate, UpiId, type SettingsUpdateInput } from "./settings-schemas.js";
+export * from "./restaurant-profile.js";
+export * from "./restaurant-profile-schema.js";
 export { nextSequence } from "./sequences.js";
 export { localDateKey } from "./dates.js";
 export {

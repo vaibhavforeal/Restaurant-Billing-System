@@ -50,6 +50,8 @@ export interface ReceiptSnapshot {
   upiId?: string;
   gstMode: GstMode;
   restaurantName: string; address: string; gstin: string; fssai: string; receiptFooter: string;
+  /** The restaurant's phone; absent on bills issued before setup asked for it. */
+  phone?: string;
   orderType: "dine_in" | "parcel" | "zomato"; tableName: string | null; splitLabel: string | null;
   /** Set on Zomato orders. */
   zomatoOrderId?: string;
