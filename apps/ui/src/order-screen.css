@@ -23,6 +23,8 @@
 .order-screen .menu-card { min-height: 98px; padding: 10px; border-radius: 8px; gap: 0; }
 .order-screen .menu-card-top { margin-bottom: 6px; }
 .order-screen .veg-indicator { font-size: 8px; line-height: 1.2; padding: 2px 4px; }
+/* Each category's best-seller (Settings: Show popular items). Brand accent, so it never reads as the amber Sold out label. */
+.order-screen .menu-popular-label { color: var(--pos-accent); background: var(--pos-accent-soft); font-size: 10px; font-weight: 650; border-radius: 4px; padding: 3px 5px; margin-left: auto; white-space: nowrap; }
 .order-screen .menu-card-name { font-size: 12px; line-height: 1.35; margin-bottom: 8px; }
 .order-screen .menu-card-portion { display: block; margin-top: 3px; font-size: 10px; font-weight: 400; color: var(--muted); }
 .order-screen .menu-card-bottom { font-size: 12px; gap: 5px; }

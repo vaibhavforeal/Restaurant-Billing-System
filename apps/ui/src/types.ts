@@ -102,6 +102,8 @@ export interface SettingsData {
   kotEditPrint: "ask" | "always" | "never";
   /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
   holdOrdersEnabled: boolean;
+  /** Popular items: badge each category's best-seller on the staff and guest menus. */
+  popularItemsEnabled: boolean;
 }
 
 export interface Customer {

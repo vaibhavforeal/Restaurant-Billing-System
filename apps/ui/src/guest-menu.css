@@ -37,6 +37,7 @@
 .guest-menu-diet { display: flex; gap: 5px; align-items: center; color: #27784d; font-size: 10px; font-weight: 600; margin-bottom: 17px; }
 .guest-menu-diet > span { border: 1px solid currentColor; line-height: 12px; width: 14px; height: 14px; text-align: center; font-size: 9px; }
 .guest-menu-nonveg { color: #ae493b; }
+.guest-menu-diet .guest-menu-popular { margin-left: auto; border-radius: 20px; padding: 3px 9px; background: #fdeced; color: #a8202c; font-size: 11px; font-weight: 650; }
 .guest-menu-product h3 { font-size: 16px; line-height: 1.45; margin-bottom: 15px; overflow-wrap: anywhere; }
 .guest-menu-variant { display: grid; gap: 5px; font-size: 11px; color: #746a71; margin-bottom: 15px; }
 .guest-menu-variant select { width: 100%; font-size: 12px; }

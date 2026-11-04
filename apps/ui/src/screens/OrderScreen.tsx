@@ -15,7 +15,8 @@ import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { savePreference, useShortcutLabels } from "../pos-shortcuts";
 import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
-import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readOrderSettingsCopy, saveCatalogCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache } from "../offline-cache";
+import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readMenuInsightsCopy, readOrderSettingsCopy, saveCatalogCopy, saveMenuInsightsCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache, type MenuInsights } from "../offline-cache";
+import { withPopularFirst } from "../popular-items";
 import { BILLING_CANCELLED, heldTargets, holdControls, holdPrompt, holdRefusal, punchItems, releaseCartHolds, sendableLines } from "../hold-order";
 import { useNavigationGuard } from "../navigation-guard";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
@@ -68,6 +69,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [draft, setDraft] = useState<DraftItem[]>(readDraft);
   /** Hold orders (Settings): the last value from the hub, kept on the device for offline use. */
   const [holdOrders, setHoldOrders] = useState(() => readOrderSettingsCopy(user.id)?.holdOrders ?? true);
+  const [popularIds, setPopularIds] = useState<string[]>(() => readMenuInsightsCopy(user.id)?.popularProductIds ?? []);
   const [, refreshQueue] = useState(0);
   /** When the screen shows this device's saved copy because the hub cannot be reached: the time of that copy. */
   const [copyAt, setCopyAt] = useState<number | null>(null);
@@ -237,9 +239,17 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       .catch(() => { /* keep the last known value */ });
   }
 
+  /** Popular badges are a hint: if the hub cannot be reached the last known list stays. */
+  function loadMenuInsights() {
+    apiFetch<MenuInsights>("/api/menu/insights")
+      .then((insights) => { setPopularIds(insights.popularProductIds); saveMenuInsightsCopy(user.id, insights); })
+      .catch(() => { /* keep the last known list */ });
+  }
+
   useEffect(() => {
     reload().catch(() => setError("Failed to load order"));
     loadOrderSettings();
+    loadMenuInsights();
     const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
     const unsub = subscribeQueue(refresh);
     const acknowledged = () => { refresh(); void reload().catch(() => {}); };
@@ -249,8 +259,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
         if (event === "table.changed") void reload().catch(() => {});
         if (event === "stock.changed") void reload().catch(() => {});
-        if (event === "catalog.changed") void reload().catch(() => {});
-        if (event === "settings.changed") loadOrderSettings();
+        if (event === "catalog.changed") { void reload().catch(() => {}); loadMenuInsights(); }
+        if (event === "settings.changed") { loadOrderSettings(); loadMenuInsights(); }
         if (event === "kot.updated" && (data as { kot: { orderId: string } }).kot.orderId === orderId) void reload().catch(() => {});
       },
       onStatus: (connected) => { if (connected) { void reload().catch(() => {}); loadOrderSettings(); } },
@@ -640,7 +650,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const query = search.toLocaleLowerCase().trim();
   // The items inside a combo show under its line, not as lines of their own.
   const lines = order.items.filter((item) => !item.parentItemId);
-  const activeProducts = products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query));
+  const popular = new Set(popularIds);
+  const activeProducts = withPopularFirst(products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query)), popularIds);
   const hasSentItems = order.items.some((i) => i.status === "sent");
   const canCancelOrder = order.status === "open" && !hasSentItems;
   const total = order.items.filter((i) => i.status !== "cancelled").reduce((sum, i) => sum + i.pricePaise * i.qty, 0);
@@ -753,10 +764,10 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </div>
         <div className="menu-results" ref={menuResults} role="region" tabIndex={0} aria-label="Menu items"><div className="menu-grid">{activeProducts.flatMap((p) => {
           const variants = p.variants.filter((v) => v.isActive);
-          const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
-          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
-          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
-          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{popular.has(p.id) && <span className="menu-popular-label">Popular</span>}{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
+          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
+          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
         })}</div>
         {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3><p>Try another name or category.</p></div>}</div>
       </section>}

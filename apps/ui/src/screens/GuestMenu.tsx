@@ -4,6 +4,7 @@ import { uuid } from "../uuid";
 import { GuestServices } from "./GuestServices";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
 import { comboExtraPaise } from "../combo-cart";
+import { withPopularFirst } from "../popular-items";
 import "../guest-menu.css";
 
 type MenuProduct = GuestMenuData["products"][number];
@@ -313,8 +314,9 @@ function GuestMenuContent({ token }: { token: string }) {
   const locked = !!saved.request || sending || needsRefresh || loading;
   const subtotal = saved.cart.reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
   const count = saved.cart.reduce((sum, item) => sum + item.qty, 0);
-  const visible = menu?.products.filter((product) => (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
-    `${product.name} ${product.description} ${product.variants.map((variant) => variant.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [];
+  const popularIds = menu?.popularProductIds ?? [];
+  const visible = withPopularFirst(menu?.products.filter((product) => (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
+    `${product.name} ${product.description} ${product.variants.map((variant) => variant.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [], popularIds);
 
   return <main className="guest-menu">
     <header className="guest-menu-header"><div className="guest-menu-header-inner">
@@ -351,7 +353,7 @@ function GuestMenuContent({ token }: { token: string }) {
             <div className="guest-menu-categories" aria-label="Menu categories"><button aria-pressed={category === "all"} onClick={() => setCategory("all")}>All dishes</button>
               {menu.categories.map((item) => <button key={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.name}</button>)}
             </div>
-            <div className="guest-menu-products">{visible.map((product) => <ProductCard key={`${menu.menuVersion}:${product.id}`} product={product} orderingAvailable={menu.orderingAvailable} locked={locked} onAdd={add} />)}</div>
+            <div className="guest-menu-products">{visible.map((product) => <ProductCard key={`${menu.menuVersion}:${product.id}`} product={product} popular={popularIds.includes(product.id)} orderingAvailable={menu.orderingAvailable} locked={locked} onAdd={add} />)}</div>
             {!visible.length && <div className="guest-menu-empty"><h3>{menu.products.length ? "No dishes found" : "The menu is being prepared"}</h3><p>{menu.products.length ? "Try another search or category." : "Please ask our team about today's menu."}</p></div>}
           </section>
           {menu.orderingAvailable && !receipt && <aside className="guest-menu-cart" aria-label="Your request" ref={cartRef} id="guest-cart" tabIndex={-1}>
@@ -389,14 +391,14 @@ function GuestMenuContent({ token }: { token: string }) {
   </main>;
 }
 
-function ProductCard({ product, orderingAvailable, locked, onAdd }: { product: MenuProduct; orderingAvailable: boolean; locked: boolean; onAdd: (product: MenuProduct, variantId: string | null) => void }) {
+function ProductCard({ product, popular, orderingAvailable, locked, onAdd }: { product: MenuProduct; popular: boolean; orderingAvailable: boolean; locked: boolean; onAdd: (product: MenuProduct, variantId: string | null) => void }) {
   const [variantId, setVariantId] = useState(product.variants[0]?.id ?? null);
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const variant = product.variants.find((item) => item.id === variantId);
   const photo = localPhoto(product.photoUrl);
   return <article className={`guest-menu-product${product.isSoldOut ? " guest-menu-product-soldout" : ""}`}>
     {photo && failedPhoto !== photo && <img className="guest-menu-product-photo" src={photo} alt={product.name} loading="lazy" decoding="async" onError={() => setFailedPhoto(photo)} />}
-    <div className={`guest-menu-diet${product.isVeg ? "" : " guest-menu-nonveg"}`}><span aria-hidden="true">●</span>{product.isVeg ? "Vegetarian" : "Non-vegetarian"}</div>
+    <div className={`guest-menu-diet${product.isVeg ? "" : " guest-menu-nonveg"}`}><span aria-hidden="true">●</span>{product.isVeg ? "Vegetarian" : "Non-vegetarian"}{popular && <strong className="guest-menu-popular">Popular</strong>}</div>
     <h3>{product.name}</h3>
     {product.description && <p className="guest-menu-product-description">{product.description}</p>}
     {product.combo && <p className="guest-menu-combo-contents">{product.combo.map((group) => group.options.length === 1 || group.minPicks >= group.options.length

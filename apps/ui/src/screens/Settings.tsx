@@ -18,9 +18,9 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -310,6 +310,11 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             <input type="checkbox" checked={form.holdOrdersEnabled} disabled={busy} aria-describedby="hold-orders-help"
               onChange={(e) => { setForm({ ...form, holdOrdersEnabled: e.target.checked }); setProfileStatus(""); }} />
             <span>Hold orders <InfoTip id="hold-orders-help">Staff can hold an order to finish later on any device, and hold dishes back from the kitchen until they fire them.</InfoTip></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={form.popularItemsEnabled} disabled={busy} aria-describedby="popular-items-help"
+              onChange={(e) => { setForm({ ...form, popularItemsEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip></span>
           </label>
 
 

@@ -6,6 +6,7 @@ import type { Category, Order, Product, TableInfo } from "./types";
  * is per signed-in person and replaced on every successful load; the hub stays the source of truth.
  */
 const PREFIX = "masalapos.cache.v1.";
+export interface MenuInsights { popularProductIds: string[] }
 export interface CatalogCache { categories: Category[]; products: Product[]; captains: Array<{ id: string; name: string }>; at: number }
 
 function write(key: string, value: unknown): void {
@@ -23,6 +24,9 @@ export const readCatalogCopy = (userId: string) => read<CatalogCache>(`${userId}
 /** The ordering options (Hold orders on or off) last read from the hub. */
 export const saveOrderSettingsCopy = (userId: string, settings: { holdOrders: boolean }) => write(`${userId}.order-settings`, settings);
 export const readOrderSettingsCopy = (userId: string) => read<{ holdOrders: boolean }>(`${userId}.order-settings`);
+/** Menu hints (each category's popular dish) last read from the hub. */
+export const saveMenuInsightsCopy = (userId: string, insights: MenuInsights) => write(`${userId}.menu-insights`, insights);
+export const readMenuInsightsCopy = (userId: string) => read<MenuInsights>(`${userId}.menu-insights`);
 export const saveTablesCopy = (userId: string, data: { tables: TableInfo[]; orders: Order[] }) => write(`${userId}.tables`, { ...data, at: Date.now() });
 export const readTablesCopy = (userId: string) => read<{ tables: TableInfo[]; orders: Order[]; at: number }>(`${userId}.tables`);
 

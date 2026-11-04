@@ -25,5 +25,7 @@ export const SettingsUpdate = z.object({
   kotEditPrint: z.enum(["ask", "always", "never"]).optional(),
   /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
   holdOrdersEnabled: z.boolean().optional(),
+  /** Popular items: badge each category's best-seller on the staff and guest menus. */
+  popularItemsEnabled: z.boolean().optional(),
 });
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdate>;

@@ -7,6 +7,7 @@ import { registerCatalog } from "./catalog.js";
 import { registerUsers } from "./users.js";
 import { registerSettings } from "./settings.js";
 import { registerOrderSettings } from "./order-settings.js";
+import { registerMenuInsights } from "./menu-insights.js";
 import { registerDiscountCaps } from "./discount-caps.js";
 import { registerKotEdits } from "./kot-edit.js";
 import { registerOrderTypes } from "./order-types.js";
@@ -129,6 +130,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerUsers(app);
   registerSettings(app);
   registerOrderSettings(app);
+  registerMenuInsights(app);
   registerDiscountCaps(app);
   registerKotEdits(app);
   registerOrderTypes(app);

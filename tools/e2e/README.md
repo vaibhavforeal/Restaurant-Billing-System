@@ -1,5 +1,16 @@
 # MasalaPOS E2E Gate
 
+## Popular items
+
+Build the UI and start `node --import tsx tools/e2e/popular-items-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4155/` with billed takeaway sales: Samosa leads Starters,
+Biryani leads Mains, and Lassi is alone in Drinks. Table T1 has its QR menu on (`GET /__qa/qr` gives its address).
+PINs: admin **1234**, waiter **3456**. Sign in as admin, add `tools/e2e/popular-items.js` to the page (Playwright
+`page.addScriptTag({ path })`) and require `window.__popularItemsResult.status === "passed"` (7 checks): each
+category's best-seller is badged Popular and listed first on the order screen while the rest stay A–Z, a one-dish
+category gets no badge, All items lists the best-sellers first, the QR table menu (opened in an iframe) shows the
+same badges, and with Show popular items off both menus drop the badges. It turns the setting back on at the end.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a

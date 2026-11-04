@@ -13,6 +13,7 @@ import { readGstSettings } from "./gst-settings.js";
 import { moduleActive, requireModule } from "./modules.js";
 import { comboGroupsByCombo } from "./combos.js";
 import { insertOrderItem, priceOrderItem } from "./order-items.js";
+import { menuPopularIds } from "./menu-insights.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 const TTL = 2 * 60 * 60 * 1000;
@@ -122,7 +123,9 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     const snapshot = { categories, products: visible };
     const pricing = { ...snapshot, products: visible.map(({ description: _description, photoUrl: _photoUrl, ...p }) => p) };
     return { restaurantName: settings.restaurant_name, table: { id: table.id, name: table.name, area: table.area },
-      orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot };
+      orderingAvailable, menuVersion: hash(JSON.stringify(pricing)), ...snapshot,
+      // Badges only: kept out of the version so a change in what sells best never asks guests to review their cart.
+      popularProductIds: menuPopularIds(app.db) };
   }
   function snapshotItems(current: GuestMenu, items: GuestSubmission["items"]): GuestRequestItem[] {
     return items.map((item) => {
