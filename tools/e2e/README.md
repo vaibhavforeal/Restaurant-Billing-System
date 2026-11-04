@@ -38,6 +38,17 @@ and require `window.__popularByTimeResult.status === "passed"` (4 checks): Match
 and Starters shows Samosa as Popular; with it off, Paneer tikka (the all-day best-seller) becomes Popular and first,
 live; turning it back on returns Samosa. It turns the setting back on at the end.
 
+## Prep forecast
+
+Build the UI and start `node --import tsx tools/e2e/prep-forecast-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4158/` with bills on tomorrow's weekday 6, 13, 20 and 27 days ago:
+Paneer tikka 4 · 2 · 0 · 6 (0.2 kg paneer each, 2.5 kg opening stock), Naan 2 each time (no recipe) and one Lassi
+(0.3 L curd). Sign in as `admin` / `admin-password`, add `tools/e2e/prep-forecast.js` to the page and require
+`window.__prepForecastResult.status === "passed"` (11 checks): Inventory → Prep forecast opens on tomorrow, based on the
+last 4 same weekdays; Paneer tikka 3 plates, Naan 2, no Lassi; Paneer to buy first (need 0.6 kg, have 0.1, buy 0.5),
+Curd enough; Naan named as having no recipe; +10% gives 4 plates and 0.66 / 0.56 kg; Print (with `window.print`
+replaced) shows the prep sheet and removes it on `afterprint`; and today's weekday, with no sales, says so.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a

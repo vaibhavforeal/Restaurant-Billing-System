@@ -127,3 +127,19 @@ Approved in plan mode on 2026-11-04.
 - **Staff screen:** an open order screen re-reads the menu hints every 15 minutes.
 - **QR menu:** works out the badge when the guest opens it.
 - **E2E:** `tools/e2e/popular-by-time.js` on the same fixture.
+
+## Built next: Prep forecast (roadmap item 5)
+Approved in chat on 2026-11-04.
+- **Forecast:** `prepForecast(db, date, today)` in `packages/domain/src/prep-forecast.ts`.
+  - It averages the last 4 same weekdays that are over (before today and from the first bill on), zero days included.
+  - Non-void bills count by local bill date. Combos are listed as combos.
+  - A dish is listed if it sold on at least 2 of those days (or on the only one).
+- **Ingredients:** each product's average, including items sold inside combos, times its current stock links, against active stock on hand.
+  - Listed non-combo dishes without stock links are named instead.
+- **Server:** `GET /api/prep-forecast?date=` uses `stock.read` + the Inventory module. The date defaults to tomorrow and accepts today through 7 days ahead.
+- **UI:** Inventory → "Prep forecast" tab (`PrepForecast.tsx`).
+  - Day picker and a safety margin of none, +10% or +20%, applied before rounding up (`prepSheet` in `apps/ui/src/prep-forecast.ts`).
+  - Dishes are grouped by category with their 4 past days. Ingredients show need, in stock and buy, to-buy first.
+  - Print uses a portal sheet with `body.printing-prep`, like the QR table sheets.
+- **No database change.**
+- **E2E:** `tools/e2e/prep-forecast-server.mts` (port 4158) and `prep-forecast.js`.

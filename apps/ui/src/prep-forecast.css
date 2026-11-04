@@ -1,0 +1,25 @@
+/* Inventory → Prep forecast. */
+.prep-forecast { display: grid; gap: var(--space-6, 12px); margin-top: var(--space-4, 8px); }
+.prep-controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-6, 12px); }
+.prep-controls label { display: grid; gap: var(--space-2, 4px); font-size: 12px; color: var(--muted); }
+.prep-controls select { min-width: 150px; }
+.prep-basis { margin: 0; color: var(--muted); font-size: 12px; }
+.prep-forecast h3 { margin: 0 0 var(--space-4, 8px); font-size: 14px; }
+.prep-table { width: 100%; max-width: 760px; border-collapse: collapse; font-size: 13px; }
+.prep-table th, .prep-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.prep-table thead th { color: var(--muted); font-size: 12px; font-weight: 600; }
+.prep-table td { font-variant-numeric: tabular-nums; }
+.prep-table tbody th { font-weight: 500; }
+.prep-table .prep-category th { padding-top: 12px; color: var(--muted); font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .3px; }
+.prep-table .prep-buy strong { color: var(--danger-text, #a3142b); }
+.prep-print-sheet { display: none; }
+
+@media print {
+  body.printing-prep > :not(.prep-print-sheet) { display: none !important; }
+  body.printing-prep .prep-print-sheet { display: block; padding: 12mm; background: #fff; color: #000; }
+  body.printing-prep .prep-print-sheet h1 { font-size: 18pt; margin: 0 0 4mm; }
+  body.printing-prep .prep-print-sheet p, body.printing-prep .prep-print-sheet .muted { color: #333; font-size: 10pt; }
+  body.printing-prep .prep-print-sheet .prep-table { max-width: none; font-size: 11pt; }
+  body.printing-prep .prep-print-sheet .prep-table th, body.printing-prep .prep-print-sheet .prep-table td { border-bottom: 1px solid #999; }
+  body.printing-prep .prep-print-sheet section { margin-top: 6mm; break-inside: avoid; }
+}
