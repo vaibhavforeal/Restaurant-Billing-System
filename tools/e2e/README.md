@@ -1,5 +1,16 @@
 # MasalaPOS E2E Gate
 
+## Hold orders
+
+Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4153/` with three kitchen dishes, mineral water
+(no station), tables T1–T4 and a fake kitchen printer (`GET /__qa/prints`). PINs: admin **1234**,
+cashier **2345**, waiter **3456**. Sign in as admin, add `tools/e2e/hold-order.js` to the page (Playwright
+`page.addScriptTag({ path })`) and require `window.__holdOrderResult.status === "passed"` (11 checks):
+KOT leaves a held dish out, billing asks and fires it, a held takeaway is saved on the hub with its held
+dish, and with Hold orders off the Hold controls hide while Fire stays. It answers the billing prompt
+by replacing `window.confirm` and restores it afterwards.
+
 ## Zomato desk
 
 Build the UI and start `node --import tsx tools/e2e/zomato-desk-server.mts`. It is a

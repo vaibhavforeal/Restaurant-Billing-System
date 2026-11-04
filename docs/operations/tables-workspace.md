@@ -8,13 +8,26 @@ On desktop, **Open takeaways** appears beside the tables. Long table and takeawa
 lists scroll independently. On phones, **Tables** and **Takeaways** switch between
 the lists. A single **Takeaway** button opens the takeaway workflow, with checkout
 available to administrators and cashiers. Use **Hold · F8** in a takeaway to keep
-it in the open list and make room for the next customer.
+it in the open list and make room for the next customer. Hold saves the cart to the
+POS, so another counter or a captain tablet can resume the order.
 
 Opening a free table starts its order. A table with one active order opens it
 directly. A table with multiple bill groups opens a split selection dialog;
 choose a group or **New split**. To change a party's table or bill two tables
 together, see [moving and merging tables](table-move-merge.md); a table linked
 to another table's bill shows **with T3** and opens the combined order.
+
+### Holding dishes back from the kitchen
+
+Each kitchen dish in the cart, and each saved dish not yet sent, has a **Hold**
+button. **KOT** leaves held dishes out, so starters can go now and mains later.
+A held dish shows **HELD** with a **Fire** button; **Fire all held (n)** sends every
+held dish on one ticket. Billing a table with held dishes asks "Send N held items to
+the kitchen and continue?" and fires them before the bill.
+
+Turn the feature off with **Settings → Restaurant profile → Hold orders**. While it
+is off, Hold · F8 and the dish Hold buttons are hidden; dishes already held still
+show **Fire**, and billing still offers to fire them, so nothing is stuck.
 
 For table orders, send kitchen items with **KOT**. The table can be billed as soon
 as its kitchen items are sent; billing never waits for the kitchen. Items with a
