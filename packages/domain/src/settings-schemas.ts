@@ -37,6 +37,8 @@ export const SettingsUpdate = z.object({
   popularByTimeEnabled: z.boolean().optional(),
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: z.boolean().optional(),
+  /** Customer's usual: offer a known customer's regular dishes and last order on the order screen. */
+  customerUsualEnabled: z.boolean().optional(),
 }).superRefine((s, ctx) => {
   if (s.stateCode !== undefined && !gstinMatchesState(s.gstin, s.stateCode)) ctx.addIssue({ code: "custom", path: ["gstin"], message: GSTIN_STATE_MESSAGE });
 });

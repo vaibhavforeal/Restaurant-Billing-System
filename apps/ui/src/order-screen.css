@@ -116,3 +116,13 @@ html[data-theme] .captain-shell .captain-send .fire-held { margin-top: var(--spa
   background: var(--pos-accent-soft); color: var(--pos-accent); font-size: 12px; font-weight: 600; }
 .order-screen .cart-suggestions button:hover:not(:disabled) { border-color: var(--pos-accent); }
 .order-screen .cart-suggestions .pos-money { margin-left: 2px; color: var(--ink); font-weight: 500; }
+
+/* "Usual for Asha": the attached customer's regular dishes and Repeat last order (Settings: Suggest a customer's usual). */
+.order-screen .customer-usual { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }
+.order-screen .customer-usual > span { color: var(--muted); font-weight: 650; }
+.order-screen .customer-usual button { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 3px 9px; border: 1px solid transparent; border-radius: 6px;
+  background: var(--pos-accent-soft); color: var(--pos-accent); font-size: 12px; font-weight: 600; }
+.order-screen .customer-usual button:hover:not(:disabled) { border-color: var(--pos-accent); }
+.order-screen .customer-usual .pos-money { margin-left: 2px; color: var(--ink); font-weight: 500; }
+.order-screen .customer-usual .customer-usual-repeat { background: transparent; border-color: var(--line); color: var(--ink); }
+.order-screen .customer-usual .customer-usual-repeat small { color: var(--muted); font-weight: 400; }

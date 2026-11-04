@@ -67,3 +67,5 @@ export { SegmentFilter, SegmentSave, matchesSegment, SEGMENT_PRESETS, SEGMENT_CS
 export { isRemoteToDesktop, isRemoteToServer, type RemoteToDesktop, type RemoteToServer, type RemoteMode, type IceServer } from "./remote-support.js";
 export { UPDATE_CHANNELS, isToServer, isToDesktop, type UpdateChannel, type UpdateState, type UpdateStatus, type ToDesktop, type ToServer } from "./updates.js";
 export { popularProductIds, orderedTogether, POPULAR_DEFAULTS, POPULAR_HOUR_WINDOW, TOGETHER_DEFAULTS, type PopularOptions, type TogetherOptions, type PairedDish } from "./menu-insights.js";
+export { customerUsual, customerLastOrder, USUAL_DEFAULTS, type UsualOptions, type UsualDish, type LastOrder } from "./customer-usual.js";
+export { buildStaffActivityReport, DEFAULT_ACTIVITY_THRESHOLDS, type ActivityEvent, type ActivityKind, type ActivityThresholds, type StaffActivityReport } from "./staff-activity.js";

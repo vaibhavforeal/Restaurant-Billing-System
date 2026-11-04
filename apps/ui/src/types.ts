@@ -116,6 +116,8 @@ export interface SettingsData {
   popularByTimeEnabled: boolean;
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: boolean;
+  /** Customer's usual: offer a known customer's regular dishes and last order on the order screen. */
+  customerUsualEnabled: boolean;
 }
 
 export interface Customer {
