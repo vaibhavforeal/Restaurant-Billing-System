@@ -52,7 +52,7 @@ describe("a real counter against the portal", () => {
         payload: { customerId: customer.code.toLowerCase(), orderId: first.code.replace(/-/g, " ") } });
       expect(activated.statusCode, activated.body).toBe(200);
       expect(activated.json()).toMatchObject({ customer: { name: "Spice Route" }, order: { code: first.code, plan: "basic", trial: false } });
-      const setup = await counter.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": DEVICE }, payload: { restaurantName: "Spice Route", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Meera", pin: "1234" } });
+      const setup = await counter.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": DEVICE }, payload: { restaurantName: "Spice Route", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Meera", username: "admin", password: "admin-password", pin: "1234" } });
       const headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": DEVICE };
       const status = (await counter.inject({ url: "/api/license", headers })).json();
       expect(status).toMatchObject({ state: "active", canOperate: true, plan: "basic", maxDevices: 3, customerCode: customer.code, orderCode: first.code, expiresAt: addMonths(T0, 12) });

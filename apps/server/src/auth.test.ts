@@ -1,7 +1,9 @@
 import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "./server.js";
-import { SETUP } from "./test-helpers.js";
+import { ADMIN_LOGIN, SETUP } from "./test-helpers.js";
+
+const WRONG = { ...ADMIN_LOGIN, password: "wrong-password" };
 
 function freshApp() {
   const db = openDb(":memory:");
@@ -70,10 +72,10 @@ describe("login / me / logout", () => {
     app = freshApp();
     await setup(app);
 
-    const bad = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "9999" } });
+    const bad = await app.inject({ method: "POST", url: "/api/login", payload: WRONG });
     expect(bad.statusCode).toBe(401);
 
-    const good = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "1234" } });
+    const good = await app.inject({ method: "POST", url: "/api/login", payload: ADMIN_LOGIN });
     expect(good.statusCode).toBe(200);
     const { token, user } = good.json();
     expect(user.name).toBe("Asha");
@@ -167,9 +169,9 @@ describe("requirePermission", () => {
     const { hashPassword } = await import("@masalapos/core");
     const { uuidv7 } = await import("@masalapos/domain");
     app.db
-      .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, 'Wren', ?, 'waiter', ?)")
-      .run(uuidv7(), await hashPassword("5678"), Date.now());
-    const waiter = (await app.inject({ method: "POST", url: "/api/login", payload: { pin: "5678" } })).json();
+      .prepare("INSERT INTO users (id, name, username, password_hash, pin_hash, role, created_at) VALUES (?, 'Wren', 'wren', ?, '', 'waiter', ?)")
+      .run(uuidv7(), await hashPassword("wren-password"), Date.now());
+    const waiter = (await app.inject({ method: "POST", url: "/api/login", payload: { username: "wren", password: "wren-password" } })).json();
 
     const okRes = await app.inject({
       method: "GET", url: "/api/_test-admin",
@@ -182,6 +184,42 @@ describe("requirePermission", () => {
       headers: { authorization: `Bearer ${waiter.token}` },
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+});
+
+describe("username and password sign-in", () => {
+  it("matches the username whatever its case and refuses the approval PIN as a password", async () => {
+    app = freshApp();
+    await setup(app);
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { username: " ADMIN ", password: SETUP.password } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { ...ADMIN_LOGIN, password: SETUP.pin } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { pin: SETUP.pin } })).statusCode).toBe(400);
+  });
+
+  it("answers an unknown username exactly like a wrong password", async () => {
+    app = freshApp();
+    await setup(app);
+    const unknown = await app.inject({ method: "POST", url: "/api/login", payload: { username: "nobody", password: SETUP.password } });
+    const wrong = await app.inject({ method: "POST", url: "/api/login", payload: WRONG });
+    expect(unknown.statusCode).toBe(401);
+    expect(unknown.json()).toEqual(wrong.json());
+  });
+
+  it("does not sign in someone without a password, or someone deactivated", async () => {
+    app = freshApp();
+    await setup(app);
+    const { hashPassword } = await import("@masalapos/core");
+    const insert = app.db.prepare("INSERT INTO users (id, name, username, password_hash, pin_hash, role, is_active, created_at) VALUES (?, ?, ?, ?, '', 'cashier', ?, ?)");
+    insert.run("u1", "No password", "nopass", "", 1, Date.now());
+    insert.run("u2", "Gone", "gone", await hashPassword("gone-password"), 0, Date.now());
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { username: "nopass", password: "anything-at-all" } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { username: "gone", password: "gone-password" } })).statusCode).toBe(401);
+  });
+
+  it("refuses setup with a short password or a bad username", async () => {
+    app = freshApp();
+    expect((await app.inject({ method: "POST", url: "/api/setup", payload: { ...SETUP, password: "short" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/setup", payload: { ...SETUP, username: "a b" } })).statusCode).toBe(400);
   });
 });
 
@@ -206,20 +244,20 @@ describe("login throttling", () => {
 
     // 5 wrong PINs from same IP
     for (let i = 0; i < 5; i++) {
-      const res = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "9999" } });
+      const res = await app.inject({ method: "POST", url: "/api/login", payload: WRONG });
       expect(res.statusCode).toBe(401);
     }
 
     // 6th attempt (even with correct PIN) → 429
-    const throttled = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "1234" } });
+    const throttled = await app.inject({ method: "POST", url: "/api/login", payload: ADMIN_LOGIN });
     expect(throttled.statusCode).toBe(429);
-    expect(throttled.json().error).toBe("too many attempts");
+    expect(throttled.json().error).toMatch(/Too many attempts/);
 
     // different IP is unaffected
     const otherIp = await app.inject({
       method: "POST",
       url: "/api/login",
-      payload: { pin: "1234" },
+      payload: ADMIN_LOGIN,
       remoteAddress: "192.168.1.99",
     });
     expect(otherIp.statusCode).toBe(200);
@@ -228,7 +266,7 @@ describe("login throttling", () => {
     const app2 = freshApp();
     try {
       await setup(app2);
-      const fresh = await app2.inject({ method: "POST", url: "/api/login", payload: { pin: "1234" } });
+      const fresh = await app2.inject({ method: "POST", url: "/api/login", payload: ADMIN_LOGIN });
       expect(fresh.statusCode).toBe(200);
     } finally {
       await app2.close();
@@ -238,19 +276,19 @@ describe("login throttling", () => {
   it("counts wrong PINs sent in parallel before they are verified, so a burst cannot slip past the cooldown", async () => {
     app = freshApp();
     await setup(app);
-    const login = (pin: string) => app.inject({ method: "POST", url: "/api/login", payload: { pin } });
+    const login = (password: string) => app.inject({ method: "POST", url: "/api/login", payload: { ...ADMIN_LOGIN, password } });
 
-    const burst = await Promise.all(Array.from({ length: 6 }, () => login("9999")));
+    const burst = await Promise.all(Array.from({ length: 6 }, () => login("wrong-password")));
     const codes = burst.map((r) => r.statusCode);
     expect(codes.filter((c) => c === 401).length).toBeLessThanOrEqual(5);
     expect(codes.filter((c) => c === 429).length).toBeGreaterThanOrEqual(1);
-    expect((await login("1234")).statusCode).toBe(429);
+    expect((await login(SETUP.password)).statusCode).toBe(429);
 
     // once the cooldown is over the right PIN signs in again
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(Date.now() + 61_000);
-      const ok = await login("1234");
+      const ok = await login(SETUP.password);
       expect(ok.statusCode, ok.body).toBe(200);
     } finally {
       vi.useRealTimers();

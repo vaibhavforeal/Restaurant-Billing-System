@@ -7,89 +7,111 @@ afterEach(async () => {
 });
 
 describe("users admin", () => {
-  it("lists users without exposing pin hashes", async () => {
+  it("lists users with their usernames, without exposing PIN or password hashes", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
     const res = await app.inject({ method: "GET", url: "/api/users", headers: auth(admin.token) });
     expect(res.statusCode).toBe(200);
     const { users } = res.json();
     expect(users).toHaveLength(1);
-    expect(users[0]).toMatchObject({ name: "Asha", role: "admin", isActive: true });
+    expect(users[0]).toMatchObject({ name: "Asha", username: "admin", role: "admin", isActive: true });
     expect(JSON.stringify(users[0])).not.toContain("hash");
   });
 
-  it("creates a user who can then log in", async () => {
+  it("creates a user who can then sign in with their username and password", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
     const res = await app.inject({
       method: "POST", url: "/api/users",
-      payload: { name: "Ravi", pin: "4321", role: "cashier" },
+      payload: { name: "Ravi", username: "Ravi.K", password: "ravi-password", role: "cashier" },
       headers: auth(admin.token),
     });
     expect(res.statusCode).toBe(201);
-    expect(res.json().user).toMatchObject({ name: "Ravi", role: "cashier", isActive: true });
+    expect(res.json().user).toMatchObject({ name: "Ravi", username: "ravi.k", role: "cashier", isActive: true });
 
-    const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "4321" } });
+    const login = await app.inject({ method: "POST", url: "/api/login", payload: { username: "ravi.k", password: "ravi-password" } });
     expect(login.statusCode).toBe(200);
     expect(login.json().user.name).toBe("Ravi");
   });
 
-  it("rejects a duplicate PIN at creation with 409 — even against an inactive user", async () => {
+  it("refuses a username already taken, whatever its case, and a short password", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
-    // same PIN as the setup admin
-    const dup = await app.inject({
-      method: "POST", url: "/api/users",
-      payload: { name: "Mallory", pin: "1234", role: "waiter" },
-      headers: auth(admin.token),
-    });
+    const post = (payload: object) => app.inject({ method: "POST", url: "/api/users", payload, headers: auth(admin.token) });
+    const dup = await post({ name: "Other Admin", username: "ADMIN", password: "another-password", role: "waiter" });
     expect(dup.statusCode).toBe(409);
-    expect(dup.json().error).toBe("PIN already in use");
+    expect(dup.json().error).toBe("Username already in use");
+    expect((await post({ name: "Short", username: "short", password: "1234", role: "waiter" })).statusCode).toBe(400);
 
-    // deactivate a user, their PIN stays reserved
     const w = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
-    await app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { isActive: false }, headers: auth(admin.token) });
-    const dup2 = await app.inject({
-      method: "POST", url: "/api/users",
-      payload: { name: "New", pin: "5678", role: "waiter" },
-      headers: auth(admin.token),
-    });
-    expect(dup2.statusCode).toBe(409);
+    const rename = await app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { username: "admin" }, headers: auth(admin.token) });
+    expect(rename.statusCode).toBe(409);
   });
 
-  it("changes a PIN (uniqueness enforced, self excluded) and the new PIN logs in", async () => {
+  it("gives only admins an approval PIN, unique among admins", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
-    const w = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
-
-    // taking the admin's PIN is refused
-    const clash = await app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { pin: "1234" }, headers: auth(admin.token) });
+    const post = (payload: object) => app.inject({ method: "POST", url: "/api/users", payload, headers: auth(admin.token) });
+    const patch = (id: string, payload: object) => app.inject({ method: "PATCH", url: `/api/users/${id}`, payload, headers: auth(admin.token) });
+    // An admin must have one, and not the PIN another admin already uses.
+    expect((await post({ name: "Beena", username: "beena", password: "beena-password", role: "admin" })).statusCode).toBe(400);
+    const clash = await post({ name: "Beena", username: "beena", password: "beena-password", role: "admin", pin: "1234" });
     expect(clash.statusCode).toBe(409);
-
-    // re-submitting your own current PIN is fine (self excluded from the scan)
-    const same = await app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { pin: "5678" }, headers: auth(admin.token) });
-    expect(same.statusCode).toBe(200);
-
-    const changed = await app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { pin: "9999" }, headers: auth(admin.token) });
-    expect(changed.statusCode).toBe(200);
-    const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "9999" } });
-    expect(login.statusCode).toBe(200);
+    expect(clash.json().error).toBe("Another admin uses this approval PIN");
+    // Staff have none, so the same digits are free for them.
+    const w = await createUser(app, admin.token, { name: "Wren", pin: "1234", role: "waiter" });
+    expect((await patch(w.id, { pin: "4321" })).statusCode).toBe(400);
+    // Making someone an admin needs their PIN in the same change.
+    expect((await patch(w.id, { role: "admin" })).statusCode).toBe(400);
+    expect((await patch(w.id, { role: "admin", pin: "1234" })).statusCode).toBe(409);
+    expect((await patch(w.id, { role: "admin", pin: "4321" })).statusCode).toBe(200);
+    // An admin re-saving their own PIN is fine.
+    expect((await patch(w.id, { pin: "4321" })).statusCode).toBe(200);
   });
 
-  it("lets only one of several simultaneous requests claim the same new PIN", async () => {
+  it("keeps a deactivated admin's approval PIN reserved", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const beena = await createUser(app, admin.token, { name: "Beena", pin: "2468", role: "admin" });
+    await app.inject({ method: "PATCH", url: `/api/users/${beena.id}`, payload: { isActive: false }, headers: auth(admin.token) });
+    const again = await app.inject({ method: "POST", url: "/api/users", payload: { name: "Chitra", username: "chitra", password: "chitra-password", role: "admin", pin: "2468" }, headers: auth(admin.token) });
+    expect(again.statusCode).toBe(409);
+  });
+
+  it("clears the approval PIN of someone who is no longer an admin", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const beena = await createUser(app, admin.token, { name: "Beena", pin: "2468", role: "admin" });
+    expect((await app.inject({ method: "PATCH", url: `/api/users/${beena.id}`, payload: { role: "cashier" }, headers: auth(admin.token) })).statusCode).toBe(200);
+    expect(app.db.prepare("SELECT pin_hash FROM users WHERE id = ?").get(beena.id)).toEqual({ pin_hash: "" });
+  });
+
+  it("resets a password, signing the person out everywhere while an admin resetting their own stays in", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
     const w = await createUser(app, admin.token, { name: "Wren", pin: "5678", role: "waiter" });
+    const reset = await app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { password: "a-new-password" }, headers: auth(admin.token) });
+    expect(reset.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: auth(w.token) })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { username: "wren", password: "password-5678" } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { username: "wren", password: "a-new-password" } })).statusCode).toBe(200);
+
+    const own = await app.inject({ method: "PATCH", url: `/api/users/${admin.user.id}`, payload: { password: "admin-password-2" }, headers: auth(admin.token) });
+    expect(own.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/me", headers: auth(admin.token) })).statusCode).toBe(200);
+  });
+
+  it("lets only one of several simultaneous requests claim the same new approval PIN", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const beena = await createUser(app, admin.token, { name: "Beena", pin: "2468", role: "admin" });
     const results = await Promise.all([
-      app.inject({ method: "POST", url: "/api/users", payload: { name: "Ravi", pin: "4321", role: "cashier" }, headers: auth(admin.token) }),
-      app.inject({ method: "POST", url: "/api/users", payload: { name: "Meena", pin: "4321", role: "cashier" }, headers: auth(admin.token) }),
-      app.inject({ method: "PATCH", url: `/api/users/${w.id}`, payload: { pin: "4321" }, headers: auth(admin.token) }),
+      app.inject({ method: "POST", url: "/api/users", payload: { name: "Ravi", username: "ravi", password: "ravi-password", pin: "4321", role: "admin" }, headers: auth(admin.token) }),
+      app.inject({ method: "POST", url: "/api/users", payload: { name: "Meena", username: "meena", password: "meena-password", pin: "4321", role: "admin" }, headers: auth(admin.token) }),
+      app.inject({ method: "PATCH", url: `/api/users/${beena.id}`, payload: { pin: "4321" }, headers: auth(admin.token) }),
     ]);
-    const winners = results.filter((r) => r.statusCode !== 409);
-    expect(winners).toHaveLength(1);
-    expect(results.filter((r) => r.statusCode === 409).map((r) => r.json().error)).toEqual(["PIN already in use", "PIN already in use"]);
-    const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: "4321" } });
-    expect(login.json().user.id).toBe(winners[0]!.json().user.id);
+    expect(results.filter((r) => r.statusCode !== 409)).toHaveLength(1);
+    expect(results.filter((r) => r.statusCode === 409).map((r) => r.json().error)).toEqual(["Another admin uses this approval PIN", "Another admin uses this approval PIN"]);
   });
 
   it("refuses to deactivate or demote the last active admin", async () => {
@@ -108,13 +130,13 @@ describe("users admin", () => {
     expect(now.statusCode).toBe(200);
   });
 
-  it("keeps one admin when the last two are demoted at the same moment, even when one change also sets a PIN", async () => {
+  it("keeps one admin when the last two are demoted at the same moment, even when one change also sets a password", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
     const beena = await createUser(app, admin.token, { name: "Beena", pin: "2468", role: "admin" });
-    // The PIN change makes one request wait on hashing, which is when the other used to slip past the check.
+    // The password change makes one request wait on hashing, which is when the other used to slip past the check.
     const results = await Promise.all([
-      app.inject({ method: "PATCH", url: `/api/users/${admin.user.id}`, payload: { role: "cashier", pin: "1357" }, headers: auth(admin.token) }),
+      app.inject({ method: "PATCH", url: `/api/users/${admin.user.id}`, payload: { role: "cashier", password: "a-new-password" }, headers: auth(admin.token) }),
       app.inject({ method: "PATCH", url: `/api/users/${beena.id}`, payload: { role: "cashier" }, headers: auth(admin.token) }),
     ]);
     expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
@@ -146,7 +168,7 @@ describe("users admin", () => {
     expect(list.statusCode).toBe(403);
     const create = await app.inject({
       method: "POST", url: "/api/users",
-      payload: { name: "X", pin: "1111", role: "waiter" },
+      payload: { name: "X", username: "xavier", password: "xavier-password", role: "waiter" },
       headers: auth(w.token),
     });
     expect(create.statusCode).toBe(403);

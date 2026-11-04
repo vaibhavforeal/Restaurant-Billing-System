@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { LicensingOptions } from "./licensing.js";
 import { buildServer } from "./server.js";
 import { requireModule } from "./modules.js";
-import { SETUP, freshApp } from "./test-helpers.js";
+import { ADMIN_LOGIN, SETUP, freshApp, testLogin } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -39,7 +39,7 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
   const activate = (c: LicenseClaims = clean) => app.inject({ method: "PUT", url: "/api/license", payload: { license: signed(c) }, headers });
   const register = (h = headers, name = "Main counter") => app.inject({ method: "POST", url: "/api/license/devices", payload: { name }, headers: h });
   const login = async (credential: string, pin = "1234") => {
-    const res = await app.inject({ method: "POST", url: "/api/login", payload: { pin }, headers: { "x-masalapos-device": credential } });
+    const res = await app.inject({ method: "POST", url: "/api/login", payload: pin === SETUP.pin ? ADMIN_LOGIN : testLogin({ name: "Cashier", pin }), headers: { "x-masalapos-device": credential } });
     expect(res.statusCode).toBe(200);
     return { authorization: `Bearer ${res.json().token}`, "x-masalapos-device": credential };
   };
@@ -152,7 +152,7 @@ describe("commercial licensing", () => {
 
   it("keeps device and history APIs available after expiry and denies staff management", async () => {
     const f = await fixture(); await f.activate(); await f.register();
-    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", pin: "2345" } });
+    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", ...testLogin({ name: "Cashier", pin: "2345" }) } });
     const cashier = await f.login(device, "2345"), target = f.app.licensing.devices()[0]!;
     for (const [method, url, payload] of [
       ["GET", "/api/license/history", undefined], ["GET", "/api/license/activation-request", undefined],
@@ -197,7 +197,7 @@ describe("commercial licensing", () => {
     expect((await f.activate(pro)).statusCode).toBe(200);
     expect((await f.app.inject({ url: "/api/test-recipes", headers: f.headers })).statusCode).toBe(200);
     // Plan entitlement never substitutes for the staff permission.
-    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", pin: "2345", role: "cashier" } });
+    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", ...testLogin({ name: "Cashier", pin: "2345" }) } });
     const cashier = await f.login(device, "2345");
     expect((await f.app.inject({ url: "/api/test-recipes", headers: cashier })).statusCode).toBe(403);
     expect((await f.app.inject({ method: "PUT", url: "/api/license", headers: cashier, payload: { license: signed({ ...pro, revision: 3 }) } })).statusCode).toBe(403);
@@ -513,7 +513,7 @@ describe("licence renewal from the licensing service", () => {
   it("check endpoint needs settings.manage", async () => {
     let next: string | null = null;
     const f = await fixture({ serviceUrl, fetch: service(() => reply(200, { license: next })).fetch }); await f.activate(); await f.register();
-    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", pin: "2345" } });
+    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", ...testLogin({ name: "Cashier", pin: "2345" }) } });
     const cashier = await f.login(device, "2345");
     const broadcast = vi.spyOn(f.app, "broadcast");
     expect((await f.app.inject({ method: "POST", url: "/api/license/check", headers: cashier })).statusCode).toBe(403);
@@ -634,7 +634,7 @@ describe("activation with a Customer ID and Order ID", () => {
   it("the settings route needs settings.manage, is never cached, and works on an expired licence", async () => {
     const s = service(() => enrolled({ revision: 2 }));
     const f = await fixture({ serviceUrl, fetch: s.fetch }); await f.activate(); await f.register();
-    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", pin: "2345" } });
+    await f.app.inject({ method: "POST", url: "/api/users", headers: f.headers, payload: { name: "Cashier", role: "cashier", ...testLogin({ name: "Cashier", pin: "2345" }) } });
     const cashier = await f.login(device, "2345");
     const post = (headers?: Record<string, string>) => f.app.inject({ method: "POST", url: "/api/license/enroll", payload: valid, ...(headers ? { headers } : {}) });
     expect((await post(cashier)).statusCode).toBe(403);

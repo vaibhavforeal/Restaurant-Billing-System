@@ -64,7 +64,7 @@ describe("staff permissions", () => {
     // Changing the role and the PIN together clears them too.
     await request("PATCH", `/api/users/${ravi.id}`, { role: "waiter" });
     await setPermissions(ravi.id, { "bills.refund": true });
-    expect((await request("PATCH", `/api/users/${ravi.id}`, { role: "cashier", pin: "8642" })).statusCode).toBe(200);
+    expect((await request("PATCH", `/api/users/${ravi.id}`, { role: "cashier", password: "ravi-new-password" })).statusCode).toBe(200);
     expect((await request("GET", `/api/users/${ravi.id}/permissions`)).json().permissions.overrides).toEqual({});
   });
 

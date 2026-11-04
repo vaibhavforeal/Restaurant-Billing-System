@@ -23,7 +23,9 @@ export function freshAppWithFakeSink(options: Partial<Omit<ServerOptions, "db" |
 
 /** The restaurant details first-run setup requires. */
 export const SETUP_PROFILE = { restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345" };
-export const SETUP = { ...SETUP_PROFILE, adminName: "Asha", pin: "1234" };
+/** The first admin, Asha: signs in as admin / admin-password and approves with PIN 1234. */
+export const SETUP = { ...SETUP_PROFILE, adminName: "Asha", username: "admin", password: "admin-password", pin: "1234" };
+export const ADMIN_LOGIN = { username: SETUP.username, password: SETUP.password };
 
 export async function setupAdmin(app: FastifyInstance) {
   const res = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP });
@@ -34,16 +36,27 @@ export function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-/** Create a user via the API and log them in; returns their token + id. */
+/** The sign-in a test user gets from `createUser`: a username from their name, and a password from their test PIN. */
+export const testLogin = (u: { name: string; pin: string }) => ({
+  username: u.name.toLowerCase().replace(/[^a-z0-9]/g, "").padEnd(3, "x").slice(0, 32),
+  password: `password-${u.pin}`,
+});
+
+/**
+ * Create a user via the API and sign them in; returns their token + id. Tests describe people by name and PIN: the PIN becomes
+ * an admin's approval PIN, and `testLogin` turns name and PIN into the username and password they sign in with.
+ */
 export async function createUser(
   app: FastifyInstance,
   adminToken: string,
   u: { name: string; pin: string; role: "admin" | "cashier" | "waiter" | "kitchen" },
 ) {
-  const created = await app.inject({ method: "POST", url: "/api/users", payload: u, headers: auth(adminToken) });
+  const login = testLogin(u);
+  const payload = { name: u.name, role: u.role, ...login, ...(u.role === "admin" ? { pin: u.pin } : {}) };
+  const created = await app.inject({ method: "POST", url: "/api/users", payload, headers: auth(adminToken) });
   if (created.statusCode !== 201) throw new Error(`createUser failed: ${created.body}`);
-  const login = await app.inject({ method: "POST", url: "/api/login", payload: { pin: u.pin } });
-  const { token } = login.json() as { token: string };
+  const signedIn = await app.inject({ method: "POST", url: "/api/login", payload: login });
+  const { token } = signedIn.json() as { token: string };
   return { id: (created.json() as { user: { id: string } }).user.id, token };
 }
 

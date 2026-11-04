@@ -5,7 +5,7 @@ import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
   type GuestMenu, type GuestReceipt, type GuestRequest, type GuestSubmission, type LicenseClaims, type QrTable, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
-import { SETUP, enableIntegration } from "./test-helpers.js";
+import { SETUP, enableIntegration , testLogin } from "./test-helpers.js";
 import { localMinute } from "./reservation-rules.js";
 
 const keys = generateKeyPairSync("ed25519");
@@ -104,9 +104,9 @@ async function fixture() {
   }
   async function staff(role: "cashier" | "waiter" | "kitchen"): Promise<Headers> {
     const pin = { cashier: "2345", waiter: "3456", kitchen: "4567" }[role];
-    const created = await api("POST", "/api/users", { name: role, role, pin });
+    const created = await api("POST", "/api/users", { name: role, role, ...testLogin({ name: role, pin }) });
     expect(created.statusCode, created.body).toBe(201);
-    const loggedIn = await api("POST", "/api/login", { pin });
+    const loggedIn = await api("POST", "/api/login", testLogin({ name: role, pin }));
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
     return { authorization: `Bearer ${loggedIn.json().token}`, "x-masalapos-device": device };
   }
