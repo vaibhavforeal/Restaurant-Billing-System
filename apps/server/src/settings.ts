@@ -12,6 +12,7 @@ interface SettingsRow {
   fssai: string;
   receipt_footer: string;
   kot_edit_print: "ask" | "always" | "never";
+  hold_orders_enabled: number;
 }
 
 export function registerSettings(app: FastifyInstance): void {
@@ -19,7 +20,7 @@ export function registerSettings(app: FastifyInstance): void {
 
   const readSettings = () => {
     const r = app.db
-      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print FROM settings WHERE id = 1")
+      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled FROM settings WHERE id = 1")
       .get() as SettingsRow;
     return {
       gstMode: r.gst_mode,
@@ -32,6 +33,7 @@ export function registerSettings(app: FastifyInstance): void {
       fssai: r.fssai,
       receiptFooter: r.receipt_footer,
       kotEditPrint: r.kot_edit_print,
+      holdOrdersEnabled: r.hold_orders_enabled === 1,
     };
   };
 
@@ -40,8 +42,11 @@ export function registerSettings(app: FastifyInstance): void {
   app.put("/api/settings", { preHandler: manage }, async (req) => {
     const body = SettingsUpdate.parse(req.body);
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print) WHERE id = 1")
-      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null);
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled) WHERE id = 1")
+      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
+        body.holdOrdersEnabled === undefined ? null : body.holdOrdersEnabled ? 1 : 0);
+    // Order screens and captain tablets show or hide Hold from these settings.
+    app.broadcast("settings.changed", {});
     return { settings: readSettings() };
   });
 }
