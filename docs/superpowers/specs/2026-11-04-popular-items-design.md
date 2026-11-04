@@ -115,3 +115,15 @@ Approved in chat on 2026-11-04.
   - Staff screen: a "Goes well with this order" row at the top of the cart footer (one-tap Add).
   - Guest screen: a "Goes well with your order" list above the request's subtotal.
 - **E2E:** `tools/e2e/ordered-together.js` on the same fixture as the popular-items check.
+
+## Built next: Popular by time of day (roadmap item 1)
+Approved in plan mode on 2026-11-04.
+- **Ranking:** `popularProductIds(db, now, { aroundHour: 2 })`.
+  - Each category ranks only bills issued within 2 hours either side of now's hour, on the hub's local clock (the same `strftime(..., 'localtime')` hour the reports use).
+  - The window wraps past midnight.
+  - A category with nothing qualifying in that band falls back to its all-day best-seller.
+- **Setting:** "Match the time of day", indented under "Show popular items" and disabled while Popular is off. It is `popular_by_time_enabled`, migration 48, on by default.
+- **Server:** `menuPopularIds` applies the setting for both the staff endpoint and the QR menu.
+- **Staff screen:** an open order screen re-reads the menu hints every 15 minutes.
+- **QR menu:** works out the badge when the guest opens it.
+- **E2E:** `tools/e2e/popular-by-time.js` on the same fixture.

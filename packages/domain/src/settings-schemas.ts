@@ -27,6 +27,8 @@ export const SettingsUpdate = z.object({
   holdOrdersEnabled: z.boolean().optional(),
   /** Popular items: badge each category's best-seller on the staff and guest menus. */
   popularItemsEnabled: z.boolean().optional(),
+  /** Popular follows the clock: each category's best-seller around this hour, else all day. */
+  popularByTimeEnabled: z.boolean().optional(),
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: z.boolean().optional(),
 });

@@ -17,6 +17,11 @@ empty cart suggests nothing, Biryani in the staff cart suggests Lassi and Samosa
 one tap adds Lassi and the drinks suggestion goes, the QR request does the same (Add Biryani, then Also add Samosa),
 and with Suggest dishes ordered together off both carts drop the row. It turns the setting back on at the end.
 
+The fixture also sold 20 Paneer tikka 12 hours ago, outside the time-of-day band. Add `tools/e2e/popular-by-time.js`
+and require `window.__popularByTimeResult.status === "passed"` (4 checks): Match the time of day is on by default
+and Starters shows Samosa as Popular; with it off, Paneer tikka (the all-day best-seller) becomes Popular and first,
+live; turning it back on returns Samosa. It turns the setting back on at the end.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a

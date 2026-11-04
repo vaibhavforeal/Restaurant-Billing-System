@@ -35,6 +35,14 @@ for (let n = 0; n < 3; n++) {
   const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
   await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
 }
+// A big Paneer tikka bill 12 hours ago: outside the time-of-day band, so it only wins Starters when Popular counts all day.
+{
+  const { order } = await post("/api/orders", { type: "parcel", clientRef: uuidv7() });
+  await post(`/api/orders/${order.id}/items`, { items: [{ clientRef: uuidv7(), productId: ids["Paneer tikka"], qty: 20 }] });
+  const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
+  const { bill } = await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
+  app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(Date.now() - 12 * 60 * 60 * 1000, bill.id);
+}
 const { table } = await post("/api/tables", { name: "T1", area: "Dining" });
 qrPath = ((await call("PUT", `/api/qr/tables/${table.id}`, { enabled: true })).table as { path: string }).path;
 await app.listen({ host: "127.0.0.1", port: 4155 });

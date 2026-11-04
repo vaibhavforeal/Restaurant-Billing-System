@@ -126,6 +126,31 @@ describe("menu insights", () => {
     expect(popularProductIds(db, NOW, { perCategory: 2, minQty: 2 })).toEqual(["paneer", "samosa"]);
   });
 
+  describe("popular by time of day", () => {
+    /** Local wall-clock time, so the test holds in any time zone. */
+    const at = (day: number, hour: number) => new Date(2026, 10, day, hour).getTime();
+
+    it("ranks by sales within 2 hours of now, falling back to all day where the window has none", () => {
+      bill(at(3, 8), [["paneer", 3]]);
+      bill(at(3, 20), [["samosa", 9], ["biryani", 4]]);
+      expect(popularProductIds(db, at(4, 9), { aroundHour: 2 })).toEqual(["biryani", "paneer"]);
+      expect(popularProductIds(db, at(4, 9))).toEqual(["biryani", "samosa"]);
+    });
+
+    it("counts the window's edges and nothing beyond them", () => {
+      bill(at(3, 11), [["paneer", 3]]);
+      bill(at(3, 6), [["samosa", 9]]);
+      expect(popularProductIds(db, at(4, 9), { aroundHour: 2 })).toEqual(["paneer"]);
+      expect(popularProductIds(db, at(4, 9), { aroundHour: 3 })).toEqual(["samosa"]);
+    });
+
+    it("wraps past midnight", () => {
+      bill(at(2, 23), [["samosa", 3]]);
+      bill(at(3, 12), [["paneer", 5]]);
+      expect(popularProductIds(db, at(4, 1), { aroundHour: 2 })).toEqual(["samosa"]);
+    });
+  });
+
   describe("orderedTogether", () => {
     const together = () => orderedTogether(db, NOW);
     /** `times` bills, each holding these products once. */

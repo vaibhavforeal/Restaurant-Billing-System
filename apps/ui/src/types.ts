@@ -104,6 +104,8 @@ export interface SettingsData {
   holdOrdersEnabled: boolean;
   /** Popular items: badge each category's best-seller on the staff and guest menus. */
   popularItemsEnabled: boolean;
+  /** Popular follows the clock: each category's best-seller around this hour, else all day. */
+  popularByTimeEnabled: boolean;
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: boolean;
 }

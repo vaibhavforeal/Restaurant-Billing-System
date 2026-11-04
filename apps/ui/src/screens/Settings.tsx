@@ -18,9 +18,9 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, orderedTogetherEnabled: true };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "orderedTogetherEnabled">; label: string }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled">; label: string }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Address" },
   { key: "gstin", label: "GSTIN" },
@@ -315,6 +315,11 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             <input type="checkbox" checked={form.popularItemsEnabled} disabled={busy} aria-describedby="popular-items-help"
               onChange={(e) => { setForm({ ...form, popularItemsEnabled: e.target.checked }); setProfileStatus(""); }} />
             <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip></span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 24 }}>
+            <input type="checkbox" checked={form.popularByTimeEnabled} disabled={busy || !form.popularItemsEnabled} aria-describedby="popular-by-time-help"
+              onChange={(e) => { setForm({ ...form, popularByTimeEnabled: e.target.checked }); setProfileStatus(""); }} />
+            <span>Match the time of day <InfoTip id="popular-by-time-help">Popular follows the clock: each category's best-seller from 2 hours either side of now over the last 30 days, or its all-day best-seller when there were too few sales at this hour.</InfoTip></span>
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={form.orderedTogetherEnabled} disabled={busy} aria-describedby="ordered-together-help"

@@ -1,10 +1,5 @@
-import { orderedTogether, popularProductIds, type Database, type PairedDish } from "@masalapos/domain";
+import { POPULAR_HOUR_WINDOW, orderedTogether, popularProductIds, type Database, type PairedDish } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
-
-/** Whether the restaurant shows popular items on its menus (Settings → Restaurant profile). */
-export function popularItemsEnabled(db: Database): boolean {
-  return (db.prepare("SELECT popular_items_enabled AS v FROM settings WHERE id = 1").get() as { v: number }).v === 1;
-}
 
 /** Whether the carts suggest dishes ordered together (Settings → Restaurant profile). */
 export function orderedTogetherEnabled(db: Database): boolean {
@@ -16,9 +11,11 @@ export function menuPairs(db: Database, now = Date.now()): Record<string, Paired
   return orderedTogetherEnabled(db) ? orderedTogether(db, now) : {};
 }
 
-/** Each category's best-seller to badge on the staff and guest menus; none while the setting is off. */
+/** Each category's best-seller to badge on the staff and guest menus (around this hour unless set to all day); none while the setting is off. */
 export function menuPopularIds(db: Database, now = Date.now()): string[] {
-  return popularItemsEnabled(db) ? popularProductIds(db, now) : [];
+  const settings = db.prepare("SELECT popular_items_enabled AS on_, popular_by_time_enabled AS byTime FROM settings WHERE id = 1").get() as { on_: number; byTime: number };
+  if (settings.on_ !== 1) return [];
+  return popularProductIds(db, now, settings.byTime === 1 ? { aroundHour: POPULAR_HOUR_WINDOW } : {});
 }
 
 /**

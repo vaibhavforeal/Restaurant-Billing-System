@@ -17,6 +17,7 @@ describe("menu insights", () => {
   }
   const insights = (as = token) => app.inject({ url: "/api/menu/insights", headers: auth(as) });
   const setPopular = (on: boolean) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", popularItemsEnabled: on } });
+  const setByTime = (on: boolean) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", popularByTimeEnabled: on } });
   const setTogether = (on: boolean) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", orderedTogetherEnabled: on } });
 
   beforeEach(async () => {
@@ -56,5 +57,17 @@ describe("menu insights", () => {
     expect((await setTogether(false)).json().settings.orderedTogetherEnabled).toBe(false);
     expect((await insights()).json()).toEqual({ popularProductIds: [meal], pairs: {} });
     expect((await setTogether(true)).json().settings.orderedTogetherEnabled).toBe(true);
+  });
+
+  it("follows the time of day unless that setting is off", async () => {
+    await sell(meal, 3);
+    await sell(juice, 9);
+    // The juice was sold 12 hours ago, outside the 2-hour band around now; the meal was sold just now.
+    const juiceBill = app.db.prepare(`SELECT b.id FROM bills b JOIN bill_report_lines l ON l.bill_id = b.id WHERE l.product_id = ?`).get(juice) as { id: string };
+    app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(Date.now() - 12 * 60 * 60 * 1000, juiceBill.id);
+    expect((await insights()).json().popularProductIds).toEqual([meal]);
+    expect((await setByTime(false)).json().settings.popularByTimeEnabled).toBe(false);
+    expect((await insights()).json().popularProductIds).toEqual([juice]);
+    expect((await setByTime(true)).json().settings.popularByTimeEnabled).toBe(true);
   });
 });

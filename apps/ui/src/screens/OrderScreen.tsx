@@ -36,6 +36,9 @@ function carriedStatusFor(orderId: string): string {
   return carriedStatus && carriedStatus.orderId === orderId && Date.now() - carriedStatus.at < 5000 ? carriedStatus.text : "";
 }
 
+/** How often an open order screen re-reads the menu hints (Popular follows the time of day). */
+const INSIGHTS_REFRESH_MS = 15 * 60 * 1000;
+
 interface DraftItem {
   clientRef: string;
   productId: string;
@@ -252,6 +255,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     reload().catch(() => setError("Failed to load order"));
     loadOrderSettings();
     loadMenuInsights();
+    // Popular follows the clock, so a screen left open picks up the next hour's best-sellers.
+    const insightsTimer = window.setInterval(loadMenuInsights, INSIGHTS_REFRESH_MS);
     const refresh = () => { setDraft(readDraft()); refreshQueue((v) => v + 1); };
     const unsub = subscribeQueue(refresh);
     const acknowledged = () => { refresh(); void reload().catch(() => {}); };
@@ -268,7 +273,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       onStatus: (connected) => { if (connected) { void reload().catch(() => {}); loadOrderSettings(); } },
       onAuthFail: () => session.clear(),
     });
-    return () => { reloadRevision.current++; dispose(); unsub(); window.removeEventListener("masalapos:ack", acknowledged); };
+    return () => { reloadRevision.current++; dispose(); unsub(); window.clearInterval(insightsTimer); window.removeEventListener("masalapos:ack", acknowledged); };
   }, [orderId, draftKey, captain]);
 
   function saveDraft(next: DraftItem[]): boolean {

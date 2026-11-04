@@ -7,11 +7,20 @@ export interface PopularOptions {
   perCategory?: number;
   /** Net quantity a product must have sold in the window to be badged. */
   minQty?: number;
+  /**
+   * Follow the clock: only count bills issued within this many hours either side of `now`'s hour (hub local time,
+   * wrapping past midnight). A category with nothing that qualifies in that band falls back to its all-day best-seller.
+   */
+  aroundHour?: number;
 }
 
-export const POPULAR_DEFAULTS: Required<PopularOptions> = { days: 30, perCategory: 1, minQty: 3 };
+export const POPULAR_DEFAULTS: Required<Omit<PopularOptions, "aroundHour">> = { days: 30, perCategory: 1, minQty: 3 };
+/** Hours either side of now that "Match the time of day" counts. */
+export const POPULAR_HOUR_WINDOW = 2;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** A bill's hour on the hub's clock; JavaScript's `getHours()` uses the same local time zone. */
+const BILL_HOUR = "CAST(strftime('%H', b.created_at / 1000, 'unixepoch', 'localtime') AS INTEGER)";
 
 /**
  * The best-selling products of each category, by net quantity billed in the window (credit notes subtract; items sold
@@ -19,19 +28,34 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * categories with at least two active products are badged. Ties go to higher revenue, then name.
  */
 export function popularProductIds(db: Database, now: number, options: PopularOptions = {}): string[] {
-  const { days, perCategory, minQty } = { ...POPULAR_DEFAULTS, ...options };
+  const { days, perCategory, minQty, aroundHour } = { ...POPULAR_DEFAULTS, ...options };
   const from = now - days * DAY_MS;
+  const allDay = rankPopular(db, from, now, minQty, perCategory);
+  let chosen = allDay;
+  if (aroundHour !== undefined) {
+    const hour = new Date(now).getHours();
+    const hours = [...new Set(Array.from({ length: 2 * aroundHour + 1 }, (_, i) => (((hour - aroundHour + i) % 24) + 24) % 24))];
+    const nearNow = rankPopular(db, from, now, minQty, perCategory, hours);
+    chosen = new Map([...allDay, ...nearNow]);
+  }
+  return [...chosen.values()].flat().sort();
+}
+
+/** Each category's best-sellers between `from` and `now`, optionally only from bills issued in the given local hours. */
+function rankPopular(db: Database, from: number, now: number, minQty: number, perCategory: number, hours?: number[]): Map<string, string[]> {
+  const inHours = hours ? ` AND ${BILL_HOUR} IN (${hours.map(() => "?").join(", ")})` : "";
+  const hourParams = hours ?? [];
   const rows = db.prepare(`
     WITH sold AS (
       SELECT l.product_id, l.qty, l.total_paise AS total
         FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-        WHERE b.created_at >= ? AND b.created_at <= ? AND l.parent_order_item_id IS NULL
+        WHERE b.created_at >= ? AND b.created_at <= ? AND l.parent_order_item_id IS NULL${inHours}
       UNION ALL
       SELECT l.product_id, -cl.qty, -cl.total_paise
         FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
         JOIN bill_report_lines l ON l.bill_id = c.bill_id AND l.order_item_id = cl.order_item_id
         JOIN bills b ON b.id = c.bill_id
-        WHERE b.created_at >= ? AND b.created_at <= ?
+        WHERE b.created_at >= ? AND b.created_at <= ?${inHours}
     ), totals AS (
       SELECT product_id, SUM(qty) AS qty, SUM(total) AS total FROM sold GROUP BY product_id
     ), ranked AS (
@@ -41,8 +65,11 @@ export function popularProductIds(db: Database, now: number, options: PopularOpt
         WHERE p.is_active = 1 AND p.is_sold_out = 0 AND c.is_active = 1 AND t.qty >= ?
           AND (SELECT COUNT(*) FROM products o WHERE o.category_id = p.category_id AND o.is_active = 1) >= 2
     )
-    SELECT id FROM ranked WHERE rank <= ? ORDER BY id`).all(from, now, from, now, minQty, perCategory) as Array<{ id: string }>;
-  return rows.map((row) => row.id);
+    SELECT id, category_id FROM ranked WHERE rank <= ? ORDER BY category_id, rank`)
+    .all(from, now, ...hourParams, from, now, ...hourParams, minQty, perCategory) as Array<{ id: string; category_id: string }>;
+  const byCategory = new Map<string, string[]>();
+  for (const row of rows) byCategory.set(row.category_id, [...(byCategory.get(row.category_id) ?? []), row.id]);
+  return byCategory;
 }
 
 export interface TogetherOptions {
