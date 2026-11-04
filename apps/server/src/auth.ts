@@ -182,8 +182,8 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
         .prepare("INSERT INTO users (id, name, pin_hash, role, created_at) VALUES (?, ?, ?, 'admin', ?)")
         .run(id, body.adminName, pinHash, Date.now());
       app.db
-        .prepare("UPDATE settings SET restaurant_name = ?, setup_complete = 1 WHERE id = 1")
-        .run(body.restaurantName);
+        .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = ?, state_code = ?, pincode = ?, phone = ?, gstin = ?, fssai = ?, setup_complete = 1 WHERE id = 1")
+        .run(body.restaurantName, body.address, body.city, body.stateCode, body.pincode, body.phone, body.gstin, body.fssai);
     });
     write();
 

@@ -1,4 +1,4 @@
-import { SettingsUpdate, type GstMode, type ReceiptStyle } from "@masalapos/domain";
+import { GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type GstMode, type ReceiptStyle } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 
 interface SettingsRow {
@@ -8,6 +8,10 @@ interface SettingsRow {
   upi_id: string;
   restaurant_name: string;
   address: string;
+  city: string;
+  state_code: string;
+  pincode: string;
+  phone: string;
   gstin: string;
   fssai: string;
   receipt_footer: string;
@@ -19,7 +23,7 @@ export function registerSettings(app: FastifyInstance): void {
 
   const readSettings = () => {
     const r = app.db
-      .prepare("SELECT restaurant_name, address, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print FROM settings WHERE id = 1")
+      .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print FROM settings WHERE id = 1")
       .get() as SettingsRow;
     return {
       gstMode: r.gst_mode,
@@ -28,6 +32,10 @@ export function registerSettings(app: FastifyInstance): void {
       upiId: r.upi_id,
       restaurantName: r.restaurant_name,
       address: r.address,
+      city: r.city,
+      stateCode: r.state_code,
+      pincode: r.pincode,
+      phone: r.phone,
       gstin: r.gstin,
       fssai: r.fssai,
       receiptFooter: r.receipt_footer,
@@ -37,11 +45,14 @@ export function registerSettings(app: FastifyInstance): void {
 
   app.get("/api/settings", { preHandler: manage }, async () => ({ settings: readSettings() }));
 
-  app.put("/api/settings", { preHandler: manage }, async (req) => {
+  app.put("/api/settings", { preHandler: manage }, async (req, reply) => {
     const body = SettingsUpdate.parse(req.body);
+    // A GSTIN saved without the state is checked against the state already on file.
+    const stateCode = body.stateCode ?? readSettings().stateCode;
+    if (stateCode && !gstinMatchesState(body.gstin, stateCode)) return reply.status(400).send({ error: GSTIN_STATE_MESSAGE });
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print) WHERE id = 1")
-      .run(body.restaurantName, body.address, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null);
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print) WHERE id = 1")
+      .run(body.restaurantName, body.address, body.city ?? null, body.stateCode ?? null, body.pincode ?? null, body.phone ?? null, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null);
     return { settings: readSettings() };
   });
 }

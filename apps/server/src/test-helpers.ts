@@ -21,7 +21,9 @@ export function freshAppWithFakeSink(options: Partial<Omit<ServerOptions, "db" |
   return { app, fake };
 }
 
-export const SETUP = { restaurantName: "Cafe Test", adminName: "Asha", pin: "1234" };
+/** The restaurant details first-run setup requires. */
+export const SETUP_PROFILE = { restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345" };
+export const SETUP = { ...SETUP_PROFILE, adminName: "Asha", pin: "1234" };
 
 export async function setupAdmin(app: FastifyInstance) {
   const res = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP });

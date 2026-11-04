@@ -1,14 +1,13 @@
 import { MIGRATIONS, migrate, openDb } from "@masalapos/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "./server.js";
+import { SETUP } from "./test-helpers.js";
 
 function freshApp() {
   const db = openDb(":memory:");
   migrate(db, MIGRATIONS);
   return buildServer({ db });
 }
-
-const SETUP = { restaurantName: "Cafe Test", adminName: "Asha", pin: "1234" };
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {
@@ -43,6 +42,26 @@ describe("first-run setup", () => {
     app = freshApp();
     const res = await app.inject({ method: "POST", url: "/api/setup", payload: { ...SETUP, pin: "12" } });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("stores the restaurant's details with the cleaned phone and uppercased GSTIN", async () => {
+    app = freshApp();
+    const res = await app.inject({ method: "POST", url: "/api/setup", payload: { ...SETUP, phone: "+91 98450-12345", gstin: "29abcde1234f1z5", fssai: "12345678901234" } });
+    expect(res.statusCode).toBe(201);
+    expect(app.db.prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, setup_complete FROM settings WHERE id = 1").get()).toEqual({
+      restaurant_name: "Cafe Test", address: "12 MG Road", city: "Bengaluru", state_code: "29", pincode: "560001",
+      phone: "9845012345", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", setup_complete: 1,
+    });
+  });
+
+  it.each([
+    ["no address", { address: "" }], ["no city", { city: "" }], ["no phone", { phone: "" }], ["a bad PIN code", { pincode: "12" }],
+    ["an unknown state", { stateCode: "99" }], ["a malformed GSTIN", { gstin: "29ABC" }], ["a GSTIN from another state", { gstin: "27ABCDE1234F1Z5" }],
+  ])("refuses setup with %s and creates no admin", async (_, change) => {
+    app = freshApp();
+    const res = await app.inject({ method: "POST", url: "/api/setup", payload: { ...SETUP, ...change } });
+    expect(res.statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/needs-setup" })).json().needsSetup).toBe(true);
   });
 });
 

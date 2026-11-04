@@ -72,7 +72,7 @@ describe("live support between a real counter and the portal host", () => {
     cleanups.push(async () => { await counter.close(); db.close(); });
     const activated = await counter.inject({ method: "POST", url: "/api/setup/activate", headers: { "x-masalapos-device": DEVICE }, payload: { customerId: customer.code, orderId: order.code } });
     expect(activated.statusCode, activated.body).toBe(200);
-    const setup = await counter.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": DEVICE }, payload: { restaurantName: "Spice Route", adminName: "Meera", pin: "1234" } });
+    const setup = await counter.inject({ method: "POST", url: "/api/setup", headers: { "x-masalapos-device": DEVICE }, payload: { restaurantName: "Spice Route", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", adminName: "Meera", pin: "1234" } });
     const pos = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": DEVICE };
     await counter.ready();
     await waitFor(() => hub.counterOnline(COUNTER), "the counter's live connection");

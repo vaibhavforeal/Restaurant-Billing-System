@@ -18,7 +18,7 @@ export async function seedDemo(app: FastifyInstance) {
     if (response.statusCode >= 400) throw new Error(`Demo setup ${url}: ${response.body}`);
     return response.json();
   }
-  token = (await request("/api/setup", { restaurantName: "MasalaPOS Demo Restaurant", adminName: "Demo Admin", pin: "1234" })).token;
+  token = (await request("/api/setup", { restaurantName: "MasalaPOS Demo Restaurant", address: "14, 80 Feet Road, Koramangala 4th Block", city: "Bengaluru", stateCode: "29", pincode: "560034", phone: "9845012345", adminName: "Demo Admin", pin: "1234" })).token;
   await request("/api/users", { name: "Demo Cashier", pin: "2345", role: "cashier" });
   const captain = (await request("/api/users", { name: "Suraj (demo)", pin: "3456", role: "waiter" })).user;
   await request("/api/users", { name: "Demo Kitchen", pin: "4567", role: "kitchen" });
