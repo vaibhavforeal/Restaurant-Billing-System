@@ -95,3 +95,13 @@ html[data-theme] .workspace-dialog.table-transfer-dialog { width: min(480px, cal
 .table-transfer-group h3 { margin: 0 0 6px; font-size: 13px; }
 .table-transfer-dialog .order-captain-options > button:disabled { opacity: .6; }
 .table-transfer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* Hold orders: per-dish Hold toggle, HELD badge, Fire buttons. */
+html[data-theme] .order-screen .draft-row:has(.cart-hold) { grid-template-columns: minmax(0, 1fr) auto auto auto var(--control-touch); }
+html[data-theme] .order-screen .cart-hold { min-width: 56px; min-height: var(--control-touch); padding: var(--space-2) var(--space-4); font-size: var(--text-secondary); color: var(--muted); }
+html[data-theme] .order-screen .cart-hold[aria-pressed="true"] { color: var(--pos-warning); background: var(--pos-warning-bg); border-color: var(--pos-warning); font-weight: 600; }
+html[data-theme] .order-screen .saved-item-fire { min-width: 56px; min-height: var(--control-touch); padding: var(--space-2) var(--space-6); font-size: var(--text-secondary); color: var(--pos-accent); font-weight: 600; }
+html[data-theme] .order-screen .status.held { color: var(--pos-warning); background: var(--pos-warning-bg); text-transform: uppercase; }
+html[data-theme] .order-screen .fire-held { min-height: var(--control-touch); font-weight: 600; color: var(--pos-accent); }
+html[data-theme] .captain-shell .draft-row .cart-hold { grid-row: 3; grid-column: 1; justify-self: start; min-height: var(--captain-touch); min-width: var(--captain-touch); }
+html[data-theme] .captain-shell .captain-send .fire-held { margin-top: var(--space-2); width: 100%; min-height: var(--captain-touch); }
