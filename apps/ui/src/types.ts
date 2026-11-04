@@ -78,6 +78,8 @@ export interface PrintJobInfo {
 export interface AdminUser {
   id: string;
   name: string;
+  /** What they type to sign in; empty for someone who has never had one. */
+  username: string;
   role: "admin" | "cashier" | "waiter" | "kitchen";
   isActive: boolean;
   createdAt: number;
