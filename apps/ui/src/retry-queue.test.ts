@@ -58,6 +58,15 @@ describe("offline queue in the browser", () => {
     await expect(reliablePost("/api/bills/b1/print", {}, "Print")).rejects.toThrow("This action cannot be queued");
   });
 
+  it("queues holding or releasing a saved dish in its order's lane (setting held is safe to repeat)", async () => {
+    values.set("masalapos.generation", "current");
+    stop = startQueue("cashier");
+    const hold = enqueueRequest({ method: "PATCH", path: "/api/order-items/item-1", body: { held: true }, lane: "order-1", label: "Hold Paneer tikka" });
+    hold.done.catch(() => {});
+    await flush();
+    expect(queuedRequests().map((e) => [e.label, e.lane, e.method])).toEqual([["Hold Paneer tikka", "order-1", "PATCH"]]);
+  });
+
   it("tells the caller the outcome even when another window sent the action", async () => {
     values.set("masalapos.generation", "current");
     stop = startQueue("cashier");

@@ -100,6 +100,14 @@ export interface SettingsData {
   receiptFooter: string;
   /** Whether a change to a sent item prints a slip to the kitchen: staff choose, or always / never. */
   kotEditPrint: "ask" | "always" | "never";
+  /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
+  holdOrdersEnabled: boolean;
+  /** Popular items: badge each category's best-seller on the staff and guest menus. */
+  popularItemsEnabled: boolean;
+  /** Popular follows the clock: each category's best-seller around this hour, else all day. */
+  popularByTimeEnabled: boolean;
+  /** Ordered together: the carts suggest dishes often on the same bill. */
+  orderedTogetherEnabled: boolean;
 }
 
 export interface Customer {
@@ -162,6 +170,8 @@ export interface OrderItem {
   kotId: string | null;
   /** Set on an item inside a combo: the combo's own line. */
   parentItemId?: string | null;
+  /** Held back from the kitchen until staff fire it (pending items only; a combo's line holds its items). */
+  held?: boolean;
 }
 
 export interface Order {

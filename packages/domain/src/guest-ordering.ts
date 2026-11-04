@@ -24,6 +24,10 @@ export interface GuestMenu {
     variants: Array<{ id: string; name: string; pricePaise: number }>;
     /** A combo's slots; a combo is sold out while it cannot be filled. */
     combo?: ComboGroup[] }>;
+  /** Each category's best-seller, for a "Popular" badge; not part of `menuVersion`. */
+  popularProductIds: string[];
+  /** For each dish, dishes from other categories often on the same bill; not part of `menuVersion`. */
+  pairs: Record<string, Array<{ productId: string; variantId: string | null }>>;
 }
 export interface GuestRequestItem {
   productId: string; variantId: string | null; name: string; pricePaise: number; gstRate: number; qty: number; note: string;

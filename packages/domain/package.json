@@ -24,7 +24,8 @@
     "./updates": "./src/updates.ts",
     "./vendor-codes": "./src/vendor-codes.ts",
     "./remote-support": "./src/remote-support.ts",
-    "./dashboard": "./src/dashboard/index.ts"
+    "./dashboard": "./src/dashboard/index.ts",
+    "./menu-insights": "./src/menu-insights.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -35,7 +35,8 @@ function isEmptyKitchenSend(path: string, body: unknown): boolean {
 /** What may be saved and sent later: every request here is safe to repeat (the hub ignores repeats by reference). */
 const QUEUEABLE: Record<"POST" | "PATCH", RegExp> = {
   POST: /^\/api\/(orders|orders\/[^/]+\/(items|send|bill|cancel)|order-items\/[^/]+\/(cancel|edit-sent)|bills\/([^/]+|\{after:[a-zA-Z.]+\})\/settle)$/,
-  PATCH: /^\/api\/orders\/[^/]+\/(captain|customer|order-type)$/,
+  // A pending item's change sets absolute values (held, qty, note), so a repeat changes nothing.
+  PATCH: /^\/api\/(orders\/[^/]+\/(captain|customer|order-type)|order-items\/[^/]+)$/,
 };
 
 /** Which lane an action goes in: its order, so one order's actions stay in order and other orders never wait. */

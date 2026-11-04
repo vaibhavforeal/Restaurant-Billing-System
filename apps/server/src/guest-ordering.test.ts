@@ -118,6 +118,46 @@ async function fixture() {
 }
 
 describe("guest QR ordering", () => {
+  it("lists popular products without changing the menu version, and none while the setting is off", async () => {
+    const f = await fixture();
+    const before = await f.menu();
+    expect(before.popularProductIds).toEqual([]);
+    const order = await f.order();
+    const punched = await f.api("POST", `/api/orders/${order.id}/items`, { items: [{ productId: f.water.id, qty: 3, clientRef: uuidv7() }] });
+    expect(punched.statusCode, punched.body).toBe(200);
+    const preview = await f.api("POST", `/api/orders/${order.id}/bill-preview`, {});
+    expect(preview.statusCode, preview.body).toBe(200);
+    const billed = await f.api("POST", `/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey });
+    expect(billed.statusCode, billed.body).toBe(201);
+    const after = await f.menu();
+    expect(after.popularProductIds).toEqual([f.water.id]);
+    expect(after.menuVersion).toBe(before.menuVersion);
+    const off = await f.api("PUT", "/api/settings", { restaurantName: "Cafe Test", popularItemsEnabled: false });
+    expect(off.statusCode, off.body).toBe(200);
+    expect((await f.menu()).popularProductIds).toEqual([]);
+  });
+
+  it("lists dishes ordered together without changing the menu version, and none while the setting is off", async () => {
+    const f = await fixture();
+    const drinks = await f.api("POST", "/api/categories", { name: "Drinks" });
+    const lassi = (await f.api("POST", "/api/products", { name: "Lassi", categoryId: drinks.json().category.id, pricePaise: 6000, gstRate: 5, kotStationId: null })).json().product;
+    const before = await f.menu();
+    expect(before.pairs).toEqual({});
+    for (let n = 0; n < 3; n++) {
+      const order = await f.api("POST", "/api/orders", { clientRef: randomUUID(), type: "parcel" });
+      const id = order.json().order.id;
+      await f.api("POST", `/api/orders/${id}/items`, { items: [{ productId: f.water.id, qty: 1, clientRef: uuidv7() }, { productId: lassi.id, qty: 1, clientRef: uuidv7() }] });
+      const preview = await f.api("POST", `/api/orders/${id}/bill-preview`, {});
+      expect((await f.api("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey })).statusCode).toBe(201);
+    }
+    const after = await f.menu();
+    expect(after.pairs).toEqual({ [f.water.id]: [{ productId: lassi.id, variantId: null }], [lassi.id]: [{ productId: f.water.id, variantId: null }] });
+    expect(after.menuVersion).toBe(before.menuVersion);
+    const off = await f.api("PUT", "/api/settings", { restaurantName: "Cafe Test", orderedTogetherEnabled: false });
+    expect(off.statusCode, off.body).toBe(200);
+    expect((await f.menu()).pairs).toEqual({});
+  });
+
   it("holds reserved tables during QR acceptance and allows additions after seating", async () => {
     const f = await fixture();
     const pending = await f.request();
@@ -253,7 +293,7 @@ describe("guest QR ordering", () => {
     expect(hiddenProduct.statusCode).toBe(201);
     expect((await f.api("PATCH", `/api/categories/${hiddenCategory.json().category.id}`, { isActive: false })).statusCode).toBe(200);
     const menu = await f.menu();
-    expect(Object.keys(menu).sort()).toEqual(["categories", "menuVersion", "orderingAvailable", "products", "restaurantName", "table"]);
+    expect(Object.keys(menu).sort()).toEqual(["categories", "menuVersion", "orderingAvailable", "pairs", "popularProductIds", "products", "restaurantName", "table"]);
     expect(menu).toMatchObject({ restaurantName: SETUP.restaurantName, table: { id: f.diningTable.id, name: "T1", area: "Patio" }, orderingAvailable: true });
     expect(menu).not.toHaveProperty("taxInclusive");
     expect(menu.menuVersion).toMatch(/^[a-f0-9]{64}$/);

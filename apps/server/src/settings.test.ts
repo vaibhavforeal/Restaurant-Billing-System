@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask",
+      restaurantName: "Cafe Test", address: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true,
     });
 
     const put = await app.inject({
@@ -103,5 +103,30 @@ describe("settings", () => {
     const { settings } = (await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) })).json();
     expect(settings).not.toHaveProperty("taxInclusive");
     expect(settings).not.toHaveProperty("gstScheme");
+  });
+
+  it("round-trips holdOrdersEnabled and tells open screens", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const events: string[] = [];
+    const broadcast = app.broadcast.bind(app);
+    app.broadcast = (event, data) => { events.push(event); broadcast(event, data); };
+    const off = await app.inject({ method: "PUT", url: "/api/settings", payload: { restaurantName: "Cafe", holdOrdersEnabled: false }, headers: auth(admin.token) });
+    expect(off.json().settings.holdOrdersEnabled).toBe(false);
+    expect(events).toContain("settings.changed");
+    // Leaving the field out keeps the saved value, like kotEditPrint.
+    const kept = await app.inject({ method: "PUT", url: "/api/settings", payload: { restaurantName: "Cafe" }, headers: auth(admin.token) });
+    expect(kept.json().settings.holdOrdersEnabled).toBe(false);
+  });
+
+  it("order settings are readable by a waiter", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const waiter = await createUser(app, admin.token, { name: "Ravi", pin: "4321", role: "waiter" });
+    const read = () => app.inject({ method: "GET", url: "/api/order-settings", headers: auth(waiter.token) });
+    expect((await read()).statusCode).toBe(200);
+    expect((await read()).json()).toEqual({ holdOrders: true });
+    await app.inject({ method: "PUT", url: "/api/settings", payload: { restaurantName: "Cafe", holdOrdersEnabled: false }, headers: auth(admin.token) });
+    expect((await read()).json()).toEqual({ holdOrders: false });
   });
 });

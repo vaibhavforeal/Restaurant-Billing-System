@@ -54,12 +54,19 @@ There is one **Takeaway** entry; the separate **New parcel** action has been
 removed. Cashiers and administrators also get quick checkout when reopening an
 existing order from **Open takeaways** in **Tables & orders**.
 
-Use **Hold · F8** to keep an unfinished takeaway and return to tables. Its order
-and cart remain saved, while **Takeaway** becomes available for the next customer.
-Open the held order from **Open takeaways** to resume it; unsubmitted cart items
-remain on the staff member's original browser. Using **Tables** or ordinary
-navigation instead of Hold keeps the current takeaway as the one resumed by the
-Takeaway button. Resolve saved order actions before holding and starting another.
+Use **Hold · F8** to keep an unfinished takeaway and return to tables. Hold saves
+the cart to the POS first, so any counter or captain tablet can open the held order
+from **Open takeaways** and carry on; **Takeaway** becomes available for the next
+customer. Without a connection the cart is saved on this device and sent when the
+connection returns. Using **Tables** or ordinary navigation instead of Hold keeps
+the current takeaway as the one resumed by the Takeaway button, and its unsaved
+cart stays on this browser. Resolve saved order actions before holding and
+starting another.
+
+A dish can also be held back from the kitchen with its **Hold** button: checkout
+asks "Send 1 held item to the kitchen and continue?" and fires it first, or leaves
+the order untouched if you answer No. Hold and the dish Hold buttons appear only
+while **Settings → Restaurant profile → Hold orders** is on (it is on by default).
 
 Waiters use the same **Takeaway** button with their ordinary order-entry and
 kitchen-send permissions; they cannot issue or settle bills. Dine-in orders

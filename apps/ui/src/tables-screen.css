@@ -37,6 +37,41 @@
 .parcel-list > button > span { flex: 1; overflow-wrap: anywhere; font-size: 12px; }
 .parcel-list small { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .tables-pane-switch { display: none; }
+.tables-side.has-reservations { align-self: stretch; }
+.tables-side > .tables-parcels.tables-reservations { flex: 1 0 auto; min-height: 300px; }
+.tables-reservations .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tables-reservations .panel-title > button { min-height: 28px; padding: 3px 10px; font-size: 11px; }
+.reservation-slots { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.reservation-slot { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 120px; padding: 10px 10px 8px; border-bottom: 1px dashed var(--line); }
+.reservation-slot h4 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.reservation-slot-badge { padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 9px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.reservation-slot.current .reservation-slot-badge { color: var(--pos-accent, var(--red)); }
+.reservation-panel-empty { flex: 1; display: grid; place-items: center; margin: 0; padding: 12px 0; text-align: center; font-size: 12px; color: var(--muted); }
+.reservation-slot .parcel-list { padding: 0; overflow: visible; }
+.tables-screen .tables-reservations .parcel-list > button > .reservation-panel-time { flex: none; width: 64px; white-space: nowrap; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.reservation-view-all { flex-shrink: 0; margin: 8px 10px 10px; }
+.tables-side > .tables-parcels.table-order-panel { flex: 1 0 auto; min-height: 300px; }
+.table-order-panel .panel-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.table-order-heading { min-width: 0; display: grid; gap: 2px; }
+.table-order-heading > span { font-size: 11px; color: var(--muted); }
+.table-order-close { flex: none; min-width: 30px; min-height: 30px; padding: 0; font-size: 18px; line-height: 1; }
+.table-order-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.table-order-actions > button { flex: 1 1 auto; min-height: 34px; font-size: 12px; }
+.table-order-actions > .table-order-edit { flex-basis: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--pos-accent, var(--red)); border-color: currentColor; font-weight: 600; }
+.table-order-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.table-order-body .order-customer, .table-order-body > section { margin: 0; }
+.table-order-message { margin: 0; font-size: 12px; color: var(--muted); }
+.table-order-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; }
+.table-order-lines > li { display: flex; justify-content: space-between; gap: 8px; }
+.table-order-lines > li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.table-order-lines .status.held { margin-left: 6px; padding: 1px 5px; font-size: 9px; text-transform: uppercase; color: var(--pos-warning); background: var(--pos-warning-bg); border-radius: 4px; }
+.table-order-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; border-top: 1px solid var(--line); flex-shrink: 0; }
+.table-order-total > span { display: grid; gap: 2px; font-size: 13px; font-weight: 600; }
+.table-order-total small { font-size: 10px; font-weight: 400; color: var(--muted); }
+.table-order-total > strong { font-size: 18px; }
+.table-order-blocker { margin: 0; padding: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--pos-warning); flex-shrink: 0; }
+.table-order-panel .billing-footer { flex-shrink: 0; border-top: 1px solid var(--line); padding: 8px 10px 10px; }
+.tables-screen .table-card.selected { outline: 3px solid var(--pos-accent, var(--red)); outline-offset: 2px; }
 .tables-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; overflow: auto; align-self: start; max-height: 100%; }
 .tables-side > .tables-parcels { flex: none; }
 .table-add-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -79,7 +114,8 @@
   .tables-layout.show-tables .tables-parcels, .tables-layout.show-parcels .table-list { display: none; }
   .tables-side { flex: 1; align-self: stretch; }
   .tables-layout.show-tables .tables-side, .tables-layout.show-parcels .tables-zomato, .tables-layout.show-zomato .table-list, .tables-layout.show-zomato .tables-parcels:not(.tables-zomato) { display: none; }
-  .tables-screen:has(.tables-layout.show-parcels, .tables-layout.show-zomato) .tables-filter-bar { display: none; }
+  .tables-layout.show-parcels .tables-reservations, .tables-layout.show-reservations .table-list, .tables-layout.show-reservations .tables-parcels:not(.tables-reservations) { display: none; }
+  .tables-screen:has(.tables-layout.show-parcels, .tables-layout.show-zomato, .tables-layout.show-reservations) .tables-filter-bar { display: none; }
   .tables-screen .table-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 6px; }
   .tables-screen .table-card { min-height: 86px; padding: 8px; }
   .tables-screen .table-card strong { font-size: 16px; }
@@ -110,8 +146,9 @@
   .tables-layout, .tables-layout.has-parcels { display: grid; }
   .tables-layout.has-parcels { grid-template-columns: minmax(0, 1fr) 185px; gap: 8px; }
   .tables-layout.show-tables .tables-parcels { display: flex; }
-  .tables-layout.show-parcels .table-list { display: block; }
-  .tables-screen:has(.tables-layout.show-parcels) .tables-filter-bar { display: flex; }
+  .tables-layout.show-parcels .table-list, .tables-layout.show-reservations .table-list { display: block; }
+  .tables-layout.show-reservations .tables-parcels, .tables-layout.show-parcels .tables-reservations { display: flex; }
+  .tables-screen:has(.tables-layout.show-parcels, .tables-layout.show-reservations) .tables-filter-bar { display: flex; }
 }
 @media (max-width: 539px) and (max-height: 550px) {
   .tables-layout { min-height: 100px; }

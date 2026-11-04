@@ -22,8 +22,12 @@ export function registerKots(app: FastifyInstance): void {
       clientRef: z.uuid(),
       itemIds: z.array(z.uuid()).min(1).max(500).optional(),
       itemRefs: z.array(z.string().min(8).max(64)).min(1).max(500).optional(),
+      /** Fire: send the named held items (and only held ones), clearing their hold. */
+      fire: z.literal(true).optional(),
     }).refine((b) => !!b.itemIds !== !!b.itemRefs, "Name the items by id or by reference").optional().parse(req.body);
-    const fingerprint = !parsed ? "" : parsed.itemIds ? JSON.stringify([...new Set(parsed.itemIds)].sort()) : `refs:${JSON.stringify([...new Set(parsed.itemRefs)].sort())}`;
+    const fire = parsed?.fire === true;
+    const named = !parsed ? "" : parsed.itemIds ? JSON.stringify([...new Set(parsed.itemIds)].sort()) : `refs:${JSON.stringify([...new Set(parsed.itemRefs)].sort())}`;
+    const fingerprint = fire ? `fire:${named}` : named;
     let body: { clientRef: string; itemIds: string[] } | undefined;
     if (parsed?.itemIds) body = { clientRef: parsed.clientRef, itemIds: parsed.itemIds };
     if (parsed) {
@@ -49,19 +53,25 @@ export function registerKots(app: FastifyInstance): void {
       product_id: string;
       station_id: string | null;
       parent_item_id: string | null;
+      /** 1 when the item, or the combo it is in, is held back from the kitchen. */
+      held: number;
     }
     const allPending = app.db
       .prepare(
-        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id, oi.parent_item_id
+        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id, oi.parent_item_id, MAX(oi.held, COALESCE(parent.held, 0)) AS held
          FROM order_items oi
          JOIN products p ON p.id = oi.product_id
+         LEFT JOIN order_items parent ON parent.id = oi.parent_item_id
          WHERE oi.order_id = ? AND oi.status = 'pending'
          ORDER BY oi.id`,
       )
       .all(id) as PendingItem[];
     // Naming a combo sends the items in it.
-    const pendingItems = allPending.filter((item) => !body || body.itemIds.includes(item.id) || (item.parent_item_id !== null && body.itemIds.includes(item.parent_item_id)));
+    const namedItems = allPending.filter((item) => !body || body.itemIds.includes(item.id) || (item.parent_item_id !== null && body.itemIds.includes(item.parent_item_id)));
     if (body && new Set(body.itemIds).size !== allPending.filter((item) => body.itemIds.includes(item.id)).length) throw httpError(409, "Kitchen items changed; review the order before sending again");
+    if (fire && allPending.some((item) => body!.itemIds.includes(item.id) && !item.held)) throw httpError(409, "Only held items can be fired");
+    // A KOT leaves held dishes for later, even when a screen that has not seen the hold names them; Fire sends them.
+    const pendingItems = fire ? namedItems : namedItems.filter((item) => !item.held);
 
     const byStation = new Map<string, string[]>();
     for (const item of pendingItems) {
@@ -99,6 +109,7 @@ export function registerKots(app: FastifyInstance): void {
       const combos = [...new Set(pendingItems.filter((item) => item.station_id && item.parent_item_id).map((item) => item.parent_item_id!))];
       changedStockIds.push(...consumeStock(app.db, combos, req.user.id));
       for (const comboId of combos) app.db.prepare("UPDATE order_items SET status = 'sent' WHERE id = ? AND status = 'pending'").run(comboId);
+      if (fire) for (const itemId of body!.itemIds) app.db.prepare("UPDATE order_items SET held = 0 WHERE id = ?").run(itemId);
       // A new Zomato order enters the kitchen; a Ready one goes back (new items to cook). Only when a KOT was created.
       if (createdKots.length > 0) {
         app.db.prepare("UPDATE orders SET zomato_status = 'preparing' WHERE id = ? AND type = 'zomato' AND (zomato_status IS NULL OR zomato_status = 'ready')").run(id);

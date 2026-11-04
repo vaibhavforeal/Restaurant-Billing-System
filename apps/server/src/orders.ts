@@ -15,6 +15,9 @@ import { integrationEnabled } from "./integrations.js";
 import { takeawayOrderType } from "./order-types.js";
 import { assertModuleActive } from "./modules.js";
 import { userCan } from "./auth.js";
+import { holdOrdersEnabled } from "./order-settings.js";
+
+const HOLD_OFF = "Hold orders is turned off in Settings";
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -171,9 +174,10 @@ export function registerOrders(app: FastifyInstance): void {
       throw httpError(409, "order is not open");
     }
 
-    const toAdd = body.items.filter((item) => !(item.clientRef && existingRefs.has(item.clientRef)))
-      .map((item) => ({ clientRef: item.clientRef ?? null, priced: priceOrderItem(app.db, order.price_tier, item) }));
-    if (toAdd.length > 0) app.db.transaction(() => { for (const item of toAdd) insertOrderItem(app.db, id, item.priced, { clientRef: item.clientRef }); })();
+    const fresh = body.items.filter((item) => !(item.clientRef && existingRefs.has(item.clientRef)));
+    if (fresh.some((item) => item.held) && !holdOrdersEnabled(app.db)) throw httpError(409, HOLD_OFF);
+    const toAdd = fresh.map((item) => ({ clientRef: item.clientRef ?? null, held: item.held === true, priced: priceOrderItem(app.db, order.price_tier, item) }));
+    if (toAdd.length > 0) app.db.transaction(() => { for (const item of toAdd) insertOrderItem(app.db, id, item.priced, { clientRef: item.clientRef, held: item.held }); })();
 
     const result = orderWithDetails(id)!;
     app.broadcast("order.updated", { order: result });
@@ -193,9 +197,12 @@ export function registerOrders(app: FastifyInstance): void {
 
     const qty = body.qty ?? item.qty;
     const note = body.note === undefined ? item.note : body.note;
+    // Un-holding always works, so dishes held before the setting was turned off are never stuck.
+    if (body.held === true && item.held !== 1 && !holdOrdersEnabled(app.db)) throw httpError(409, HOLD_OFF);
+    const held = body.held === undefined ? item.held : body.held ? 1 : 0;
 
     app.db.transaction(() => {
-      app.db.prepare("UPDATE order_items SET qty = ?, note = ? WHERE id = ?").run(qty, note, id);
+      app.db.prepare("UPDATE order_items SET qty = ?, note = ?, held = ? WHERE id = ?").run(qty, note, held, id);
       // A combo's items follow its quantity and cooking note; each holds a whole number of units per combo.
       app.db.prepare("UPDATE order_items SET qty = qty / ? * ?, note = ? WHERE parent_item_id = ? AND status != 'cancelled'").run(item.qty, qty, note, id);
     })();
