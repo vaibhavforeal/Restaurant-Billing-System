@@ -94,7 +94,13 @@ export interface SettingsData {
   receiptStyle: ReceiptStyle;
   upiId: string;
   restaurantName: string;
+  /** The street line; city, state and PIN code are kept apart and joined on bills. */
   address: string;
+  city: string;
+  /** GST state code, e.g. "29" for Karnataka. */
+  stateCode: string;
+  pincode: string;
+  phone: string;
   gstin: string;
   fssai: string;
   receiptFooter: string;

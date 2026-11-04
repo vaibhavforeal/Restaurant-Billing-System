@@ -1,0 +1,7 @@
+/* First-run setup: two fields share a row where they are short, and each field shows its own problem under it. */
+.setup-details .setup-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.setup-details select { width: 100%; }
+.setup-details small { color: var(--muted); font-weight: 400; }
+.setup-field-error { color: var(--pos-danger, #b42332); font-size: 12px; line-height: 1.35; }
+.setup-details [aria-invalid="true"] { border-color: var(--pos-danger, #b42332); }
+@media (max-width: 380px) { .setup-details .setup-row { grid-template-columns: minmax(0, 1fr); gap: 0; } }
