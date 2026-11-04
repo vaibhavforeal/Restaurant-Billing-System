@@ -20,6 +20,7 @@ interface SettingsRow {
   popular_items_enabled: number;
   popular_by_time_enabled: number;
   ordered_together_enabled: number;
+  customer_usual_enabled: number;
 }
 
 export function registerSettings(app: FastifyInstance): void {
@@ -27,7 +28,7 @@ export function registerSettings(app: FastifyInstance): void {
 
   const readSettings = () => {
     const r = app.db
-      .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled FROM settings WHERE id = 1")
+      .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled FROM settings WHERE id = 1")
       .get() as SettingsRow;
     return {
       gstMode: r.gst_mode,
@@ -48,6 +49,7 @@ export function registerSettings(app: FastifyInstance): void {
       popularItemsEnabled: r.popular_items_enabled === 1,
       popularByTimeEnabled: r.popular_by_time_enabled === 1,
       orderedTogetherEnabled: r.ordered_together_enabled === 1,
+      customerUsualEnabled: r.customer_usual_enabled === 1,
     };
   };
 
@@ -59,12 +61,13 @@ export function registerSettings(app: FastifyInstance): void {
     const stateCode = body.stateCode ?? readSettings().stateCode;
     if (stateCode && !gstinMatchesState(body.gstin, stateCode)) return reply.status(400).send({ error: GSTIN_STATE_MESSAGE });
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled) WHERE id = 1")
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled) WHERE id = 1")
       .run(body.restaurantName, body.address, body.city ?? null, body.stateCode ?? null, body.pincode ?? null, body.phone ?? null, body.gstin, body.fssai, body.receiptFooter, body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
         body.holdOrdersEnabled === undefined ? null : body.holdOrdersEnabled ? 1 : 0,
         body.popularItemsEnabled === undefined ? null : body.popularItemsEnabled ? 1 : 0,
         body.popularByTimeEnabled === undefined ? null : body.popularByTimeEnabled ? 1 : 0,
-        body.orderedTogetherEnabled === undefined ? null : body.orderedTogetherEnabled ? 1 : 0);
+        body.orderedTogetherEnabled === undefined ? null : body.orderedTogetherEnabled ? 1 : 0,
+        body.customerUsualEnabled === undefined ? null : body.customerUsualEnabled ? 1 : 0);
     // Order screens and captain tablets show or hide Hold, the Popular badges and the ordered-together suggestions from these settings.
     app.broadcast("settings.changed", {});
     return { settings: readSettings() };

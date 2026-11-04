@@ -38,6 +38,19 @@ and require `window.__popularByTimeResult.status === "passed"` (4 checks): Match
 and Starters shows Samosa as Popular; with it off, Paneer tikka (the all-day best-seller) becomes Popular and first,
 live; turning it back on returns Samosa. It turns the setting back on at the end.
 
+## Customer's usual
+
+Build the UI and start `node --import tsx tools/e2e/customer-usual-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4156/` with CRM & Loyalty on and one customer, Priya Sharma
+(98765 43210), with two past takeaway bills: Paneer tikka (Full) and Butter naan on both, and the last one also has
+Dal tadka, a Thali whose main must be chosen, and a Lassi that is now sold out. Sign in as `admin` /
+`admin-password`, add `tools/e2e/customer-usual.js` to the page and require
+`window.__customerUsualResult.status === "passed"` (8 checks): no row before a customer is added; adding Priya shows
+"Usual for Priya" with Butter naan and Paneer tikka (Full); one tap adds Paneer tikka (Full) and it leaves the row;
+Repeat last order adds Paneer tikka (Full) ×2, Butter naan and Dal tadka and names the Thali ("choose its items from
+the menu") and the sold-out Lassi; with Suggest a customer's usual off, adding Priya again shows no row. It turns the
+setting back on at the end.
+
 ## Hold orders
 
 Build the UI and start `node --import tsx tools/e2e/hold-order-server.mts` (fresh for each run). It is a

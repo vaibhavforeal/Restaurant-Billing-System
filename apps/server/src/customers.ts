@@ -1,10 +1,11 @@
 import {
   CustomerCreate, CustomerTypeCreate, CustomerTypeUpdate, CustomerUpdate, LoyaltyAdjust, LoyaltySettingsUpdate, OrderCustomerSet,
-  bestSlabPercent, percentOf, uuidv7, type Database, type SlabRule,
+  bestSlabPercent, customerLastOrder, customerUsual, percentOf, uuidv7, type Database, type SlabRule,
 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { customerUsualEnabled } from "./menu-insights.js";
 import { crmEnabled, requireIntegration } from "./integrations.js";
 import { currentTier, customerSpend, earnExpiry, loyaltySettings, pointsExpiringSoon, redeemedLots, sweepExpiry } from "./loyalty.js";
 import { customerJson, loadOrderJson, pointsBalance } from "./mappers.js";
@@ -129,6 +130,14 @@ export function registerCustomers(app: FastifyInstance): void {
       customer, stats: customerStats(db, id), tier: currentTier(db, id, now), expiringSoon: pointsExpiringSoon(db, id, now),
       ledger, bills: bills.slice(0, 20), moreBills: bills.length > 20, feedback,
     };
+  });
+  /** The order screen's "Usual for …" row: dishes on 2+ of their bills in 6 months, and their last order to repeat. */
+  app.get("/api/customers/:id/usual", { preHandler: read }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!db.prepare("SELECT 1 FROM customers WHERE id = ?").get(id)) throw httpError(404, "customer not found");
+    reply.header("Cache-Control", "no-store");
+    if (!customerUsualEnabled(db)) return { dishes: [], lastOrder: null };
+    return { dishes: customerUsual(db, id, Date.now()), lastOrder: customerLastOrder(db, id) };
   });
   app.post("/api/customers", { preHandler: manage }, async (req, reply) => {
     const body = CustomerCreate.parse(req.body);

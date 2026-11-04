@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true,
+      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true,
     });
 
     const put = await app.inject({

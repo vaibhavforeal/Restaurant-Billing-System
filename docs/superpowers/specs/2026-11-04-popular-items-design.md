@@ -127,3 +127,22 @@ Approved in plan mode on 2026-11-04.
 - **Staff screen:** an open order screen re-reads the menu hints every 15 minutes.
 - **QR menu:** works out the badge when the guest opens it.
 - **E2E:** `tools/e2e/popular-by-time.js` on the same fixture.
+
+## Built next: Customer's usual (roadmap item 3)
+Approved in chat on 2026-11-04.
+- **Ranking:** `customerUsual(db, customerId, now)` in `packages/domain/src/customer-usual.ts`.
+  - It lists dishes on at least 2 of the customer's non-void bills in the last 183 days. Items inside combos don't count.
+  - Ranking: most bills first, then the most recent.
+  - Only active, in-stock dishes in active categories. Combos are kept.
+  - Each dish comes in the customer's most-ordered active size.
+- **Last order:** `customerLastOrder(db, customerId)` returns the latest non-void bill's top-level dishes. The same dish and size are added together, in the order first billed.
+- **Server:** `GET /api/customers/:id/usual` uses the profile's `customers.read` + CRM guards and is sent `no-store`.
+  - It returns `{ dishes, lastOrder }`, or empty while the setting `customer_usual_enabled` (migration 51) is off.
+  - The checkbox is "Suggest a customer's usual" in Settings.
+- **UI:** `CustomerUsual` under the customer line on the cashier and Quick Takeaway screens. It needs CRM, `customers.read` and an open order.
+  - "Usual for Priya" shows up to 4 dishes not already on the order (`usualChips`). Tapping a combo opens the combo chooser.
+  - "Repeat last order" uses `repeatPlan` in `apps/ui/src/customer-usual.ts`.
+    - It adds the last bill's dishes at today's prices.
+    - It names what it skipped: off the menu, sold out, a size gone, a combo whose items must be chosen, or a dish that now has sizes.
+  - The order screen's cart-add function has a batch version, `addRowsToDraft`, which Repeat uses.
+- **E2E:** `tools/e2e/customer-usual-server.mts` (port 4156) and `customer-usual.js`.
