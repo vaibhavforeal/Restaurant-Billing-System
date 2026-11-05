@@ -8,6 +8,9 @@ import type { Category, Product, Station, Variant } from "../types";
 import { ComboSlotsEditor, slotsFromGroups, slotsToGroups } from "./ComboSlotsEditor";
 import "../product-editor.css";
 import { withTimeout } from "../abort-signal";
+import { useAiStatus } from "../ai-status";
+import { describeRequest } from "../ai-buttons";
+import { aiErrorText } from "../ask-chat";
 
 const optionalPrice = (value: number | null | undefined) => value == null ? "" : paiseToRupees(value);
 const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zomatoPrice: "" };
@@ -30,6 +33,9 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     isActive: product?.isActive ?? true, isSoldOut: product?.isSoldOut ?? false }).current;
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
+  const ai = useAiStatus();
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState("");
   const [categoryId, setCategoryId] = useState(initial.categoryId);
   const [price, setPrice] = useState(initial.price);
   const [acPrice, setAcPrice] = useState(initial.acPrice);
@@ -149,12 +155,27 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     void run("photo", async () => { setPhotoChange(await prepareProductPhoto(file)); setMessage("Photo ready to save with this product."); });
   }
 
+  /** Fills the description with an AI draft; nothing is saved until Save. */
+  async function draftDescription() {
+    setDrafting(true); setDraftError("");
+    try {
+      const body = describeRequest({ name, categoryName: categories.find((c) => c.id === categoryId)?.name ?? "", isVeg, variantNames: variants.map((v) => v.name), description });
+      const { text } = await apiFetch<{ text: string }>("/api/ai/describe", { method: "POST", body: JSON.stringify(body) });
+      setDescription(text);
+    } catch (e) { setDraftError(aiErrorText(e)); }
+    finally { setDrafting(false); }
+  }
+
   return <section className="product-editor panel" aria-label="Product editor">
     <div className="product-editor-heading"><h2>{product ? `Edit: ${product.name}` : isCombo ? "New combo" : "New product"}</h2><span role="status">{dirty ? "Unsaved changes" : ""}</span></div>
     <form onSubmit={(event) => { event.preventDefault(); save(); }}>
       <div className="product-editor-layout"><div className="product-editor-fields">
         <label className="product-field-wide">{isCombo ? "Combo name" : "Product name"}<input required value={name} disabled={busy !== null} onChange={(event) => setName(event.target.value)} /></label>
-        <details className="product-field-wide"><summary>Description (optional)</summary><label className="product-field-wide">Menu description<textarea maxLength={500} rows={4} value={description} disabled={busy !== null} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the dish, its ingredients, or how it is served." /><small>{description.length}/500 characters · Shown on the guest menu.</small></label></details>
+        <details className="product-field-wide"><summary>Description (optional)</summary><label className="product-field-wide">Menu description<textarea maxLength={500} rows={4} value={description} disabled={busy !== null} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the dish, its ingredients, or how it is served." /><small>{description.length}/500 characters · Shown on the guest menu.</small></label>
+          {ai?.enabled && ai.canDescribe && <div className="product-ai-describe" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" disabled={busy !== null || drafting || !name.trim()} onClick={() => void draftDescription()}>{drafting ? "Writing…" : description.trim() ? "Rewrite" : "Write description"}</button>
+            <small className="muted">{draftError || "Drafted by the AI assistant; check it, then Save."}</small>
+          </div>}</details>
         <div className="product-field-wide product-metadata-grid">
           <label>Category<select required value={categoryId} disabled={busy !== null} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.isActive ? "" : " (inactive)"}</option>)}</select></label>
           <label>GST rate<select value={gstRate} disabled={busy !== null} onChange={(event) => setGstRate(event.target.value)}><option value="">Restaurant default ({defaultGstRate}%)</option>{GST_RATES.map((rate) => <option key={rate} value={String(rate)}>{rate}%</option>)}</select></label>

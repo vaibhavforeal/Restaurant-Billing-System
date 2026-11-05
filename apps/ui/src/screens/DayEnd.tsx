@@ -4,6 +4,9 @@ import { paiseToRupees } from "../money";
 import { dayEndCsv, netTaxes, NO_GST_SALES_LABEL, ZOMATO_SUPPLIES_LABEL, type DayEndReport } from "../report-export";
 import { downloadText } from "../download";
 import { OverflowMenu } from "../PosControls";
+import { useAiStatus } from "../ai-status";
+import { summaryClipboardText } from "../ai-buttons";
+import { aiErrorText } from "../ask-chat";
 function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 const money = (n: number) => `₹${paiseToRupees(n)}`;
 export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
@@ -12,6 +15,22 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [version, setVersion] = useState(0);
+  const ai = useAiStatus();
+  const [summary, setSummary] = useState<{ busy: boolean; text: string; model: string; error: string; copied: boolean }>({ busy: false, text: "", model: "", error: "", copied: false });
+  // A summary belongs to one date.
+  useEffect(() => { setSummary({ busy: false, text: "", model: "", error: "", copied: false }); }, [date]);
+  async function writeSummary() {
+    setSummary((s) => ({ ...s, busy: true, error: "", copied: false }));
+    try {
+      const reply = await apiFetch<{ text: string; model: string }>("/api/ai/day-summary", { method: "POST", body: JSON.stringify({ date }) });
+      setSummary({ busy: false, text: reply.text, model: reply.model, error: "", copied: false });
+    } catch (e) { setSummary((s) => ({ ...s, busy: false, error: aiErrorText(e) })); }
+  }
+  async function copySummary() {
+    const name = await apiFetch<{ settings: { restaurantName: string } }>("/api/settings").then((r) => r.settings.restaurantName).catch(() => "");
+    try { await navigator.clipboard.writeText(summaryClipboardText(date, name || "Day summary", summary.text)); setSummary((s) => ({ ...s, copied: true })); }
+    catch { setSummary((s) => ({ ...s, error: "Couldn't copy. Select the text and copy it instead." })); }
+  }
   useEffect(() => {
     let active = true; setReport(null); setError(""); setMessage("");
     if (!date) return () => { active = false; };
@@ -32,7 +51,13 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
       <label>Business date <input type="date" value={date} onChange={(e) => { setReport(null); setDate(e.target.value); }} /></label>
       <button disabled={!date} onClick={() => { setReport(null); setVersion((v) => v + 1); }}>Refresh report</button>
       <OverflowMenu label="Export"><button disabled={!report || report.date !== date} onClick={exportReport} title="Download this report as a CSV file for Excel">Export CSV</button></OverflowMenu>
+      {ai?.enabled && ai.canAsk && <button disabled={!report || report.date !== date || summary.busy} onClick={() => void writeSummary()}>{summary.busy ? "Writing…" : "Write summary"}</button>}
     </div>
+    {(summary.text || summary.error) && <section className="day-summary" aria-label="AI day summary" style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-panel, 6px)", padding: 12, margin: "8px 0", maxWidth: 760 }}>
+      {summary.text && <><div style={{ whiteSpace: "pre-wrap" }}>{summary.text}</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}><button onClick={() => void copySummary()}>Copy</button><small className="muted">{summary.copied ? "Copied — paste it into WhatsApp." : `Written by ${summary.model}. Not saved.`}</small></div></>}
+      {summary.error && <p role="alert" style={{ color: "var(--danger-text, crimson)", margin: 0 }}>{summary.error}</p>}
+    </section>}
     <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>
     {message && <p role="status">{message}</p>}
     {report && <>
