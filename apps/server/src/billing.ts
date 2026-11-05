@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  localDateKey, pointsEarned, GST_STATES, type BuyerDetailsInput, type Bill, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
+  localDateKey, pointsEarned, GST_STATES, type BillShow, type BuyerDetailsInput, type Bill, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
@@ -78,12 +78,15 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const limit = effectiveDiscountCap(db, actor);
   if (limit !== null && !actor.approvedBy && discount.manualPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%; an admin PIN is needed for more`, "discount_cap");
   const earned = customer && loyalty.enabled ? pointsEarned(totals.totalPaise, loyalty.pointsPer100, customer.tier?.earnMultiplier ?? 1) : 0;
-  const { city, stateCode, pincode, ...profile } = db.prepare("SELECT restaurant_name AS restaurantName, address, city, state_code AS stateCode, pincode, phone, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as
-    Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle"> & { phone: string; city: string; stateCode: string; pincode: string };
+  const { city, stateCode, pincode, showFssai, showCustomer, showTable, showServedBy, showItemGst, ...profile } = db.prepare("SELECT restaurant_name AS restaurantName, address, city, state_code AS stateCode, pincode, phone, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle, receipt_header AS receiptHeader, bill_show_fssai AS showFssai, bill_show_customer AS showCustomer, bill_show_table AS showTable, bill_show_served_by AS showServedBy, bill_show_item_gst AS showItemGst FROM settings WHERE id = 1").get() as
+    Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle"> & { receiptHeader: string; phone: string; city: string; stateCode: string; pincode: string;
+      showFssai: number; showCustomer: number; showTable: number; showServedBy: number; showItemGst: number };
+  // Print choices are frozen with the bill like the rest of the profile, so changing them later never alters an issued bill.
+  const billShow: BillShow = { fssai: !!showFssai, customer: !!showCustomer, table: !!showTable, servedBy: !!showServedBy, itemGst: !!showItemGst };
   // The bill keeps the address as one printed line, so later changes to the restaurant's details never alter an issued bill.
   profile.address = formatRestaurantAddress({ address: profile.address, city, stateCode, pincode });
   const gst = gstInvoiceDetails(db, profile.gstin, mode, stateCode, buyer);
-  const receipt: ReceiptSnapshot = { ...profile, ...gst, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
+  const receipt: ReceiptSnapshot = { ...profile, ...gst, gstMode: mode, billShow, ...(order.soldByName ? { servedBy: order.soldByName } : {}), orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     ...(order.orderTypeName ? { orderTypeName: order.orderTypeName } : {}),
     ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),
     items: items.map((item) => {

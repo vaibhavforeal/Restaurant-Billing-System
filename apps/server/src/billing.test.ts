@@ -7,11 +7,13 @@ import { billUpiPayment } from "./print/upi.js";
 describe("billing and day-end", () => {
   let app: FastifyInstance;
   let token: string;
+  let adminName: string;
   let productId: string;
   let fake: ReturnType<typeof freshAppWithFakeSink>["fake"];
   beforeEach(async () => {
     ({ app, fake } = freshAppWithFakeSink());
-    ({ token } = await setupAdmin(app));
+    let admin;
+    ({ token, user: admin } = await setupAdmin(app)); adminName = admin.name;
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Meal", categoryId: category.json().category.id, pricePaise: 10500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201); productId = product.json().product.id;
@@ -152,6 +154,15 @@ describe("billing and day-end", () => {
     expect(receipt.body).toContain('class="bill bill--modern"');
     const later = await issue(await order());
     expect(later.receipt.gstMode).toBe("none"); expect(later.cgstPaise).toBe(0);
+  });
+  it("freezes header, print toggles and served-by into the bill", async () => {
+    expect((await putSettings({ receiptHeader: "Pure veg", billShowItemGst: true })).statusCode).toBe(200);
+    const bill = await issue(await order());
+    expect(bill.receipt).toMatchObject({ receiptHeader: "Pure veg", billShow: { fssai: true, customer: true, table: true, servedBy: false, itemGst: true }, servedBy: adminName });
+    expect((await putSettings({ receiptHeader: "Changed", billShowItemGst: false, billShowServedBy: true })).statusCode).toBe(200);
+    const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill as Bill;
+    expect(stored.receipt.receiptHeader).toBe("Pure veg");
+    expect(stored.receipt.billShow).toEqual({ fssai: true, customer: true, table: true, servedBy: false, itemGst: true });
   });
   it("issues a GST-free bill in none mode, whatever the GSTIN, and leaves earlier bills alone", async () => {
     const before = await issue(await order());
