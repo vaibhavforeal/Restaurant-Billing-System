@@ -92,7 +92,7 @@ export interface AdminUser {
 
 export interface SettingsData {
   gstMode: GstMode;
-  /** The restaurant's default GST rate, used by items without their own rate. Only meaningful when `gstMode` is "included". */
+  /** The restaurant's default GST rate, used by items without their own rate. Only meaningful when GST is charged (`gstMode` "included" or "exclusive"). */
   gstRate: DefaultGstRate;
   receiptStyle: ReceiptStyle;
   upiId: string;

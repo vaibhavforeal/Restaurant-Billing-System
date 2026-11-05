@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { PaymentMode } from "@masalapos/domain";
-import type { GstMode } from "@masalapos/domain/gst";
+import { billChargesGst, type GstMode } from "@masalapos/domain/gst";
 import { ApiError, apiFetch } from "./api";
 import type { Order } from "./types";
 import { uuid } from "./uuid";
@@ -36,12 +36,13 @@ export type BillGst = { gstMode: GstMode; gstPaidBy?: "zomato" };
 /** The GST line of a bill. Zomato wins: its snapshot also carries the restaurant's mode, but Zomato pays the GST. */
 export function gstNote(receipt: BillGst): string {
   if (receipt.gstPaidBy === "zomato") return "GST paid by Zomato (section 9(5))";
-  return receipt.gstMode === "none" ? "No GST charged" : "Includes GST";
+  if (receipt.gstMode === "none") return "No GST charged";
+  return receipt.gstMode === "exclusive" ? "GST added on the bill" : "Includes GST";
 }
 
 /** The per-rate GST rows a bill shows: none when Zomato pays the GST or the bill was issued without GST. */
 export function billTaxRates<T>(bill: { taxes: T[] }, receipt: BillGst | undefined): T[] {
-  return !receipt || (receipt.gstPaidBy !== "zomato" && receipt.gstMode === "included") ? bill.taxes : [];
+  return !receipt || billChargesGst(receipt) ? bill.taxes : [];
 }
 
 /**

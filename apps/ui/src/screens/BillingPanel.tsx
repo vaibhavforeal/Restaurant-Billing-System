@@ -20,6 +20,7 @@ import "../billing-panel.css";
 import "../zomato.css";
 import { useCan } from "../permissions";
 import { gstinProblem } from "@masalapos/domain/gstin";
+import { billChargesGst } from "@masalapos/domain/gst";
 import { GST_STATES } from "@masalapos/domain/restaurant-profile";
 import { Icon } from "../Icon";
 
@@ -33,7 +34,9 @@ type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string;
 export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
   const rates = billTaxRates(value, gst);
   // Nothing GST-related is shown for a bill issued without GST or one whose GST Zomato pays.
-  const noGst = gst !== undefined && (gst.gstPaidBy === "zomato" || gst.gstMode === "none");
+  const noGst = gst !== undefined && !billChargesGst(gst);
+  // With GST added on the bill, CGST and SGST are lines of the sum rather than a note of what the total contains.
+  const added = !noGst && gst?.gstMode === "exclusive";
   const includedPaise = value.cgstPaise + value.sgstPaise;
   const breakdown = <>
     {gst && <p>{gstNote(gst)}</p>}
@@ -42,9 +45,9 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
       <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
     </table></div>}
   </>;
-  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd><dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
+  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
-  const includes = !noGst && includedPaise > 0 && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
+  const includes = !noGst && !added && includedPaise > 0 && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
     {compact ? <>{amounts}{payable}{includes}<details className="bill-tax-details"><summary>Tax details</summary>{breakdown}</details></> : <>{amounts}{payable}{includes}{breakdown}</>}
   </div>;

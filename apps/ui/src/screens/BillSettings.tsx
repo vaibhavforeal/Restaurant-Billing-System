@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
+import { DEFAULT_GST_RATES, GST_MODES, type GstMode } from "@masalapos/domain/gst";
 import { financialYear, formatInvoiceNo } from "@masalapos/domain/invoice-numbers";
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch } from "../api";
@@ -38,6 +38,8 @@ function useBillPreview(form: SettingsData | null) {
   return { html, error };
 }
 
+const GST_MODE_LABELS: Record<GstMode, string> = { included: "Prices include GST", exclusive: "Prices exclude GST, added on the bill", none: "No GST charged" };
+
 /** Settings → Bill settings: tax, what the printed bill shows, and order handling, beside a live preview of the bill. */
 export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void }) {
   const { form, update, save, busy, status, message } = useSettingsForm("Could not save the bill settings");
@@ -49,14 +51,13 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
       <fieldset className="bill-settings-group">
         <legend>Tax</legend>
         <label style={field}>
-          <span>GST <InfoTip id="gst-settings-help">Applies to new bills. With GST included, the tax is part of your menu prices and is shown as an Includes GST block on the bill; items without their own rate use the default rate. With No GST charged, bills show no tax. Existing bills keep their original tax calculation.</InfoTip></span>
+          <span>GST <InfoTip id="gst-settings-help">Applies to new bills. With GST included, the tax is part of your menu prices and is shown as an Includes GST block on the bill; items without their own rate use the default rate. With GST added on the bill, menu prices are before tax and CGST and SGST are added to each bill; this needs your GSTIN. With No GST charged, bills show no tax. Existing bills keep their original tax calculation.</InfoTip></span>
           <select value={form.gstMode} disabled={busy} aria-describedby="gst-settings-help"
-            onChange={(e) => update({ gstMode: e.target.value === "none" ? "none" : "included" })}>
-            <option value="included">Prices include GST</option>
-            <option value="none">No GST charged</option>
+            onChange={(e) => update({ gstMode: GST_MODES.find((m) => m === e.target.value) ?? "included" })}>
+            {GST_MODES.map((mode) => <option key={mode} value={mode}>{GST_MODE_LABELS[mode]}</option>)}
           </select>
         </label>
-        {form.gstMode === "included" && <label style={field}>
+        {form.gstMode !== "none" && <label style={field}>
           Default GST rate
           <select value={form.gstRate} disabled={busy} aria-describedby="gst-settings-help"
             onChange={(e) => update({ gstRate: Number(e.target.value) as SettingsData["gstRate"] })}>
