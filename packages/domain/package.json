@@ -9,6 +9,7 @@
     "./pricing": "./src/pricing.ts",
     "./combos": "./src/combos.ts",
     "./gst": "./src/gst.ts",
+    "./invoice-numbers": "./src/invoice-numbers.ts",
     "./receipt-styles": "./src/receipt-styles.ts",
     "./operational-reports": "./src/operational-reports.ts",
     "./custom-reports": "./src/custom-reports.ts",
