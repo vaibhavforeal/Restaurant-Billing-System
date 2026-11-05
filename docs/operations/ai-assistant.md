@@ -35,7 +35,7 @@ Billing, KOTs and everything else never depend on it. When the assistant is off 
 
 The switch belongs to the counter's **seat**: if the seat is released, or the counter is activated again on another order, the assistant is off until switched on again. A replacement computer takes over the old one's setting with the seat.
 
-The counter picks it up within 15 minutes, or at once when the restaurant's admin presses **Check** in **Settings → Restaurant profile → AI assistant**.
+The counter picks it up within 15 minutes, or at once when the restaurant's admin presses **Check** in **Settings → AI suggestions → AI assistant**.
 
 The same panel shows today's requests against the limit, and requests and tokens for each of the last 7 UTC days.
 
@@ -85,7 +85,7 @@ OPENROUTER_API_KEY_FILE=/etc/forkflow-portal/openrouter-key   # a root-only file
 
 ## The restaurant's side
 
-**Settings → Restaurant profile → AI assistant · provided by MasalaPOS** shows one of:
+**Settings → AI suggestions → AI assistant · provided by MasalaPOS** shows one of:
 
 - "On for this restaurant · 12 of 40 requests used today"
 - "Not switched on for this restaurant. Contact MasalaPOS to add the AI assistant."

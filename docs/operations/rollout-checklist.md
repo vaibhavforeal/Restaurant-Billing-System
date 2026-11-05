@@ -49,7 +49,8 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 
 ## 2. Basic setup for testing
 
-- [ ] **Settings → Restaurant profile:** GST number, address, receipt footer, **GST** (Prices include GST with the default rate, or No GST charged), UPI ID (if used). Save.
+- [ ] **Settings → Restaurant profile:** GST number and address. Save.
+- [ ] **Settings → Bill settings:** receipt footer, **GST** (Prices include GST with the default rate, or No GST charged), UPI ID (if used). Save.
 - [ ] **Kitchen screen:** decide with the owner. If the kitchen will use a Kitchen screen (Pro plan), turn on **Kitchen Display (KDS)** in the Marketplace; if it only gets printed KOTs, leave it off.
 - [ ] Add staff: at least one cashier, one captain/waiter and one kitchen user, each with their own PIN.
 - [ ] Add 3–5 test menu items across two kitchen stations (for example Kitchen and Bar), and tables T1–T6, including at least one AC table if the restaurant uses AC pricing.

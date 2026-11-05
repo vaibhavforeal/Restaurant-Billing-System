@@ -11,7 +11,7 @@ the GSTIN and report warnings. **Share reports** opens the device's sharing menu
 Otherwise download each file, enter the auditor's email, and choose **Open email draft**. Attach the downloaded files
 in the email app before sending; browser email links cannot add attachments automatically. No email is sent by the POS.
 
-What the screen shows depends on **Settings > Restaurant profile**:
+What the screen shows depends on **Settings > Restaurant profile** (GSTIN) and **Bill settings** (GST):
 
 | Restaurant | Shown | Download |
 | --- | --- | --- |

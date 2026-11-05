@@ -1,6 +1,6 @@
 # Bill formats
 
-Choose **Settings > Restaurant profile > Bill style**, then **Save**:
+Choose **Settings > Bill settings > Bill style**, then **Save**:
 
 | Style | Preview / PDF | Thermal receipt |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ design displays a short thank-you message.
 
 ## GST settings and item rates
 
-Choose **Settings > Restaurant profile > GST**, then **Save**:
+Choose **Settings > Bill settings > GST**, then **Save**:
 
 - **Prices include GST** - menu prices already contain the tax. Pick the
   **Default GST rate** (5%, 12% or 18%); items without a rate of their own use it.
