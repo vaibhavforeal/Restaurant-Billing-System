@@ -19,10 +19,10 @@ export function canToggle(info: IntegrationInfo, canConfigure: boolean): boolean
 }
 
 /** The sidebar tabs for staff in the full POS, in order. */
-export const STAFF_TABS = ["home", "tables", "reports", "customers", "inventory", "kitchen", "catalog", "users", "marketplace", "settings"] as const;
+export const STAFF_TABS = ["home", "tables", "orders", "reports", "customers", "inventory", "kitchen", "catalog", "users", "marketplace", "settings"] as const;
 /** The permission each tab needs; Home is always there. */
 const TAB_PERMISSION: Record<typeof STAFF_TABS[number], string | null> = {
-  home: null, tables: "tables.read", reports: "reports.read", customers: "customers.read", inventory: "stock.read",
+  home: null, tables: "tables.read", orders: "orders.read", reports: "reports.read", customers: "customers.read", inventory: "stock.read",
   kitchen: "kots.read", catalog: "catalog.manage", users: "users.manage", marketplace: "integrations.read", settings: "settings.manage",
 };
 export function staffTabVisible(tab: typeof STAFF_TABS[number], can: (slug: string) => boolean): boolean {

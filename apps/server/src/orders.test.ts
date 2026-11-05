@@ -148,6 +148,25 @@ describe("orders: create/get/list", () => {
     expect(listAfter.json().orders).toHaveLength(0);
   });
 
+  it("GET /api/orders?closedSince= adds non-table orders settled since then", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const table = (await app.inject({ method: "POST", url: "/api/tables", payload: { name: "T1", area: "Main" }, headers: auth(admin.token) })).json().table;
+    for (const [clientRef, type, tableId] of [["pc-today", "parcel", null], ["pc-older", "parcel", null], ["dc-today", "dine_in", table.id], ["pc-open1", "parcel", null], ["pc-cancel", "parcel", null]] as const) {
+      const r = await app.inject({ method: "POST", url: "/api/orders", payload: { clientRef, type, tableId }, headers: auth(admin.token) }); expect(r.statusCode).toBe(201);
+    }
+    const settle = app.db.prepare("UPDATE orders SET status = ?, closed_at = ? WHERE client_ref = ?");
+    settle.run("settled", 5000, "pc-today");
+    settle.run("settled", 1000, "pc-older");
+    settle.run("settled", 5000, "dc-today");
+    settle.run("cancelled", 5000, "pc-cancel");
+
+    const refs = async (url: string) => (await app.inject({ method: "GET", url, headers: auth(admin.token) })).json().orders.map((o: { clientRef: string }) => o.clientRef).sort();
+    expect(await refs("/api/orders")).toEqual(["pc-open1"]);
+    expect(await refs("/api/orders?closedSince=4000")).toEqual(["pc-open1", "pc-today"]);
+    expect((await app.inject({ method: "GET", url: "/api/orders?closedSince=-1", headers: auth(admin.token) })).statusCode).toBe(400);
+  });
+
   it("GET /api/orders/:id returns 404 for unknown id", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

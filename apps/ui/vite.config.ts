@@ -27,6 +27,7 @@ export default defineConfig({
     alias: { "@board": fileURLToPath(new URL("./src/dynamic-dashboard/boardui", import.meta.url)) },
   },
   server: {
-    proxy: { "/api": { target: "http://localhost:4100", ws: true } },
+    // Same port variable as the server, so a dev copy can run beside the installed app on 4100.
+    proxy: { "/api": { target: `http://localhost:${process.env["MASALAPOS_PORT"] ?? 4100}`, ws: true } },
   },
 });

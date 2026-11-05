@@ -12,6 +12,7 @@ import { GetSupportButton } from "./support";
 export type Page =
   | { name: "home" }
   | { name: "tables"; qrInbox?: number }
+  | { name: "orders" }
   | { name: "takeaway" }
   | { name: "order"; orderId: string }
   | { name: "kitchen" }

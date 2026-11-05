@@ -121,10 +121,14 @@ export function registerOrders(app: FastifyInstance): void {
     return reply.status(201).send({ order });
   });
 
-  app.get("/api/orders", { preHandler: read }, async () => {
-    const rows = app.db
-      .prepare("SELECT * FROM orders WHERE status IN ('open', 'billed') ORDER BY opened_at")
-      .all() as OrderRow[];
+  // Running orders; with closedSince, also non-table orders settled since then (the order board's Processed column).
+  app.get("/api/orders", { preHandler: read }, async (req) => {
+    const { closedSince } = z.object({ closedSince: z.coerce.number().int().nonnegative().optional() }).parse(req.query);
+    const rows = (closedSince === undefined
+      ? app.db.prepare("SELECT * FROM orders WHERE status IN ('open', 'billed') ORDER BY opened_at").all()
+      : app.db.prepare(
+        "SELECT * FROM orders WHERE status IN ('open', 'billed') OR (status = 'settled' AND type <> 'dine_in' AND closed_at >= ?) ORDER BY opened_at",
+      ).all(closedSince)) as OrderRow[];
     const orders = rows.map((r) => orderWithDetails(r.id)!);
     return { orders };
   });

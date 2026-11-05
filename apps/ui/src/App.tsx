@@ -9,6 +9,7 @@ import { OrderScreen } from "./screens/OrderScreen";
 import { Settings } from "./screens/Settings";
 import { Setup, type SetupActivation } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
+import { OrderBoard } from "./screens/OrderBoard";
 import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
 import { SalesReports } from "./screens/SalesReports";
@@ -186,6 +187,7 @@ function StaffApp() {
           <QrNotifications key={`qr-${user.id}`} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
+          {page.name === "orders" && <OrderBoard user={user} onOpenOrder={onOpenOrder} onNewOrder={canQuickBill ? () => go({ name: "takeaway" }) : undefined} />}
           {page.name === "tables" && <Tables user={user} captain={captain} qrInbox={page.qrInbox} onOpenOrder={onOpenOrder} onTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
