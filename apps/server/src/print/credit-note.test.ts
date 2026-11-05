@@ -73,6 +73,18 @@ describe("credit note slip", () => {
     }
   });
 
+  it("prints the GST rows on a credit note against a bill with GST added on top", async () => {
+    const { bill } = await refunded();
+    const added: Bill = { ...bill, receipt: { ...bill.receipt, gstMode: "exclusive" as const } };
+    const note = view(bill.creditNotes[0]!);
+    const html = creditNoteHtml(note, added);
+    expect(html).toContain("GST breakdown"); expect(html).not.toContain("No GST was charged");
+    for (const width of [58, 80] as const) {
+      const rendered = renderBytes(creditNoteSlip(note, added, width));
+      expect(rendered).toContain("CGST 2.5%"); expect(rendered).toContain("SGST 2.5%");
+    }
+  });
+
   it("says BILL VOIDED for the void of an unpaid bill", async () => {
     const { bill } = await refunded();
     const note = { ...view(bill.creditNotes[0]!), kind: "void" as const, refunds: [] };

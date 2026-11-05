@@ -1,4 +1,4 @@
-import { billShowOf, billTextLines, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
+import { billChargesGst, billShowOf, billTextLines, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { contextLine } from "./templates.js";
@@ -51,13 +51,14 @@ const compositionNote = "Composition taxable person, not eligible to collect tax
  */
 function billHeading(r: Bill["receipt"]): { thermal: string; html: string; declaration: string | null } {
   if (r.gstPaidBy === "zomato") return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
-  if (r.gstMode === "included") return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
+  if (billChargesGst(r)) return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
   if (r.gstin.trim()) return { thermal: "BILL OF SUPPLY", html: "Bill of supply", declaration: compositionNote };
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
-const chargesGst = (r: Bill["receipt"]) => r.gstPaidBy !== "zomato" && r.gstMode === "included";
-/** The per-rate GST shown after the total: only a tax invoice carries it. */
-const includedGst = (bill: Bill) => chargesGst(bill.receipt) ? bill.taxes : [];
+/** The per-rate GST the prices already contain, shown after the total. */
+const includedGst = (bill: Bill) => billChargesGst(bill.receipt) && bill.receipt.gstMode === "included" ? bill.taxes : [];
+/** The per-rate GST added on top of the prices, shown as additions before round-off and the total. */
+const addedGst = (bill: Bill) => billChargesGst(bill.receipt) && bill.receipt.gstMode === "exclusive" ? bill.taxes : [];
 
 function wrapText(value: string, width: number): string[] {
   return value.split(/\r?\n/).flatMap((part) => {
@@ -95,7 +96,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   const zomatoGst = r.gstPaidBy === "zomato";
   const heading = billHeading(r);
   const show = billShowOf(r);
-  const itemGst = show.itemGst && chargesGst(r);
+  const itemGst = show.itemGst && billChargesGst(r);
   const rule = () => pos.line((style === "classic" ? "." : style === "heritage" ? "=" : "-").repeat(width));
   // Fixed numeric columns keep regular rows compact. Oversize values fall back
   // to label/value lines so a large quantity or amount is never truncated.
@@ -148,11 +149,15 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   pair(`Subtotal (${quantity(bill)} qty)`, money(bill.subtotalPaise));
   if (bill.discountPaise) pair("Discount", `-${money(bill.discountPaise)}`);
   if (zomatoGst) line("GST paid by Zomato (section 9(5))");
+  for (const t of addedGst(bill)) {
+    pair(`CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}`, money(t.cgstPaise));
+    pair(`SGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}`, money(t.sgstPaise));
+  }
   if (bill.roundingPaise) pair("Round off", money(bill.roundingPaise));
   rule().bold(true).size(1, 2);
   pair("TOTAL Rs.", money(bill.totalPaise));
   pos.size(1, 1).bold(false); rule();
-  // A tax invoice must show the rate and amount of tax; the prices already contain it, so it follows the total.
+  // A tax invoice must show the rate and amount of tax; when the prices already contain it, it follows the total.
   const taxes = includedGst(bill);
   if (taxes.length) {
     line("Includes GST:");
@@ -205,7 +210,7 @@ export function receiptHtml(bill: Bill): string {
   const zomatoGst = r.gstPaidBy === "zomato";
   const heading = billHeading(r);
   const show = billShowOf(r);
-  const itemGst = show.itemGst && chargesGst(r);
+  const itemGst = show.itemGst && billChargesGst(r);
   const taxes = includedGst(bill);
   const payment = billUpiPayment(bill);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -233,6 +238,8 @@ export function receiptHtml(bill: Bill): string {
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
     ${bill.discountPaise ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise)}</td></tr>` : ""}
     ${zomatoGst ? `<tr><td colspan="2" class="tax-note">GST paid by Zomato (section 9(5))</td></tr>` : ""}
+    ${addedGst(bill).map((t) => `<tr class="tax"><td>CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.cgstPaise)}</td></tr>
+    <tr class="tax"><td>SGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.sgstPaise)}</td></tr>`).join("")}
     ${bill.roundingPaise ? `<tr><td>Round off</td><td class="amount">₹${money(bill.roundingPaise)}</td></tr>` : ""}
     <tr class="grand-total"><td>TOTAL</td><td class="amount">₹${money(bill.totalPaise)}</td></tr>
     ${taxes.length ? `<tr><td colspan="2" class="tax-note">Includes GST</td></tr>` + taxes.map((t) => `<tr class="taxable"><td>Taxable @ ${t.gstRate}%</td><td class="amount">₹${money(t.taxablePaise)}</td></tr>

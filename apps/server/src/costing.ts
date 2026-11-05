@@ -52,8 +52,8 @@ export function registerCosting(app: FastifyInstance): void {
 
   app.get("/api/costing/dishes", { preHandler: costs }, async (_req, reply) => {
     // Combos are costed through their items' recipes in the profit report, so they are not listed here.
-    // A restaurant that charges no GST sells at its menu prices: nothing is backed out. Otherwise GST is included in
-    // the menu price, at the item's own rate or else the restaurant's default.
+    // Only when GST is included in the menu price is it backed out, at the item's own rate or else the restaurant's default.
+    // With no GST, or GST added on the bill, the menu price is already the pre-tax selling price.
     const { gstMode, gstRate: defaultRate } = readGstSettings(db);
     const taxInclusive = gstMode === "included";
     const products = db.prepare(`SELECT p.id, p.name, p.price_paise, p.gst_rate, p.ac_price_paise, p.takeaway_price_paise, p.zomato_price_paise, c.name AS category_name

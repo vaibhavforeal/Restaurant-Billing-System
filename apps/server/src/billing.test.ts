@@ -199,6 +199,22 @@ describe("billing and day-end", () => {
       expect(lines.reduce((sum, l) => sum + l.total, 0), gstMode).toBe(bill.totalPaise);
     }
   });
+  it("issues a tax invoice with GST added on top and keeps it when the setting switches back", async () => {
+    expect((await putSettings({ gstMode: "exclusive" })).statusCode).toBe(200);
+    const bill = await issue(await order());
+    // ₹105 before GST at 5%: CGST = SGST = round-half-up(262.5) = 263; 110.26 rounds to 110.
+    expect(bill).toMatchObject({ subtotalPaise: 10500, cgstPaise: 263, sgstPaise: 263, roundingPaise: -26, totalPaise: 11000 });
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 10500, cgstPaise: 263, sgstPaise: 263 }]);
+    expect(bill.receipt).toMatchObject({ gstMode: "exclusive", sacCode: "996331" });
+    expect((await putSettings({ gstMode: "included" })).statusCode).toBe(200);
+    expect((await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill).toEqual(bill);
+    const receipt = (await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) })).body;
+    expect(receipt).toContain("<h2>Tax invoice</h2>"); expect(receipt).toContain("CGST 2.5% on 105.00"); expect(receipt).not.toContain("Includes GST");
+    const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+    expect(day.sales).toMatchObject({ billCount: 1, totalPaise: 11000 });
+    expect(day.taxes).toEqual([{ gstRate: 5, taxablePaise: 10500, cgstPaise: 263, sgstPaise: 263 }]);
+    expect(day.noGstSalesPaise).toBe(0);
+  });
   it("refuses to issue a bill from a preview taken before the GST mode changed", async () => {
     const id = await order(); const body = await billRequest(id);
     expect((await putSettings({ gstMode: "none" })).statusCode).toBe(200);

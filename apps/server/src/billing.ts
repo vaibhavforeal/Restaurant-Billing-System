@@ -107,7 +107,7 @@ function gstInvoiceDetails(db: Database, ownGstin: string, mode: GstMode, stateC
   if (buyer && buyer.gstin === ownGstin.trim().toUpperCase()) throw httpError(400, "That is your own GSTIN; enter the buyer's GSTIN");
   const { sac_code: sacCode } = db.prepare("SELECT sac_code FROM settings WHERE id = 1").get() as { sac_code: string };
   return {
-    ...(registered && mode === "included" ? { sacCode } : {}),
+    ...(registered && mode !== "none" ? { sacCode } : {}),
     ...(buyer ? { buyer: { gstin: buyer.gstin, name: buyer.name, address: buyer.address, stateCode, stateName: GST_STATES[stateCode] ?? "" } } : {}),
   };
 }

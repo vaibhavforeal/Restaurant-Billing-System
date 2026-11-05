@@ -106,6 +106,17 @@ describe("GST returns", () => {
     expect(res.json()).toMatchObject({ gstin: OWN, fp: "012026", b2b: [{ ctin: ACME.gstin }] });
   });
 
+  it("reports a bill with GST added on top as a regular taxable supply", async () => {
+    app.db.prepare("UPDATE settings SET gst_mode = 'exclusive' WHERE id = 1").run();
+    await bill(2, JAN);
+    const r = await report("2026-01");
+    expect(r.regime).toBe("regular");
+    // 2 x ₹105 before GST: CGST = SGST = round-half-up(525.0) = 525.
+    expect(table(r, "Table 7").rows).toEqual([{ pos: "29-Karnataka", type: "OE", rate: "5%", taxable: 21000, cgst: 525, sgst: 525 }]);
+    expect(table(r, "Table 3.1").rows[0]).toMatchObject({ taxable: 21000, cgst: 525, sgst: 525 });
+    expect(r.tables.some((t) => t.title.includes("CMP-08"))).toBe(false);
+  });
+
   it("shows CMP-08 to a composition restaurant and refuses it the GSTR-1 file", async () => {
     app.db.prepare("UPDATE settings SET gst_mode = 'none' WHERE id = 1").run();
     await bill(2, JAN);

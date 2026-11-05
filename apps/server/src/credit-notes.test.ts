@@ -465,6 +465,24 @@ describe("credit preview, approval and bill credit data", () => {
       expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(after.totalPaise);
     });
 
+    it("credits an exclusive bill's line total including the GST added on top", async () => {
+      const gstin = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", gstMode: "exclusive" } });
+      expect(gstin.statusCode, gstin.body).toBe(200);
+      // 2 x ₹35 before GST: CGST = SGST = ₹1.75, ₹73.50 rounds to ₹74.
+      const b = await bill(2);
+      expect(b).toMatchObject({ subtotalPaise: 7000, cgstPaise: 175, sgstPaise: 175, totalPaise: 7400 });
+      const orderItemId = orderItemOf(b.id);
+      // Half of each stored part, rounded half up (taxable 3500, CGST 88, SGST 88, round-off 25), as for any bill.
+      const first = await refundBill(b.id, { lines: [{ orderItemId, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3701 }] });
+      expect(first.statusCode, first.body).toBe(201);
+      expect(first.json().creditNote).toMatchObject({ totalPaise: 3701, taxablePaise: 3500, cgstPaise: 88, sgstPaise: 88 });
+      const rest = await app.inject({ method: "POST", url: `/api/bills/${b.id}/void`, headers: auth(admin.token), payload: { clientRef: uuidv7(), reason: "Cold food", refunds: [{ mode: "cash", amountPaise: 3699 }] } });
+      expect(rest.statusCode, rest.body).toBe(201);
+      const after = rest.json().bill as Bill;
+      expect(after.refundState).toBe("refunded");
+      expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(after.totalPaise);
+    });
+
     it("refuses an over-refund: a quantity that no longer fits is a stale bill, an unknown item a bad request", async () => {
       const b = await bill();
       const orderItemId = orderItemOf(b.id);

@@ -272,7 +272,7 @@ describe("Zomato status and Picked up", () => {
     expect(count("SELECT COUNT(*) n FROM bills")).toBe(0);
   });
 
-  for (const gstMode of ["included", "none"]) {
+  for (const gstMode of ["included", "exclusive", "none"]) {
     it(`Picked up issues and settles one GST-free bill at the item value (restaurant GST mode ${gstMode})`, async () => {
       const admin = await setup();
       app.db.prepare("UPDATE settings SET gst_mode = ? WHERE id = 1").run(gstMode);

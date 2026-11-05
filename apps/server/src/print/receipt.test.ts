@@ -125,6 +125,42 @@ describe("receipts", () => {
     expect(html).toContain("&lt;b&gt;Member discount&lt;/b&gt;"); expect(html).not.toContain("<img");
     expect(html).toContain("size:A4 portrait"); expect(html).toContain("display:table-header-group");
   });
+  it.each(RECEIPT_STYLES)("prints a %s tax invoice with GST added on top, before round-off and the total", (receiptStyle) => {
+    const items = [{ name: "Thali", pricePaise: 10000, qty: 1, gstRate: 5 }, { name: "Mocktail", pricePaise: 20000, qty: 1, gstRate: 18 }];
+    const totals = calculateBill(items, 3000, "exclusive");
+    expect(totals).toMatchObject({ cgstPaise: 1845, sgstPaise: 1845, roundingPaise: 10, totalPaise: 30700 });
+    const added = paid({ ...bill, ...totals, receipt: { ...bill.receipt, receiptStyle, gstMode: "exclusive", items, billShow: { fssai: true, customer: true, table: true, servedBy: false, itemGst: true } } });
+    const html = receiptHtml(added);
+    expect(html).toContain("<h2>Tax invoice</h2>");
+    expect(html).not.toContain("Includes GST");
+    expect(html).toContain("<th scope=\"col\">GST</th>"); expect(html).toContain("<td>18%</td>");
+    for (const label of ["CGST 2.5% on 90.00", "SGST 2.5% on 90.00", "CGST 9% on 180.00", "SGST 9% on 180.00"]) {
+      expect(html.indexOf(label), label).toBeGreaterThan(html.indexOf("Discount</td>"));
+      expect(html.indexOf(label), label).toBeLessThan(html.indexOf("Round off</td>"));
+    }
+    expect(html).toContain("₹2.25"); expect(html).toContain("₹16.20"); expect(html).toContain("₹307.00");
+    expect(html.indexOf("Round off</td>")).toBeLessThan(html.indexOf("TOTAL</td>"));
+    for (const width of [58, 80] as const) {
+      const slip = thermal(added, width);
+      expect(slip).toContain("TAX INVOICE");
+      expect(slip).not.toContain("Includes GST");
+      expect(slip).toContain("GST 18%");
+      for (const label of ["CGST 2.5% on 90.00", "SGST 2.5% on 90.00", "CGST 9% on 180.00", "SGST 9% on 180.00"]) {
+        expect(slip.indexOf(label), label).toBeGreaterThan(slip.indexOf("Discount"));
+        expect(slip.indexOf(label), label).toBeLessThan(slip.indexOf("Round off"));
+      }
+      expect(slip).toContain("16.20");
+      expect(slip.indexOf("Round off")).toBeLessThan(slip.indexOf("TOTAL Rs."));
+      expect(fits(slip, width)).toBe(true);
+    }
+  });
+  it("reprints an included bill with its Includes GST block after the setting changes to GST added on top", () => {
+    // The receipt renders from the bill's snapshot, so only gstMode on the snapshot matters.
+    const included = paid(bill);
+    expect(receiptHtml(included)).toContain("Includes GST");
+    expect(thermal(included, 80)).toContain("Includes GST:");
+    expect(thermal(included, 80)).not.toMatch(/CGST \S+ on /);
+  });
   it.each(RECEIPT_STYLES)("prints a %s bill of supply with the declaration and no GST lines for a no-GST restaurant with a GSTIN", (receiptStyle) => {
     const totals = calculateBill([{ pricePaise: 10050, qty: 2, gstRate: 5 }], 0, "none");
     const supply = paid({ ...bill, ...totals, receipt: { ...bill.receipt, receiptStyle, gstMode: "none" } });
