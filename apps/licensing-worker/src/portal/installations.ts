@@ -1,7 +1,7 @@
 import { MODULES, isModuleId, resolveModules, MODULE_IDS, type ModuleId, type ModuleOverrides } from "@masalapos/domain/modules";
 import { parseActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
-import { aiDay, getAiSettings, setAiSettingsStatement, usageHistory } from "../ai/store.js";
+import { aiDay, clearAiStatement, getAiSettings, setAiSettingsStatement, usageHistory } from "../ai/store.js";
 import { GRACE_MS } from "../dates.js";
 import { assignSeat, orderFull } from "../enroll.js";
 import { issueLicense, reissueLicense } from "../issue.js";
@@ -191,6 +191,8 @@ export const installationsRoutes: Route[] = [
       db.prepare(`UPDATE orders SET seats_used = seats_used - 1, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM installations WHERE installation_id = ? AND order_id = ?)`)
         .bind(now, installation.orderId, installation.installationId, installation.orderId),
       db.prepare(`UPDATE installations SET order_id = NULL WHERE installation_id = ? AND order_id = ?`).bind(installation.installationId, installation.orderId),
+      // The AI assistant goes with the seat; cleared so it doesn't come back on if this counter takes the same seat again.
+      clearAiStatement(db, installation.installationId, now, ctx.user.id),
       logBy(ctx, { action: "installation.released", entityType: "installation", entityId: installation.installationId, customerId: installation.customerId,
         summary: `Released ${label(installation)}'s seat on order ${order?.code ?? ""}${latest ? `; its current licence still works offline until ${new Date(latest.graceUntil).toISOString().slice(0, 10)}` : ""}` }),
     ]);
@@ -233,10 +235,11 @@ export const installationsRoutes: Route[] = [
         .bind(next.customerId, next.orderId, next.maxDevices, now, next.outletName, next.installationId),
       setOverridesStatement(db, next.installationId, overrides, now),
       // The AI assistant follows the seat: the new computer gets the old one's switch and limit, or the default (off) when it had none.
-      // The old computer no longer holds the seat, so its switch no longer counts.
+      // The old computer's switch is cleared, so it can't come back on should it ever take a seat on this order again.
       db.prepare(`DELETE FROM ai_settings WHERE installation_id = ?`).bind(next.installationId),
       db.prepare(`INSERT INTO ai_settings (installation_id, order_id, enabled, daily_limit, updated_at, updated_by)
           SELECT ?, order_id, enabled, daily_limit, ?, ? FROM ai_settings WHERE installation_id = ?`).bind(next.installationId, now, ctx.user.id, old.installationId),
+      clearAiStatement(db, old.installationId, now, ctx.user.id),
       statement,
       db.prepare(`UPDATE OR IGNORE order_installations SET installation_id = ? WHERE installation_id = ? AND order_id IN (SELECT id FROM orders WHERE status IN ('draft', 'confirmed'))`)
         .bind(next.installationId, old.installationId),

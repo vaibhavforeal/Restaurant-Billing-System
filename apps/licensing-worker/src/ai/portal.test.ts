@@ -63,6 +63,18 @@ describe("the AI assistant in the portal", () => {
     await admin.ok("POST", `/installations/${COUNTER}/replace`, { installationId: NEW });
     expect((await admin.ok<{ installation: InstallationDetail }>("GET", `/installations/${NEW}`)).installation.ai).toMatchObject({ enabled: true, dailyLimit: 25 });
     expect((await detail()).ai.enabled).toBe(false);
+    // Cleared, not just out of date: should the old computer ever take a seat on this order again, it starts off.
+    expect(await env.DB.prepare(`SELECT enabled, order_id AS orderId FROM ai_settings WHERE installation_id = ?`).bind(COUNTER).first()).toEqual({ enabled: 0, orderId: null });
+  });
+
+  it("a counter that gets the same seat back after a release starts off", async () => {
+    const { installation } = await admin.ok<{ installation: InstallationDetail }>("GET", `/installations/${COUNTER}`);
+    await admin.ok("PATCH", `/installations/${COUNTER}/ai`, { enabled: true, dailyLimit: 25, expectedUpdatedAt: installation.ai.updatedAt });
+    const seat = (await env.DB.prepare(`SELECT c.code AS customerCode, o.code AS orderCode FROM installations i JOIN customers c ON c.id = i.customer_id JOIN orders o ON o.id = i.order_id
+      WHERE i.installation_id = ?`).bind(COUNTER).first<{ customerCode: string; orderCode: string }>())!;
+    await admin.ok("POST", `/installations/${COUNTER}/release`);
+    expect((await send(env, "POST", "/v1/enroll", { activation: activation(COUNTER, fingerprint), customerId: seat.customerCode, orderId: seat.orderCode }, withSecret())).status).toBe(200);
+    expect((await detail()).ai.enabled).toBe(false);
   });
 
   it("releasing a seat switches the AI assistant off, and a counter that gets a seat again starts off", async () => {

@@ -56,3 +56,7 @@ export async function usageHistory(db: D1Like, installationId: string, today: st
     WHERE installation_id = ? AND day >= ? AND day <= ?`).bind(installationId, list.at(-1), today).all<AiUsageDay>();
   return list.map((day) => results.find((r) => r.day === day) ?? { day, requests: 0, inputTokens: 0, outputTokens: 0 });
 }
+
+/** Turns the switch off and detaches it from any seat: a counter giving up its seat starts off whenever it takes one again. */
+export const clearAiStatement = (db: D1Like, installationId: string, at: number, by: string): D1StatementLike =>
+  db.prepare(`UPDATE ai_settings SET enabled = 0, order_id = NULL, updated_at = ?, updated_by = ? WHERE installation_id = ?`).bind(at, by, installationId);
