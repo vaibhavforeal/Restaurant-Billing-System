@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateBill, BillCreate, BillSettle } from "./billing.js";
+import type { RoundOff } from "./round-off.js";
 
 describe("GST billing", () => {
   it("included: one rate", () => {
@@ -74,5 +75,20 @@ describe("GST billing", () => {
   });
   it("still settles only cash, UPI or card", () => {
     expect(BillSettle.safeParse({ clientRef: "test-ref-1", payments: [{ mode: "zomato", amountPaise: 100 }] }).success).toBe(false);
+  });
+});
+
+describe("round-off", () => {
+  it.each([
+    [12325, "rupee", 12300, -25], [12350, "rupee", 12400, 50], [12375, "rupee", 12400, 25],
+    [12325, "half", 12350, 25], [12350, "half", 12350, 0], [12375, "half", 12400, 25], [12310, "half", 12300, -10],
+    [12345, "off", 12345, 0],
+  ])("%i paise with %s rounds to %i (rounding %i)", (price, mode, total, rounding) => {
+    const t = calculateBill([{ pricePaise: price, qty: 1, gstRate: 5 }], 0, "none", mode as RoundOff);
+    expect(t.totalPaise).toBe(total);
+    expect(t.roundingPaise).toBe(rounding);
+  });
+  it("defaults to nearest rupee", () => {
+    expect(calculateBill([{ pricePaise: 12350, qty: 1, gstRate: 5 }]).totalPaise).toBe(12400);
   });
 });

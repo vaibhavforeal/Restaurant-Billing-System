@@ -3,6 +3,7 @@ import type { GstMode } from "./gst.js";
 import type { ReceiptStyle } from "./receipt-styles.js";
 import type { BillShow } from "./bill-print.js";
 import { ValidGstin } from "./gstin-schema.js";
+import { roundTotal, type RoundOff } from "./round-off.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
 const Ref = z.string().min(8).max(64);
@@ -127,7 +128,7 @@ export interface Bill extends BillTotals {
 }
 
 /** All financial arithmetic uses integer paise / BigInt. */
-export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included"): BillTotals {
+export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee"): BillTotals {
   if (!items.length) throw new Error("Bill must contain at least one item");
   const groups = new Map<number, number>();
   let subtotalPaise = 0;
@@ -162,6 +163,6 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
   const unrounded = subtotalPaise - discountPaise;
-  const totalPaise = Math.floor((unrounded + 50) / 100) * 100;
+  const totalPaise = roundTotal(unrounded, roundOff);
   return { subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
 }
