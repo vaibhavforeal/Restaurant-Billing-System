@@ -115,7 +115,10 @@ export interface BillCreditNote {
   lines: Array<{ orderItemId: string; name: string; qty: number; totalPaise: number }>;
 }
 export interface Bill extends BillTotals {
-  id: string; billNo: number; orderId: string; status: "unpaid" | "paid" | "void";
+  id: string; billNo: number;
+  /** The financial-year invoice number that is printed (`MP/26-27/0001`); a bill from before invoice numbers shows its bill number. */
+  invoiceNo: string;
+  orderId: string; status: "unpaid" | "paid" | "void";
   discountNote: string | null; createdAt: number; receipt: ReceiptSnapshot;
   payments: Array<{ mode: PaymentMode; amountPaise: number; refNote: string | null; createdAt: number }>;
   /** Derived from credit notes; the stored status is unchanged by a refund. */

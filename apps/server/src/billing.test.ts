@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
@@ -269,5 +269,74 @@ describe("billing and day-end", () => {
     expect(report.payments).toEqual([{ mode: "cash", amountPaise: 10500 }]);
     expect(report.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
     expect((await app.inject({ url: "/api/reports/day-end?date=2026-02-30", headers: auth(token) })).statusCode).toBe(400);
+  });
+
+  describe("invoice numbers and round-off", () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const at = (d: Date) => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(d); };
+    const putSetting = async (fields: object) => expect((await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", ...fields } })).statusCode).toBe(200);
+    /** An open order holding one item at the given price. */
+    async function orderAt(pricePaise: number) {
+      const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: `Cat${pricePaise}` } });
+      const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: `Item${pricePaise}`, categoryId: category.json().category.id, pricePaise, gstRate: 5, kotStationId: null } });
+      const id = (await app.inject({ method: "POST", url: "/api/orders", headers: auth(token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } })).json().order.id as string;
+      await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId: product.json().product.id, qty: 1, clientRef: uuidv7() }] } });
+      return id;
+    }
+    const previewOf = async (orderId: string) => (await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill-preview`, headers: auth(token), payload: { discountPaise: 0 } })).json().preview;
+
+    it("numbers bills per financial year and adds the prefix", async () => {
+      at(new Date(2026, 2, 31, 22, 0));
+      expect((await issue(await order())).invoiceNo).toBe("25-26/0001");
+      expect((await issue(await order())).invoiceNo).toBe("25-26/0002");
+      at(new Date(2026, 3, 1, 0, 5));
+      expect((await issue(await order())).invoiceNo).toBe("26-27/0001");
+      await putSetting({ invoicePrefix: "MP" });
+      expect((await issue(await order())).invoiceNo).toBe("MP/26-27/0002");
+    });
+    it("replays keep the number and a rejected request leaves no gap", async () => {
+      at(new Date(2026, 5, 1, 12, 0));
+      const id = await order(); const body = await billRequest(id);
+      const send = () => app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: body });
+      const first = await send(); const replay = await send();
+      expect(first.statusCode).toBe(201); expect(replay.statusCode).toBe(200);
+      expect(first.json().bill.invoiceNo).toBe("26-27/0001"); expect(replay.json().bill.invoiceNo).toBe("26-27/0001");
+      const other = await order();
+      const stale = await app.inject({ method: "POST", url: `/api/orders/${other}/bill`, headers: auth(token), payload: { clientRef: uuidv7(), discountPaise: 0, previewKey: "stale" } });
+      expect(stale.statusCode).toBe(409);
+      expect((await issue(other)).invoiceNo).toBe("26-27/0002");
+    });
+    it("round-off off bills the exact amount", async () => {
+      await putSetting({ roundOff: "off" });
+      const bill = await issue(await orderAt(12345));
+      expect(bill.totalPaise).toBe(12345); expect(bill.roundingPaise).toBe(0);
+      const settle = await pay(bill);
+      expect(settle.statusCode).toBe(200); expect(settle.json().bill.status).toBe("paid");
+      const receipt = await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) });
+      expect(receipt.body).not.toContain("Round off");
+    });
+    it("round-off half rounds to 50 paise and changes the preview key", async () => {
+      await putSetting({ roundOff: "half" });
+      expect((await issue(await orderAt(12375))).totalPaise).toBe(12400);
+      const id = await orderAt(12325);
+      await putSetting({ roundOff: "rupee" });
+      const rupee = await previewOf(id);
+      await putSetting({ roundOff: "half" });
+      const half = await previewOf(id);
+      expect(rupee.totalPaise).toBe(12300); expect(half.totalPaise).toBe(12350);
+      expect(half.previewKey).not.toBe(rupee.previewKey);
+    });
+    it("a bill from before invoice numbers shows its bill number", async () => {
+      const bill = await issue(await order());
+      app.db.prepare("UPDATE bills SET invoice_no = NULL WHERE id = ?").run(bill.id);
+      const got = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill as Bill;
+      expect(got.invoiceNo).toBe(String(bill.billNo));
+    });
+    it("the UPI QR payload carries the invoice number", async () => {
+      await putSetting({ upiId: "cafe@upi" });
+      const bill = await issue(await order());
+      const qr = (await app.inject({ url: `/api/bills/${bill.id}/upi-qr`, headers: auth(token) })).json();
+      expect(qr.payment.invoiceNo).toBe(bill.invoiceNo);
+    });
   });
 });

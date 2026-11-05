@@ -5,7 +5,7 @@ import { renderBytes } from "./render-bytes.js";
 
 const bill: Bill = {
   ...calculateBill([{ pricePaise: 10500, qty: 2, gstRate: 5 }]),
-  id: "bill-1", billNo: 42, orderId: "order-1", status: "paid", discountNote: null,
+  id: "bill-1", billNo: 42, invoiceNo: "42", orderId: "order-1", status: "paid", discountNote: null,
   createdAt: new Date(2026, 8, 28, 13, 30).getTime(),
   receipt: { restaurantName: "MasalaPOS Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", gstMode: "included",
     orderType: "dine_in", tableName: "T1", splitLabel: "B", items: [{ name: "Meal", pricePaise: 10500, qty: 2, gstRate: 5 }] },

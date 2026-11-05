@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  localDateKey, pointsEarned, GST_STATES, type BillShow, type BuyerDetailsInput, type Bill, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
+  localDateKey, pointsEarned, nextInvoiceNo, GST_STATES, type BillShow, type BuyerDetailsInput, type Bill, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
-import { readGstSettings } from "./gst-settings.js";
+import { readBillingSettings } from "./gst-settings.js";
 import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
@@ -23,7 +23,7 @@ import { crmEnabled } from "./integrations.js";
 import { pointsBalance } from "./mappers.js";
 
 interface BillRow {
-  id: string; bill_no: number; order_id: string; status: Bill["status"];
+  id: string; bill_no: number; invoice_no: string | null; order_id: string; status: Bill["status"];
   subtotal_paise: number; discount_paise: number; discount_note: string | null;
   cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number;
   created_at: number; client_ref: string | null; request_json: string | null; receipt_json: string | null;
@@ -40,7 +40,7 @@ export function loadBill(db: Database, id: string): Bill {
   const taxes = db.prepare("SELECT gst_rate AS gstRate, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM bill_taxes WHERE bill_id = ? ORDER BY gst_rate").all(id) as TaxLine[];
   const payments = db.prepare("SELECT mode, amount_paise AS amountPaise, ref_note AS refNote, created_at AS createdAt FROM payments WHERE bill_id = ? ORDER BY id").all(id) as Bill["payments"];
   const receipt = JSON.parse(r.receipt_json) as ReceiptSnapshot;
-  return { id, billNo: r.bill_no, orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
+  return { id, billNo: r.bill_no, invoiceNo: r.invoice_no ?? String(r.bill_no), orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
     discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
     roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
     receipt, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise), ...feedbackOf(db, id) };
@@ -68,11 +68,12 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   if (unsent) throw httpError(409, "Send kitchen items before billing");
   let totals;
   // The restaurant's setting, unless the caller overrides it (Zomato bills charge no GST).
-  const mode = gstMode ?? readGstSettings(db).gstMode;
+  const settings = readBillingSettings(db);
+  const mode = gstMode ?? settings.gstMode;
   // With CRM & Loyalty off in the Marketplace a customer left on the order gives no discount, points or receipt line.
   const customer = crmEnabled(db) ? order.customer : null;
   const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0), discount);
-  try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode); }
+  try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message.replace("Discount exceeds subtotal", "The discounts are more than the bill") : "Invalid bill"); }
   // The limit is on what staff choose to give; slab discounts are set by an admin and points were earned.
   const limit = effectiveDiscountCap(db, actor);
@@ -163,16 +164,17 @@ export function issueBill(db: Database, orderId: string, opts: {
 }): { billId: string; changedStockIds: string[] } {
   const { totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0 }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null);
   const id = uuidv7();
-  const billNo = nextSequence(db, "bill_no");
   const now = Date.now();
+  const billNo = nextSequence(db, "bill_no");
+  const invoiceNo = nextInvoiceNo(db, readBillingSettings(db).invoicePrefix, now);
   const settings = loyaltySettings(db);
   // A random, unguessable link for the receipt's feedback QR; Zomato's customers are not ours to ask.
   const isZomato = (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string }).type === "zomato";
   const feedbackToken = settings.feedbackEnabled && !isZomato && crmEnabled(db) ? randomBytes(24).toString("base64url") : null;
-  db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
+  db.prepare(`INSERT INTO bills (id, bill_no, invoice_no, order_id, subtotal_paise, discount_paise, discount_note,
     cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json, discount_approved_by,
     customer_id, customer_discount_paise, points_redeemed, points_value_paise, feedback_token, buyer_gstin, buyer_name, buyer_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, orderId, totals.subtotalPaise,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, invoiceNo, orderId, totals.subtotalPaise,
       totals.discountPaise, discountNote(opts.discountNote, loyalty), totals.cgstPaise, totals.sgstPaise, totals.roundingPaise,
       totals.totalPaise, now, opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt), opts.discountPaise > 0 ? opts.approvedBy ?? null : null,
       loyalty.customerId, loyalty.customerDiscountPaise, loyalty.pointsRedeemed, loyalty.pointsValuePaise, feedbackToken,
@@ -342,7 +344,7 @@ export function registerBilling(app: FastifyInstance): void {
     const bill = getBill((req.params as { id: string }).id);
     const payment = billUpiPayment(bill);
     return { payment: payment ? {
-      billId: bill.id, billNo: bill.billNo, restaurantName: bill.receipt.restaurantName,
+      billId: bill.id, billNo: bill.billNo, invoiceNo: bill.invoiceNo, restaurantName: bill.receipt.restaurantName,
       upiId: payment.upiId, amountPaise: payment.amountPaise,
       qrDataUrl: `data:image/svg+xml;base64,${Buffer.from(upiQrSvg(payment.uri)).toString("base64")}`,
     } : null };

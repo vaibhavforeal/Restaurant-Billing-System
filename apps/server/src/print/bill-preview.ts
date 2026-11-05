@@ -1,4 +1,4 @@
-import { DEFAULT_BILL_SHOW, calculateBill, formatRestaurantAddress, type Bill, type BillShow, type SettingsUpdateInput } from "@masalapos/domain";
+import { DEFAULT_BILL_SHOW, calculateBill, financialYear, formatInvoiceNo, formatRestaurantAddress, type Bill, type BillShow, type SettingsUpdateInput } from "@masalapos/domain";
 
 type PreviewSettings = SettingsUpdateInput & { stateCode: string; city: string; pincode: string; phone: string };
 
@@ -15,10 +15,11 @@ export function sampleBill(s: PreviewSettings): Bill {
     table: s.billShowTable ?? DEFAULT_BILL_SHOW.table, servedBy: s.billShowServedBy ?? DEFAULT_BILL_SHOW.servedBy,
     itemGst: s.billShowItemGst ?? DEFAULT_BILL_SHOW.itemGst,
   };
+  const createdAt = new Date(2026, 3, 1, 13, 30).getTime();
   return {
-    ...calculateBill(ITEMS, 0, gstMode),
-    id: "preview", billNo: 1, orderId: "preview", status: "unpaid", discountNote: null,
-    createdAt: new Date(2026, 3, 1, 13, 30).getTime(),
+    ...calculateBill(ITEMS, 0, gstMode, s.roundOff ?? "rupee"),
+    id: "preview", billNo: 1, invoiceNo: formatInvoiceNo(s.invoicePrefix ?? "", financialYear(createdAt).short, 1), orderId: "preview", status: "unpaid", discountNote: null,
+    createdAt,
     receipt: {
       gstMode, restaurantName: s.restaurantName, address: formatRestaurantAddress({ address: s.address, city: s.city, stateCode: s.stateCode, pincode: s.pincode }),
       phone: s.phone, gstin: s.gstin, fssai: s.fssai, receiptHeader: s.receiptHeader, receiptFooter: s.receiptFooter, billShow,
