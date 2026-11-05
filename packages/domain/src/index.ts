@@ -23,7 +23,7 @@ export { BuyerDetails, type BuyerDetailsInput, type ReceiptBuyer, BillPreview, B
 export * from "./bill-print.js";
 export { gstinCheckChar, gstinProblem, isValidGstin } from "./gstin.js";
 export { ValidGstin, OptionalGstin } from "./gstin-schema.js";
-export { GST_MODES, DEFAULT_GST_RATES, effectiveGstRate, type GstMode, type DefaultGstRate } from "./gst.js";
+export { GST_MODES, DEFAULT_GST_RATES, billChargesGst, effectiveGstRate, type GstMode, type DefaultGstRate } from "./gst.js";
 export { openDb, type Database } from "./db.js";
 export { migrate, type Migration } from "./migrate.js";
 export { MIGRATIONS } from "./migrations/index.js";

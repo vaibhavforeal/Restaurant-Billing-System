@@ -4,9 +4,10 @@ import { ProductCreate, ProductUpdate, SettingsUpdate } from "./index.js";
 describe("GST settings and catalog schemas", () => {
   const base = { restaurantName: "Cafe" };
 
-  it("accepts the two modes and the three default rates only", () => {
+  it("accepts the three modes and the three default rates only", () => {
     expect(SettingsUpdate.parse({ ...base, gstMode: "none", gstRate: 12 })).toMatchObject({ gstMode: "none", gstRate: 12 });
-    expect(SettingsUpdate.safeParse({ ...base, gstMode: "exclusive" }).success).toBe(false);
+    expect(SettingsUpdate.parse({ ...base, gstMode: "exclusive" }).gstMode).toBe("exclusive");
+    expect(SettingsUpdate.safeParse({ ...base, gstMode: "inclusive" }).success).toBe(false);
     expect(SettingsUpdate.safeParse({ ...base, gstRate: 28 }).success).toBe(false);
     expect(SettingsUpdate.safeParse({ ...base, gstRate: 0 }).success).toBe(false);
   });

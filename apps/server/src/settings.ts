@@ -91,7 +91,10 @@ export function registerSettings(app: FastifyInstance): void {
   app.put("/api/settings", { preHandler: manage }, async (req, reply) => {
     const body = SettingsUpdate.parse(req.body);
     // A GSTIN saved without the state is checked against the state already on file.
-    const stateCode = body.stateCode ?? readSettings(app.db).stateCode;
+    const saved = readSettings(app.db);
+    const stateCode = body.stateCode ?? saved.stateCode;
+    // GST added on top needs a registration; the GSTIN is always replaced by the request, the mode only when sent.
+    if ((body.gstMode ?? saved.gstMode) === "exclusive" && !body.gstin.trim()) return reply.status(400).send({ error: "Add your GSTIN before adding GST to bills" });
     if (stateCode && !gstinMatchesState(body.gstin, stateCode)) return reply.status(400).send({ error: GSTIN_STATE_MESSAGE });
     if (stateCode && body.zomatoGstin && !gstinMatchesState(body.zomatoGstin, stateCode)) return reply.status(400).send({ error: "Use Zomato's GSTIN for your state" });
     app.db

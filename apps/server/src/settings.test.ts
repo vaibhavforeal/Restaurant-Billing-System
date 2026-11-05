@@ -193,10 +193,32 @@ describe("settings", () => {
     expect((await save({ address: "New address" })).json().settings).toMatchObject({ gstMode: "none", gstRate: 18 });
     expect((await save({ gstMode: "included" })).json().settings).toMatchObject({ gstMode: "included", gstRate: 18 });
     expect((await save({ gstRate: 12 })).json().settings).toMatchObject({ gstMode: "included", gstRate: 12 });
-    for (const fields of [{ gstRate: 28 }, { gstRate: 0 }, { gstMode: "exclusive" }, { gstMode: null }, { gstRate: null }]) {
+    for (const fields of [{ gstRate: 28 }, { gstRate: 0 }, { gstMode: null }, { gstRate: null }]) {
       expect((await save(fields)).statusCode, JSON.stringify(fields)).toBe(400);
     }
     expect((await save({ address: "Again" })).json().settings).toMatchObject({ gstMode: "included", gstRate: 12 });
+  });
+  it("saves exclusive mode when a GSTIN is set", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const res = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", gstMode: "exclusive" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().settings.gstMode).toBe("exclusive");
+    expect((await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) })).json().settings.gstMode).toBe("exclusive");
+  });
+  it("rejects exclusive mode without a GSTIN", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const save = (fields: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", ...fields } });
+    const bare = await save({ gstMode: "exclusive" });
+    expect(bare.statusCode).toBe(400);
+    expect(bare.json().error).toBe("Add your GSTIN before adding GST to bills");
+    expect((await save({ gstin: "29ABCDE1234F1Z5", gstMode: "exclusive" })).statusCode).toBe(200);
+    // Blanking the GSTIN while the saved mode is exclusive is rejected too.
+    const blanked = await save({ gstin: "" });
+    expect(blanked.statusCode).toBe(400);
+    expect(blanked.json().error).toBe("Add your GSTIN before adding GST to bills");
+    expect((await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) })).json().settings).toMatchObject({ gstMode: "exclusive", gstin: "29ABCDE1234F1Z5" });
   });
   it("no longer exposes taxInclusive or gstScheme", async () => {
     app = freshApp();
