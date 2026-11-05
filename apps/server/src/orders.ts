@@ -18,6 +18,8 @@ import { userCan } from "./auth.js";
 import { holdOrdersEnabled } from "./order-settings.js";
 
 const HOLD_OFF = "Hold orders is turned off in Settings";
+/** How far back GET /api/orders?closedSince= may reach for settled orders. */
+const SETTLED_WINDOW_MS = 36 * 60 * 60 * 1000;
 
 export function registerOrders(app: FastifyInstance): void {
   const create = app.requirePermission("orders.create");
@@ -122,8 +124,10 @@ export function registerOrders(app: FastifyInstance): void {
   });
 
   // Running orders; with closedSince, also non-table orders settled since then (the order board's Processed column).
+  // The window is capped at the last 36 hours (enough for "today" anywhere), so orders.read cannot page through history.
   app.get("/api/orders", { preHandler: read }, async (req) => {
-    const { closedSince } = z.object({ closedSince: z.coerce.number().int().nonnegative().optional() }).parse(req.query);
+    const query = z.object({ closedSince: z.coerce.number().int().nonnegative().optional() }).parse(req.query);
+    const closedSince = query.closedSince === undefined ? undefined : Math.max(query.closedSince, Date.now() - SETTLED_WINDOW_MS);
     const rows = (closedSince === undefined
       ? app.db.prepare("SELECT * FROM orders WHERE status IN ('open', 'billed') ORDER BY opened_at").all()
       : app.db.prepare(
