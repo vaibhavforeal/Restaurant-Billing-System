@@ -1,4 +1,5 @@
 import { ActivityAlertSettings } from "./ActivityAlertSettings";
+import { AiAssistantSettings } from "./AiAssistantSettings";
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -367,6 +368,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
           </div>
         </div>
         <ActivityAlertSettings />
+        <AiAssistantSettings />
       </div>}
 
       {/* Printers section */}

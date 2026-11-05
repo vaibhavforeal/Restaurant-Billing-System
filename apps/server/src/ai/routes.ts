@@ -67,6 +67,8 @@ export function registerAi(app: FastifyInstance, opts: AiOptions | undefined): v
       if (!store) throw new AiError("off");
       if (body.key !== undefined) store.setKey(store.settings().provider, body.key);
       store.saveSettings({ ...(body.enabled !== undefined ? { enabled: body.enabled } : {}), ...(body.model !== undefined ? { model: body.model } : {}), ...(body.fallback !== undefined ? { fallback: body.fallback } : {}) });
+      // Open screens show or hide the AI buttons from /api/ai/status.
+      app.broadcast("settings.changed", {});
       return settingsView();
     });
   });
