@@ -15,7 +15,7 @@ What the screen shows depends on **Settings > Restaurant profile** (GSTIN) and *
 
 | Restaurant | Shown | Download |
 | --- | --- | --- |
-| GSTIN saved, **Prices include GST** | GSTR-3B Table 3.1 and the GSTR-1 tables | CSV and **GSTR-1 JSON** |
+| GSTIN saved, **Prices include GST** or **Prices exclude GST, added on the bill** | GSTR-3B Table 3.1 and the GSTR-1 tables | CSV and **GSTR-1 JSON** |
 | GSTIN saved, **No GST charged** (composition) | CMP-08: turnover, credit notes and 2.5% CGST + 2.5% SGST, by month | CSV |
 | No GSTIN | A note that no GST returns apply | None |
 

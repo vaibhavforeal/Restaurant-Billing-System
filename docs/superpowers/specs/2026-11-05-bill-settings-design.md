@@ -1,6 +1,6 @@
 # Bill settings — design
 
-Date: 2026-11-05 · Branch: `feat/bill-settings` · Status: approved in brainstorm; Phase 1 and Phase 2 built
+Date: 2026-11-05 · Branch: `feat/bill-settings` · Status: approved in brainstorm; Phases 1–3 built
 
 ## Why
 

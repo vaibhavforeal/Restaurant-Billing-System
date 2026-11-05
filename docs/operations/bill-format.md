@@ -52,13 +52,41 @@ Choose **Settings > Bill settings > GST**, then **Save**:
 
 - **Prices include GST** - menu prices already contain the tax. Pick the
   **Default GST rate** (5%, 12% or 18%); items without a rate of their own use it.
+- **Prices exclude GST, added on the bill** - menu prices are before tax. CGST
+  and SGST are worked out on each rate's item value after any discount and added
+  to the bill, so the customer pays the menu price plus GST. Pick the **Default
+  GST rate** as above. This needs the restaurant's **GSTIN**; the setting cannot
+  be saved without it.
 - **No GST charged** - bills show no tax at all (for example a composition
   restaurant, or one that is not registered for GST).
 
 The setting applies to new bills only. Each bill keeps the mode it was issued
 under, including on reprints and credit notes, so changing the setting never
-alters an old bill. Menu prices are never increased by GST: the tax shown is the
-part of the price that is GST.
+alters an old bill.
+
+How the tax appears on the bill:
+
+- **Prices include GST**: the total is the menu prices less any discount. An
+  **Includes GST** block after the total shows the taxable value, CGST and SGST
+  for each rate: the part of the price that is GST.
+- **GST added on the bill**: lines such as `CGST 2.5% on 90.00` and
+  `SGST 2.5% on 90.00` (the rate, and the taxable value it is charged on) are
+  added after the discount and before **Round off** and the **TOTAL**.
+
+Example, a ₹100 thali at 5% with a ₹10 discount and rounding to the nearest ₹1:
+
+| | Prices include GST | GST added on the bill |
+| --- | --- | --- |
+| Subtotal | ₹100.00 | ₹100.00 |
+| Discount | -₹10.00 | -₹10.00 |
+| CGST 2.5% | (inside the price) ₹2.14 | ₹2.25 |
+| SGST 2.5% | (inside the price) ₹2.14 | ₹2.25 |
+| Total | ₹90.00 | ₹94.50 → ₹95.00 (round off +₹0.50) |
+
+Zomato orders never charge GST on the bill, whichever mode is chosen: Zomato
+pays it under section 9(5). Dish costing compares recipe cost with the price
+before GST: under **Prices include GST** the GST is taken out of the menu price;
+under the other two modes the menu price is used as it is.
 
 An item can override the default in **Catalog > Edit > GST rate**. Leave it on
 **Restaurant default** to follow the setting (changing the default later changes
@@ -87,7 +115,7 @@ bills only**. Reprints and older bills keep the layout they were issued with;
 bills issued before these options existed print exactly as they did.
 
 The item GST rate column or line appears only on bills that charge GST
-themselves: Prices include GST, and not a Zomato-paid order. No-GST bills, bills
+themselves: Prices include GST or GST added on the bill, and not a Zomato-paid order. No-GST bills, bills
 of supply and Zomato bills never show it, even when the option is on.
 
 ## Numbering and rounding

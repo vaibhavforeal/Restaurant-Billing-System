@@ -84,11 +84,23 @@
   await click('View receipt');
   await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Includes GST') && html.includes('Tax invoice'); }, 'old receipt');
   check((await api(`/bills/${included.id}`)).bill.receipt.gstMode === 'included', 'Old GST bill keeps its mode and receipt after the switch');
+  // GST added on the bill needs a GSTIN, so this round sets one through the API and puts the saved settings back after.
+  const savedSettings = (await api('/settings')).settings;
+  await api('/settings', 'PUT', { ...savedSettings, ...(savedSettings.gstin ? {} : { gstin: '29ABCDE1234F1Z5', stateCode: '29' }), gstMode: 'exclusive' });
+  const added = await checkout();
+  // ₹105 before GST at 5%: CGST = SGST = ₹2.63, ₹110.26 rounds to ₹110.
+  check(added.totalPaise === 11000 && added.cgstPaise === 263 && added.sgstPaise === 263 && added.receipt.gstMode === 'exclusive', 'GST added on the bill totals correct');
+  await payMode(1, 'Cash'); await click('Settle bill');
+  await waitFor(() => document.body.innerText.includes('Paid:'), 'exclusive settlement');
+  await click('View receipt');
+  await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Tax invoice') && html.includes('CGST 2.5% on 105.00'); }, 'GST added receipt');
+  check(!document.querySelector('iframe').contentDocument.body.innerText.includes('Includes GST'), 'GST added receipt has no Includes GST block');
+  await api('/settings', 'PUT', savedSettings);
   await nav('tables'); await nav('Reports & Analytics'); await click('Day-end / GST');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');
   check(document.body.innerText.includes('105.00') || document.body.innerText.includes('110.00'), 'Day-end payment breakdown rendered');
   const report = (await api('/reports/day-end')).report;
   check(report.sales.billCount >= 2 && report.payments.length === 3, 'Report matches saved cash, UPI and card collections');
-  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo };
+  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo, addedGstBill: added.billNo };
   return window.__m4Report;
 })()
