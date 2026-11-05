@@ -57,7 +57,7 @@ export function operationalReport(db: Database, kind: OperationalReportKind, ran
           rows: inCombos, totals: { name: "Total", ...sum(inCombos, ["qty"]) } });
       }
       // Zomato collects and pays the GST on these supplies, so the bills carry none; they are listed for the accountant.
-      const supplies = query(`SELECT b.bill_no AS billNo, o.zomato_order_id AS zomatoOrderId, b.created_at AS date, b.total_paise AS value
+      const supplies = query(`SELECT COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS billNo, o.zomato_order_id AS zomatoOrderId, b.created_at AS date, b.total_paise AS value
         FROM bills b JOIN orders o ON o.id = b.order_id WHERE o.type = 'zomato' AND b.created_at >= ? AND b.created_at < ? ORDER BY b.created_at, b.bill_no`, start, end);
       tables.push({ title: "Aggregator supplies — GST paid by Zomato (section 9(5))", columns: [column("billNo", "Bill no."), column("zomatoOrderId", "Zomato order"), column("date", "Date", "time"), column("value", "Value", "money")],
         rows: supplies, totals: { billNo: "Total", ...sum(supplies, ["value"]) } });

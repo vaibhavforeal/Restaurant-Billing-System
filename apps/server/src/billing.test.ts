@@ -306,6 +306,16 @@ describe("billing and day-end", () => {
       expect(stale.statusCode).toBe(409);
       expect((await issue(other)).invoiceNo).toBe("26-27/0002");
     });
+    it("rolls the invoice number back when the bill fails after the number is taken", async () => {
+      at(new Date(2026, 5, 1, 12, 0));
+      expect((await issue(await order())).invoiceNo).toBe("26-27/0001");
+      const id = await order(); const body = await billRequest(id);
+      app.db.exec("CREATE TRIGGER reject_tax_no BEFORE INSERT ON bill_taxes BEGIN SELECT RAISE(ABORT, 'test failure'); END;");
+      expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: body })).statusCode).toBe(500);
+      app.db.exec("DROP TRIGGER reject_tax_no");
+      expect((await issue(id)).invoiceNo).toBe("26-27/0002");
+      expect((await issue(await order())).invoiceNo).toBe("26-27/0003");
+    });
     it("round-off off bills the exact amount", async () => {
       await putSetting({ roundOff: "off" });
       const bill = await issue(await orderAt(12345));

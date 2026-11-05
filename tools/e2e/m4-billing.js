@@ -78,7 +78,7 @@
   const plain = document.querySelector('iframe').contentDocument.body.innerText;
   check(!/Tax invoice|Includes GST|CGST|SGST|Bill of supply/.test(plain), 'No-GST receipt without a GSTIN is a plain Restaurant bill with no GST lines');
   await nav('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid');
-  await click(`Open bill #${included.billNo}`);
+  await click(`Open bill ${included.invoiceNo}`);
   await waitFor(() => button('View receipt') || button('View bill'), 'bill actions');
   if (!button('View receipt')) await click('View bill');
   await click('View receipt');

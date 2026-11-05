@@ -218,7 +218,7 @@
       const bill = (await api('/orders/' + orderId + '/bill')).bill;
       check(queues().some(request => request.after === queued.id), 'The payment is saved to follow the bill');
       check(queued.body === fault.bodies[0], 'Bill retry keeps the original bill reference and preview snapshot');
-      state.billRecovery = { orderId, billId: bill.id, billNo: bill.billNo, body: queued.body };
+      state.billRecovery = { orderId, billId: bill.id, billNo: bill.billNo, invoiceNo: bill.invoiceNo, body: queued.body };
       return reloadNext('bill_reload');
     }
     if (state.phase === 'bill_reload') {
@@ -236,7 +236,7 @@
       check(bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === (state.settleRecovery.mode ?? 'card') && bill.payments[0].amountPaise === state.settleRecovery.totalPaise, 'Reloaded settlement replay keeps exactly one correct payment');
       check((await api('/orders/' + state.settleRecovery.orderId)).order.status === 'settled', 'Recovered paid takeaway remains settled');
       check((await stockMoves(state.rice.id, state.settleRecovery.orderId)).length === 1 && (await stockMoves(state.bottles.id, state.settleRecovery.orderId)).length === 1, 'Bill and settlement recovery do not duplicate either stock deduction');
-      await closeBilling(); await click('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid'); await click('Open bill #' + bill.billNo);
+      await closeBilling(); await click('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid'); await click('Open bill ' + bill.invoiceNo);
       await wait(() => button('Next takeaway'), 'recovered paid order'); await click('View bill'); await click('View receipt');
       await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('CARD'), 'recovered paid receipt');
       check(true, 'Recovered paid receipt and Next takeaway are available');
