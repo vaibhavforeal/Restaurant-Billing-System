@@ -101,7 +101,7 @@ function EditCustomer({ customer: c, types, onChanged }: { customer: Customer; t
   const [edit, setEdit] = useState({
     name: c.name, phone: c.phone, email: c.email ?? "", typeId: c.typeId ?? "", notes: c.notes, gender: c.gender ?? "",
     birthDay: birth.day, birthYear: birth.year, anniversaryDay: anniversary.day, anniversaryYear: anniversary.year,
-    tags: c.tags.join(", "), marketingOptIn: c.marketingOptIn, isActive: c.isActive,
+    tags: c.tags.join(", "), marketingOptIn: c.marketingOptIn, isActive: c.isActive, gstin: c.gstin ?? "", legalName: c.legalName ?? "",
   });
   const { busy, run, status } = useRun();
   const set = (patch: Partial<typeof edit>) => setEdit({ ...edit, ...patch });
@@ -115,13 +115,16 @@ function EditCustomer({ customer: c, types, onChanged }: { customer: Customer; t
     <label>Type <select value={edit.typeId} onChange={(e) => set({ typeId: e.target.value })}><option value="">None</option>{types.map((t) => <option key={t.id} value={t.id}>{t.name}{t.isActive ? "" : " (off)"}</option>)}</select></label>
     <label>Tags <input value={edit.tags} placeholder="Vegan, Office lunch" onChange={(e) => set({ tags: e.target.value })} /></label>
     <label>Notes <input value={edit.notes} maxLength={500} onChange={(e) => set({ notes: e.target.value })} /></label>
+    <label>Business GSTIN <input value={edit.gstin} maxLength={15} autoCapitalize="characters" spellCheck={false} placeholder="For GST invoices"
+      onChange={(e) => set({ gstin: e.target.value.toUpperCase() })} /></label>
+    <label>Business legal name <input value={edit.legalName} maxLength={100} onChange={(e) => set({ legalName: e.target.value })} /></label>
     <label className="crm-check"><input type="checkbox" checked={edit.marketingOptIn} onChange={(e) => set({ marketingOptIn: e.target.checked })} /> Happy to receive offers</label>
     <label className="crm-check"><input type="checkbox" checked={edit.isActive} onChange={(e) => set({ isActive: e.target.checked })} /> Active</label>
     <button className="primary" onClick={() => void run(async () => {
       await apiFetch(`/api/customers/${c.id}`, { method: "PATCH", body: JSON.stringify({
         name: edit.name, phone: edit.phone, email: edit.email, typeId: edit.typeId || null, notes: edit.notes, gender: edit.gender || null,
         birthDate: joinOccasion(edit.birthDay, edit.birthYear), anniversaryDate: joinOccasion(edit.anniversaryDay, edit.anniversaryYear),
-        tags: parseTags(edit.tags), marketingOptIn: edit.marketingOptIn, isActive: edit.isActive,
+        tags: parseTags(edit.tags), marketingOptIn: edit.marketingOptIn, isActive: edit.isActive, gstin: edit.gstin, legalName: edit.legalName,
       }) });
       await onChanged();
     })}>Save</button>

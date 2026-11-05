@@ -98,3 +98,8 @@ html:has(.billing-dialog[open]), body:has(.billing-dialog[open]) { overflow: hid
 .credit-note-refund-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; margin-bottom: 8px; }
 .credit-note-footer { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .credit-note-result { display: grid; gap: 12px; }
+
+/* GST invoice for a business */
+.billing-options-fields label.billing-check { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.billing-options-fields label.billing-check input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin: 0; flex: none; }
+.billing-options-fields small[role="alert"] { color: #b42318; }

@@ -4,7 +4,8 @@ import { apiFetch } from "../api";
 import { SalesPeriodControls } from "../SalesReportControls";
 import { recentPeriod, type ReportPeriod } from "../sales-report";
 import { downloadText } from "../download";
-import { operationalCell, operationalCsv } from "../operational-report";
+import { operationalCsv } from "../operational-report";
+import { ReportTables } from "./ReportTables";
 import { withTimeout } from "../abort-signal";
 
 /** Reports built from dish costs: admin-only (`costs.read`) and part of the Dish costing module. */
@@ -51,21 +52,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     {loading && <p role="status">Loading report…</p>}
     {report && <>
       <div className="sales-range-caption"><span>{report.from} → {report.to} · {report.timezone}</span><span>Updated {new Date(report.generatedAt).toLocaleTimeString()}</span></div>
-      <details className="report-notes"><summary>How this report is calculated</summary>{report.notes.map((note) => <p key={note}>{note}</p>)}</details>
-      {report.tables.map((table) => <section key={table.title}>
-        <h3>{table.title} <small>({table.rows.length})</small></h3>
-        {!table.rows.length ? <p className="sales-report-empty">No records for these dates.</p> : <div className="sales-report-table" role="region" aria-label={table.title} tabIndex={0}>
-          <table><caption>{table.title} · {report.from} to {report.to}</caption>
-            <thead><tr>{table.columns.map((c) => <th scope="col" key={c.key}>{c.label}</th>)}</tr></thead>
-            <tbody>{table.rows.map((row, index) => <tr key={index}>{table.columns.map((c, i) => i === 0
-              ? <th scope="row" key={c.key}>{operationalCell(row[c.key], c, report.timezone)}</th>
-              : <td key={c.key}>{operationalCell(row[c.key], c, report.timezone)}</td>)}</tr>)}</tbody>
-            {table.totals && <tfoot><tr>{table.columns.map((c, i) => i === 0
-              ? <th scope="row" key={c.key}>{operationalCell(table.totals![c.key], c, report.timezone)}</th>
-              : <td key={c.key}>{operationalCell(table.totals![c.key], c, report.timezone)}</td>)}</tr></tfoot>}
-          </table>
-        </div>}
-      </section>)}
+      <ReportTables report={report} />
     </>}
   </div>;
 }

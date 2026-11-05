@@ -19,6 +19,8 @@ import { billPaymentLabel, billTaxRates, gstNote, type BillGst, useZomatoStatus,
 import "../billing-panel.css";
 import "../zomato.css";
 import { useCan } from "../permissions";
+import { gstinProblem } from "@masalapos/domain/gstin";
+import { GST_STATES } from "@masalapos/domain/restaurant-profile";
 
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
@@ -57,6 +59,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const [reason, setReason] = useState("");
   const [approverPin, setApproverPin] = useState("");
   const [redeem, setRedeem] = useState("");
+  // A GST invoice to a registered business: its GSTIN, legal name and address print on the bill (B2B in GSTR-1).
+  const [business, setBusiness] = useState(false);
+  const [buyerGstin, setBuyerGstin] = useState("");
+  const [buyerName, setBuyerName] = useState("");
+  const [buyerAddress, setBuyerAddress] = useState("");
+  useEffect(() => { setBusiness(false); setBuyerGstin(""); setBuyerName(""); setBuyerAddress(""); }, [order.id]);
   const can = useCan();
   const crm = useIntegrations().isEnabled("crm");
   // The most points the last preview allowed on this bill; kept while the cashier edits the amount.
@@ -130,7 +138,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     });
     return () => { active = false; };
   }, [order.id, order.status]);
-  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin, redeem, order.customer?.id]);
+  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin, redeem, order.customer?.id, business, buyerGstin, buyerName, buyerAddress]);
   useEffect(() => { setHtml(""); setFrameReady(false); }, [bill?.id, bill?.status]);
   useEffect(() => { setShowQr(false); }, [bill?.id, bill?.status]);
   useEffect(() => {
@@ -181,13 +189,19 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     const pin = discountPaise > 0 ? approverPin.trim() : "";
     const redeemPoints = redeem.trim() ? Number(redeem) : 0;
     if (!Number.isInteger(redeemPoints) || redeemPoints < 0) throw new Error("Enter whole points to redeem");
+    const buyer = business ? { gstin: buyerGstin.trim().toUpperCase(), name: buyerName.trim(), address: buyerAddress.trim() } : null;
+    if (buyer) {
+      const problem = gstinProblem(buyer.gstin);
+      if (problem) throw new Error(`Buyer's GSTIN: ${problem}`);
+      if (!buyer.name) throw new Error("Enter the business's legal name");
+    }
     const { preview: value } = await apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
-      method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}) }),
+      method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}), ...(buyer ? { buyer } : {}) }),
     });
     setPreview(value);
     setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
-    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, ...(pin ? { approverPin: pin } : {}) };
+    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, ...(pin ? { approverPin: pin } : {}) };
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
@@ -325,6 +339,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
         <div className={`billing-dialog-grid${totals ? "" : " billing-awaiting-preview"}`}>
           <div className="billing-review">
             {totals && <BillSummary value={totals} compact gst={totals.receipt} />}
+            {totals?.receipt.buyer && <p className="billing-note">GST invoice to <strong>{totals.receipt.buyer.name}</strong> · GSTIN {totals.receipt.buyer.gstin}</p>}
             {bill?.discountNote && <p className="billing-note">Discount reason: {bill.discountNote}</p>}
             {bill && <BillItemLines items={order.items} refundedQty={bill.refundedQty} showRefunded={bill.creditNotes.length > 0} />}
             {!zomatoBill && <details ref={options} className="billing-options" open={!totals}>
@@ -337,6 +352,13 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
                   <label>Discount (₹) <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={blocked} /></label>
                   <label className="billing-wide-field">Discount reason <input maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} disabled={blocked} /></label>
                   {crm && order.customer && order.customer.pointsBalance > 0 && <label>Redeem points (has {order.customer.pointsBalance}{redeemCap !== null && redeemCap < order.customer.pointsBalance ? `, up to ${redeemCap} on this bill` : ""}) <input type="number" min="0" max={Math.min(order.customer.pointsBalance, redeemCap ?? order.customer.pointsBalance)} step="1" value={redeem} onChange={(e) => setRedeem(e.target.value)} disabled={blocked} /></label>}
+                  <label className="billing-wide-field billing-check"><input type="checkbox" checked={business} disabled={blocked} onChange={(e) => {
+                    setBusiness(e.target.checked);
+                    // A business customer on the order fills in their GSTIN; the cashier can still change it.
+                    if (e.target.checked && !buyerGstin && order.customer?.gstin) { setBuyerGstin(order.customer.gstin); setBuyerName(order.customer.legalName ?? ""); }
+                  }} /> GST invoice for a business (buyer's GSTIN)</label>
+                  {business && <BuyerFields gstin={buyerGstin} name={buyerName} address={buyerAddress} disabled={blocked}
+                    onGstin={setBuyerGstin} onName={setBuyerName} onAddress={setBuyerAddress} />}
                   {role !== "admin" && <label className="billing-wide-field">Admin PIN (only for a discount above your limit) <input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={approverPin} onChange={(e) => setApproverPin(e.target.value)} disabled={blocked} /></label>}
                 </>}
               </div>
@@ -397,4 +419,22 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     {bill && <UpiQrPreview billId={bill.id} open={showQr && canShowQr} onClose={() => setShowQr(false)} />}
     {bill && !zomatoBill && can("bills.refund") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role ?? "cashier"} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
   </section>;
+}
+
+/** The business buyer's details, checked as they are typed: a GSTIN that fails the check character is usually a typing mistake. */
+function BuyerFields({ gstin, name, address, disabled, onGstin, onName, onAddress }: {
+  gstin: string; name: string; address: string; disabled: boolean;
+  onGstin: (v: string) => void; onName: (v: string) => void; onAddress: (v: string) => void;
+}) {
+  const value = gstin.trim().toUpperCase();
+  const problem = value.length >= 15 ? gstinProblem(value) : null;
+  const state = !problem && value.length === 15 ? GST_STATES[value.slice(0, 2)] : undefined;
+  const hintId = useId();
+  return <>
+    <label className="billing-wide-field">Buyer's GSTIN <input value={gstin} maxLength={15} autoCapitalize="characters" spellCheck={false} disabled={disabled}
+      aria-invalid={problem ? true : undefined} aria-describedby={hintId} onChange={(e) => onGstin(e.target.value.toUpperCase())} />
+      <small id={hintId} role={problem ? "alert" : undefined}>{problem ?? (state ? `Registered in ${state}` : "15 characters, e.g. 29AABCU9603R1ZJ")}</small></label>
+    <label className="billing-wide-field">Business legal name <input value={name} maxLength={100} disabled={disabled} onChange={(e) => onName(e.target.value)} /></label>
+    <label className="billing-wide-field">Business address (optional) <input value={address} maxLength={200} disabled={disabled} onChange={(e) => onAddress(e.target.value)} /></label>
+  </>;
 }
