@@ -1,6 +1,7 @@
 .bill-settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
-.bill-settings-form { min-width: 0; }
-.bill-settings-group { display: grid; gap: var(--space-3); margin: 0; padding: var(--space-4); border: var(--border) solid var(--line); border-radius: var(--radius-panel); }
+.bill-settings .bill-settings-form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-4); min-width: 0; padding: 0; }
+.bill-settings .bill-settings-form > button.primary { align-self: flex-start; min-width: 140px; }
+.bill-settings-group { display: grid; align-content: start; gap: var(--space-3); margin: 0; padding: var(--space-4); border: var(--border) solid var(--line); border-radius: var(--radius-panel); }
 .bill-settings-group legend { padding: 0 var(--space-2); font-weight: 600; }
 .bill-settings-group small { color: var(--muted); }
 .bill-settings .link-button { justify-self: start; padding: 0; border: 0; background: none; color: var(--pos-accent); text-decoration: underline; cursor: pointer; }
