@@ -174,3 +174,33 @@ Errors map to friendly messages, with the raw error logged on the hub.
   - Checks `stop_reason` (including `refusal`) before reading content.
 - **Settings:** each provider keeps its own sealed key and model in `ai-assistant.json`, so switching back and forth doesn't lose keys.
 - **Pricing:** the usage counters from section 1 give real per-restaurant request and token numbers for setting a paid plan.
+
+## 10. Managed by MasalaPOS (2026-11-04)
+
+After the first real test, the owner decided the AI key stays with MasalaPOS, not with each restaurant. This section replaces the restaurant-key parts of sections 1, 6, 7 and 9. Branch `feat/managed-ai`.
+
+- **Decisions:**
+  - The assistant works only for restaurants MasalaPOS switches on in the portal.
+  - Each has a daily limit, 40 requests by default (1–1,000), editable per counter.
+  - The "paste your own key" option is removed.
+- **Relay:** the licensing service (`apps/licensing-worker/src/ai/`) holds the OpenRouter key and serves two routes:
+  - `POST /v1/ai/chat` and `GET /v1/ai/status`, authenticated with the counter's installation ID and secret.
+  - Each needs an enrolled counter with a licence that's active or in grace.
+  - The chat request is the neutral `AiRequest` (`@masalapos/domain/ai-wire`). The service validates it against size caps: 60 messages, 60,000 characters each, 12 tools, 4,000 max tokens, no model field.
+- **Limits and usage:**
+  - Migration `0011` adds `ai_settings` (off by default) and `ai_usage` (per counter per UTC day).
+  - A request is reserved atomically before the provider call and given back if the call fails.
+- **Portal:**
+  - `PATCH /installations/:id/ai` takes `{ enabled, dailyLimit, expectedUpdatedAt }`. It needs an admin (`licences.manage`) and is logged as `installation.ai`.
+  - The counter panel shows today's use and 7 days of requests and tokens.
+- **Hub (`apps/server/src/ai/service.ts`):**
+  - `ai-assistant.json` keeps only the restaurant's own switch (on by default), the service's last status and per-feature usage. Older keys are dropped.
+  - Copies without a service connection (development, demo) answer `off`.
+  - The status refreshes at start, when it is over 15 minutes old, on Check, and after every request.
+  - Settings shows "On for this restaurant · N of M requests used today", "Not switched on…" or "This copy isn't connected to MasalaPOS".
+- **New error codes:** `not_enabled` and `daily_limit`. No owner-facing message mentions keys or OpenRouter.
+- **Answers:**
+  - A small Markdown subset (bold, italic, code, bullet and numbered lists, headings) is parsed into data and rendered as React elements, never HTML (`apps/ui/src/ai-markdown.ts`, `AiText.tsx`).
+  - Answers sit in a "MasalaPOS AI" card, with figures as chips and the model as a tag.
+  - The day summary's Copy converts to WhatsApp formatting.
+- **Moving to OpenAI or Anthropic** now means an adapter in the licensing service, not on the hub.

@@ -1,6 +1,8 @@
 # AI assistant
 
-The AI assistant is optional and needs internet. It does three jobs:
+The AI assistant is optional, needs internet, and is **run by MasalaPOS**. Restaurants never enter or hold an AI key. Their counter sends each AI request to MasalaPOS's licensing service (`https://portal.billnroll.in`). The service checks the counter and forwards the request to OpenRouter with MasalaPOS's own key.
+
+It does three jobs:
 
 | Feature | Where | Who |
 | --- | --- | --- |
@@ -8,49 +10,108 @@ The AI assistant is optional and needs internet. It does three jobs:
 | **Write summary:** a short end-of-day summary with a Copy button for WhatsApp | Reports → Day-end / GST | Admins |
 | **Write description / Rewrite:** a draft menu description for the QR menu | Catalog → Edit dish → Description | Anyone who can edit dishes |
 
-Billing, KOTs and everything else never depend on it. Without internet, or before it is set up, the AI buttons are hidden or show a clear message.
+Billing, KOTs and everything else never depend on it. When the assistant is off or there's no internet, the AI buttons are hidden or show a clear message.
 
-## Setting it up (OpenRouter, free tier)
+## How a request travels
 
-1. Create an account at <https://openrouter.ai> and create an API key (it starts `sk-or-v1-`).
-2. In your OpenRouter account's privacy settings, **turn off "allow training"**.
-3. In MasalaPOS, go to **Settings → Restaurant profile → AI assistant**:
-   1. Paste the key into **OpenRouter key**.
-   2. Leave the model as **Gemma 4 31B (recommended)** and keep **If it fails, try another free model** ticked.
-   3. Press **Save AI settings**, then **Test**. It should say "Working · answered by …".
-4. **Use the AI assistant** is switched on when the first key is saved. Untick it to hide the AI features without removing the key.
+1. The restaurant's hub sends `POST /v1/ai/chat` with its installation ID and secret (the same pair support chat uses).
+2. The service accepts only a counter that:
+   - is enrolled with a customer
+   - has a licence that's active or in grace
+   - has been **switched on in the portal**
+   - is under its **daily limit**
+3. It forwards the request to OpenRouter:
+   - with `OPENROUTER_API_KEY`
+   - asking for `OPENROUTER_MODEL` (default `google/gemma-4-31b-it:free`)
+   - with `openrouter/free` as a second choice unless `OPENROUTER_FALLBACK=off`
+4. It records the request and its tokens for that counter and UTC day. A failed request isn't counted.
+5. The hub caches what the service says (on or off, the limit, today's use). It refreshes that at start, when the cache is older than 15 minutes, when an admin presses **Check**, and after every AI request.
 
-The key is encrypted on this PC with Windows' credential protection and is never shown again: Settings only shows its last four characters. It is stored in `ai-assistant.json` in the data folder, **not** in the database or its backups. A data folder copied to another PC will ask for the key again.
+## Switching a restaurant on (portal)
 
-## Free-tier limits
+1. Open the counter in the portal: from its customer's page, or search for the Installation ID.
+2. In **AI assistant**, tick **On for this counter** and set **Requests a day**: 40 by default, 1 to 1,000.
+3. Press **Save AI assistant**. This needs an admin, and the change goes into the activity log.
+
+The counter picks it up within 15 minutes, or at once when the restaurant's admin presses **Check** in **Settings → Restaurant profile → AI assistant**.
+
+The same panel shows today's requests against the limit, and requests and tokens for each of the last 7 UTC days.
+
+**One question uses 2 to 7 requests:** one per lookup, then the answer. A day summary or a description uses one. So 40 a day is about 6 to 20 questions.
+
+## OpenRouter account limits (MasalaPOS's account)
+
+The free tier is shared by **every** restaurant using the assistant:
 
 - 20 requests a minute.
-- **50 requests a day**, rising to **1,000 a day** once the OpenRouter account has bought $10 of credit (one-time; free models stay free).
-- One Ask question uses 2–7 requests (one per lookup, then the answer). A day summary or a description uses one.
-- **Test** shows how many of today's free requests are used. The **Usage** table in Settings shows requests and tokens per feature.
+- 50 requests a day, rising to 1,000 a day once the account has bought $10 of credit (one-time; free models stay free).
+
+Keep the sum of the restaurants' daily limits within what the account allows, and buy the $10 of credit before switching on more than one or two restaurants. When OpenRouter's limit is hit, restaurants see "The AI service is busy right now".
+
+Moving to a paid model only needs `OPENROUTER_MODEL` changed on the server. The restaurants change nothing. Use the portal's token counts to price it.
+
+## Server setup (`portal.billnroll.in`)
+
+Add these to `/etc/forkflow-portal/env`, then restart the service:
+
+```
+OPENROUTER_API_KEY_FILE=/etc/forkflow-portal/openrouter-key   # a root-only file holding the sk-or-v1-… key
+# or OPENROUTER_API_KEY=sk-or-v1-…
+# OPENROUTER_MODEL=google/gemma-4-31b-it:free                 # optional
+# OPENROUTER_FALLBACK=off                                       # optional; on by default
+```
+
+- **The key file:** create it with `install -m 600 -o root /dev/null /etc/forkflow-portal/openrouter-key`, then write the key into it.
+- **No key:** every AI request answers 503 and restaurants see "The AI service isn't responding right now".
+- **Migration:** `0011_ai_assistant.sql` adds `ai_settings` and `ai_usage`. It runs when the service starts.
+- **Deploying:** see `docs/operations/connector-release.md` → Deployment.
+- **The OpenRouter account:** turn off "allow training" in its privacy settings.
 
 ## What is sent, and what never is
 
-- **Sent:** sales figures (by day, hour, dish, category and order type), menu-engineering groups, the prep forecast, the restaurant's name and city (for the day summary), dish and category names, and staff **first names** (for staff-activity questions and the day summary).
-- **Never sent:** customer names, phone numbers, addresses, birthdays, notes or loyalty details, and no notes staff typed (cancel reasons, discount notes).
-- The model never reads the database. It can only call fixed, read-only lookups, at most 6 per question. Each answer lists the **Figures used** so they can be checked in the matching report.
+- **Sent:**
+  - sales figures (by day, hour, dish, category and order type)
+  - menu-engineering groups and the prep forecast
+  - the restaurant's name and city (for the day summary)
+  - dish and category names
+  - staff **first names** (for staff-activity questions and the day summary)
+- **Never sent:**
+  - customer names, phone numbers, addresses, birthdays, notes or loyalty details
+  - notes staff typed (cancel reasons, discount notes)
+- **The service** stores only counts and token totals, never the questions or answers.
+- **The model never reads the database.** It can only call fixed, read-only lookups, at most 6 per question. Each answer lists the **Figures used** so they can be checked in the matching report.
+
+## The restaurant's side
+
+**Settings → Restaurant profile → AI assistant · provided by MasalaPOS** shows one of:
+
+- "On for this restaurant · 12 of 40 requests used today"
+- "Not switched on for this restaurant. Contact MasalaPOS to add the AI assistant."
+- "This copy isn't connected to MasalaPOS…": development and demo copies, or a copy that was never activated online.
+
+The panel also has:
+
+- **Use the AI assistant:** the restaurant's own switch, which hides the AI buttons on its counter.
+- **Check:** asks MasalaPOS again.
+- The counter's usage for each feature.
 
 ## Messages and what to do
 
 | Message | Cause | Fix |
 | --- | --- | --- |
-| "The AI assistant needs internet…" | No internet, or OpenRouter unreachable | Check the connection; everything else keeps working |
-| "OpenRouter didn't accept the key…" | Wrong or revoked key | Paste a new key in Settings → AI assistant |
-| "OpenRouter's free limit is used up…" | 50 (or 1,000) requests today, or 20 in the last minute | Wait for midnight UTC, or add $10 of credit |
-| "The chosen model is no longer available…" | OpenRouter retired the model | Pick another model in Settings (shown as "no longer offered") |
-| "The AI service isn't responding right now…" | OpenRouter or the model is having trouble | Try again in a minute; the fallback model usually covers this |
-| "The AI couldn't answer that…" | Empty or unusable reply | Ask more simply, or try another model |
+| "The AI assistant needs internet…" | The counter can't reach portal.billnroll.in | Check the connection; everything else keeps working |
+| "The AI assistant isn't switched on for this restaurant…" | Not switched on in the portal | Switch it on in the portal's counter panel |
+| "Today's AI limit for this restaurant is used up…" | The counter's daily limit was reached | Wait for midnight UTC, or raise the limit in the portal |
+| "The AI service is busy right now…" | OpenRouter's rate limit (shared account) | Try later; buy the $10 credit or move to a paid model |
+| "The AI service isn't responding right now…" | No key on the server, OpenRouter down, or the model gone | Check the server log (`licensing-worker: AI request failed: …`) and the env file |
+| "MasalaPOS couldn't verify this counter…" | Not enrolled, the licence ended, or the pairing was reset | Fix the licence in the portal |
+| "The AI couldn't answer that…" | An empty or unusable reply | Ask more simply |
 
 ## Moving to OpenAI or Anthropic later
 
-The features talk to providers only through `apps/server/src/ai/provider.ts`. Moving to a paid provider means:
+The provider lives only in the licensing service (`apps/licensing-worker/src/ai/openrouter.ts`, behind the `ChatProvider` interface). Adding OpenAI or Anthropic means:
 
-1. Add `apps/server/src/ai/openai.ts` (official `openai` SDK) or `apps/server/src/ai/anthropic.ts` (official `@anthropic-ai/sdk`) implementing `AiProvider`, plus an option in the Provider select.
-2. Each provider keeps its own sealed key in `ai-assistant.json`.
+1. Add an adapter beside it (official `openai` or `@anthropic-ai/sdk` SDK).
+2. Choose it with a server setting.
 
-The lookups, prompts, privacy rules, routes and screens stay as they are. Use the Usage table's request and token counts to price a paid plan. Details: `docs/superpowers/specs/2026-11-04-ai-assistant-design.md` section 9.
+The hub, its lookups, prompts, privacy rules and screens stay as they are. Details: `docs/superpowers/specs/2026-11-04-ai-assistant-design.md`, sections 9 and 10.

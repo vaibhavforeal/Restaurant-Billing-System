@@ -49,6 +49,10 @@ Build the portal and Node host using their workspace build commands. Archive onl
 
 For a release-only rollback, disable `CONNECTOR_ENABLED` first, restart to terminate access, restore the previous approved manifest and application release, and keep invitations disabled until checked. Versioned artifacts remain available for rollback; do not reuse their keys. If reverting migration 0009, enter a maintenance window, stop the service, save the current database for reconciliation, restore the pre-0009 database snapshot **and matching application/migrations**, discard only the stopped database's WAL/SHM files, verify ownership and restart. Restoring a snapshot discards subsequent writes; reconcile those records before reopening. Do not run the old application against a partially reverted schema.
 
+### AI assistant relay (migration 0011)
+
+The same deployment carries the AI assistant relay (`/v1/ai/*`). Before restarting, add `OPENROUTER_API_KEY_FILE=/etc/forkflow-portal/openrouter-key` to `/etc/forkflow-portal/env`. The key file must be root-only (`install -m 600 -o root`). `OPENROUTER_MODEL` and `OPENROUTER_FALLBACK=off` are optional. Migration `0011_ai_assistant.sql` runs on start. Every counter stays off until an admin switches it on in the portal's counter panel. Without the key, AI requests answer 503 and nothing else is affected. Details: `docs/operations/ai-assistant.md`.
+
 ## Logs, metrics and cost
 
 CloudFront standard logging v2 delivers JSON to private encrypted bucket `masalapos-support-connector-logs-ej9w0mwvhhp9` with a 30-day expiry. Source `masalapos-connector`, destination `masalapos-connector-s3`, delivery `QpDuj7hqlvEJuzWd` are in `us-east-1`. The selected fields are `date`, `time`, `x-edge-location`, `sc-bytes`, `cs-method`, `cs(Host)`, `cs-uri-stem`, `sc-status`, `time-taken`, `x-edge-result-type`, `x-edge-request-id`. **Do not enable default/legacy logs or add query, cookie or referrer fields**, because invitation filenames are query parameters. Log delivery can be delayed.

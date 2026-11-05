@@ -40,18 +40,22 @@ live; turning it back on returns Samosa. It turns the setting back on at the end
 
 ## AI assistant
 
+The whole chain runs locally: browser → restaurant hub → the real licensing service's AI relay → a fake OpenRouter.
 Build the UI, start `node --import tsx tools/e2e/fake-openrouter.mts` (a scripted stand-in for OpenRouter on
-`http://127.0.0.1:4161/api/v1`, no key or cost) and then `node --import tsx tools/e2e/ai-assistant-server.mts` (the app on
-`http://127.0.0.1:4160/`, its AI pointed at the fake, with billed sales and a customer, Priya Sharma 98765 43210). Start both
-fresh for each run. Sign in as `admin` / `admin-password`, add `tools/e2e/ai-assistant.js` and require
-`window.__aiAssistantResult.status === "passed"` (11 checks):
-- Before setup, Ask MasalaPOS points the admin to Settings.
-- Settings saves the key and shows only "ending …4321", pre-selects Gemma 4 31B, lists only free models, and Test reports "… of 50".
-- Ask answers with "Sales by day" under Figures used, and a question mentioning "limit" shows the free-limit message, and one mentioning "slow" (the fake waits 20 s) still gets its answer.
-- Day-end Write summary and Copy work (clipboard replaced while it runs).
+`http://127.0.0.1:4161/api/v1`, no key or cost) and then `node --import tsx tools/e2e/ai-assistant-server.mts`. That starts the licensing
+service on `:4162` (Worker code on the Node adapter, an enrolled counter, vendor key `sk-or-v1-vendor-e2e`), QA switches on `:4163` standing in
+for the portal, and the app on `http://127.0.0.1:4160/` connected to the service as that counter, with billed sales and a customer, Priya
+Sharma 98765 43210. Start both fresh for each run. Sign in as `admin` / `admin-password`, add `tools/e2e/ai-assistant.js` and require
+`window.__aiAssistantResult.status === "passed"` (16 checks):
+- While MasalaPOS hasn't switched it on, Settings says so (no key or model fields) and Ask points the admin to Settings.
+- After the QA switch turns it on, Check shows "On for this restaurant · 0 of 40 requests used today".
+- Ask shows "You asked" and a MasalaPOS AI card with real bold, list and italic elements (no raw `**`), and "Sales by day" as a figures chip.
+- A question mentioning "busy" (the fake's 429) shows "The AI service is busy right now"; one mentioning "slow" (the fake waits 20 s) still gets its answer.
+- Day-end Write summary renders as a list, and Copy gives WhatsApp text (`*bold*`, `•` bullets; clipboard replaced while it runs).
 - The dish editor's Write description fills the box and leaves it unsaved.
-- The fake's recorded requests contain neither "Priya" nor "98765".
-- After `POST /__qa/offline`, Ask shows the needs-internet message.
+- Every request the fake received carried the vendor key, and none contains "Priya" or "98765".
+- The service counted the requests; at the daily limit Ask says today's limit is used up.
+- After `POST :4163/__qa/service-offline`, Ask shows the needs-internet message.
 
 ## Customer's usual
 
