@@ -92,11 +92,21 @@ export function buildGstr1(input: { sacCode: string; bills: GstBillFact[]; credi
     b2cPaise: b2cBills.reduce((s, b) => s + nilOf(b.taxes), 0) - b2cNotes.reduce((s, n) => s + nilOf(n.taxes), 0),
   };
 
-  // Every bill and credit note issued in the period is a document, whatever its supply. Numbers run in series, so a gap is per series.
+  // Every bill and credit note issued in the period is a document, whatever its supply. Table 13 ranges are per series, but the
+  // counter is shared by every prefix in a financial year (MP, then X1, then MP again), so a gap is checked per year.
   const invoiceRanges = ranges(input.bills.map((b) => ({ no: b.invoiceNo, seq: b.billNo, cancelled: cancelled.has(b.billId) })));
-  for (const r of invoiceRanges) {
-    if (r.max - r.min + 1 !== r.total) {
-      warnings.push(`${r.max - r.min + 1 - r.total} bill number(s) between ${r.from} and ${r.to} are not in this period. Check the computer's date was right when they were issued.`);
+  const byYear = new Map<string, Array<{ no: string; n: number }>>();
+  for (const b of input.bills) {
+    const { series, n } = invoiceSeries(b.invoiceNo);
+    const year = series.slice(series.lastIndexOf("/") + 1); // "MP/26-27" gives "26-27"; a legacy number has no year
+    byYear.set(year, [...(byYear.get(year) ?? []), { no: b.invoiceNo, n: Number.isNaN(n) ? b.billNo : n }]);
+  }
+  for (const list of byYear.values()) {
+    const first = list.reduce((x, y) => (y.n < x.n ? y : x));
+    const last = list.reduce((x, y) => (y.n > x.n ? y : x));
+    const missing = last.n - first.n + 1 - list.length;
+    if (missing > 0) {
+      warnings.push(`${missing} bill number(s) between ${first.no} and ${last.no} are not in this period. Check the computer's date was right when they were issued.`);
     }
   }
   const invoices = invoiceRanges.map(stripCounters);

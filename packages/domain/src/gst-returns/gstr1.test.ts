@@ -143,12 +143,21 @@ describe("invoice numbers and series", () => {
     ]);
   });
 
-  it("warns about a gap within a series, naming its ends", () => {
-    const s = build([inv("MP/25-26/0001"), inv("MP/25-26/0004"), inv("X1/25-26/0009")]);
+  it("warns about a real gap in the yearly counter, naming its ends", () => {
+    const s = build([inv("MP/25-26/0001"), inv("MP/25-26/0004"), inv("X1/25-26/0005")]);
     expect(s.warnings).toHaveLength(1);
     expect(s.warnings[0]).toContain("2 bill number(s)");
     expect(s.warnings[0]).toContain("MP/25-26/0001");
-    expect(s.warnings[0]).toContain("MP/25-26/0004");
+    expect(s.warnings[0]).toContain("X1/25-26/0005");
+  });
+
+  it("does not warn when a prefix is switched and switched back within a year", () => {
+    const s = build([inv("MP/25-26/0001"), inv("MP/25-26/0002"), inv("MP/25-26/0003"), inv("X1/25-26/0004"), inv("MP/25-26/0005"), inv("MP/25-26/0006")]);
+    expect(s.docs.invoices).toEqual([
+      { from: "MP/25-26/0001", to: "MP/25-26/0006", total: 5, cancelled: 0 },
+      { from: "X1/25-26/0004", to: "X1/25-26/0004", total: 1, cancelled: 0 },
+    ]);
+    expect(s.warnings).toEqual([]);
   });
 
   it("ranges credit notes by series, and orders a legacy CN-n note by its number", () => {
