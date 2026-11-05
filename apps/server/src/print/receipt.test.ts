@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
 import { money, receiptHtml, receiptSlip } from "./receipt.js";
+import { billUpiPayment } from "./upi.js";
 import { renderBytes } from "./render-bytes.js";
 
 const bill: Bill = {
@@ -180,6 +181,26 @@ describe("receipts", () => {
       expect(slip).not.toMatch(/DINE-IN|TAKEAWAY|TAX INVOICE|BILL OF SUPPLY|Includes GST|Taxable|CGST|SGST|All prices include tax|GST added to menu prices/);
     }
   });
+  describe("invoice number", () => {
+    const invoiced: Bill = { ...bill, invoiceNo: "MP/25-26/0007" };
+    it("heads the html, the page footer and the bill-meta cell, without a #", () => {
+      const html = receiptHtml(invoiced);
+      expect(html).toContain("<title>Bill MP/25-26/0007</title>");
+      expect(html).toContain("<dt>Bill no.</dt><dd><strong>MP/25-26/0007</strong>");
+      expect(html).toContain('content:"Bill MP/25-26/0007"');
+      expect(html).not.toContain("#42");
+    });
+    it("prints on the thermal slip", () => {
+      expect(thermal(invoiced, 80)).toContain("Bill MP/25-26/0007");
+    });
+    it("goes in the UPI note and the printed UPI caption", () => {
+      const unpaid: Bill = { ...invoiced, status: "unpaid", payments: [], receipt: { ...invoiced.receipt, upiId: "cafe@upi" } };
+      expect(billUpiPayment(unpaid)!.uri).toContain("tn=Bill%20MP%2F25-26%2F0007");
+      expect(receiptHtml(unpaid)).toContain("Bill MP/25-26/0007 · Amount filled in automatically");
+      expect(thermal(unpaid, 80)).toContain("Bill MP/25-26/0007");
+    });
+  });
+
   describe("bill settings", () => {
     const withReceipt = (extra: Partial<Bill["receipt"]>): Bill => ({ ...bill, receipt: { ...bill.receipt, ...extra } });
     const show = (patch: Partial<NonNullable<Bill["receipt"]["billShow"]>>) =>

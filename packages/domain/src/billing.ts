@@ -108,7 +108,10 @@ export interface ReceiptCustomer {
 }
 /** A void or refund as shown on its bill. */
 export interface BillCreditNote {
-  id: string; cnNo: number; kind: "void" | "refund"; reason: string; createdAt: number;
+  id: string; cnNo: number;
+  /** The financial-year reference that is printed (`CN/26-27/001`); a note from before references shows `CN-<cnNo>`. */
+  creditNoteRef: string;
+  kind: "void" | "refund"; reason: string; createdAt: number;
   totalPaise: number; taxablePaise: number; cgstPaise: number; sgstPaise: number;
   requestedByName: string; approvedByName: string;
   refunds: Array<{ mode: "cash" | "upi" | "card"; amountPaise: number; refNote: string | null }>;

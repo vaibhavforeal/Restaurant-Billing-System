@@ -625,6 +625,44 @@ describe("credit preview, approval and bill credit data", () => {
     });
   });
 
+  describe("credit note references", () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const noteRefs = () => (app.db.prepare("SELECT credit_note_ref AS ref FROM credit_notes ORDER BY cn_no").all() as Array<{ ref: string }>).map((r) => r.ref);
+
+    it("numbers credit notes per financial year, restarting on 1 April, without touching the invoice counter", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 7, 10, 12));
+      const first = await bill();
+      const second = await bill(1, false);
+      const invoiceBefore = app.db.prepare("SELECT value FROM sequences WHERE name = 'invoice:2026-27'").get();
+      const refunded = await app.inject({ method: "POST", url: `/api/bills/${first.id}/refund`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), reason: "Cold food", lines: [{ orderItemId: orderItemOf(first.id), qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] } });
+      expect(refunded.statusCode, refunded.body).toBe(201);
+      expect((refunded.json().creditNote as BillCreditNote).creditNoteRef).toBe("CN/26-27/001");
+      const voided = await app.inject({ method: "POST", url: `/api/bills/${second.id}/void`, headers: auth(admin.token), payload: { clientRef: uuidv7(), reason: "Wrong table", refunds: [] } });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect((voided.json().creditNote as BillCreditNote).creditNoteRef).toBe("CN/26-27/002");
+      expect(app.db.prepare("SELECT value FROM sequences WHERE name = 'invoice:2026-27'").get()).toEqual(invoiceBefore);
+
+      vi.setSystemTime(new Date(2027, 3, 1, 9));
+      app.db.prepare("UPDATE sessions SET expires_at = ?").run(Date.now() + 3_600_000);
+      const next = await app.inject({ method: "POST", url: `/api/bills/${first.id}/refund`, headers: auth(admin.token),
+        payload: { clientRef: uuidv7(), reason: "Cold food", lines: [{ orderItemId: orderItemOf(first.id), qty: 1 }], refunds: [{ mode: "cash", amountPaise: 3499 }] } });
+      expect(next.statusCode, next.body).toBe(201);
+      expect((next.json().creditNote as BillCreditNote).creditNoteRef).toBe("CN/27-28/001");
+      expect(noteRefs()).toEqual(["CN/26-27/001", "CN/26-27/002", "CN/27-28/001"]);
+      const shown = (await app.inject({ url: `/api/bills/${first.id}`, headers: auth(admin.token) })).json().bill as Bill;
+      expect(shown.creditNotes.map((n) => n.creditNoteRef)).toEqual(["CN/26-27/001", "CN/27-28/001"]);
+    });
+
+    it("shows a credit note from before references as CN-<number>", async () => {
+      const b = await bill();
+      priorCredit(b.id, 1, [3333, 83, 83, 0, 3499], [["cash", 3499]]);
+      const shown = (await app.inject({ url: `/api/bills/${b.id}`, headers: auth(admin.token) })).json().bill as Bill;
+      expect(shown.creditNotes.map((n) => n.creditNoteRef)).toEqual(["CN-1"]);
+    });
+  });
+
   describe("resolveApprover", () => {
     const requestOf = (user: { id: string; name: string; role: "admin" | "cashier" }, ip = "10.0.0.1") =>
       ({ ip, user }) as unknown as FastifyRequest;
@@ -712,7 +750,7 @@ describe("credit preview, approval and bill credit data", () => {
       expect(json.refundState).toBe("partly_refunded");
       expect(json.refundedQty).toEqual({ [orderItemId]: 1 });
       expect(json.creditNotes).toEqual([{
-        id: "cn-1", cnNo: 1, kind: "refund", reason: "Cold food", createdAt: 1001, totalPaise: 3499,
+        id: "cn-1", cnNo: 1, creditNoteRef: "CN-1", kind: "refund", reason: "Cold food", createdAt: 1001, totalPaise: 3499,
         taxablePaise: 3333, cgstPaise: 83, sgstPaise: 83, requestedByName: "Cara", approvedByName: "Asha",
         refunds: [{ mode: "cash", amountPaise: 3499, refNote: "note" }],
         lines: [{ orderItemId, name: "Thali", qty: 1, totalPaise: 3499 }],

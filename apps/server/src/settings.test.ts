@@ -50,6 +50,15 @@ describe("settings", () => {
     expect((await preview(cashier.token, { restaurantName: "Cafe", address: "FC Road" })).statusCode).toBe(403);
   });
 
+  it("previews the invoice number from the unsaved prefix", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const res = await app.inject({ method: "POST", url: "/api/settings/bill-preview", headers: auth(admin.token),
+      payload: { restaurantName: "Cafe Test", address: "12 MG Road", invoicePrefix: "MP" } });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((res.json() as { html: string }).html).toContain("MP/26-27/0001");
+  });
+
   it("saves bill header lines and print toggles, and keeps toggles a PUT leaves out", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

@@ -120,7 +120,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   if (style !== "compact") pos.line();
   pos.bold(false).align("left");
   line(`Date: ${dateTime(bill.createdAt)}`);
-  pair(`Bill #${bill.billNo}`, statusLabel(bill));
+  pair(`Bill ${bill.invoiceNo}`, statusLabel(bill));
   line(r.orderType === "zomato" ? contextLine(r.orderType, null, null, r.zomatoOrderId) :
     r.orderType === "parcel" ? (r.orderTypeName ? r.orderTypeName.toUpperCase() : "TAKEAWAY / Parcel") : show.table ? `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}` : "DINE-IN");
   if (show.servedBy && r.servedBy) line(`Served by: ${r.servedBy}`);
@@ -179,7 +179,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
     // The bitmap already includes centered padding across the full print width.
     pos.align("left").raster(qr.widthBytes, qr.height, qr.data).align("center");
     line(`UPI: ${payment.upiId}`);
-    line(`Bill #${bill.billNo}`);
+    line(`Bill ${bill.invoiceNo}`);
     rule();
   }
   if (bill.feedbackUrl) {
@@ -209,8 +209,8 @@ export function receiptHtml(bill: Bill): string {
   const taxes = includedGst(bill);
   const payment = billUpiPayment(bill);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Bill #${bill.billNo}</title><style>${RESTAURANT_RECEIPT_CSS}
-  @page{@bottom-left{content:"Bill #${bill.billNo}";font:9px Arial,sans-serif;color:#71717a}}
+  <title>Bill ${escape(bill.invoiceNo)}</title><style>${RESTAURANT_RECEIPT_CSS}
+  @page{@bottom-left{content:"Bill ${escape(bill.invoiceNo)}";font:9px Arial,sans-serif;color:#71717a}}
   </style></head><body><main class="bill bill--${style}" aria-label="Restaurant bill">
   <header class="bill-header"><h1>${e(r.restaurantName)}</h1>
     ${billTextLines(r.receiptHeader ?? "").map((text) => `<p class="header-line">${e(text)}</p>`).join("")}
@@ -218,7 +218,7 @@ export function receiptHtml(bill: Bill): string {
     <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai && show.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
     <h2>${heading.declaration ? `${heading.html}<small class="supply-note">${heading.declaration}</small>` : heading.html}</h2></header>
   <dl class="bill-meta"><div class="date"><dt>Date</dt><dd>${e(dateTime(bill.createdAt))}</dd></div>
-    <div><dt>Bill no.</dt><dd><strong>#${bill.billNo}</strong> <span class="status">${statusLabel(bill)}</span></dd></div>
+    <div><dt>Bill no.</dt><dd><strong>${escape(bill.invoiceNo)}</strong> <span class="status">${statusLabel(bill)}</span></dd></div>
     <div><dt>Service</dt><dd>${service}</dd></div>
     ${r.orderType !== "dine_in" || show.table ? `<div><dt>${r.orderType === "dine_in" ? "Table / Group" : "Order"}</dt><dd>${r.orderType === "dine_in" ? e(contextLine(r.orderType, r.tableName, r.splitLabel)) : order}</dd></div>` : ""}
     ${show.servedBy && r.servedBy ? `<div><dt>Served by</dt><dd>${e(r.servedBy)}</dd></div>` : ""}
@@ -244,7 +244,7 @@ export function receiptHtml(bill: Bill): string {
     <p class="payment-state"><strong>${bill.status === "paid" ? "PAID IN FULL" : bill.status === "void" ? "VOID - NOT PAYABLE" : `AMOUNT DUE ₹${money(due)}`}</strong></p></section>
   ${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}
   ${customerLines(bill).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}
-  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill #${bill.billNo} · Amount filled in automatically</p></section>` : ""}
+  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill ${e(bill.invoiceNo)} · Amount filled in automatically</p></section>` : ""}
   ${bill.feedbackUrl ? `<section class="upi-payment" aria-label="Feedback"><h2>Rate your visit</h2><div class="upi-qr">${upiQrSvg(bill.feedbackUrl)}</div><p class="tax-note">Scan on the restaurant Wi-Fi</p></section>` : ""}
   <footer>${e(footerLines(bill).join("\n"))}</footer></main></body></html>`;
 }

@@ -7,7 +7,7 @@ import { buyerLines, dateTime, escape, money, slipWriter } from "./receipt.js";
 /** A credit note as printed: the bill JSON's credit note plus its per-rate taxes (which the bill JSON does not carry). */
 export interface CreditNoteView extends BillCreditNote { taxes: TaxLine[] }
 
-const cnLabel = (note: CreditNoteView) => `CN-${note.cnNo}`;
+const cnLabel = (note: CreditNoteView) => note.creditNoteRef;
 /** A void of an unpaid bill refunds nothing: the bill is simply cancelled. */
 const isUnpaidVoid = (note: CreditNoteView) => note.kind === "void" && note.refunds.length === 0;
 const roundingOf = (note: CreditNoteView) => note.totalPaise - note.taxablePaise - note.cgstPaise - note.sgstPaise;
@@ -28,7 +28,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
   line(`CREDIT NOTE ${cnLabel(note)}`);
   pos.bold(false).align("left");
   line(dateTime(note.createdAt));
-  line(`Against Bill #${bill.billNo}`);
+  line(`Against Bill ${bill.invoiceNo}`);
   line(`Bill date: ${dateTime(bill.createdAt)}`);
   for (const text of buyerLines(r)) line(text);
   pos.hr(width).bold(true);
@@ -86,7 +86,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
     ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}${r.phone ? `<p class="phone">Ph: ${e(r.phone)}</p>` : ""}
     <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
   </div><div class="bill-identity"><p class="eyebrow">Credit note</p><p class="bill-number">${label}</p><span class="status">${unpaidVoid ? "BILL VOIDED" : note.kind === "void" ? "VOID" : "REFUND"}</span></div></header>
-  <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(note.createdAt))}</dd></div><div><dt>Against bill</dt><dd>Bill #${bill.billNo}</dd></div>
+  <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(note.createdAt))}</dd></div><div><dt>Against bill</dt><dd>Bill ${e(bill.invoiceNo)}</dd></div>
     <div><dt>Bill date</dt><dd>${e(dateTime(bill.createdAt))}</dd></div></dl>
   ${r.buyer ? `<section class="buyer" aria-label="Issued to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <table class="items" aria-label="Credited items"><thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Amount ₹</th></tr></thead><tbody>

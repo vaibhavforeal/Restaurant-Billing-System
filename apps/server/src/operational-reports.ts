@@ -119,7 +119,7 @@ export function operationalReport(db: Database, kind: OperationalReportKind, ran
     }
     if (kind === "credit-notes") {
       notes.push("Every void and refund credit note made during the selected dates, by the date it was made (not the original bill's date). GST is CGST + SGST credited; total includes round-off.");
-      const rows = query(`SELECT 'CN-' || c.cn_no AS cnNo, c.created_at AS date, b.bill_no AS billNo,
+      const rows = query(`SELECT COALESCE(c.credit_note_ref, 'CN-' || c.cn_no) AS cnNo, c.created_at AS date, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS billNo,
           CASE c.kind WHEN 'void' THEN 'Void' ELSE 'Refund' END AS kind, c.reason, rb.name AS requestedBy, ab.name AS approvedBy,
           COALESCE((SELECT group_concat(label, ', ') FROM (SELECT CASE r.mode WHEN 'cash' THEN 'Cash' WHEN 'upi' THEN 'UPI' ELSE 'Card' END AS label
             FROM refund_payments r WHERE r.credit_note_id = c.id GROUP BY r.mode ORDER BY MIN(r.rowid))), 'None') AS refundModes,

@@ -1,6 +1,6 @@
 import { verifyPassword } from "@masalapos/core";
 import { reverseLoyalty } from "./customers.js";
-import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
+import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextCreditNoteNo, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
   type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
@@ -49,7 +49,7 @@ export function loadBillCredit(db: Database, billId: string): BillCredit {
 export function loadBillCreditNotes(db: Database, billId: string, billTotalPaise: number): {
   refundState: ReturnType<typeof refundState>; creditNotes: BillCreditNote[]; refundedQty: Record<string, number>;
 } {
-  const notes = db.prepare(`SELECT c.id, c.cn_no AS cnNo, c.kind, c.reason, c.created_at AS createdAt, c.total_paise AS totalPaise,
+  const notes = db.prepare(`SELECT c.id, c.cn_no AS cnNo, COALESCE(c.credit_note_ref, 'CN-' || c.cn_no) AS creditNoteRef, c.kind, c.reason, c.created_at AS createdAt, c.total_paise AS totalPaise,
       c.taxable_paise AS taxablePaise, c.cgst_paise AS cgstPaise, c.sgst_paise AS sgstPaise,
       rb.name AS requestedByName, ab.name AS approvedByName
     FROM credit_notes c JOIN users rb ON rb.id = c.requested_by JOIN users ab ON ab.id = c.approved_by
@@ -176,9 +176,9 @@ function writeCreditNote(db: Database, note: {
 }): string {
   const id = uuidv7();
   const t = note.draft.totals;
-  db.prepare(`INSERT INTO credit_notes (id, cn_no, bill_id, kind, reason, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise,
-      requested_by, approved_by, created_at, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, nextSequence(db, "credit_note_no"), note.billId, note.kind, note.reason, t.taxablePaise, t.cgstPaise, t.sgstPaise, t.roundingPaise, t.totalPaise,
+  db.prepare(`INSERT INTO credit_notes (id, cn_no, credit_note_ref, bill_id, kind, reason, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise,
+      requested_by, approved_by, created_at, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, nextSequence(db, "credit_note_no"), nextCreditNoteNo(db, note.now), note.billId, note.kind, note.reason, t.taxablePaise, t.cgstPaise, t.sgstPaise, t.roundingPaise, t.totalPaise,
       note.requestedBy, note.approvedBy, note.now, note.clientRef, note.requestJson);
   const line = db.prepare(`INSERT INTO credit_note_lines (credit_note_id, order_item_id, name, category_id, category_name, gst_rate, qty,
       taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);

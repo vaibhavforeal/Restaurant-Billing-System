@@ -21,7 +21,7 @@ describe("bill UPI QR", () => {
     const url = new URL(payment.uri);
     expect(url.protocol).toBe("upi:"); expect(url.host).toBe("pay");
     expect(Object.fromEntries(url.searchParams)).toEqual({ pa: "cafe.123@bank", pn: "Cafe & Co / भोजन",
-      am: "235.00", cu: "INR", tr: "01900000123471238123123456789abc", tn: "Bill #42" });
+      am: "235.00", cu: "INR", tr: "01900000123471238123123456789abc", tn: "Bill 42" });
     expect(payment.amountPaise).toBe(bill.totalPaise);
     expect(billUpiPayment({ ...bill, ...calculateBill(items, 1234, "none") })!.amountPaise).toBe(23500);
   });
