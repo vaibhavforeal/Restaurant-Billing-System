@@ -1,6 +1,8 @@
 import { ActivityAlertSettings } from "./ActivityAlertSettings";
 import { AiSuggestionSettings } from "./AiSuggestionSettings";
 import { BillSettings } from "./BillSettings";
+import { TableSettings } from "./TableSettings";
+import { useCan } from "../permissions";
 import { settingsForSave } from "../settings-save";
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
@@ -42,6 +44,8 @@ const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", pape
 
 /** Opens on a grid of section cards; `section: "plan"` opens Plan & devices directly, e.g. from a Marketplace card that needs a different plan. */
 export function Settings({ section }: { section?: "plan" | undefined } = {}) {
+  const can = useCan();
+  const [tableBusy, setTableBusy] = useState(false);
   const [active, setActive] = useState<SettingsSectionId | null>(() => initialSettingsSection(section));
   const sectionHeading = useRef<HTMLHeadingElement>(null);
   const returnToCard = useRef<SettingsSectionId | null>(null);
@@ -252,7 +256,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       <div className="page-header"><div><h2>Settings</h2></div></div>
       {active === null ? (
         <ul className="settings-cards">
-          {SETTINGS_SECTIONS.map(({ id, title, blurb, icon }) => (
+          {SETTINGS_SECTIONS.filter(item => item.id !== "tables" || can("tables.manage")).map(({ id, title, blurb, icon }) => (
             <li key={id}>
               <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setActive(id); }}>
                 <span className="settings-card-icon"><Icon name={icon} size={22} /></span>
@@ -264,12 +268,13 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
         </ul>
       ) : <>
       <div className="settings-detail-head">
-        <button type="button" onClick={() => setActive(null)}>← Settings</button>
+        <button type="button" disabled={tableBusy} onClick={() => setActive(null)}>← Settings</button>
         <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title} {active === "jobs" && <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip>}</h3>
       </div>
       <div className="pos-section settings-detail">
       {active === "shortcuts" && <KeyboardSettings />}
       {active === "order-types" && <OrderTypes />}
+      {active === "tables" && <TableSettings onBusyChange={setTableBusy} />}
       {active === "updates" && <UpdateSettings />}
       {active === "support" && <SupportSettings />}
       {active === "bill" && <BillSettings onOpenPrinters={() => setActive("printers")} />}

@@ -3,6 +3,7 @@ import type { ServiceRequest } from "@masalapos/domain";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
 import { WorkspaceDialog } from "../WorkspaceDialog";
+import { Icon } from "../Icon";
 import "../service-requests.css";
 import "../tables-requests.css";
 import { withTimeout } from "../abort-signal";
@@ -81,11 +82,15 @@ export function ServiceRequests({ disabled, onBusyChange, compact = false }: { d
     {requests.length === 100 && <p className="service-inbox-help">Showing the latest 100 {history ? "service" : "pending"} requests.</p>}
     <p className="service-inbox-help">Mark handled after helping the guest. A bill request does not create a bill or record a payment.</p>
   </>;
-  if (compact) return <section className="tables-request-summary" aria-label="Table service requests">
-    <div className="tables-request-summary-heading"><h3>Table service <span className="qr-pending-count" role="status" aria-label={pending === null ? "Loading pending service requests" : `${pending.length}${pending.length === 100 ? " or more" : ""} pending service requests`}>{pending === null ? "…" : `${pending.length}${pending.length === 100 ? "+" : ""}`}</span></h3>{error && <span className="tables-request-attention" role="status" title={error}>Needs attention</span>}</div>
-    <button aria-expanded={expanded} aria-haspopup="dialog" disabled={busyId !== null || disabled} onClick={() => setExpanded(true)}>View service requests</button>
+  if (compact) return <div className="table-request-icon">
+    <button className="table-request-button" title={error ? `Table service — ${error}` : "Table service — waiter calls and bill requests"}
+      aria-label={`Table service${pending === null ? ", loading" : `, ${pending.length} pending`}${error ? ", needs attention" : ""}`}
+      aria-expanded={expanded} aria-haspopup="dialog" disabled={busyId !== null || disabled} onClick={() => setExpanded(true)}>
+      <Icon name="service" size={21} /><span className="qr-pending-count" role="status" aria-label={pending === null ? "Loading pending service requests" : `${pending.length}${pending.length === 100 ? " or more" : ""} pending service requests`}>{pending === null ? "…" : `${pending.length}${pending.length === 100 ? "+" : ""}`}</span>
+      {error && <span className="table-request-error" aria-hidden="true">!</span>}
+    </button>
     <WorkspaceDialog open={expanded} title="Table service requests" onClose={() => { if (!lock.current && !disabled) setExpanded(false); }} busy={busyId !== null || disabled} className="tables-requests-dialog service-requests-dialog">{actions}{inbox}</WorkspaceDialog>
-  </section>;
+  </div>;
   return <section className="service-inbox panel" aria-label="Table service requests">
     <div className="service-inbox-heading"><div><h3>Table service requests</h3><p>Waiter calls and requests for the bill from guests.</p></div>{actions}</div>
     {inbox}

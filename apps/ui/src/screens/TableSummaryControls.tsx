@@ -14,9 +14,9 @@ import { PRICE_TIER_LABELS } from "@masalapos/domain/pricing";
 type Staff = { id: string; name: string };
 type Editor = { kind: "notes" | "type" | "delete"; revision: number } | null;
 
-export function TableSummaryControls({ user, order, disabled, canCheckout, checkoutHint, onCheckout, onSaved, onClose, onBusyChange, onRefresh, onHoldOrder, onDeleteOrder }: {
-  user: User; order: Order; disabled: boolean; canCheckout: boolean; checkoutHint: string | null;
-  onCheckout: () => void; onSaved: (order: Order) => void | Promise<void>; onClose: () => void;
+export function TableSummaryControls({ user, order, disabled, onSaved, onClose, onBusyChange, onRefresh, onHoldOrder, onDeleteOrder }: {
+  user: User; order: Order; disabled: boolean;
+  onSaved: (order: Order) => void | Promise<void>; onClose: () => void;
   onBusyChange: (busy: boolean) => void; onRefresh: () => Promise<void>;
   onHoldOrder?: () => void;
   onDeleteOrder?: (reason: string) => Promise<void>;
@@ -121,7 +121,6 @@ export function TableSummaryControls({ user, order, disabled, canCheckout, check
       <button type="button" className="table-summary-type" disabled={locked || !editable || !!typeBlock} title={typeBlock ?? "Change order type"} onClick={() => openEditor("type")}><span>{typeLabel}</span><span aria-hidden="true">⌄</span></button>
       <button type="button" disabled={locked || !editable || !!deleteBlock} title={deleteBlock ?? "Cancel this order"} onClick={() => openEditor("delete")}><Icon name="trash" /><span>Delete order</span></button>
       <button type="button" disabled={locked} title={order.notes ? "View or edit order notes" : "Add order notes"} onClick={() => openEditor("notes")}><Icon name="note" /><span>Order notes{order.notes ? " •" : ""}</span></button>
-      <button type="button" disabled={locked || !canCheckout} title={checkoutHint ?? "Review the bill and receive payment"} onClick={onCheckout}><Icon name="check" /><span>Close order</span></button>
       <button type="button" disabled={locked || !editable || !holdEnabled || hasQueue} title={!holdEnabled ? "Enable Hold orders in Settings" : hasQueue ? "Review saved actions before holding this order." : "Save the order and return to tables"} onClick={onHoldOrder ?? (() => void run(hold, true))}><Icon name="pause" /><span>Hold order</span></button>
     </div>
     {order.type === "dine_in" && <>

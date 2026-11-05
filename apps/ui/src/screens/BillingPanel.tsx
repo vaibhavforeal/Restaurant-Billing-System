@@ -340,7 +340,6 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       {zomatoStatus.error && <p className="error-message" role="alert">{zomatoStatus.error}</p>}
       {hasDraft ? <p className="billing-zomato-hint">Punch or remove the items in your cart first.</p> : zomatoAction.status === null && <p className="billing-zomato-hint">Add items to hand this order over.</p>}
     </>}
-    {!zomatoDesk && <div className="pos-printer-status">Printer: {printerId ? printers.find((p) => p.id === printerId)?.name ?? "Selected printer" : "Browser / A4"}{job ? ` · ${job.status}` : ""}</div>}
     {error && <button className="billing-attention" onClick={() => openDialog()}>Billing needs attention</button>}
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
       <header className="billing-dialog-header">

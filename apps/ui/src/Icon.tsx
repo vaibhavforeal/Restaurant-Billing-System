@@ -1,6 +1,11 @@
 import type { CSSProperties } from "react";
 
 const paths = {
+  grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
+  list: "M4 5h16M4 12h16M4 19h16",
+  tile: "M5 5h.01M12 5h.01M19 5h.01M5 12h.01M12 12h.01M19 12h.01M5 19h.01M12 19h.01M19 19h.01",
+  qr: "M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM13 13h3v3h-3zM19 13h2v5h-3v3h-5v-2m8 2h.01",
+  service: "M3 18h18M5 16a7 7 0 0 1 14 0M12 9V6m-2 0h4M2 21h20",
   home: "M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9",
   tables: "M3 7h18v4H3zM6 11 4 21m14-10 2 10M7 16h10",
   bills: "M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6",

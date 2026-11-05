@@ -15,7 +15,7 @@ import { Icon } from "../Icon";
 import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
-import { savePreference, useShortcutLabels } from "../pos-shortcuts";
+import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
 import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readMenuInsightsCopy, readOrderSettingsCopy, saveCatalogCopy, saveMenuInsightsCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache, type MenuInsights } from "../offline-cache";
 import { withPopularFirst } from "../popular-items";
@@ -31,6 +31,7 @@ import { userCan } from "../permissions";
 import { TableSummaryControls } from "./TableSummaryControls";
 import "../table-summary-controls.css";
 import "../order-summary-cart.css";
+import "../order-menu-views.css";
 
 // A status line to show on the next order screen: a merge switches screens, which would otherwise drop it.
 let carriedStatus: { orderId: string; text: string; at: number } | null = null;
@@ -89,8 +90,11 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const billingLock = useRef(false);
   const reloadRevision = useRef(0);
   const [billingBusy, setBillingBusy] = useState(false);
-  const checkout = useRef<() => void>(null);
   const [search, setSearch] = useState("");
+  const [menuView, setMenuView] = useState<"grid" | "list" | "tile">(() => {
+    const saved = readPreference("masalapos.menu-view", "grid");
+    return saved === "list" || saved === "tile" ? saved : "grid";
+  });
   const [mobilePane, setMobilePane] = useState<"menu" | "cart">("menu");
   const cartItems = useRef<HTMLDivElement>(null);
   const menuSearch = useRef<HTMLInputElement>(null);
@@ -717,8 +721,9 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     return (cooked.length ? cooked.every(kotDone) : kotDone(item)) ? "ready" : item.status;
   };
 
-  return <section className={`screen order-screen${useOrderControls ? " order-with-summary" : ""}`}>
-    <div className="page-header order-header">
+  const compactDineIn = useOrderControls && order.type === "dine_in";
+  const headerInMenu = (isQuick || compactDineIn) && order.status === "open" && lane.entries.length === 0;
+  const orderHeader = <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
       <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : order.orderTypeName ?? "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span>{lane.entries.length > 0 && <span className={`status saved-actions${lane.needsReview ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{lane.needsReview ? "Needs review" : `${lane.entries.length} saved`}</span>}</h2>
         {/* Captains serve their own tables; reassigning is a counter decision. */}
@@ -749,15 +754,22 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => openTransfer("merge")}>Merge…</button>}
         {canCancelOrder && <button disabled={locked} onClick={cancelOrder}>Cancel order</button>}
       </OverflowMenu> : <div className="actions">
-      <TerminalClock />
-      <span className="pos-order-meta">{PRICE_TIER_LABELS[order.priceTier]} · {user.name}</span>
+      {!isQuick && !compactDineIn && <>
+        <TerminalClock />
+        <span className="pos-order-meta">{PRICE_TIER_LABELS[order.priceTier]} · {user.name}</span>
+      </>}
       {!useOrderControls && order.status === "open" && showHold && <button {...shortcutProps("hold")} title={shortcut("hold", isQuick ? "Keep this order in My Orders and start a takeaway for the next customer" : "Save this order for any device and return to tables")} disabled={locked} onClick={() => void holdOrder()}>{shortcut("hold", "Hold")}</button>}
-      {order.type === "dine_in" && order.status === "open" && <button onClick={() => void newSplit()} disabled={locked}>+ Split</button>}
-      {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("move")} disabled={locked}>Move table…</button>}
-      {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("merge")} disabled={locked}>Merge…</button>}
-      <button title="Return to the previous screen" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>← Back</button>
+      {order.type === "dine_in" && order.status === "open" && <OverflowMenu label="Table actions">
+        <button onClick={() => void newSplit()} disabled={locked}>+ Split</button>
+        <button onClick={() => openTransfer("move")} disabled={locked}>Move table…</button>
+        <button onClick={() => openTransfer("merge")} disabled={locked}>Merge…</button>
+      </OverflowMenu>}
+      {!isQuick && !compactDineIn && <button title="Return to the previous screen" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>← Back</button>}
       </div>}
-    </div>
+    </div>;
+
+  return <section className={`screen order-screen${useOrderControls ? " order-with-summary" : ""}${headerInMenu ? " order-header-in-menu" : ""}`}>
+    {!headerInMenu && orderHeader}
     <WorkspaceDialog open={captainPickerOpen} title="Choose captain" className="order-captain-dialog" busy={locked}
       onClose={() => { if (!actionLock.current && !billingLock.current) setCaptainPickerOpen(false); }}>
       <p>Captain for {orderLabel(order)} · {order.splitLabel ?? "A"}</p>
@@ -790,15 +802,20 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       <button aria-pressed={mobilePane === "cart"} aria-controls="order-cart" onClick={() => setMobilePane("cart")}>Order · {itemCount}</button>
     </div>}
     <div className={`order-layout ${order.status === "open" ? `show-${mobilePane}` : "closed-order"}`}>
-      {order.status === "open" && <section className="menu-browser" id="order-menu" aria-label="Menu">
+      {order.status === "open" && <section className={`menu-browser menu-view-${menuView}`} id="order-menu" aria-label="Menu">
         <div className="menu-toolbar">
+          {headerInMenu && orderHeader}
           <div className="menu-heading"><h3>Menu</h3><span>{PRICE_TIER_LABELS[order.priceTier]} prices · {activeProducts.length} dishes</span></div>
           <div className="search-field"><Icon name="search" size={16} /><input ref={menuSearch} autoFocus={!captain} aria-label="Search menu" placeholder={captain ? "Search dishes or variants" : "Search items · Enter to add"} value={search} onChange={(e) => { setSearch(e.target.value); if (e.target.value) setSelectedCat("all"); }} onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) return;
             if (event.key === "Enter") { event.preventDefault(); menuResults.current?.querySelector<HTMLButtonElement>("button.menu-card:not(:disabled)")?.click(); }
             if (event.key === "Escape") { event.preventDefault(); setSearch(""); }
           }} /></div>
-          <span className="pos-search-hint">Enter adds first match</span>
+          <div className="menu-view-controls" role="group" aria-label="Menu view">
+            {(["grid", "list", "tile"] as const).map((view) => <button type="button" key={view} aria-pressed={menuView === view} aria-label={`${view[0]!.toUpperCase()}${view.slice(1)} view`} onClick={() => { setMenuView(view); savePreference("masalapos.menu-view", view); }}>
+              <Icon name={view} size={18} /><span>{view[0]!.toUpperCase()}{view.slice(1)}</span>
+            </button>)}
+          </div>
         </div>
         <div className="category-rail" role="group" aria-label="Menu categories">
           <button aria-pressed={selectedCat === "all"} onClick={() => setSelectedCat("all")}>All items</button>
@@ -816,9 +833,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       <aside className="order-cart" id="order-cart" aria-label="Current order">
         <div className="cart-heading"><h3>Current order <span>{itemCount} {itemCount === 1 ? "item" : "items"}</span></h3><Icon name={order.type === "dine_in" ? "tables" : "bag"} size={17} /></div>
         {useOrderControls && <TableSummaryControls key={order.id} user={user} order={order} disabled={locked}
-          canCheckout={userCan(user, "bills.create") && (order.status === "open" || order.status === "billed") && itemCount > 0 && (isQuick || draft.length === 0) && !lane.entries.length}
-          checkoutHint={!isQuick && draft.length ? "Save the order and send kitchen items before checkout." : itemCount === 0 ? "Add dishes before checkout." : null}
-          onCheckout={() => checkout.current?.()} onHoldOrder={() => void holdOrder()}
+          onHoldOrder={() => void holdOrder()}
           onBusyChange={(value) => { actionLock.current = value; setPending(value); }}
           onSaved={async (saved) => { keepLocally(saved); if (saved.type !== order.type || saved.priceTier !== order.priceTier) await reload(); }}
           onRefresh={reload} onClose={() => { if (canLeave()) onBack(); }}
@@ -866,7 +881,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           {showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}
           {!useOrderControls && canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}
         </div>)}
-        {!captain && userCan(user, "bills.create") && <BillingPanel checkoutRef={checkout} checkoutLabel={useOrderControls ? "Checkout" : undefined} role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} heldCount={held.count} onFireHeld={async () => { if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED); await reload(); }} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
+        {!captain && userCan(user, "bills.create") && <BillingPanel checkoutLabel={useOrderControls ? "Checkout" : undefined} role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} heldCount={held.count} onFireHeld={async () => { if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED); await reload(); }} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
         {isQuick && order.status === "settled" && onNextTakeaway && <button className="primary next-takeaway" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Next takeaway")} disabled={locked} onClick={() => { if (canLeave()) onNextTakeaway(); }}>Next takeaway</button>}
         </div>
       </aside>

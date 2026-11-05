@@ -7,7 +7,7 @@ html[data-theme] .tables-screen.table-overview {
   .tables-heading p { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; font-size: 12px; color: var(--muted); }
   .tables-available-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pos-success); }
   .tables-header button { min-height: 34px; padding: 6px 10px; font-size: 12px; }
-  .tables-header .actions { gap: 6px; }
+  .tables-header .actions { gap: 6px; margin-left: auto; }
   .tables-request-strip { gap: 8px; }
   .tables-request-summary { padding: 4px 8px; border-radius: 6px; min-height: 38px; box-shadow: none; }
   .tables-request-summary h3 { font-size: 12px; }

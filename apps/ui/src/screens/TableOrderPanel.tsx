@@ -196,7 +196,7 @@ export function TableOrderPanel({ user, orderId, disabled, onEditItems, onSelect
     <WorkspaceDialog open={actionDialog === "more"} title="Order details" busy={locked} onClose={() => setActionDialog(null)} className="table-summary-dialog">
       {actionDialog === "more" && <>
         <TableSummaryControls user={user} order={order} disabled={locked} onSaved={(saved) => { setOrder(saved); onChanged(); }} onBusyChange={detailsBusy}
-          onRefresh={reload} onClose={close} onCheckout={openCheckout} canCheckout={canBill && (open || order.status === "billed") && !checkoutBlocked && summary.lines.length > 0} checkoutHint={checkoutBlocked ? blocker : null} />
+          onRefresh={reload} onClose={close} />
         <div className="table-more-actions">{dineIn && open && <><button disabled={locked} onClick={() => { setActionDialog(null); setTransferError(""); setTransferDialog("move"); }}>Move table</button><button disabled={locked} onClick={() => { setActionDialog(null); setTransferError(""); setTransferDialog("merge"); }}>Merge bills</button></>}</div>
       </>}
     </WorkspaceDialog>
