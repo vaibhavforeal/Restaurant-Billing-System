@@ -31,6 +31,8 @@ describe("billSupply", () => {
     expect(billSupply({ gstMode: "included", gstin: ACME })).toBe("regular");
     expect(billSupply({ gstMode: "none", gstin: ACME })).toBe("composition");
     expect(billSupply({ gstMode: "included", gstin: "" })).toBe("unregistered");
+    expect(billSupply({ gstMode: "exclusive", gstin: ACME })).toBe("regular");
+    expect(billSupply({ gstMode: "exclusive", gstin: "" })).toBe("unregistered");
     expect(billSupply({ gstMode: "none", gstin: ACME, gstPaidBy: "zomato" })).toBe("eco95");
   });
 });

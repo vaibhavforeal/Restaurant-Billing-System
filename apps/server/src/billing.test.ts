@@ -179,6 +179,26 @@ describe("billing and day-end", () => {
     expect((await issue(await order())).cgstPaise).toBe(250);
     expect((await app.inject({ url: `/api/bills/${before.id}`, headers: auth(token) })).json().bill).toEqual(before);
   });
+  it("keeps report lines non-negative and adding up to the bill in every GST mode", async () => {
+    const category = (await app.inject({ url: "/api/categories", headers: auth(token) })).json().categories[0].id as string;
+    const soda = (await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Soda", categoryId: category, pricePaise: 9013, gstRate: 18, kotStationId: null } })).json().product.id as string;
+    for (const gstMode of ["included", "exclusive", "none"]) {
+      expect((await putSettings({ gstMode })).statusCode, gstMode).toBe(200);
+      const res = await app.inject({ method: "POST", url: "/api/orders", headers: auth(token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } });
+      const id = res.json().order.id as string;
+      await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId, qty: 1, clientRef: uuidv7() }, { productId: soda, qty: 2, clientRef: uuidv7() }] } });
+      const bill = (await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: await billRequest(id, { discountPaise: 4603, discountNote: "Regular" }) })).json().bill as Bill;
+      expect(bill.receipt.gstMode).toBe(gstMode);
+      const lines = app.db.prepare("SELECT discount_paise AS d, taxable_paise AS t, cgst_paise AS c, sgst_paise AS s, rounding_paise AS r, total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ d: number; t: number; c: number; s: number; r: number; total: number }>;
+      expect(lines).toHaveLength(2);
+      for (const line of lines) {
+        expect(line.d, gstMode).toBeGreaterThanOrEqual(0);
+        expect(line.total, gstMode).toBe(line.t + line.c + line.s + line.r);
+      }
+      expect(lines.reduce((sum, l) => sum + l.d, 0), gstMode).toBe(4603);
+      expect(lines.reduce((sum, l) => sum + l.total, 0), gstMode).toBe(bill.totalPaise);
+    }
+  });
   it("refuses to issue a bill from a preview taken before the GST mode changed", async () => {
     const id = await order(); const body = await billRequest(id);
     expect((await putSettings({ gstMode: "none" })).statusCode).toBe(200);
