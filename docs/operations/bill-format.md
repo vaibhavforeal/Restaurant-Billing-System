@@ -29,7 +29,7 @@ The 80 mm thermal receipt uses Item / Qty / Rate / Amount columns. On 58 mm
 paper it uses Item / Qty / Amount, with the unit rate below each item. Long names
 wrap within their column; unusually large numeric values use separate lines
 without truncation. All thermal text remains within 32/48 characters respectively.
-Zero rounding is omitted. Dine-in bills identify the table and group; takeaway
+Zero rounding is omitted (see Numbering and rounding below). Dine-in bills identify the table and group; takeaway
 bills show Parcel. Zomato bills identify the platform order and display the
 platform-paid GST note. Paid, unpaid and void bills have distinct wording.
 
@@ -89,6 +89,39 @@ bills issued before these options existed print exactly as they did.
 The item GST rate column or line appears only on bills that charge GST
 themselves: Prices include GST, and not a Zomato-paid order. No-GST bills, bills
 of supply and Zomato bills never show it, even when the option is on.
+
+## Numbering and rounding
+
+Choose **Settings > Bill settings > Numbering & rounding**, then **Save**:
+
+- **Invoice prefix** - optional, up to 4 letters or digits, saved in capitals.
+  "CN" is not allowed because credit notes use it.
+- **Round off total** - **To the nearest Rs 1** (default), **To the nearest 50
+  paise**, or **No rounding (exact paise)**.
+
+Both apply to new bills only. Refunds and credit notes use the rounding each bill
+was issued with.
+
+Bills are numbered `PREFIX/YY-YY/NNNN`, or `YY-YY/NNNN` with no prefix, for example
+`MP/25-26/0001`. The financial year runs 1 April to 31 March (local time). The
+counter restarts at 0001 for the first bill on or after 1 April and grows to 5
+digits after 9999. Changing the prefix mid-year continues the same counter. A
+number is at most 16 characters, the GST limit.
+
+Credit notes are `CN/YY-YY/NNN`, for example `CN/25-26/001`, with their own yearly
+counter. They carry no restaurant prefix: a 4-letter prefix would make the number
+17 characters, and GST allows 16.
+
+Bills and credit notes issued before this change keep their old numbers (the plain
+number, and `CN-<n>`).
+
+The number shows on thermal and A4 receipts, the digital bill and its file name
+(`Bill-MP-25-26-0001.html`), the UPI payment note, credit-note prints, the Bills
+list, the billing panel, customer profiles and feedback. GSTR-1 uses it for the
+invoice and credit-note numbers, and Table 13 lists one range per series, so a
+prefix change mid-year shows as two ranges. Print-job labels, custom-report
+"Bill no." columns, staff-activity references and a customer's usual stay on the
+internal bill number.
 
 ## The four bill types
 

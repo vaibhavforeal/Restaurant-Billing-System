@@ -1,6 +1,6 @@
 # Bill settings — design
 
-Date: 2026-11-05 · Branch: `feat/bill-settings` · Status: approved in brainstorm, awaiting spec review
+Date: 2026-11-05 · Branch: `feat/bill-settings` · Status: approved in brainstorm; Phase 1 and Phase 2 built
 
 ## Why
 
@@ -25,7 +25,7 @@ Four phases, each with its own implementation plan, session and commit, built in
 | # | Phase | Money logic | Migration |
 |---|---|---|---|
 | 1 | Cards + print content + live preview | None | 56 |
-| 2 | Invoice numbering + round-off | Rounding only | 57 |
+| 2 | Invoice numbering + round-off (built) | Rounding only | 57 |
 | 3 | GST added on top | Core calculation | 58 |
 | 4 | Service + packaging charges | New bill lines | 59 |
 
@@ -120,8 +120,10 @@ values show the field error and keep the last good preview.
 
 ### Credit notes
 
-Same pattern with a `CN` part and their own per-FY counter (`sequences` key `credit_note:<FY>`), 3-digit padding:
-`MP/CN/25-26/001`. Stored in `credit_notes.credit_note_ref TEXT UNIQUE`.
+`CN/YY-YY/NNN`, e.g. `CN/25-26/001`, with their own per-FY counter (`sequences` key `credit_note:<FY>`) and 3-digit
+padding. They carry no restaurant prefix: `ABCD/CN/25-26/001` would be 17 characters and GST allows 16 (changed from
+the original `MP/CN/25-26/001` during build). The invoice prefix `CN` is rejected so the two series cannot collide.
+Stored in `credit_notes.credit_note_ref TEXT UNIQUE`.
 
 ### Where the invoice number appears
 
