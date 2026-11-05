@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { closeSync, createReadStream, createWriteStream, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { z } from "zod";
 import type { CloudBackupAccount, CloudBackupFile } from "@masalapos/domain";
 import { atomicJson, expiredBackups, parseBackupName } from "./backups.js";
+import { seal, unseal } from "./secret-box.js";
 import type { CloudBackupConnection, CloudBackupProvider } from "./cloud-backups.js";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -352,19 +353,8 @@ export class GoogleDriveProvider implements CloudBackupProvider {
     if (this.state.account?.id !== account.id) throw new Error("Google account changed");
   }
   private save() { atomicJson(this.path, this.state); }
-  private seal(text: string): string {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", this.options.secretKey, iv);
-    const data = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
-    return ["v1", iv, cipher.getAuthTag(), data].map((part) => typeof part === "string" ? part : part.toString("base64")).join(".");
-  }
-  private unseal(sealed: string): string {
-    const [version, iv, tag, data] = sealed.split(".");
-    if (version !== "v1" || !iv || !tag || !data) throw new Error("Unsupported credential format");
-    const decipher = createDecipheriv("aes-256-gcm", this.options.secretKey, Buffer.from(iv, "base64"));
-    decipher.setAuthTag(Buffer.from(tag, "base64"));
-    return Buffer.concat([decipher.update(Buffer.from(data, "base64")), decipher.final()]).toString("utf8");
-  }
+  private seal(text: string): string { return seal(this.options.secretKey, text); }
+  private unseal(sealed: string): string { return unseal(this.options.secretKey, sealed); }
 }
 
 async function hashFile(path: string, algorithm: "md5" | "sha256", signal: AbortSignal) {
