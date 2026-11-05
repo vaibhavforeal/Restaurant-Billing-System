@@ -2,6 +2,7 @@ import { z } from "zod";
 import { RECEIPT_STYLES } from "./receipt-styles.js";
 import { DEFAULT_GST_RATES, GST_MODES } from "./gst.js";
 import { GSTIN_STATE_MESSAGE, gstinMatchesState } from "./restaurant-profile.js";
+import { OptionalGstin } from "./gstin-schema.js";
 import { Fssai, Gstin, Phone, Pincode, StateCode } from "./restaurant-profile-schema.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
@@ -37,7 +38,16 @@ export const SettingsUpdate = z.object({
   popularByTimeEnabled: z.boolean().optional(),
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: z.boolean().optional(),
+  /** Customer's usual: offer a known customer's regular dishes and last order on the order screen. */
+  customerUsualEnabled: z.boolean().optional(),
+  /** The SAC code printed on tax invoices and used in the GSTR-1 HSN summary; 996331 is restaurant service. */
+  sacCode: z.string().trim().regex(/^\d{4,8}$/, "Enter a 4 to 8 digit SAC code").optional(),
+  /** Zomato's GSTIN in the restaurant's state, for GSTR-1 Table 14 (supplies where Zomato pays the GST). Empty when not known. */
+  zomatoGstin: OptionalGstin.optional(),
 }).superRefine((s, ctx) => {
+  if (s.stateCode !== undefined && s.zomatoGstin && !gstinMatchesState(s.zomatoGstin, s.stateCode)) {
+    ctx.addIssue({ code: "custom", path: ["zomatoGstin"], message: "Use Zomato's GSTIN for your state" });
+  }
   if (s.stateCode !== undefined && !gstinMatchesState(s.gstin, s.stateCode)) ctx.addIssue({ code: "custom", path: ["gstin"], message: GSTIN_STATE_MESSAGE });
 });
 export type SettingsUpdateInput = z.infer<typeof SettingsUpdate>;

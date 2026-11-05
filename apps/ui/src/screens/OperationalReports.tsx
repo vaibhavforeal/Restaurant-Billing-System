@@ -4,14 +4,23 @@ import { apiFetch } from "../api";
 import { SalesPeriodControls } from "../SalesReportControls";
 import { recentPeriod, type ReportPeriod } from "../sales-report";
 import { downloadText } from "../download";
-import { operationalCell, operationalCsv } from "../operational-report";
+import { operationalCsv } from "../operational-report";
+import { ReportTables } from "./ReportTables";
 import { withTimeout } from "../abort-signal";
 
-export type ProfitReport = Omit<OperationalReport, "kind"> & { kind: "profit" };
+/** Reports built from dish costs: admin-only (`costs.read`) and part of the Dish costing module. */
+export type CostReportKind = "profit" | "menu-engineering";
+/** Reports read straight from `/api/reports/<kind>`: the cost reports and staff activity (admins). */
+export type DirectReportKind = CostReportKind | "staff-activity";
+export type ProfitReport = Omit<OperationalReport, "kind"> & { kind: DirectReportKind };
 type LoadedReport = OperationalReport | ProfitReport;
 export const PROFIT_REPORT_TITLE = "Food cost & profit";
+export const STAFF_ACTIVITY_TITLE = "Staff activity";
+const DIRECT_TITLES: Record<DirectReportKind, string> = { profit: PROFIT_REPORT_TITLE, "menu-engineering": "Menu engineering", "staff-activity": STAFF_ACTIVITY_TITLE };
+export const COST_REPORTS: Array<{ id: CostReportKind; title: string }> = (["profit", "menu-engineering"] as const).map((id) => ({ id, title: DIRECT_TITLES[id] }));
+const isDirect = (kind: string): kind is DirectReportKind => kind in DIRECT_TITLES;
 
-export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { kind: OperationalReportKind | "profit"; initialPeriod?: ReportPeriod | undefined; onPeriodChange: (period: ReportPeriod) => void }) {
+export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { kind: OperationalReportKind | DirectReportKind; initialPeriod?: ReportPeriod | undefined; onPeriodChange: (period: ReportPeriod) => void }) {
   const [period, setPeriod] = useState(initialPeriod ?? recentPeriod(7));
   const [report, setReport] = useState<LoadedReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,7 +31,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     let active = true;
     const controller = new AbortController();
     setLoading(true); setReport(null); setError(""); setMessage("");
-    apiFetch<{ report: LoadedReport }>(`${kind === "profit" ? "/api/reports/profit" : `/api/reports/operations/${kind}`}?${new URLSearchParams({ from: period.from, to: period.to })}`, { signal: withTimeout(controller.signal, 15000) })
+    apiFetch<{ report: LoadedReport }>(`${isDirect(kind) ? `/api/reports/${kind}` : `/api/reports/operations/${kind}`}?${new URLSearchParams({ from: period.from, to: period.to })}`, { signal: withTimeout(controller.signal, 15000) })
       .then(({ report }) => { if (active) setReport(report); })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load report"); })
       .finally(() => { if (active) setLoading(false); });
@@ -37,27 +46,13 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     } catch (e) { setError(e instanceof Error ? e.message : "Could not export report"); }
   }
   return <div className="operational-report">
-    <div className="page-header"><h3>{kind === "profit" ? PROFIT_REPORT_TITLE : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3><button disabled={!report || loading} onClick={exportReport}>Export CSV</button></div>
+    <div className="page-header"><h3>{isDirect(kind) ? DIRECT_TITLES[kind] : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3><button disabled={!report || loading} onClick={exportReport}>Export CSV</button></div>
     <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((v) => v + 1); }} onRefresh={() => { invalidate(); setRevision((v) => v + 1); }} />
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {loading && <p role="status">Loading report…</p>}
     {report && <>
       <div className="sales-range-caption"><span>{report.from} → {report.to} · {report.timezone}</span><span>Updated {new Date(report.generatedAt).toLocaleTimeString()}</span></div>
-      <details className="report-notes"><summary>How this report is calculated</summary>{report.notes.map((note) => <p key={note}>{note}</p>)}</details>
-      {report.tables.map((table) => <section key={table.title}>
-        <h3>{table.title} <small>({table.rows.length})</small></h3>
-        {!table.rows.length ? <p className="sales-report-empty">No records for these dates.</p> : <div className="sales-report-table" role="region" aria-label={table.title} tabIndex={0}>
-          <table><caption>{table.title} · {report.from} to {report.to}</caption>
-            <thead><tr>{table.columns.map((c) => <th scope="col" key={c.key}>{c.label}</th>)}</tr></thead>
-            <tbody>{table.rows.map((row, index) => <tr key={index}>{table.columns.map((c, i) => i === 0
-              ? <th scope="row" key={c.key}>{operationalCell(row[c.key], c, report.timezone)}</th>
-              : <td key={c.key}>{operationalCell(row[c.key], c, report.timezone)}</td>)}</tr>)}</tbody>
-            {table.totals && <tfoot><tr>{table.columns.map((c, i) => i === 0
-              ? <th scope="row" key={c.key}>{operationalCell(table.totals![c.key], c, report.timezone)}</th>
-              : <td key={c.key}>{operationalCell(table.totals![c.key], c, report.timezone)}</td>)}</tr></tfoot>}
-          </table>
-        </div>}
-      </section>)}
+      <ReportTables report={report} />
     </>}
   </div>;
 }

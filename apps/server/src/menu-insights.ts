@@ -6,6 +6,11 @@ export function orderedTogetherEnabled(db: Database): boolean {
   return (db.prepare("SELECT ordered_together_enabled AS v FROM settings WHERE id = 1").get() as { v: number }).v === 1;
 }
 
+/** Whether the order screen offers a known customer's usual dishes and last order (Settings → Restaurant profile). */
+export function customerUsualEnabled(db: Database): boolean {
+  return (db.prepare("SELECT customer_usual_enabled AS v FROM settings WHERE id = 1").get() as { v: number }).v === 1;
+}
+
 /** Dishes often on the same bill as each dish, for the carts' "Goes well with" row; none while the setting is off. */
 export function menuPairs(db: Database, now = Date.now()): Record<string, PairedDish[]> {
   return orderedTogetherEnabled(db) ? orderedTogether(db, now) : {};

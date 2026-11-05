@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OptionalGstin } from "./gstin-schema.js";
 
 /**
  * An Indian mobile number as 10 digits: spaces, dashes, a leading 0 and a +91 / 91 prefix are removed.
@@ -41,6 +42,10 @@ const Email = z.string().trim().max(120).transform((value, ctx) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { ctx.addIssue({ code: "custom", message: "Enter a valid email" }); return z.NEVER; }
   return value.toLowerCase();
 }).nullable();
+/** A business customer's GSTIN; empty means none. */
+const CustomerGstin = OptionalGstin.transform((value) => value || null).nullable();
+const LegalName = z.string().trim().max(100).transform((value) => value || null).nullable();
+const GSTIN_NEEDS_NAME = { message: "Enter the business's legal name for the GSTIN", path: ["legalName"] };
 const Gender = z.enum(["female", "male", "other"]).nullable();
 /** Tags are trimmed and de-duplicated ignoring case; the first spelling wins. */
 const Tags = z.array(z.string().trim().min(1).max(30)).max(20).transform((tags) => {
@@ -58,7 +63,9 @@ export const CustomerCreate = z.object({
   gender: Gender.default(null),
   marketingOptIn: z.boolean().default(false),
   tags: Tags.default([]),
-});
+  gstin: CustomerGstin.default(null),
+  legalName: LegalName.default(null),
+}).refine((c) => !c.gstin || !!c.legalName, GSTIN_NEEDS_NAME);
 export const CustomerUpdate = z.object({
   name: Name.optional(), phone: Phone.optional(),
   typeId: z.string().min(1).nullable().optional(),
@@ -71,7 +78,9 @@ export const CustomerUpdate = z.object({
   isActive: z.boolean().optional(),
   /** When given, replaces the customer's tags. */
   tags: Tags.optional(),
-});
+  gstin: CustomerGstin.optional(),
+  legalName: LegalName.optional(),
+}).refine((c) => !c.gstin || c.legalName !== null, GSTIN_NEEDS_NAME);
 export const CustomerSlab = z.object({
   minBillPaise: Paise,
   percent: z.number().gt(0, "Percent must be above 0").max(100),

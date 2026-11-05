@@ -116,6 +116,12 @@ export interface SettingsData {
   popularByTimeEnabled: boolean;
   /** Ordered together: the carts suggest dishes often on the same bill. */
   orderedTogetherEnabled: boolean;
+  /** Customer's usual: offer a known customer's regular dishes and last order on the order screen. */
+  customerUsualEnabled: boolean;
+  /** The SAC code on tax invoices and in the GSTR-1 HSN summary; 996331 is restaurant service. */
+  sacCode: string;
+  /** Zomato's GSTIN in the restaurant's state, for GSTR-1 Table 14. Empty when not known. */
+  zomatoGstin: string;
 }
 
 export interface Customer {
@@ -131,6 +137,9 @@ export interface Customer {
   anniversaryDate: string | null;
   gender: "female" | "male" | "other" | null;
   marketingOptIn: boolean;
+  /** A business customer's GSTIN and legal name, for GST (B2B) invoices. */
+  gstin?: string | null;
+  legalName?: string | null;
   isActive: boolean;
   tags: string[];
   /** The loyalty tier their recent spend reaches; null when tiers are off. */

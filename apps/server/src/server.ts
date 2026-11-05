@@ -1,3 +1,6 @@
+import { registerAi, type AiOptions } from "./ai/routes.js";
+import { registerStaffActivity } from "./staff-activity.js";
+import { registerPrepForecast } from "./prep-forecast.js";
 import type { Database } from "@masalapos/domain";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
@@ -30,6 +33,7 @@ import { registerZomatoDesk } from "./zomato-desk.js";
 import { registerReports } from "./reports.js";
 import { registerSalesReports } from "./sales-reports.js";
 import { registerOperationalReports } from "./operational-reports.js";
+import { registerGstReturns } from "./gst-returns.js";
 import { registerCustomReports } from "./custom-reports.js";
 import { registerOrderAnalytics } from "./order-analytics.js";
 import { registerDashboard } from "./dashboard.js";
@@ -70,6 +74,8 @@ export interface ServerOptions {
   updateBridge?: UpdateBridge;
   /** The running app version, shown in Settings → Updates. */
   appVersion?: string;
+  /** The AI assistant's data folder and sealing key (absent in demo mode; tests pass a fake fetch and base URL). */
+  ai?: AiOptions;
   /** Tests replace the support channel's live connection. */
   support?: Pick<SupportOptions, "connect" | "log">;
 }
@@ -130,6 +136,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerCatalog(app);
   registerUsers(app);
   registerSettings(app);
+  registerStaffActivity(app);
+  // The AI assistant reaches MasalaPOS's AI service the same way support does: with the counter's installation ID and secret.
+  const aiService = opts.ai?.service ?? (opts.licensing?.serviceUrl && opts.licensing.installationSecret
+    ? { serviceUrl: opts.licensing.serviceUrl, installationId: opts.licensing.installationId, installationSecret: opts.licensing.installationSecret } : undefined);
+  const aiFetch = opts.ai?.fetch ?? opts.licensing?.fetch;
+  registerAi(app, opts.ai && { dataDir: opts.ai.dataDir, ...(aiService ? { service: aiService } : {}), ...(aiFetch ? { fetch: aiFetch } : {}) });
   registerOrderSettings(app);
   registerMenuInsights(app);
   registerDiscountCaps(app);
@@ -152,11 +164,13 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerReports(app);
   registerSalesReports(app);
   registerOperationalReports(app);
+  registerGstReturns(app);
   registerCustomReports(app);
   registerCrmReports(app);
   registerOrderAnalytics(app);
   registerDashboard(app);
   registerStock(app);
+  registerPrepForecast(app);
   registerCosting(app);
   registerGuestOrdering(app, opts.port);
   registerFeedback(app, opts.port);

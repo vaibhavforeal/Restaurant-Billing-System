@@ -2,7 +2,7 @@ import { type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } 
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { RECEIPT_CSS } from "./receipt-style.js";
-import { dateTime, escape, money, slipWriter } from "./receipt.js";
+import { buyerLines, dateTime, escape, money, slipWriter } from "./receipt.js";
 
 /** A credit note as printed: the bill JSON's credit note plus its per-rate taxes (which the bill JSON does not carry). */
 export interface CreditNoteView extends BillCreditNote { taxes: TaxLine[] }
@@ -30,6 +30,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
   line(dateTime(note.createdAt));
   line(`Against Bill #${bill.billNo}`);
   line(`Bill date: ${dateTime(bill.createdAt)}`);
+  for (const text of buyerLines(r)) line(text);
   pos.hr(width).bold(true);
   pair("ITEM / QTY", "AMOUNT");
   pos.bold(false);
@@ -87,6 +88,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   </div><div class="bill-identity"><p class="eyebrow">Credit note</p><p class="bill-number">${label}</p><span class="status">${unpaidVoid ? "BILL VOIDED" : note.kind === "void" ? "VOID" : "REFUND"}</span></div></header>
   <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(note.createdAt))}</dd></div><div><dt>Against bill</dt><dd>Bill #${bill.billNo}</dd></div>
     <div><dt>Bill date</dt><dd>${e(dateTime(bill.createdAt))}</dd></div></dl>
+  ${r.buyer ? `<section class="buyer" aria-label="Issued to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <table class="items" aria-label="Credited items"><thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Amount ₹</th></tr></thead><tbody>
     ${note.lines.length ? note.lines.map((i, index) => `<tr><td>${index + 1}</td><td><span class="item-name">${e(i.name)}</span></td><td>${i.qty}</td><td class="amount"><strong>${money(i.totalPaise)}</strong></td></tr>`).join("") : `<tr><td></td><td><span class="item-name">All items on the bill</span></td><td></td><td class="amount"><strong>${money(note.totalPaise)}</strong></td></tr>`}
   </tbody></table><div class="item-count"><span>${note.lines.reduce((sum, l) => sum + l.qty, 0)} total quantity credited</span><span>All amounts in INR</span></div>

@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GoogleDriveProvider } from "./google-drive.js";
+import { resolveSecretKey } from "./secret-box.js";
 
 declare const __MASALAPOS_GOOGLE_CLIENT_ID__: string;
 declare const __MASALAPOS_GOOGLE_CLIENT_SECRET__: string;
@@ -20,15 +20,8 @@ export function driveProvider(input: { dataDir: string; secretKey: string | unde
     ? { clientId: process.env["MASALAPOS_GOOGLE_CLIENT_ID"], clientSecret: process.env["MASALAPOS_GOOGLE_CLIENT_SECRET"] ?? "" }
     : commercial ? { clientId: "", clientSecret: "" } : developmentClientFile(input.warn));
   if (!clientId) return undefined;
-  let key = input.secretKey ? Buffer.from(input.secretKey, "base64") : undefined;
-  if (!key && !commercial) {
-    // Development server without the desktop shell: an unprotected local key, never used by the customer build.
-    const path = join(input.dataDir, "dev-secret.key");
-    if (!existsSync(path)) writeFileSync(path, randomBytes(32).toString("base64"));
-    key = Buffer.from(readFileSync(path, "utf8").trim(), "base64");
-    input.warn("Google Drive tokens use an unprotected development key (dev-secret.key)");
-  }
-  if (!key || key.length !== 32) { input.warn("Google Drive backup unavailable: Windows credential protection is not available"); return undefined; }
+  const key = resolveSecretKey({ dataDir: input.dataDir, secretKey: input.secretKey, commercial, warn: input.warn });
+  if (!key) { input.warn("Google Drive backup unavailable: Windows credential protection is not available"); return undefined; }
   try {
     return new GoogleDriveProvider({ clientId, clientSecret, dataDir: input.dataDir, secretKey: key, restaurantName: input.restaurantName });
   } catch (error) {

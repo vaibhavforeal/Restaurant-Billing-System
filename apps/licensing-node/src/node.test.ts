@@ -13,7 +13,7 @@ import type { Env } from "../../licensing-worker/src/env.js";
 import { createApp, type Fetcher } from "./app.js";
 import { directoryAssets } from "./assets.js";
 import { memoryLimiter } from "./limiter.js";
-import { readSecret } from "./secrets.js";
+import { aiEnv, readSecret } from "./secrets.js";
 import { fileD1 } from "./sqlite-d1.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../licensing-worker/migrations/", import.meta.url));
@@ -220,5 +220,31 @@ describe("live sockets", () => {
     ws.send(Buffer.from([1, 2, 3]));
     expect(await code).toBe(1003);
     await s.close();
+  });
+});
+
+describe("AI assistant relay configuration", () => {
+  it("reads MasalaPOS's OpenRouter key from the environment or a root-only file, with the model and fallback", () => {
+    expect(aiEnv({})).toEqual({});
+    expect(aiEnv({ OPENROUTER_API_KEY: "sk-or-v1-env", OPENROUTER_MODEL: "nvidia/nemotron:free", OPENROUTER_FALLBACK: "off" }))
+      .toEqual({ OPENROUTER_API_KEY: "sk-or-v1-env", OPENROUTER_MODEL: "nvidia/nemotron:free", OPENROUTER_FALLBACK: "off" });
+    const file = join(root, "openrouter-key");
+    writeFileSync(file, "sk-or-v1-file\n");
+    expect(aiEnv({ OPENROUTER_API_KEY_FILE: file })).toEqual({ OPENROUTER_API_KEY: "sk-or-v1-file" });
+  });
+
+  it("answers /v1/ai/status on the Node adapter, refusing a counter it doesn't know", async () => {
+    const { privateKey } = generateKeyPairSync("ed25519");
+    const store = fileD1(join(root, "ai.db"), MIGRATIONS);
+    const env: Env = {
+      DB: store.d1, LIMITER: memoryLimiter(20, 60), LICENSE_SIGNING_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+      RAZORPAY_KEY_ID: "k", RAZORPAY_KEY_SECRET: "s", RAZORPAY_WEBHOOK_SECRET: "w", ...aiEnv({ OPENROUTER_API_KEY: "sk-or-v1-env" }),
+    };
+    const app = await listen(worker, env);
+    try {
+      const res = await fetch(`${app.url}/v1/ai/status`, { headers: { "x-masalapos-installation-id": crypto.randomUUID(), "x-masalapos-installation-secret": "c".repeat(64) } });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: "unknown_installation" });
+    } finally { await app.close(); store.db.close(); }
   });
 });

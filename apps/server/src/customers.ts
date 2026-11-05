@@ -1,10 +1,11 @@
 import {
   CustomerCreate, CustomerTypeCreate, CustomerTypeUpdate, CustomerUpdate, LoyaltyAdjust, LoyaltySettingsUpdate, OrderCustomerSet,
-  bestSlabPercent, percentOf, uuidv7, type Database, type SlabRule,
+  bestSlabPercent, customerLastOrder, customerUsual, percentOf, uuidv7, type Database, type SlabRule,
 } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { customerUsualEnabled } from "./menu-insights.js";
 import { crmEnabled, requireIntegration } from "./integrations.js";
 import { currentTier, customerSpend, earnExpiry, loyaltySettings, pointsExpiringSoon, redeemedLots, sweepExpiry } from "./loyalty.js";
 import { customerJson, loadOrderJson, pointsBalance } from "./mappers.js";
@@ -130,14 +131,22 @@ export function registerCustomers(app: FastifyInstance): void {
       ledger, bills: bills.slice(0, 20), moreBills: bills.length > 20, feedback,
     };
   });
+  /** The order screen's "Usual for …" row: dishes on 2+ of their bills in 6 months, and their last order to repeat. */
+  app.get("/api/customers/:id/usual", { preHandler: read }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!db.prepare("SELECT 1 FROM customers WHERE id = ?").get(id)) throw httpError(404, "customer not found");
+    reply.header("Cache-Control", "no-store");
+    if (!customerUsualEnabled(db)) return { dishes: [], lastOrder: null };
+    return { dishes: customerUsual(db, id, Date.now()), lastOrder: customerLastOrder(db, id) };
+  });
   app.post("/api/customers", { preHandler: manage }, async (req, reply) => {
     const body = CustomerCreate.parse(req.body);
     typeExists(body.typeId); phoneTaken(body.phone);
     const id = uuidv7();
     db.transaction(() => {
-      db.prepare(`INSERT INTO customers (id, name, phone, type_id, notes, email, birth_date, anniversary_date, gender, marketing_opt_in, created_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.name, body.phone, body.typeId, body.notes || null, body.email, body.birthDate,
-        body.anniversaryDate, body.gender, body.marketingOptIn ? 1 : 0, Date.now(), req.user.id);
+      db.prepare(`INSERT INTO customers (id, name, phone, type_id, notes, email, birth_date, anniversary_date, gender, marketing_opt_in, created_at, created_by, gstin, legal_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.name, body.phone, body.typeId, body.notes || null, body.email, body.birthDate,
+        body.anniversaryDate, body.gender, body.marketingOptIn ? 1 : 0, Date.now(), req.user.id, body.gstin, body.legalName);
       saveTags(id, body.tags);
     })();
     return reply.status(201).send({ customer: customerJson(db, id) });
@@ -147,19 +156,22 @@ export function registerCustomers(app: FastifyInstance): void {
     const body = CustomerUpdate.parse(req.body);
     const row = db.prepare("SELECT * FROM customers WHERE id = ?").get(id) as {
       name: string; phone: string; type_id: string | null; notes: string | null; email: string | null; birth_date: string | null;
-      anniversary_date: string | null; gender: string | null; marketing_opt_in: number; is_active: number;
+      anniversary_date: string | null; gender: string | null; marketing_opt_in: number; is_active: number; gstin: string | null; legal_name: string | null;
     } | undefined;
     if (!row) throw httpError(404, "customer not found");
+    const gstin = body.gstin === undefined ? row.gstin : body.gstin;
+    const legalName = body.legalName === undefined ? row.legal_name : body.legalName;
+    if (gstin && !legalName) throw httpError(400, "Enter the business's legal name for the GSTIN");
     typeExists(body.typeId);
     if (body.phone) phoneTaken(body.phone, id);
     const keep = <T>(next: T | undefined, current: T) => next === undefined ? current : next;
     const flag = (next: boolean | undefined, current: number) => next === undefined ? current : next ? 1 : 0;
     db.transaction(() => {
       db.prepare(`UPDATE customers SET name = ?, phone = ?, type_id = ?, notes = ?, email = ?, birth_date = ?, anniversary_date = ?, gender = ?,
-        marketing_opt_in = ?, is_active = ?, updated_at = ? WHERE id = ?`).run(body.name ?? row.name, body.phone ?? row.phone, keep(body.typeId, row.type_id),
+        marketing_opt_in = ?, is_active = ?, gstin = ?, legal_name = ?, updated_at = ? WHERE id = ?`).run(body.name ?? row.name, body.phone ?? row.phone, keep(body.typeId, row.type_id),
         body.notes === undefined ? row.notes : body.notes || null, keep(body.email, row.email), keep(body.birthDate, row.birth_date),
         keep(body.anniversaryDate, row.anniversary_date), keep(body.gender, row.gender), flag(body.marketingOptIn, row.marketing_opt_in),
-        flag(body.isActive, row.is_active), Date.now(), id);
+        flag(body.isActive, row.is_active), gstin, legalName, Date.now(), id);
       if (body.tags) saveTags(id, body.tags);
     })();
     return { customer: customerJson(db, id) };

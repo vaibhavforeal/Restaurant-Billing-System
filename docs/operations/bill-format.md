@@ -86,6 +86,10 @@ billing screen the summary reads Subtotal, Discount, Round off, Payable, then
 **Includes GST** with the per-rate detail under **Tax details**. The QR menu
 always tells guests *No tax is added to menu prices.*
 
+A tax invoice from a restaurant with a GSTIN also prints the **SAC** code (Settings, 996331 by default). A bill
+issued to a business (Bill options > **GST invoice for a business**) prints **Billed to**, the buyer's GSTIN and
+address and **Place of supply**; its credit notes do too. See [GST returns](gst-returns.md).
+
 Reports follow the same split: Day-end / GST lists GST bills only and shows no-GST
 bills as one **Sales without GST** line (also in the CSV), next to the Zomato
 section 9(5) line.

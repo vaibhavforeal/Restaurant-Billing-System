@@ -6,6 +6,8 @@ import type { Category, Order, OrderItem, OrderTypeInfo, Product, TableInfo } fr
 import { connectWs } from "../ws";
 import { uuid } from "../uuid";
 import { OrderCustomer } from "./OrderCustomer";
+import { CustomerUsual } from "./CustomerUsual";
+import { repeatPlan, type LastOrder } from "../customer-usual";
 import { BillingPanel } from "./BillingPanel";
 import { mergeBlockedReason, mergeRoles } from "../table-transfer";
 import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
@@ -328,15 +330,28 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   }
 
   function addToDraft(productId: string, variantId: string | null, name: string, pricePaise: number, combo?: Pick<DraftItem, "comboPicks" | "contents">) {
-    if (actionLock.current || billingLock.current) return;
-    if (products.find((product) => product.id === productId)?.isSoldOut) {
-      setError(`${name} is sold out and cannot be added to a new order.`); return;
-    }
+    if (addRowsToDraft([{ productId, variantId, name, pricePaise, qty: 1, ...combo }])) setMessage("");
+  }
+
+  /** Puts dishes in the cart together (one tap, or Repeat last order); false when nothing could be added. */
+  function addRowsToDraft(rows: Array<Omit<DraftItem, "clientRef" | "note">>): boolean {
+    if (actionLock.current || billingLock.current || !rows.length) return false;
+    const soldOut = rows.find((row) => products.find((product) => product.id === row.productId)?.isSoldOut);
+    if (soldOut) { setError(`${soldOut.name} is sold out and cannot be added to a new order.`); return false; }
     if (queuedRequests(user.id).some((r) => r.path === `/api/orders/${orderId}/bill` && !r.error)) {
-      setError("A bill is queued for this order. Wait for it to finish before starting another order."); return;
+      setError("A bill is queued for this order. Wait for it to finish before starting another order."); return false;
     }
-    setMessage("");
-    saveDraft([...readDraft(), { clientRef: uuid(), productId, variantId, name, pricePaise, qty: 1, note: "", ...combo }]);
+    return saveDraft([...readDraft(), ...rows.map((row) => ({ clientRef: uuid(), note: "", ...row }))]);
+  }
+
+  /** Repeat last order: the customer's previous bill back in the cart at today's prices, naming what could not go in. */
+  function repeatLastOrder(last: LastOrder) {
+    const { rows, skipped } = repeatPlan(last, products);
+    const added = addRowsToDraft(rows);
+    const count = rows.reduce((sum, row) => sum + row.qty, 0);
+    const notAdded = skipped.length ? `Not added: ${skipped.join(", ")}.` : "";
+    if (added) setMessage(`Added ${count} item${count === 1 ? "" : "s"} from bill #${last.billNo}.${notAdded ? ` ${notAdded}` : ""}`);
+    else if (!rows.length && notAdded) setMessage(notAdded);
   }
 
   /** A combo goes in the cart once its slots are chosen; one with only fixed items goes straight in. */
@@ -711,6 +726,10 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           </button>
         </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>}
         {!captain && crm && <OrderCustomer order={order} canAdd={userCan(user, "customers.manage")} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
+        {!captain && crm && order.status === "open" && order.customer && userCan(user, "customers.read") && <CustomerUsual customer={order.customer} products={products} disabled={locked}
+          onOrder={new Set([...lines.filter((item) => item.status !== "cancelled").map((item) => item.productId), ...draft.map((item) => item.productId)])}
+          onAdd={(product, variant) => product.kind === "combo" ? chooseCombo(product) : addToDraft(product.id, variant?.id ?? null, variant ? `${product.name} (${variant.name})` : product.name, variant ? variant.pricePaise : product.pricePaise)}
+          onRepeat={repeatLastOrder} />}
         {order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
           {takeawayTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select></label>}

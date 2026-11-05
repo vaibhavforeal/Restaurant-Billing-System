@@ -16,6 +16,16 @@ waiter **3456**, kitchen **4567**); use the matching sign-in from this table.
 When a guide says to complete setup with admin PIN `1234`, set the username
 `admin`, password `admin-password` and approval PIN `1234`.
 
+## GST returns
+
+Build the UI and start `node --import tsx tools/e2e/gst-returns-server.mts` (fresh for each run): an in-memory
+restaurant on `http://127.0.0.1:4164/` (GSTIN 29AAPFU0939F1ZR, Zomato's GSTIN 29AAACZ1234A1ZR) with last month's
+bills: two walk-in bills (one with 0% water), a GST invoice to Acme Foods (29AAGCB7383J1Z4), a bill voided the same
+month, a refund of one thali, and a Zomato order. Reports > GST returns opens on that month and shows B2CS ₹1,250
+taxable at 5%, B2B ₹1,000, nil ₹40, Table 13 with 6 invoices and 1 cancelled, and Table 14 for Zomato. Download
+GSTR-1 JSON saves `GSTR1_29AAPFU0939F1ZR_<MMYYYY>.json`. At checkout, Bill options > GST invoice for a business
+checks the GSTIN as it is typed (try changing its last character).
+
 ## Popular items
 
 Build the UI and start `node --import tsx tools/e2e/popular-items-server.mts` (fresh for each run). It is a
@@ -37,6 +47,72 @@ The fixture also sold 20 Paneer tikka 12 hours ago, outside the time-of-day band
 and require `window.__popularByTimeResult.status === "passed"` (4 checks): Match the time of day is on by default
 and Starters shows Samosa as Popular; with it off, Paneer tikka (the all-day best-seller) becomes Popular and first,
 live; turning it back on returns Samosa. It turns the setting back on at the end.
+
+## AI assistant
+
+The whole chain runs locally: browser → restaurant hub → the real licensing service's AI relay → a fake OpenRouter.
+Build the UI, start `node --import tsx tools/e2e/fake-openrouter.mts` (a scripted stand-in for OpenRouter on
+`http://127.0.0.1:4161/api/v1`, no key or cost) and then `node --import tsx tools/e2e/ai-assistant-server.mts`. That starts the licensing
+service on `:4162` (Worker code on the Node adapter, an enrolled counter, vendor key `sk-or-v1-vendor-e2e`), QA switches on `:4163` standing in
+for the portal, and the app on `http://127.0.0.1:4160/` connected to the service as that counter, with billed sales and a customer, Priya
+Sharma 98765 43210. Start both fresh for each run. Sign in as `admin` / `admin-password`, add `tools/e2e/ai-assistant.js` and require
+`window.__aiAssistantResult.status === "passed"` (18 checks):
+- While MasalaPOS hasn't switched it on, Settings says so (no key or model fields) and Ask points the admin to Settings.
+- Ask opens from the "Ask AI" tab on the right edge of Reports as a side panel over the open report (it is not in "More reports"), and closes.
+- After the QA switch turns it on, Check shows "On for this restaurant · 0 of 40 requests used today".
+- Ask shows "You asked" and a MasalaPOS AI card with real bold, list and italic elements (no raw `**`), and "Sales by day" as a figures chip.
+- A question mentioning "busy" (the fake's 429) shows "The AI service is busy right now"; one mentioning "slow" (the fake waits 20 s) still gets its answer.
+- Day-end Write summary renders as a list, and Copy gives WhatsApp text (`*bold*`, `•` bullets; clipboard replaced while it runs).
+- The dish editor's Write description fills the box and leaves it unsaved.
+- Every request the fake received carried the vendor key, and none contains "Priya" or "98765".
+- The service counted the requests; at the daily limit Ask says today's limit is used up.
+- After `POST :4163/__qa/service-offline`, Ask shows the needs-internet message.
+
+## Customer's usual
+
+Build the UI and start `node --import tsx tools/e2e/customer-usual-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4156/` with CRM & Loyalty on and one customer, Priya Sharma
+(98765 43210), with two past takeaway bills: Paneer tikka (Full) and Butter naan on both, and the last one also has
+Dal tadka, a Thali whose main must be chosen, and a Lassi that is now sold out. Sign in as `admin` /
+`admin-password`, add `tools/e2e/customer-usual.js` to the page and require
+`window.__customerUsualResult.status === "passed"` (8 checks): no row before a customer is added; adding Priya shows
+"Usual for Priya" with Butter naan and Paneer tikka (Full); one tap adds Paneer tikka (Full) and it leaves the row;
+Repeat last order adds Paneer tikka (Full) ×2, Butter naan and Dal tadka and names the Thali ("choose its items from
+the menu") and the sold-out Lassi; with Suggest a customer's usual off, adding Priya again shows no row. It turns the
+setting back on at the end.
+
+## Staff activity
+
+Build the UI and start `node --import tsx tools/e2e/staff-activity-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4159/` with cashiers Meena and Ravi and planted incidents: Meena's
+paid bill voided (approved by Asha), a ₹600 pay-out and a drawer ₹300 short; Asha's 30% discount; Ravi's kebab cancelled
+after KOT 10 days ago (1) and today (4). Sign in as `admin` / `admin-password`, add `tools/e2e/staff-activity.js` and
+require `window.__staffActivityResult.status === "passed"` (8 checks): Reports → More reports → Staff activity flags
+the paid void, cash short, pay-out, discount and Ravi's cancellations ("4 items in N days; usually 0.03 a day"); the
+void names its approver and bill; By staff totals Meena; the CSV has both tables; Settings → Restaurant profile →
+Staff activity alerts shows the ₹200 default, and at ₹500 the ₹300 drawer is no longer flagged. It restores the limits.
+
+## Menu engineering
+
+Build the UI and start `node --import tsx tools/e2e/menu-engineering-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4157/` with paneer at ₹320/kg and five ₹100 Mains (no GST) sold
+today: Paneer Tikka ×6 (₹48 cost), Paneer Bhurji ×5 (₹80), Malai Kofta ×1 (₹16), Shahi Paneer ×1 (₹96) and Water ×2
+(no recipe). Sign in as `admin` / `admin-password`, add `tools/e2e/menu-engineering.js` to the page and require
+`window.__menuEngineeringResult.status === "passed"` (8 checks): Reports → More reports lists Menu engineering; Tikka
+is a Star, Bhurji a Plowhorse, Kofta a Puzzle, Shahi Paneer a Dog and Water needs a recipe cost; per-plate cost,
+margin and suggested action show; dishes are listed by plates; the summary has one dish per group; and the CSV export
+(captured from `URL.createObjectURL`) has each dish, group and action.
+
+## Prep forecast
+
+Build the UI and start `node --import tsx tools/e2e/prep-forecast-server.mts` (fresh for each run). It is a
+disposable in-memory restaurant on `http://127.0.0.1:4158/` with bills on tomorrow's weekday 6, 13, 20 and 27 days ago:
+Paneer tikka 4 · 2 · 0 · 6 (0.2 kg paneer each, 2.5 kg opening stock), Naan 2 each time (no recipe) and one Lassi
+(0.3 L curd). Sign in as `admin` / `admin-password`, add `tools/e2e/prep-forecast.js` to the page and require
+`window.__prepForecastResult.status === "passed"` (11 checks): Inventory → Prep forecast opens on tomorrow, based on the
+last 4 same weekdays; Paneer tikka 3 plates, Naan 2, no Lassi; Paneer to buy first (need 0.6 kg, have 0.1, buy 0.5),
+Curd enough; Naan named as having no recipe; +10% gives 4 plates and 0.66 / 0.56 kg; Print (with `window.print`
+replaced) shows the prep sheet and removes it on `afterprint`; and today's weekday, with no sales, says so.
 
 ## Hold orders
 

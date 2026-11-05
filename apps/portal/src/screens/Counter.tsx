@@ -86,6 +86,7 @@ export function CounterDialog({ id, me, onClose, onChanged }: { id: string; me: 
       {admin && c.customer && <MoveCounter counter={c} onMoved={(next) => { setData({ installation: next }); onChanged(); }} />}
       {admin && c.licence && <LicenceForm counter={c} onSaved={(next) => { setData({ installation: next }); onChanged(); }} />}
       <Modules counter={c} editable={admin} onSaved={(next) => { setData({ installation: next }); onChanged(); }} />
+      <AiAssistant counter={c} editable={admin} onSaved={(next) => { setData({ installation: next }); onChanged(); }} />
     </div>}
   </Dialog>;
 }
@@ -112,6 +113,32 @@ function Modules({ counter, editable, onSaved }: { counter: InstallationDetail; 
     {counter.moduleEvents.length > 0 && <details style={{ marginTop: 12 }}><summary>Module changes</summary><ul className="stack" style={{ marginTop: 8 }}>
       {counter.moduleEvents.map((e) => <li key={e.id}>{counter.modules.find((m) => m.id === e.moduleId)?.name ?? e.moduleId}: {e.allowed === null ? "follows the plan" : e.allowed ? "allowed" : "blocked"}
         <span className="muted"> · {dateTime(e.at)}{e.actorName ? ` · ${e.actorName}` : ""}{e.revision ? ` · revision ${e.revision}` : ""}</span></li>)}</ul></details>}
+  </section>;
+}
+
+/** The AI assistant MasalaPOS runs for this counter: switched on here, with a daily request limit, and its use over the last week. */
+function AiAssistant({ counter, editable, onSaved }: { counter: InstallationDetail; editable: boolean; onSaved: (c: InstallationDetail) => void }) {
+  const ai = counter.ai;
+  const [enabled, setEnabled] = useState(ai.enabled);
+  const [limit, setLimit] = useState(String(ai.dailyLimit));
+  const { busy, run, status } = useRun();
+  const changed = enabled !== ai.enabled || Number(limit) !== ai.dailyLimit;
+  const tokens = (d: { inputTokens: number; outputTokens: number }) => (d.inputTokens + d.outputTokens).toLocaleString("en-IN");
+  return <section>
+    <div className="panel-head"><h2>AI assistant</h2>{editable && <button className="primary small" disabled={busy || !changed} onClick={() => void run(async () => {
+      const res = await patch<{ installation: InstallationDetail }>(`/installations/${counter.id}/ai`, { enabled, dailyLimit: Number(limit), expectedUpdatedAt: ai.updatedAt });
+      onSaved(res.installation);
+    }, "Saved. The counter picks it up on its next AI request or status check, within 15 minutes.")}>Save AI assistant</button>}</div>
+    {status}
+    <p className="muted small">Questions about sales, day summaries and menu descriptions, answered through MasalaPOS's AI account. A restaurant can't use it until it's switched on here. Limits count per UTC day.</p>
+    {editable ? <div className="form-grid">
+      <label className="check"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={busy} /> On for this counter</label>
+      <Field label="Requests a day" hint="1 to 1,000. One question uses 2 to 7 requests."><input type="number" min={1} max={1000} step={1} value={limit} onChange={(e) => setLimit(e.target.value)} disabled={busy} /></Field>
+    </div> : <p>{ai.enabled ? `On, ${ai.dailyLimit} requests a day` : <span className="muted">Off</span>}</p>}
+    <p><strong>Today:</strong> {ai.usedToday} of {ai.dailyLimit} requests</p>
+    <table className="data"><thead><tr><th>Day (UTC)</th><th className="num">Requests</th><th className="num">Tokens</th></tr></thead><tbody>
+      {ai.usage.map((d) => <tr key={d.day}><td>{date(Date.parse(`${d.day}T00:00:00Z`))}</td><td className="num">{d.requests}</td><td className="num">{tokens(d)}</td></tr>)}
+    </tbody></table>
   </section>;
 }
 

@@ -127,3 +127,77 @@ Approved in plan mode on 2026-11-04.
 - **Staff screen:** an open order screen re-reads the menu hints every 15 minutes.
 - **QR menu:** works out the badge when the guest opens it.
 - **E2E:** `tools/e2e/popular-by-time.js` on the same fixture.
+
+## Built next: Customer's usual (roadmap item 3)
+Approved in chat on 2026-11-04.
+- **Ranking:** `customerUsual(db, customerId, now)` in `packages/domain/src/customer-usual.ts`.
+  - It lists dishes on at least 2 of the customer's non-void bills in the last 183 days. Items inside combos don't count.
+  - Ranking: most bills first, then the most recent.
+  - Only active, in-stock dishes in active categories. Combos are kept.
+  - Each dish comes in the customer's most-ordered active size.
+- **Last order:** `customerLastOrder(db, customerId)` returns the latest non-void bill's top-level dishes. The same dish and size are added together, in the order first billed.
+- **Server:** `GET /api/customers/:id/usual` uses the profile's `customers.read` + CRM guards and is sent `no-store`.
+  - It returns `{ dishes, lastOrder }`, or empty while the setting `customer_usual_enabled` (migration 51) is off.
+  - The checkbox is "Suggest a customer's usual" in Settings.
+- **UI:** `CustomerUsual` under the customer line on the cashier and Quick Takeaway screens. It needs CRM, `customers.read` and an open order.
+  - "Usual for Priya" shows up to 4 dishes not already on the order (`usualChips`). Tapping a combo opens the combo chooser.
+  - "Repeat last order" uses `repeatPlan` in `apps/ui/src/customer-usual.ts`.
+    - It adds the last bill's dishes at today's prices.
+    - It names what it skipped: off the menu, sold out, a size gone, a combo whose items must be chosen, or a dish that now has sizes.
+  - The order screen's cart-add function has a batch version, `addRowsToDraft`, which Repeat uses.
+- **E2E:** `tools/e2e/customer-usual-server.mts` (port 4156) and `customer-usual.js`.
+
+## Built next: Staff activity report (roadmap item 6)
+Approved in chat on 2026-11-04. It's on `feat/staff-activity`, stacked on `feat/customer-usual` because it needs migration 52.
+- **Where:** read-only, in Reports → More reports → "Staff activity". Admins only (`users.manage`). No dashboard alerts and no reviewed state, at the user's request.
+- **Events:** `activityEvents()` in `apps/server/src/staff-activity.ts` reads the chosen dates and the 30 days before:
+  - cancelled after KOT (not counting items cancelled by a KOT edit)
+  - KOT quantity cuts
+  - voids and refunds (asked by, approved by, whether the bill was paid)
+  - discounts (% of subtotal, approver)
+  - cash short at shift close
+  - pay-outs
+  - wastage and manual count corrections
+- **Builder:** `buildStaffActivityReport()` in `packages/domain/src/staff-activity.ts`.
+  - **Always flags:** a paid bill voided, cash short at or over the limit, a discount at or over the %, a pay-out over the limit.
+  - **Unusual:** a count per day at least the multiplier × the person's own daily rate over the 30 days before (or the restaurant's rate per person when they have no history there), with at least the minimum number of events.
+  - "Same person asked and approved" was dropped: only admins can approve, so it would only ever flag the owner.
+  - Output: a Flagged table, a By staff table, and notes.
+- **Settings:** migration 52 adds `alert_*` columns to `settings`, with defaults ₹200, 20%, ₹500, 2×, 3. They're edited in Settings → Restaurant profile → "Staff activity alerts" (`GET/PUT /api/settings/activity-alerts`, `settings.manage`).
+- **E2E:** `tools/e2e/staff-activity-server.mts` (port 4159) and `staff-activity.js`.
+
+## Built next: Menu engineering report (roadmap item 4)
+Approved in chat on 2026-11-04.
+- **Builder:** `buildMenuEngineeringReport()` in `packages/domain/src/menu-engineering.ts`.
+  - It takes the profit report's lines from `profitLines()` in `apps/server/src/costing.ts`, now shared by both reports.
+  - Each dish is its bill-line name within its category. Plates and revenue are pre-GST and net of credit notes. Food cost is the cost frozen when the dish was sold.
+  - Combos rank like dishes, because their cost comes from their items.
+- **Groups:**
+  - **High seller:** at least 70% of an even share of the category's plates, using whole-number arithmetic so the boundary is exact.
+  - **High margin:** margin per plate at or above the category average, weighted by plates, over fully costed dishes.
+  - Star, Plowhorse, Puzzle or Dog.
+  - A dish whose lines aren't all fully costed gets "Needs a recipe cost", with its plates still counted for popularity.
+- **Output:**
+  - A Summary table (dishes, plates and pre-GST revenue per group).
+  - One table per category: plates, share, Sells High/Low, price, cost and margin per plate, group, suggested action. The footer has the category's plates and average margin.
+  - Notes explain the method.
+- **Server:** `GET /api/reports/menu-engineering` uses the same guards as Profit (`costs.read` + Dish costing) and is sent `no-store`.
+- **UI:** Reports → More reports → "Menu engineering", shown through the existing `OperationalReports` screen with CSV export (`COST_REPORTS` in `OperationalReports.tsx`).
+- **No database change.**
+- **E2E:** `tools/e2e/menu-engineering-server.mts` (port 4157) and `menu-engineering.js`.
+
+## Built next: Prep forecast (roadmap item 5)
+Approved in chat on 2026-11-04.
+- **Forecast:** `prepForecast(db, date, today)` in `packages/domain/src/prep-forecast.ts`.
+  - It averages the last 4 same weekdays that are over (before today and from the first bill on), zero days included.
+  - Non-void bills count by local bill date. Combos are listed as combos.
+  - A dish is listed if it sold on at least 2 of those days (or on the only one).
+- **Ingredients:** each product's average, including items sold inside combos, times its current stock links, against active stock on hand.
+  - Listed non-combo dishes without stock links are named instead.
+- **Server:** `GET /api/prep-forecast?date=` uses `stock.read` + the Inventory module. The date defaults to tomorrow and accepts today through 7 days ahead.
+- **UI:** Inventory → "Prep forecast" tab (`PrepForecast.tsx`).
+  - Day picker and a safety margin of none, +10% or +20%, applied before rounding up (`prepSheet` in `apps/ui/src/prep-forecast.ts`).
+  - Dishes are grouped by category with their 4 past days. Ingredients show need, in stock and buy, to-buy first.
+  - Print uses a portal sheet with `body.printing-prep`, like the QR table sheets.
+- **No database change.**
+- **E2E:** `tools/e2e/prep-forecast-server.mts` (port 4158) and `prep-forecast.js`.
