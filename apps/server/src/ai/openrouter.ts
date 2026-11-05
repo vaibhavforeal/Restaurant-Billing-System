@@ -80,7 +80,7 @@ export function createOpenRouter(opts: { apiKey: string; model: string; fallback
       const reply = await chat({ system: "You are a connection test.", messages: [{ role: "user", text: "Reply with OK." }], maxTokens: 10 });
       const key = await call("/key", {}) as { data?: { free_model_daily_requests?: { used?: number; limit?: number } } };
       const daily = key.data?.free_model_daily_requests;
-      return { model: reply.model, freeRequestsUsed: daily?.used ?? null, freeRequestsLimit: daily?.limit ?? null };
+      return { model: reply.model, freeRequestsUsed: daily?.used ?? null, freeRequestsLimit: daily?.limit ?? null, usage: reply.usage };
     },
   };
 }

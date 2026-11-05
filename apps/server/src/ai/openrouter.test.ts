@@ -90,10 +90,10 @@ describe("OpenRouter provider", () => {
 
   it("check reports the answering model and today's free requests", async () => {
     const { fetch, calls } = fakeFetch((call) => call.url.endsWith("/key") ? [200, { data: { free_model_daily_requests: { used: 12, limit: 50, remaining: 38 } } }] : [200, reply({ content: "OK" })]);
-    expect(await provider(fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: 12, freeRequestsLimit: 50 });
+    expect(await provider(fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: 12, freeRequestsLimit: 50, usage: { inputTokens: 10, outputTokens: 3 } });
     expect(calls.map((c) => c.url)).toEqual([`${BASE}/chat/completions`, `${BASE}/key`]);
     expect(calls[1]!.headers.authorization).toBe("Bearer sk");
     const bare = fakeFetch((call) => call.url.endsWith("/key") ? [200, { data: {} }] : [200, reply({ content: "OK" })]);
-    expect(await provider(bare.fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: null, freeRequestsLimit: null });
+    expect(await provider(bare.fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: null, freeRequestsLimit: null, usage: { inputTokens: 10, outputTokens: 3 } });
   });
 });

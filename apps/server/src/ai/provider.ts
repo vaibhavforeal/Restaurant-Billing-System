@@ -15,7 +15,7 @@ export interface AiRequest { system: string; messages: AiMessage[]; tools?: AiTo
 export interface AiUsage { inputTokens: number; outputTokens: number }
 export interface AiReply { text: string; toolCalls: AiToolCall[]; model: string; usage: AiUsage }
 export interface AiModel { id: string; name: string; contextLength: number; free: boolean; supportsTools: boolean }
-export interface AiCheck { model: string; freeRequestsUsed: number | null; freeRequestsLimit: number | null }
+export interface AiCheck { model: string; freeRequestsUsed: number | null; freeRequestsLimit: number | null; usage?: AiUsage }
 
 export interface AiProvider {
   listModels(): Promise<AiModel[]>;

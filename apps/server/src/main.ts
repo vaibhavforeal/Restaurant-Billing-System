@@ -1,3 +1,4 @@
+import { resolveSecretKey } from "./secret-box.js";
 import { openDb } from "@masalapos/domain";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -15,6 +16,8 @@ import { loadCaptainHttps, startCaptainHttps, type CaptainHttpsInfo } from "./ca
 import { seedDemo } from "./demo-seed.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { driveProvider } from "./drive-config.js";
+
+declare const __MASALAPOS_COMMERCIAL__: boolean;
 
 declare const __MASALAPOS_DEMO__: boolean;
 const demo = typeof __MASALAPOS_DEMO__ !== "undefined" && __MASALAPOS_DEMO__;
@@ -51,7 +54,10 @@ try {
   const cloudBackupProvider = demo ? undefined : driveProvider({ dataDir, secretKey,
     restaurantName: () => (liveDb.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name?: string } | undefined)?.restaurant_name ?? "",
     warn: (message) => console.warn(message) });
-  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
+  // The AI assistant seals provider keys with the same Windows-protected key as Drive tokens.
+  const ai = demo ? undefined : { dataDir, secretKey: resolveSecretKey({ dataDir, secretKey, warn: (message) => console.warn(message),
+    commercial: typeof __MASALAPOS_COMMERCIAL__ !== "undefined" && __MASALAPOS_COMMERCIAL__ }) };
+  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(ai ? { ai } : {}), ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
     serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
   } });
   const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };

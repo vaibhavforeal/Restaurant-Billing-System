@@ -1,3 +1,4 @@
+import { registerAi, type AiOptions } from "./ai/routes.js";
 import { registerStaffActivity } from "./staff-activity.js";
 import { registerPrepForecast } from "./prep-forecast.js";
 import type { Database } from "@masalapos/domain";
@@ -72,6 +73,8 @@ export interface ServerOptions {
   updateBridge?: UpdateBridge;
   /** The running app version, shown in Settings → Updates. */
   appVersion?: string;
+  /** The AI assistant's data folder and sealing key (absent in demo mode; tests pass a fake fetch and base URL). */
+  ai?: AiOptions;
   /** Tests replace the support channel's live connection. */
   support?: Pick<SupportOptions, "connect" | "log">;
 }
@@ -133,6 +136,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerUsers(app);
   registerSettings(app);
   registerStaffActivity(app);
+  registerAi(app, opts.ai);
   registerOrderSettings(app);
   registerMenuInsights(app);
   registerDiscountCaps(app);
