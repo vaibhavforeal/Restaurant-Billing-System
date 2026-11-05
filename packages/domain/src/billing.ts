@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GstMode } from "./gst.js";
 import type { ReceiptStyle } from "./receipt-styles.js";
+import type { BillShow } from "./bill-print.js";
 import { ValidGstin } from "./gstin-schema.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
@@ -75,6 +76,12 @@ export interface ReceiptSnapshot {
   buyer?: ReceiptBuyer;
   /** The SAC code printed on a tax invoice; absent on bills issued before GST returns. */
   sacCode?: string;
+  /** Header lines under the restaurant name; absent on bills issued before Bill settings. */
+  receiptHeader?: string;
+  /** Which optional lines this bill prints; absent means the defaults. */
+  billShow?: BillShow;
+  /** Who served the order; set only when the bill shows it. */
+  servedBy?: string;
   /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;
 }

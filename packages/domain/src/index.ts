@@ -18,6 +18,7 @@ export { STOCK_UNITS, STOCK_LIMIT, stockMilli, StockQuantity, StockCreate, Stock
 export { stockJson, appendStockMove, consumeStock, reverseStock, returnPartialStock, orderStockWarnings, type StockRow } from "./stock.js";
 export { blendUnitCost, moveCostPaise, preGstPaise, dishCost, buildProfitReport, type ProfitLine, type StockCost, type DishPrice, type DishCost, type DishCostStatus, type StockCostChange } from "./costing.js";
 export { BuyerDetails, type BuyerDetailsInput, type ReceiptBuyer, BillPreview, BillCreate, BillSettle, BillPrint, calculateBill, type BillCreateInput, type BillSettleInput, type TaxLine, type PaymentMode, type BillTotals, type ReceiptSnapshot, type ReceiptCustomer, type Bill, type BillCreditNote } from "./billing.js";
+export * from "./bill-print.js";
 export { gstinCheckChar, gstinProblem, isValidGstin } from "./gstin.js";
 export { ValidGstin, OptionalGstin } from "./gstin-schema.js";
 export { GST_MODES, DEFAULT_GST_RATES, effectiveGstRate, type GstMode, type DefaultGstRate } from "./gst.js";

@@ -3,6 +3,7 @@ import { RECEIPT_STYLES } from "./receipt-styles.js";
 import { DEFAULT_GST_RATES, GST_MODES } from "./gst.js";
 import { GSTIN_STATE_MESSAGE, gstinMatchesState } from "./restaurant-profile.js";
 import { OptionalGstin } from "./gstin-schema.js";
+import { BillTextLines } from "./bill-print.js";
 import { Fssai, Gstin, Phone, Pincode, StateCode } from "./restaurant-profile-schema.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
@@ -27,7 +28,15 @@ export const SettingsUpdate = z.object({
   phone: Phone.optional(),
   gstin: Gstin.default(""),
   fssai: Fssai.default(""),
-  receiptFooter: z.string().trim().max(500).default(""),
+  /** Up to 3 lines under the restaurant name on every bill. */
+  receiptHeader: BillTextLines.default(""),
+  receiptFooter: BillTextLines.default(""),
+  /** Optional bill lines; GSTIN is never hideable. */
+  billShowFssai: z.boolean().optional(),
+  billShowCustomer: z.boolean().optional(),
+  billShowTable: z.boolean().optional(),
+  billShowServedBy: z.boolean().optional(),
+  billShowItemGst: z.boolean().optional(),
   /** Whether a KOT edit prints a slip to the kitchen: staff choose ('ask'), or always / never. */
   kotEditPrint: z.enum(["ask", "always", "never"]).optional(),
   /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
