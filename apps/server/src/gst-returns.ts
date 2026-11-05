@@ -24,25 +24,26 @@ export function loadGstFacts(db: Database, bounds: readonly [number, number]): {
     };
     const billTaxes = taxesOf(`SELECT t.bill_id AS id, t.gst_rate AS gstRate, t.taxable_paise AS taxablePaise, t.cgst_paise AS cgstPaise, t.sgst_paise AS sgstPaise
       FROM bill_taxes t JOIN bills b ON b.id = t.bill_id WHERE b.created_at >= ? AND b.created_at < ? ORDER BY t.gst_rate`);
-    const bills = (db.prepare(`SELECT b.id, b.bill_no AS billNo, b.created_at AS createdAt, b.status, b.total_paise AS totalPaise,
+    const bills = (db.prepare(`SELECT b.id, b.bill_no AS billNo, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoiceNo, b.created_at AS createdAt, b.status, b.total_paise AS totalPaise,
         b.buyer_gstin AS buyerGstin, b.buyer_name AS buyerName, json_extract(b.receipt_json, '$.gstMode') AS gstMode,
         json_extract(b.receipt_json, '$.gstPaidBy') AS gstPaidBy, json_extract(b.receipt_json, '$.gstin') AS gstin
       FROM bills b WHERE b.created_at >= ? AND b.created_at < ? ORDER BY b.bill_no`).all(...bounds) as Array<Snapshot & {
-        id: string; billNo: number; createdAt: number; status: GstBillFact["status"]; totalPaise: number; buyerGstin: string | null; buyerName: string | null;
+        id: string; billNo: number; invoiceNo: string; createdAt: number; status: GstBillFact["status"]; totalPaise: number; buyerGstin: string | null; buyerName: string | null;
       }>).map((b): GstBillFact => ({
-        billId: b.id, billNo: b.billNo, dateKey: localDateKey(b.createdAt), status: b.status, supply: supplyOf(b),
+        billId: b.id, billNo: b.billNo, invoiceNo: b.invoiceNo, dateKey: localDateKey(b.createdAt), status: b.status, supply: supplyOf(b),
         buyerGstin: b.buyerGstin, buyerName: b.buyerName, totalPaise: b.totalPaise, taxes: billTaxes.get(b.id) ?? [],
       }));
     const noteTaxes = taxesOf(`SELECT t.credit_note_id AS id, t.gst_rate AS gstRate, t.taxable_paise AS taxablePaise, t.cgst_paise AS cgstPaise, t.sgst_paise AS sgstPaise
       FROM credit_note_taxes t JOIN credit_notes c ON c.id = t.credit_note_id WHERE c.created_at >= ? AND c.created_at < ? ORDER BY t.gst_rate`);
-    const creditNotes = (db.prepare(`SELECT c.id, c.cn_no AS cnNo, c.bill_id AS billId, b.bill_no AS billNo, c.kind, c.created_at AS createdAt,
+    const creditNotes = (db.prepare(`SELECT c.id, c.cn_no AS cnNo, COALESCE(c.credit_note_ref, 'CN-' || c.cn_no) AS creditNoteRef, c.bill_id AS billId, b.bill_no AS billNo,
+        COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoiceNo, c.kind, c.created_at AS createdAt,
         c.taxable_paise AS taxablePaise, c.total_paise AS totalPaise, b.buyer_gstin AS buyerGstin, b.buyer_name AS buyerName,
         json_extract(b.receipt_json, '$.gstMode') AS gstMode, json_extract(b.receipt_json, '$.gstPaidBy') AS gstPaidBy, json_extract(b.receipt_json, '$.gstin') AS gstin
       FROM credit_notes c JOIN bills b ON b.id = c.bill_id WHERE c.created_at >= ? AND c.created_at < ? ORDER BY c.cn_no`).all(...bounds) as Array<Snapshot & {
-        id: string; cnNo: number; billId: string; billNo: number; kind: "void" | "refund"; createdAt: number; taxablePaise: number; totalPaise: number;
+        id: string; cnNo: number; creditNoteRef: string; billId: string; billNo: number; invoiceNo: string; kind: "void" | "refund"; createdAt: number; taxablePaise: number; totalPaise: number;
         buyerGstin: string | null; buyerName: string | null;
       }>).map((n): GstCreditNoteFact => ({
-        cnNo: n.cnNo, billId: n.billId, billNo: n.billNo, kind: n.kind, dateKey: localDateKey(n.createdAt), supply: supplyOf(n),
+        cnNo: n.cnNo, creditNoteRef: n.creditNoteRef, billId: n.billId, billNo: n.billNo, invoiceNo: n.invoiceNo, kind: n.kind, dateKey: localDateKey(n.createdAt), supply: supplyOf(n),
         buyerGstin: n.buyerGstin, buyerName: n.buyerName, totalPaise: n.totalPaise,
         // A credit note on a bill without GST may carry no per-rate lines: its value is all it reduces.
         taxes: noteTaxes.get(n.id) ?? [{ gstRate: 0, taxablePaise: n.taxablePaise, cgstPaise: 0, sgstPaise: 0 }],

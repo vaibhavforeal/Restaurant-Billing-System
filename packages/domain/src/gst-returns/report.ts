@@ -42,9 +42,9 @@ function regularTables(s: Gstr1Summary, input: GstReturnsInput): ReportTable[] {
     rows: rows.map((r) => ({ sac: r.sac, description: "Restaurant service", uqc: "NA", rate: rate(r.gstRate), ...taxCells(r) })),
     totals: totalsOf(rows, { sac: "Total" }),
   });
-  const doc = (label: string, range: Gstr1Summary["docs"]["invoices"], prefix: string) => range ? [{
-    document: label, from: `${prefix}${range.from}`, to: `${prefix}${range.to}`, total: range.total, cancelled: range.cancelled, net: range.total - range.cancelled,
-  }] : [];
+  const doc = (label: string, ranges: Gstr1Summary["docs"]["invoices"]) => ranges.map((r) => ({
+    document: label, from: r.from, to: r.to, total: r.total, cancelled: r.cancelled, net: r.total - r.cancelled,
+  }));
   return [
     { title: "GSTR-3B Table 3.1: outward supplies", columns: [text("section", "Table"), text("description", "Nature of supplies"), ...TAX_COLUMNS], rows: [
       { section: "3.1(a)", description: "Outward taxable supplies (other than zero rated, nil rated and exempted)", ...taxCells(g3b.outwardTaxable) },
@@ -53,7 +53,7 @@ function regularTables(s: Gstr1Summary, input: GstReturnsInput): ReportTable[] {
     ] },
     { title: "GSTR-1 Table 4A: B2B invoices", columns: [text("ctin", "Buyer GSTIN"), text("buyer", "Buyer"), text("invoice", "Bill no."), text("date", "Date"),
       money("value", "Bill value"), text("pos", "Place of supply"), text("rate", "Rate"), ...TAX_COLUMNS],
-      rows: b2bLines.map(({ g, i, l }) => ({ ctin: g.ctin, buyer: g.buyerName, invoice: String(i.billNo), date: gstDate(i.dateKey), value: i.valuePaise, pos, rate: rate(l.gstRate), ...taxCells(l) })),
+      rows: b2bLines.map(({ g, i, l }) => ({ ctin: g.ctin, buyer: g.buyerName, invoice: i.invoiceNo, date: gstDate(i.dateKey), value: i.valuePaise, pos, rate: rate(l.gstRate), ...taxCells(l) })),
       totals: totalsOf(b2bLines.map((x) => x.l), { ctin: "Total" }) },
     { title: "GSTR-1 Table 7: B2C (others)", columns: [text("pos", "Place of supply"), text("type", "Type"), text("rate", "Rate"), ...TAX_COLUMNS],
       rows: s.b2cs.map((l) => ({ pos, type: "OE", rate: rate(l.gstRate), ...taxCells(l) })), totals: totalsOf(s.b2cs, { pos: "Total" }) },
@@ -63,13 +63,13 @@ function regularTables(s: Gstr1Summary, input: GstReturnsInput): ReportTable[] {
     ] },
     { title: "GSTR-1 Table 9B: credit notes to registered buyers", columns: [text("ctin", "Buyer GSTIN"), text("buyer", "Buyer"), text("note", "Credit note"),
       text("bill", "Against bill"), text("date", "Date"), money("value", "Note value"), text("rate", "Rate"), ...TAX_COLUMNS],
-      rows: cdnrLines.map(({ g, n, l }) => ({ ctin: g.ctin, buyer: g.buyerName, note: `CN-${n.cnNo}`, bill: String(n.billNo), date: gstDate(n.dateKey), value: n.valuePaise, rate: rate(l.gstRate), ...taxCells(l) })),
+      rows: cdnrLines.map(({ g, n, l }) => ({ ctin: g.ctin, buyer: g.buyerName, note: n.creditNoteRef, bill: n.invoiceNo, date: gstDate(n.dateKey), value: n.valuePaise, rate: rate(l.gstRate), ...taxCells(l) })),
       totals: totalsOf(cdnrLines.map((x) => x.l), { ctin: "Total" }) },
     hsnTable("GSTR-1 Table 12: HSN/SAC summary, B2B", s.hsn.b2b),
     hsnTable("GSTR-1 Table 12: HSN/SAC summary, B2C", s.hsn.b2c),
     { title: "GSTR-1 Table 13: documents issued", columns: [text("document", "Document"), text("from", "From"), text("to", "To"),
       { key: "total", label: "Total", format: "quantity" }, { key: "cancelled", label: "Cancelled", format: "quantity" }, { key: "net", label: "Net issued", format: "quantity" }],
-      rows: [...doc("Invoices for outward supply", s.docs.invoices, ""), ...doc("Credit notes", s.docs.creditNotes, "CN-")] },
+      rows: [...doc("Invoices for outward supply", s.docs.invoices), ...doc("Credit notes", s.docs.creditNotes)] },
     { title: "GSTR-1 Table 14: supplies through Zomato (GST paid by Zomato, section 9(5))", columns: [text("eco", "Zomato GSTIN"),
       { key: "bills", label: "Bills", format: "quantity" }, money("value", "Value of supplies")],
       rows: s.eco95.billCount ? [{ eco: input.ecoGstin || "Not set: add it in Settings", bills: s.eco95.billCount, value: s.eco95.valuePaise }] : [] },

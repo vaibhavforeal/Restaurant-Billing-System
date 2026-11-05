@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill } from "@masalapos/domain";
+import { financialYear, uuidv7, type Bill } from "@masalapos/domain";
 import type { GstReturnsReport } from "@masalapos/domain/gst-returns";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
@@ -71,11 +71,30 @@ describe("GST returns", () => {
     await voidBill(business.id, FEB);
     expect((await report("2026-01")).tables).toEqual(before.tables);
     const feb = await report("2026-02");
-    expect(table(feb, "Table 9B").rows).toMatchObject([{ ctin: ACME.gstin, bill: String(business.billNo), taxable: 10000 }]);
+    expect(table(feb, "Table 9B").rows).toMatchObject([{ ctin: ACME.gstin, bill: business.invoiceNo, taxable: 10000 }]);
     expect(table(feb, "Table 3.1").rows[0]).toMatchObject({ taxable: -10000 });
     const quarter = await report("2026-02", "quarter");
     expect(quarter.period).toMatchObject({ from: "2026-01-01", to: "2026-03-31" });
     expect(table(quarter, "Table 13").rows[0]).toMatchObject({ total: 1, cancelled: 1 });
+  });
+
+  it("reports stored invoice numbers, one range per prefix, and credit note references", async () => {
+    const setPrefix = (invoicePrefix: string) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", gstin: OWN, invoicePrefix } });
+    const fy = financialYear(Date.now()).short;
+    expect((await setPrefix("MP")).statusCode).toBe(200);
+    await bill(1, JAN);
+    const second = await bill(1, JAN, ACME);
+    expect((await setPrefix("X1")).statusCode).toBe(200);
+    const third = await bill(1, JAN);
+    await voidBill(third.id, JAN);
+    const r = await report("2026-01");
+    expect(table(r, "Table 13").rows).toEqual([
+      { document: "Invoices for outward supply", from: `MP/${fy}/0001`, to: `MP/${fy}/0002`, total: 2, cancelled: 0, net: 2 },
+      { document: "Invoices for outward supply", from: `X1/${fy}/0003`, to: `X1/${fy}/0003`, total: 1, cancelled: 1, net: 0 },
+      { document: "Credit notes", from: `CN/${fy}/001`, to: `CN/${fy}/001`, total: 1, cancelled: 0, net: 1 },
+    ]);
+    expect(second.invoiceNo).toBe(`MP/${fy}/0002`);
+    expect(table(r, "Table 4A").rows).toMatchObject([{ invoice: `MP/${fy}/0002` }]);
   });
 
   it("downloads the GSTR-1 JSON with the GSTIN and period in its name", async () => {
