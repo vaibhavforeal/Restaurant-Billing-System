@@ -14,8 +14,6 @@ function scripted(replies: Array<Partial<AiReply>>, fallback?: Partial<AiReply>)
       const next = replies.shift() ?? fallback ?? { text: "done" };
       return { text: "", toolCalls: [], model: "test/model", usage: { inputTokens: 10, outputTokens: 2 }, ...next };
     },
-    async listModels() { return []; },
-    async check() { return { model: "test/model", freeRequestsUsed: null, freeRequestsLimit: null }; },
   };
   return { provider, requests };
 }
@@ -65,8 +63,6 @@ describe("assistant flows", () => {
           ? { text: "", toolCalls: [{ id: `t${requests.length}`, name: "today", arguments: "{}" }], model: "test/model", usage: { inputTokens: 1, outputTokens: 1 } }
           : { text: "Here is what I found.", toolCalls: [], model: "test/model", usage: { inputTokens: 1, outputTokens: 1 } };
       },
-      async listModels() { return []; },
-      async check() { return { model: "test/model", freeRequestsUsed: null, freeRequestsLimit: null }; },
     };
     const result = await ask(provider, app.db, "Loop?", [], Date.now());
     expect(result.answer).toBe("Here is what I found.");
@@ -86,8 +82,6 @@ describe("assistant flows", () => {
           ? { text: "", toolCalls: [{ id: `t${requests.length}`, name: "today", arguments: "{}" }], model: "m", usage: { inputTokens: 1, outputTokens: 1 } }
           : { text: "Answer from what I found.", toolCalls: [], model: "m", usage: { inputTokens: 1, outputTokens: 1 } };
       },
-      async listModels() { return []; },
-      async check() { return { model: "m", freeRequestsUsed: null, freeRequestsLimit: null }; },
     };
     const result = await ask(provider, app.db, "Slow?", [], Date.now(), { clock: () => clock });
     expect(ASK_DEADLINE_MS).toBeLessThanOrEqual(110_000);

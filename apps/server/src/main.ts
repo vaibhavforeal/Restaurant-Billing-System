@@ -1,4 +1,3 @@
-import { resolveSecretKey } from "./secret-box.js";
 import { openDb } from "@masalapos/domain";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -54,9 +53,8 @@ try {
   const cloudBackupProvider = demo ? undefined : driveProvider({ dataDir, secretKey,
     restaurantName: () => (liveDb.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name?: string } | undefined)?.restaurant_name ?? "",
     warn: (message) => console.warn(message) });
-  // The AI assistant seals provider keys with the same Windows-protected key as Drive tokens.
-  const ai = demo ? undefined : { dataDir, secretKey: resolveSecretKey({ dataDir, secretKey, warn: (message) => console.warn(message),
-    commercial: typeof __MASALAPOS_COMMERCIAL__ !== "undefined" && __MASALAPOS_COMMERCIAL__ }) };
+  // The AI assistant keeps its switch and usage in the data folder; requests go to MasalaPOS's AI service (no key on this counter).
+  const ai = demo ? undefined : { dataDir };
   const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(ai ? { ai } : {}), ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
     serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
   } });

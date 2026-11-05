@@ -1,72 +1,48 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicJson } from "../backups.js";
-import { seal, unseal } from "../secret-box.js";
 
-export type AiProviderId = "openrouter";
-export type AiFeature = "ask" | "daySummary" | "describe" | "test";
-export interface AiSettings { enabled: boolean; provider: AiProviderId; model: string; fallback: boolean }
+export type AiFeature = "ask" | "daySummary" | "describe";
 export interface AiUsageTotals { requests: number; inputTokens: number; outputTokens: number }
+/** The last answer from MasalaPOS's AI service about this counter. `usedToday` counts the UTC day `checkedAt` falls on. */
+export interface AiServiceCache { enabled: boolean; dailyLimit: number; usedToday: number; checkedAt: number }
 
-const FEATURES: AiFeature[] = ["ask", "daySummary", "describe", "test"];
-const DEFAULTS: AiSettings = { enabled: false, provider: "openrouter", model: "google/gemma-4-31b-it:free", fallback: true };
+const FEATURES: AiFeature[] = ["ask", "daySummary", "describe"];
 const zero = (): AiUsageTotals => ({ requests: 0, inputTokens: 0, outputTokens: 0 });
 
-interface FileShape { settings?: Partial<AiSettings>; keys?: Partial<Record<AiProviderId, string>>; usage?: Partial<Record<AiFeature, AiUsageTotals>> }
+interface FileShape { localEnabled?: boolean; service?: AiServiceCache | null; usage?: Partial<Record<AiFeature, AiUsageTotals>> }
 
 /**
- * The AI assistant's settings, each provider's key (sealed) and usage counters, in `ai-assistant.json` in the data
- * folder: outside the database, so a restored backup never carries a key. Without the shell's secret key nothing can
- * be sealed, so a key can't be saved.
+ * The AI assistant's state on this counter, in `ai-assistant.json` in the data folder: the restaurant's own on/off switch, the service's
+ * last status, and usage per feature. No key is kept here: MasalaPOS's AI service holds it. Fields from older versions (a sealed key, a
+ * model choice) are dropped on the next write.
  */
 export class AiStore {
   private readonly path: string;
-  constructor(dataDir: string, private readonly secretKey: Buffer | undefined) {
-    this.path = join(dataDir, "ai-assistant.json");
-  }
+  constructor(dataDir: string) { this.path = join(dataDir, "ai-assistant.json"); }
 
   private read(): FileShape {
     if (!existsSync(this.path)) return {};
-    try { return JSON.parse(readFileSync(this.path, "utf8")) as FileShape; } catch { return {}; }
+    try {
+      const file = JSON.parse(readFileSync(this.path, "utf8")) as FileShape;
+      return { ...(typeof file.localEnabled === "boolean" ? { localEnabled: file.localEnabled } : {}), service: file.service ?? null, ...(file.usage ? { usage: file.usage } : {}) };
+    } catch { return {}; }
   }
-  private write(file: FileShape) { atomicJson(this.path, file); }
+  private update(patch: FileShape) { atomicJson(this.path, { ...this.read(), ...patch }); }
 
-  settings(): AiSettings { return { ...DEFAULTS, ...this.read().settings }; }
+  /** The restaurant's own switch, "Use the AI assistant"; on until an admin turns it off. */
+  localEnabled(): boolean { return this.read().localEnabled ?? true; }
+  setLocalEnabled(enabled: boolean): void { this.update({ localEnabled: enabled }); }
 
-  saveSettings(patch: Partial<AiSettings>): AiSettings {
-    const file = this.read();
-    file.settings = { ...this.settings(), ...patch };
-    this.write(file);
-    return this.settings();
-  }
+  service(): AiServiceCache | null { return this.read().service ?? null; }
+  setService(service: AiServiceCache): void { this.update({ service }); }
 
-  setKey(provider: AiProviderId, key: string | null): void {
-    const file = this.read();
-    const keys = { ...file.keys };
-    if (key === null) delete keys[provider];
-    else {
-      if (!this.secretKey) throw new Error("Saving a key needs Windows credential protection");
-      keys[provider] = seal(this.secretKey, key);
-    }
-    this.write({ ...file, keys });
-  }
-
-  /** The provider's key, or null when none is saved or it was sealed on another PC (the owner re-enters it). */
-  key(provider: AiProviderId): string | null {
-    const sealed = this.read().keys?.[provider];
-    if (!sealed || !this.secretKey) return null;
-    try { return unseal(this.secretKey, sealed); } catch { return null; }
-  }
-
-  keyEnding(provider: AiProviderId): string | null { return this.key(provider)?.slice(-4) ?? null; }
-
-  /** Adds one feature use: `requests` is how many provider requests it made (default 1). */
+  /** Adds one feature use: `requests` is how many AI requests it made (default 1). */
   recordUsage(feature: AiFeature, usage: { inputTokens: number; outputTokens: number; requests?: number }): void {
-    const file = this.read();
     const totals = this.usage();
     const current = totals[feature];
     totals[feature] = { requests: current.requests + (usage.requests ?? 1), inputTokens: current.inputTokens + usage.inputTokens, outputTokens: current.outputTokens + usage.outputTokens };
-    this.write({ ...file, usage: totals });
+    this.update({ usage: totals });
   }
 
   usage(): Record<AiFeature, AiUsageTotals> {

@@ -136,7 +136,11 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerUsers(app);
   registerSettings(app);
   registerStaffActivity(app);
-  registerAi(app, opts.ai);
+  // The AI assistant reaches MasalaPOS's AI service the same way support does: with the counter's installation ID and secret.
+  const aiService = opts.ai?.service ?? (opts.licensing?.serviceUrl && opts.licensing.installationSecret
+    ? { serviceUrl: opts.licensing.serviceUrl, installationId: opts.licensing.installationId, installationSecret: opts.licensing.installationSecret } : undefined);
+  const aiFetch = opts.ai?.fetch ?? opts.licensing?.fetch;
+  registerAi(app, opts.ai && { dataDir: opts.ai.dataDir, ...(aiService ? { service: aiService } : {}), ...(aiFetch ? { fetch: aiFetch } : {}) });
   registerOrderSettings(app);
   registerMenuInsights(app);
   registerDiscountCaps(app);
