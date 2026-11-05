@@ -60,11 +60,12 @@ export class AiStore {
 
   keyEnding(provider: AiProviderId): string | null { return this.key(provider)?.slice(-4) ?? null; }
 
-  recordUsage(feature: AiFeature, usage: { inputTokens: number; outputTokens: number }): void {
+  /** Adds one feature use: `requests` is how many provider requests it made (default 1). */
+  recordUsage(feature: AiFeature, usage: { inputTokens: number; outputTokens: number; requests?: number }): void {
     const file = this.read();
     const totals = this.usage();
     const current = totals[feature];
-    totals[feature] = { requests: current.requests + 1, inputTokens: current.inputTokens + usage.inputTokens, outputTokens: current.outputTokens + usage.outputTokens };
+    totals[feature] = { requests: current.requests + (usage.requests ?? 1), inputTokens: current.inputTokens + usage.inputTokens, outputTokens: current.outputTokens + usage.outputTokens };
     this.write({ ...file, usage: totals });
   }
 

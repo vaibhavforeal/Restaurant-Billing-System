@@ -96,4 +96,21 @@ describe("OpenRouter provider", () => {
     const bare = fakeFetch((call) => call.url.endsWith("/key") ? [200, { data: {} }] : [200, reply({ content: "OK" })]);
     expect(await provider(bare.fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: null, freeRequestsLimit: null, usage: { inputTokens: 10, outputTokens: 3 } });
   });
+
+  it("check calls a working key working even when the reply is empty or the daily count can't be read", async () => {
+    const { fetch, calls } = fakeFetch((call) => call.url.endsWith("/key") ? [500, { error: { message: "down" } }] : [200, reply({ content: "" }, { model: "openrouter/free" })]);
+    expect(await provider(fetch).check()).toEqual({ model: "openrouter/free", freeRequestsUsed: null, freeRequestsLimit: null, usage: { inputTokens: 10, outputTokens: 3 } });
+    expect((calls[0]!.body as { max_tokens: number }).max_tokens).toBeGreaterThanOrEqual(64);
+    const refused = fakeFetch(() => [401, { error: { message: "No auth" } }]);
+    await expect(provider(refused.fetch).check()).rejects.toMatchObject({ code: "bad_key" });
+  });
+
+  it("reads text sent as parts and turns badly shaped replies into no_answer", async () => {
+    const parts = fakeFetch(() => [200, reply({ content: [{ type: "text", text: "Paneer " }, { type: "text", text: "tikka." }] })]);
+    expect((await provider(parts.fetch).chat(request)).text).toBe("Paneer tikka.");
+    for (const body of [reply({ content: null, tool_calls: [{ id: "x" }] }), { model: "m" }, { model: "m", choices: [{}] }, "not json"]) {
+      const odd = fakeFetch(() => [200, body]);
+      await expect(provider(odd.fetch).chat(request)).rejects.toMatchObject({ code: "no_answer" });
+    }
+  });
 });

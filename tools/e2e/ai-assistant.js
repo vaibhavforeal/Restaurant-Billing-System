@@ -40,10 +40,9 @@
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { copied = t; } } });
 
   try {
-    // 1. Hidden until set up.
-    await nav('Reports & Analytics');
-    const select = await wait(moreReports, 'More reports');
-    check(![...select.options].some((o) => o.value === 'ask'), 'Ask MasalaPOS is hidden before the assistant is set up');
+    // 1. Before setup an admin gets a pointer to Settings, not the question box.
+    const before = await openAsk();
+    check(/Set up the AI assistant in Settings/.test(before.textContent) && !before.querySelector('input[aria-label="Your question"]'), 'before setup, Ask MasalaPOS points the admin to Settings');
 
     // 2. Settings: save a key, model pre-selected, Test.
     await nav('settings');
@@ -70,6 +69,11 @@
     await askQuestion('Did we hit the limit?');
     await wait(() => askSection.querySelector('[role="alert"]')?.textContent.includes('free limit is used up'), 'limit message');
     check(true, 'a rate-limited question shows the free-limit message');
+
+    // 4b. A slow model (20 s, past the app's usual 15 s request timeout) still answers.
+    await askQuestion('A slow question about sales?');
+    await wait(() => [...askSection.querySelectorAll('.ask-answer')].some((a) => a.textContent.includes('slow but complete answer')), 'slow answer', 45000);
+    check(!askSection.querySelector('[role="alert"]')?.textContent.includes('needs internet'), 'a reply taking 20 s still arrives instead of a false "needs internet"');
 
     // 5. Day-end summary and Copy.
     await click(() => byText('Day-end / GST'), 'Day-end tab');

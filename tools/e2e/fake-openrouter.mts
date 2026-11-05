@@ -36,6 +36,8 @@ createServer((req, res) => {
     if (/connection test/.test(system)) return send(res, 200, reply("OK"));
     if (/end-of-day summary/.test(system)) return send(res, 200, reply("• Sales were steady at the counter.\n• Paneer tikka sold most."));
     if (/menu descriptions/.test(system)) return send(res, 200, reply("Smoky paneer cubes, marinated in spiced yoghurt and charred in the tandoor."));
+    // A question mentioning "slow" waits 20 s (longer than the app's normal 15 s request timeout) before answering.
+    if (body.messages.some((m) => m.role === "user" && /slow/i.test(m.content ?? ""))) { setTimeout(() => send(res, 200, reply("A slow but complete answer.")), 20_000); return; }
     if (body.tools && last.role === "user") return send(res, 200, reply(null, { tool_calls: [{ id: "call-1", type: "function", function: { name: "sales_by_day", arguments: "{}" } }] }));
     return send(res, 200, reply("Sales held steady this week; Paneer tikka was the best seller (fake answer)."));
   });

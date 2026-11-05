@@ -58,6 +58,8 @@ describe("AI settings store", () => {
     store.recordUsage("ask", { inputTokens: 100, outputTokens: 20 });
     expect(store.usage().ask).toEqual({ requests: 2, inputTokens: 200, outputTokens: 40 });
     expect(store.usage().describe).toEqual({ requests: 0, inputTokens: 0, outputTokens: 0 });
+    store.recordUsage("ask", { inputTokens: 10, outputTokens: 1, requests: 3 });
+    expect(store.usage().ask.requests).toBe(5);
   });
 
   it("keeps settings when the file is unreadable JSON", () => {

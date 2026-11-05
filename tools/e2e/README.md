@@ -44,10 +44,10 @@ Build the UI, start `node --import tsx tools/e2e/fake-openrouter.mts` (a scripte
 `http://127.0.0.1:4161/api/v1`, no key or cost) and then `node --import tsx tools/e2e/ai-assistant-server.mts` (the app on
 `http://127.0.0.1:4160/`, its AI pointed at the fake, with billed sales and a customer, Priya Sharma 98765 43210). Start both
 fresh for each run. Sign in as `admin` / `admin-password`, add `tools/e2e/ai-assistant.js` and require
-`window.__aiAssistantResult.status === "passed"` (10 checks):
-- Ask MasalaPOS is hidden before setup.
+`window.__aiAssistantResult.status === "passed"` (11 checks):
+- Before setup, Ask MasalaPOS points the admin to Settings.
 - Settings saves the key and shows only "ending …4321", pre-selects Gemma 4 31B, lists only free models, and Test reports "… of 50".
-- Ask answers with "Sales by day" under Figures used, and a question mentioning "limit" shows the free-limit message.
+- Ask answers with "Sales by day" under Figures used, and a question mentioning "limit" shows the free-limit message, and one mentioning "slow" (the fake waits 20 s) still gets its answer.
 - Day-end Write summary and Copy work (clipboard replaced while it runs).
 - The dish editor's Write description fills the box and leaves it unsaved.
 - The fake's recorded requests contain neither "Priya" nor "98765".

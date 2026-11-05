@@ -6,6 +6,8 @@ import { AI_TOOLS, runTool } from "./tools.js";
 import { AiError, type AiMessage, type AiProvider, type AiReply, type AiUsage } from "./provider.js";
 
 export const MAX_LOOKUPS = 6;
+/** Time for lookups in one question; with the final answer's own 60 s limit it stays under the browser's 180 s wait. */
+export const ASK_DEADLINE_MS = 100_000;
 export type ChatTurn = { role: "user" | "assistant"; text: string };
 
 export const ASK_SYSTEM = `You are MasalaPOS's assistant for the owner of an Indian restaurant. Answer questions about the restaurant's sales using only the results of the lookups you are given; call a lookup whenever you need figures, and use the "today" lookup to work out dates. Never invent or estimate figures the lookups did not return, and say plainly when the data doesn't cover the question. Amounts are in Indian rupees (₹). Be brief and practical: a few sentences or short bullet points, with the numbers that matter and one useful suggestion when it fits. Answer in the language the owner writes in.`;
@@ -13,7 +15,7 @@ export const SUMMARY_SYSTEM = `You write a short end-of-day summary for the owne
 export const DESCRIBE_SYSTEM = `You write menu descriptions for an Indian restaurant's QR menu. Write one or two appetising lines, at most 200 characters, from the dish details given. Don't claim ingredients, spice levels or cooking methods the details don't support beyond what the dish name clearly implies. Reply with the description only, without quotes.`;
 
 const rs = (paise: number) => Math.round(paise) / 100;
-const sumUsage = (a: AiUsage, b: AiUsage): AiUsage => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens });
+const sumUsage = (a: AiUsage, b: AiUsage): AiUsage => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, requests: (a.requests ?? 0) + (b.requests ?? 1) });
 const DAY_MS = 24 * 60 * 60 * 1000;
 const shiftDay = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 
@@ -26,18 +28,20 @@ export function cleanHistory(history: unknown): ChatTurn[] {
 }
 
 /**
- * Ask your sales: the model calls lookups (at most MAX_LOOKUPS), then answers. When the lookups are used up, the
+ * Ask your sales: the model calls lookups (at most MAX_LOOKUPS, and only for ASK_DEADLINE_MS), then answers. When the lookups are used up, the
  * results so far are handed back as plain text with no lookups offered, so it must answer (some providers reject tool
  * history in a request that offers no tools).
  */
-export async function ask(provider: AiProvider, db: Database, question: string, history: ChatTurn[], now: number) {
+export async function ask(provider: AiProvider, db: Database, question: string, history: ChatTurn[], now: number, opts: { clock?: () => number } = {}) {
+  const clock = opts.clock ?? Date.now;
+  const started = clock();
   const messages: AiMessage[] = [...history.map((t): AiMessage => ({ role: t.role, text: t.text })), { role: "user", text: question }];
   const figuresUsed: string[] = [];
   const results: string[] = [];
-  let usage: AiUsage = { inputTokens: 0, outputTokens: 0 };
+  let usage: AiUsage = { inputTokens: 0, outputTokens: 0, requests: 0 };
   let lookups = 0;
   let model = "";
-  while (lookups < MAX_LOOKUPS) {
+  while (lookups < MAX_LOOKUPS && clock() - started < ASK_DEADLINE_MS) {
     const reply: AiReply = await provider.chat({ system: ASK_SYSTEM, messages, tools: AI_TOOLS, maxTokens: 1500 });
     usage = sumUsage(usage, reply.usage); model = reply.model;
     if (!reply.toolCalls.length) return { answer: reply.text, figuresUsed, model, usage };
@@ -81,7 +85,8 @@ export function daySummaryInput(db: Database, date: string): object {
       cancelledOrders: day.cancellations.orderCount, voidsAndRefunds: { count: day.creditNotes.count, amountRs: rs(day.creditNotes.totalPaise) },
       payments: day.netPayments.map((p) => ({ mode: p.mode, amountRs: rs(p.amountPaise) })) },
     top5: items.slice(0, 5).map(dish),
-    bottom5: [...items].reverse().slice(0, 5).map(dish),
+    // The weakest sellers after the top 5, so a quiet day never names a dish as both.
+    bottom5: items.slice(5).reverse().slice(0, 5).map(dish),
     weekdayAverage: { days: past.length, netSalesRs: past.length ? rs(past.reduce((n, d) => n + d.totalPaise, 0) / past.length) : null },
     staff: { flags: staff.flags ?? [], byStaff: staff.byStaff ?? [] },
   };

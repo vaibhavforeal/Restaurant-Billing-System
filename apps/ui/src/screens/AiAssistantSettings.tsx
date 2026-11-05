@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api";
+import { AI_TIMEOUT_MS, aiRequestInit } from "../ask-chat";
+import { timeoutSignal } from "../abort-signal";
 import { DEFAULT_AI_MODEL, modelOptions, usageRows, type AiCheckView, type AiModelInfo, type AiSettingsView } from "../ai-settings";
 
 const PRIVACY = "Some free AI providers may keep what is sent. MasalaPOS sends only sales figures and dish and staff first names, never customer details. In your OpenRouter account, turn off 'allow training'.";
@@ -21,7 +23,7 @@ export function AiAssistantSettings() {
   }
   useEffect(() => {
     apiFetch<AiSettingsView>("/api/ai/settings").then(show).catch((e) => setStatus({ ok: false, text: errorText(e, "Could not load the AI assistant settings.") }));
-    apiFetch<{ models: AiModelInfo[] }>("/api/ai/models").then((r) => setModels(r.models)).catch(() => setModels([]));
+    apiFetch<{ models: AiModelInfo[] }>("/api/ai/models", { signal: timeoutSignal(AI_TIMEOUT_MS.other) }).then((r) => setModels(r.models)).catch(() => setModels([]));
   }, []);
 
   async function save(patch: Record<string, unknown>, done: string) {
@@ -36,7 +38,7 @@ export function AiAssistantSettings() {
   async function test() {
     setBusy(true); setStatus(null);
     try {
-      const check = await apiFetch<AiCheckView>("/api/ai/test", { method: "POST" });
+      const check = await apiFetch<AiCheckView>("/api/ai/test", aiRequestInit("other"));
       const limit = check.freeRequestsLimit !== null ? ` · ${check.freeRequestsUsed ?? 0} of ${check.freeRequestsLimit} free requests used today` : "";
       setStatus({ ok: true, text: `Working · answered by ${check.model}${limit}` });
       show(await apiFetch<AiSettingsView>("/api/ai/settings"));

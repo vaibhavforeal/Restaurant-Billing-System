@@ -27,8 +27,9 @@ export function registerAi(app: FastifyInstance, opts: AiOptions | undefined): v
   const manage = app.requirePermission("settings.manage");
   const enabled = () => !!store && store.settings().enabled && !!store.key(store.settings().provider);
 
-  function provider(): AiProvider {
-    if (!store || !enabled()) throw new AiError("off");
+  /** The configured provider. Test may use it while switched off, as long as a key is saved. */
+  function provider(opts2: { evenWhenOff?: boolean } = {}): AiProvider {
+    if (!store || !store.key(store.settings().provider) || (!opts2.evenWhenOff && !enabled())) throw new AiError("off");
     const settings = store.settings();
     return createOpenRouter({ apiKey: store.key(settings.provider)!, model: settings.model, fallback: settings.fallback,
       ...(opts?.fetch ? { fetch: opts.fetch } : {}), ...(opts?.baseUrl ? { baseUrl: opts.baseUrl } : {}) });
@@ -78,7 +79,7 @@ export function registerAi(app: FastifyInstance, opts: AiOptions | undefined): v
     const models = await createOpenRouter({ apiKey: key, model: store.settings().model, fallback: false, ...(opts?.fetch ? { fetch: opts.fetch } : {}), ...(opts?.baseUrl ? { baseUrl: opts.baseUrl } : {}) }).listModels();
     return { models };
   }));
-  app.post("/api/ai/test", { preHandler: manage }, async (_req, reply) => metered(reply, "test", () => provider().check()));
+  app.post("/api/ai/test", { preHandler: manage }, async (_req, reply) => metered(reply, "test", () => provider({ evenWhenOff: true }).check()));
   app.post("/api/ai/ask", { preHandler: app.requirePermission("users.manage") }, async (req, reply) => {
     const body = AskBody.parse(req.body);
     return metered(reply, "ask", () => ask(provider(), app.db, body.question, cleanHistory(body.history), Date.now()));

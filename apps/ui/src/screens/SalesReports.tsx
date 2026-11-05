@@ -4,6 +4,7 @@ import { OPERATIONAL_REPORTS, type OperationalReportKind } from "@masalapos/doma
 import { COST_REPORTS, OperationalReports, STAFF_ACTIVITY_TITLE, type CostReportKind } from "./OperationalReports";
 import { AskMasalaPOS } from "./AskMasalaPOS";
 import { useAiStatus } from "../ai-status";
+import { askEntry } from "../ask-chat";
 import { COSTING_PRO_NOTE } from "../dish-costing";
 import { useLicense } from "./LicenseSettings";
 import { OrderAnalytics } from "./OrderAnalytics";
@@ -57,8 +58,8 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
   const { status } = useLicense();
   const profit = canSeeCosts && COST_REPORTS.some((r) => r.id === tab);
   const staffActivity = canSeeStaff && tab === "staff-activity";
-  const ai = useAiStatus();
-  const canAsk = !!ai?.enabled && ai.canAsk;
+  const askMode = askEntry(useAiStatus());
+  const canAsk = askMode !== "hidden";
   const operational = OPERATIONAL_REPORTS.some((r) => r.id === tab) || profit || staffActivity;
   const [detailPeriod, setDetailPeriod] = useState<ReportPeriod | undefined>(initialPeriod);
   const [day, setDay] = useState(initialPeriod?.to);
@@ -91,7 +92,7 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
         {OPERATIONAL_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeCosts && COST_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeStaff && <option value="staff-activity">{STAFF_ACTIVITY_TITLE}</option>}{canAsk && <option value="ask">Ask MasalaPOS</option>}
       </select>
     </div>
-    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "ask" && canAsk ? <AskMasalaPOS /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={COST_REPORTS.find((r) => r.id === tab)!.title}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | CostReportKind | "staff-activity"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
+    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "ask" && canAsk ? <AskMasalaPOS setup={askMode === "setup"} /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={COST_REPORTS.find((r) => r.id === tab)!.title}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | CostReportKind | "staff-activity"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
       <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { setMessage(""); setExportError(""); setPeriod(next); }} onRefresh={() => { setMessage(""); refresh(); }} />
       {(error || exportError) && <p role="alert">{error || exportError}</p>}
       {message && <p role="status">{message}</p>}

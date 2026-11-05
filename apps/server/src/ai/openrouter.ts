@@ -1,4 +1,4 @@
-import { AiError, type AiCheck, type AiMessage, type AiModel, type AiProvider, type AiReply, type AiRequest } from "./provider.js";
+import { AiError, type AiCheck, type AiMessage, type AiModel, type AiProvider, type AiReply, type AiRequest, type AiToolCall } from "./provider.js";
 
 export const DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free";
 export const OPENROUTER_FALLBACK = "openrouter/free";
@@ -7,7 +7,7 @@ const DEFAULT_BASE = "https://openrouter.ai/api/v1";
 interface WireReply {
   model?: string;
   error?: { message?: string; code?: number | string };
-  choices?: Array<{ message?: { content?: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }>;
+  choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
@@ -16,6 +16,24 @@ const toWire = (message: AiMessage) => message.role === "user" ? { role: "user",
   : message.toolCalls?.length
     ? { role: "assistant", content: message.text || null, tool_calls: message.toolCalls.map((call) => ({ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } })) }
     : { role: "assistant", content: message.text };
+
+/** Reply text, whether a string or (some providers) a list of `{type: "text", text}` parts; anything else is no text. */
+function textOf(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) return content.map((part) => part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "").join("").trim();
+  return "";
+}
+
+/** Well-formed tool calls only; a malformed entry is dropped rather than crashing the request. */
+function toolCallsOf(calls: unknown): AiToolCall[] {
+  if (!Array.isArray(calls)) return [];
+  return calls.flatMap((call, index) => {
+    const fn = call && typeof call === "object" ? (call as { function?: { name?: unknown; arguments?: unknown } }).function : undefined;
+    if (!fn || typeof fn.name !== "string") return [];
+    const id = typeof (call as { id?: unknown }).id === "string" ? (call as { id: string }).id : `call-${index}`;
+    return [{ id, name: fn.name, arguments: typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments ?? {}) }];
+  });
+}
 
 /** HTTP status (or an error code inside a 200 body) to what the owner is told. */
 function failure(status: number, detail: string): AiError {
@@ -61,9 +79,9 @@ export function createOpenRouter(opts: { apiKey: string; model: string; fallback
       ...(request.tools?.length ? { tools: request.tools.map((tool) => ({ type: "function", function: tool })) } : {}),
       max_tokens: request.maxTokens,
     } }) as WireReply;
-    const message = json.choices?.[0]?.message;
-    const text = message?.content?.trim() ?? "";
-    const toolCalls = (message?.tool_calls ?? []).map((tc) => ({ id: tc.id, name: tc.function.name, arguments: tc.function.arguments }));
+    const message = Array.isArray(json.choices) ? json.choices[0]?.message : undefined;
+    const text = textOf(message?.content);
+    const toolCalls = toolCallsOf(message?.tool_calls);
     if (!text && !toolCalls.length) throw new AiError("no_answer", "empty reply");
     return { text, toolCalls, model: json.model ?? opts.model, usage: { inputTokens: json.usage?.prompt_tokens ?? 0, outputTokens: json.usage?.completion_tokens ?? 0 } };
   }
@@ -76,11 +94,18 @@ export function createOpenRouter(opts: { apiKey: string; model: string; fallback
         .filter((m) => m.pricing?.prompt === "0" && m.pricing?.completion === "0" && (m.supported_parameters ?? []).includes("tools"))
         .map((m) => ({ id: m.id, name: m.name ?? m.id, contextLength: m.context_length ?? 0, free: true, supportsTools: true }));
     },
+    /**
+     * Any successful reply proves the key and model work, even an empty one (a model may spend a small budget on
+     * thinking). The daily free-request count is a bonus: if it can't be read, the counts are left empty.
+     */
     async check(): Promise<AiCheck> {
-      const reply = await chat({ system: "You are a connection test.", messages: [{ role: "user", text: "Reply with OK." }], maxTokens: 10 });
-      const key = await call("/key", {}) as { data?: { free_model_daily_requests?: { used?: number; limit?: number } } };
-      const daily = key.data?.free_model_daily_requests;
-      return { model: reply.model, freeRequestsUsed: daily?.used ?? null, freeRequestsLimit: daily?.limit ?? null, usage: reply.usage };
+      const json = await call("/chat/completions", { method: "POST", body: {
+        ...(opts.fallback ? { models: [opts.model, OPENROUTER_FALLBACK] } : { model: opts.model }),
+        messages: [{ role: "system", content: "You are a connection test." }, { role: "user", content: "Reply with OK." }], max_tokens: 64,
+      } }) as WireReply;
+      const daily = await call("/key", {}).then((key) => (key as { data?: { free_model_daily_requests?: { used?: number; limit?: number } } }).data?.free_model_daily_requests).catch(() => undefined);
+      return { model: json.model ?? opts.model, freeRequestsUsed: daily?.used ?? null, freeRequestsLimit: daily?.limit ?? null,
+        usage: { inputTokens: json.usage?.prompt_tokens ?? 0, outputTokens: json.usage?.completion_tokens ?? 0 } };
     },
   };
 }

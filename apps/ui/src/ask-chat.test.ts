@@ -19,3 +19,27 @@ describe("Ask MasalaPOS helpers", () => {
     expect(AI_OFFLINE_TEXT).toBe("The AI assistant needs internet. Everything else keeps working.");
   });
 });
+
+describe("AI request timeouts", () => {
+  it("gives AI requests far longer than the usual 15 s, with Ask longest", async () => {
+    const { AI_TIMEOUT_MS, aiRequestInit } = await import("./ask-chat");
+    expect(AI_TIMEOUT_MS.ask).toBeGreaterThanOrEqual(180_000);
+    expect(AI_TIMEOUT_MS.other).toBeGreaterThanOrEqual(90_000);
+    const init = aiRequestInit("ask", { question: "Hi" });
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ question: "Hi" }));
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal!.aborted).toBe(false);
+  });
+});
+
+describe("askEntry", () => {
+  it("offers Ask when on, a set-up note to admins when off, and nothing otherwise", async () => {
+    const { askEntry } = await import("./ask-chat");
+    expect(askEntry({ enabled: true, canAsk: true, canDescribe: true, canManage: true })).toBe("ask");
+    expect(askEntry({ enabled: false, canAsk: true, canDescribe: true, canManage: true })).toBe("setup");
+    expect(askEntry({ enabled: false, canAsk: false, canDescribe: false, canManage: false })).toBe("hidden");
+    expect(askEntry({ enabled: true, canAsk: false, canDescribe: true, canManage: false })).toBe("hidden");
+    expect(askEntry(null)).toBe("hidden");
+  });
+});

@@ -12,7 +12,8 @@ export type AiMessage =
   | { role: "assistant"; text: string; toolCalls?: AiToolCall[] }
   | { role: "tool"; toolCallId: string; name: string; content: string };
 export interface AiRequest { system: string; messages: AiMessage[]; tools?: AiTool[]; maxTokens: number }
-export interface AiUsage { inputTokens: number; outputTokens: number }
+/** Tokens used; `requests` counts provider calls when a feature made more than one. */
+export interface AiUsage { inputTokens: number; outputTokens: number; requests?: number }
 export interface AiReply { text: string; toolCalls: AiToolCall[]; model: string; usage: AiUsage }
 export interface AiModel { id: string; name: string; contextLength: number; free: boolean; supportsTools: boolean }
 export interface AiCheck { model: string; freeRequestsUsed: number | null; freeRequestsLimit: number | null; usage?: AiUsage }

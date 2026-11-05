@@ -10,7 +10,7 @@ import "../product-editor.css";
 import { withTimeout } from "../abort-signal";
 import { useAiStatus } from "../ai-status";
 import { describeRequest } from "../ai-buttons";
-import { aiErrorText } from "../ask-chat";
+import { aiErrorText, aiRequestInit } from "../ask-chat";
 
 const optionalPrice = (value: number | null | undefined) => value == null ? "" : paiseToRupees(value);
 const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zomatoPrice: "" };
@@ -160,7 +160,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     setDrafting(true); setDraftError("");
     try {
       const body = describeRequest({ name, categoryName: categories.find((c) => c.id === categoryId)?.name ?? "", isVeg, variantNames: variants.map((v) => v.name), description });
-      const { text } = await apiFetch<{ text: string }>("/api/ai/describe", { method: "POST", body: JSON.stringify(body) });
+      const { text } = await apiFetch<{ text: string }>("/api/ai/describe", aiRequestInit("other", body));
       setDescription(text);
     } catch (e) { setDraftError(aiErrorText(e)); }
     finally { setDrafting(false); }

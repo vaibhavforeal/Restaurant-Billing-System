@@ -74,6 +74,14 @@ describe("AI assistant routes", () => {
     expect((await call("GET", "/api/ai/settings")).json().usage.test).toEqual({ requests: 1, inputTokens: 5, outputTokens: 2 });
   });
 
+  it("Test works with a saved key while the assistant is switched off", async () => {
+    await turnOn();
+    await call("PUT", "/api/ai/settings", { enabled: false });
+    const res = await call("POST", "/api/ai/test");
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ model: "google/gemma-4-31b-it:free" });
+  });
+
   it("ask returns the answer and figures used, and counts usage", async () => {
     await turnOn();
     let step = 0;
@@ -83,7 +91,7 @@ describe("AI assistant routes", () => {
     const res = await call("POST", "/api/ai/ask", { question: "What day is it?", history: [{ role: "system", text: "x" }] });
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json()).toEqual({ answer: "It is today.", figuresUsed: ["Today's date"], model: "m" });
-    expect((await call("GET", "/api/ai/settings")).json().usage.ask).toEqual({ requests: 1, inputTokens: 10, outputTokens: 4 });
+    expect((await call("GET", "/api/ai/settings")).json().usage.ask).toEqual({ requests: 2, inputTokens: 10, outputTokens: 4 });
   });
 
   it("day summary and describe return text", async () => {

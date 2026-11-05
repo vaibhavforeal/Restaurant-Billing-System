@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7 } from "@masalapos/domain";
 import { auth, enableIntegration, freshApp, setupAdmin } from "../test-helpers.js";
-import { ask, cleanHistory, daySummary, daySummaryInput, describeDish, MAX_LOOKUPS } from "./assistant.js";
+import { ask, ASK_DEADLINE_MS, cleanHistory, daySummary, daySummaryInput, describeDish, MAX_LOOKUPS } from "./assistant.js";
 import type { AiProvider, AiReply, AiRequest } from "./provider.js";
 
 /** A provider that answers from a script and records each request. */
@@ -75,6 +75,27 @@ describe("assistant flows", () => {
     expect(result.figuresUsed).toHaveLength(MAX_LOOKUPS);
   });
 
+  it("ask stops looking things up once its time is used and answers from what it has", async () => {
+    // Each provider call takes 60 s on a fake clock; after ASK_DEADLINE_MS the model gets no more lookups.
+    let clock = 0;
+    const requests: AiRequest[] = [];
+    const provider: AiProvider = {
+      async chat(request) {
+        requests.push(request); clock += 60_000;
+        return request.tools
+          ? { text: "", toolCalls: [{ id: `t${requests.length}`, name: "today", arguments: "{}" }], model: "m", usage: { inputTokens: 1, outputTokens: 1 } }
+          : { text: "Answer from what I found.", toolCalls: [], model: "m", usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+      async listModels() { return []; },
+      async check() { return { model: "m", freeRequestsUsed: null, freeRequestsLimit: null }; },
+    };
+    const result = await ask(provider, app.db, "Slow?", [], Date.now(), { clock: () => clock });
+    expect(ASK_DEADLINE_MS).toBeLessThanOrEqual(110_000);
+    expect(result.answer).toBe("Answer from what I found.");
+    expect(requests.filter((r) => r.tools)).toHaveLength(2);
+    expect(requests).toHaveLength(3);
+  });
+
   it("ask feeds bad tool arguments back as an error and continues", async () => {
     const { provider, requests } = scripted([{ toolCalls: [{ id: "b1", name: "item_sales", arguments: "{oops" }] }, { text: "Sorry, try again." }]);
     const result = await ask(provider, app.db, "Bad?", [], Date.now());
@@ -98,7 +119,8 @@ describe("assistant flows", () => {
     expect(input).toMatchObject({ date: today(), weekday: expect.any(String), restaurant: { name: expect.any(String) } });
     expect(input.totals).toMatchObject({ bills: 1, netSalesRs: expect.any(Number), discountsRs: 300 });
     expect((input.top5 as Array<{ dish: string }>).map((d) => d.dish)).toEqual(["Paneer tikka", "Butter naan", "Dal", "Rice", "Raita"]);
-    expect((input.bottom5 as Array<{ dish: string }>)[0]!.dish).toBe("Soup");
+    // Only 7 dishes sold: the weakest list never repeats a top-5 dish.
+    expect((input.bottom5 as Array<{ dish: string }>).map((d) => d.dish)).toEqual(["Soup", "Salad"]);
     expect(input.weekdayAverage).toMatchObject({ days: 0, netSalesRs: null });
     const text = JSON.stringify(input);
     expect(text).toContain("Asha");
@@ -130,6 +152,6 @@ describe("assistant flows", () => {
 
   it("usage adds up across requests", async () => {
     const { provider } = scripted([{ toolCalls: [{ id: "c1", name: "today", arguments: "{}" }] }, { text: "It is today." }]);
-    expect((await ask(provider, app.db, "Date?", [], Date.now())).usage).toEqual({ inputTokens: 20, outputTokens: 4 });
+    expect((await ask(provider, app.db, "Date?", [], Date.now())).usage).toEqual({ inputTokens: 20, outputTokens: 4, requests: 2 });
   });
 });

@@ -6,7 +6,7 @@ import { downloadText } from "../download";
 import { OverflowMenu } from "../PosControls";
 import { useAiStatus } from "../ai-status";
 import { summaryClipboardText } from "../ai-buttons";
-import { aiErrorText } from "../ask-chat";
+import { aiErrorText, aiRequestInit } from "../ask-chat";
 function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 const money = (n: number) => `₹${paiseToRupees(n)}`;
 export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
@@ -22,7 +22,7 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
   async function writeSummary() {
     setSummary((s) => ({ ...s, busy: true, error: "", copied: false }));
     try {
-      const reply = await apiFetch<{ text: string; model: string }>("/api/ai/day-summary", { method: "POST", body: JSON.stringify({ date }) });
+      const reply = await apiFetch<{ text: string; model: string }>("/api/ai/day-summary", aiRequestInit("other", { date }));
       setSummary({ busy: false, text: reply.text, model: reply.model, error: "", copied: false });
     } catch (e) { setSummary((s) => ({ ...s, busy: false, error: aiErrorText(e) })); }
   }
