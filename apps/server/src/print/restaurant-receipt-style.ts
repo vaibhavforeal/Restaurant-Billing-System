@@ -31,6 +31,11 @@ export const RESTAURANT_RECEIPT_CSS = `
   .items th:nth-child(2),.items td:nth-child(2){width:9%}
   .items th:nth-child(3),.items td:nth-child(3){width:22%;padding-inline:5px}
   .items th:last-child,.items td:last-child{width:24%}
+  .items--gst th:first-child,.items--gst td:first-child{width:36%}
+  .items--gst th:nth-child(2),.items--gst td:nth-child(2){width:8%}
+  .items--gst th:nth-child(3),.items--gst td:nth-child(3){width:20%}
+  .items--gst th:nth-child(4),.items--gst td:nth-child(4){width:10%;padding-inline:5px}
+  .items--gst th:last-child,.items--gst td:last-child{width:26%}
   .items tbody tr:last-child td{padding-bottom:10px}
   .totals td{padding:3px 0}.totals td:first-child{width:60%;text-align:left;padding-right:10px}
   .totals .subtotal td{border-top:1px dotted #555;padding-top:7px;padding-bottom:7px;font-weight:700}
@@ -109,6 +114,9 @@ export const RESTAURANT_RECEIPT_CSS = `
     body{font-size:12px}.items th,.items td{font-size:12px}.items th:first-child,.items td:first-child{width:32%;padding-right:6px}
     .items th:nth-child(2),.items td:nth-child(2){width:10%}
     .items th:nth-child(3),.items td:nth-child(3){width:28%;padding-inline:3px}.items th:last-child,.items td:last-child{width:30%}
+    .items--gst th:first-child,.items--gst td:first-child{width:28%}.items--gst th:nth-child(2),.items--gst td:nth-child(2){width:9%}
+    .items--gst th:nth-child(3),.items--gst td:nth-child(3){width:22%}.items--gst th:nth-child(4),.items--gst td:nth-child(4){width:12%;padding-inline:3px}
+    .items--gst th:last-child,.items--gst td:last-child{width:29%}
     .totals .grand-total td{font-size:16px}
   }
   @media print{

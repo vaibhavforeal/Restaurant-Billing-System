@@ -51,6 +51,7 @@ function billHeading(r: Bill["receipt"]): { thermal: string; html: string; decla
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
 /** The per-rate GST shown after the total: only a tax invoice carries it. */
+const chargesGst = (r: Bill["receipt"]) => r.gstPaidBy !== "zomato" && r.gstMode === "included";
 const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && bill.receipt.gstMode === "included" ? bill.taxes : [];
 
 function wrapText(value: string, width: number): string[] {
@@ -89,6 +90,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   const zomatoGst = r.gstPaidBy === "zomato";
   const heading = billHeading(r);
   const show = billShowOf(r);
+  const itemGst = show.itemGst && chargesGst(r);
   const rule = () => pos.line((style === "classic" ? "." : style === "heritage" ? "=" : "-").repeat(width));
   // Fixed numeric columns keep regular rows compact. Oversize values fall back
   // to label/value lines so a large quantity or amount is never truncated.
@@ -134,7 +136,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
       row(item.name, values);
       if (paperWidth === 58) line(`  @ ${money(item.pricePaise)} each`);
     }
-    if (show.itemGst) line(`  GST ${item.gstRate}%`);
+    if (itemGst) line(`  GST ${item.gstRate}%`);
     for (const held of item.contents ?? []) line(`  - ${held}`);
   });
   rule();
@@ -198,6 +200,7 @@ export function receiptHtml(bill: Bill): string {
   const zomatoGst = r.gstPaidBy === "zomato";
   const heading = billHeading(r);
   const show = billShowOf(r);
+  const itemGst = show.itemGst && chargesGst(r);
   const taxes = includedGst(bill);
   const payment = billUpiPayment(bill);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -218,8 +221,8 @@ export function receiptHtml(bill: Bill): string {
     ${r.sacCode ? `<div><dt>SAC</dt><dd>${e(r.sacCode)}</dd></div>` : ""}</dl>
   ${r.buyer ? `<section class="buyer" aria-label="Billed to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <p class="currency-note">All amounts in INR (₹)</p>
-  <table class="items" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th>${show.itemGst ? `<th scope="col">GST</th>` : ""}<th scope="col">Amount</th></tr></thead><tbody>
-    ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td>${show.itemGst ? `<td>${i.gstRate}%</td>` : ""}<td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
+  <table class="items${itemGst ? " items--gst" : ""}" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th>${itemGst ? `<th scope="col">GST</th>` : ""}<th scope="col">Amount</th></tr></thead><tbody>
+    ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td>${itemGst ? `<td>${i.gstRate}%</td>` : ""}<td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
   </tbody></table>
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>

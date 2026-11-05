@@ -241,6 +241,18 @@ describe("receipts", () => {
       for (const rendered of [receiptHtml(bill), thermal(bill, 58), thermal(bill, 80)]) expect(rendered).not.toContain("GST 5%");
       expect(receiptHtml(bill)).not.toContain('<th scope="col">GST</th>');
     });
+    it("shows item GST only on bills that charge GST, with a matching table class", () => {
+      const on = show({ itemGst: true });
+      const charged = withReceipt({ billShow: on });
+      expect(receiptHtml(charged)).toContain('class="items items--gst"');
+      expect(receiptHtml(bill)).toContain('class="items" aria');
+      for (const other of [withReceipt({ billShow: on, gstPaidBy: "zomato" }), withReceipt({ billShow: on, gstMode: "none" })]) {
+        for (const rendered of [receiptHtml(other), thermal(other, 58), thermal(other, 80)]) {
+          expect(rendered).not.toContain("GST 5%"); expect(rendered).not.toContain('<th scope="col">GST</th>');
+          expect(rendered).not.toContain('class="items items--gst"');
+        }
+      }
+    });
     it("escapes header markup and strips control bytes", () => {
       const sample = withReceipt({ receiptHeader: "<b>x</b>\x1b@", receiptFooter: "<i>y</i>\x1b@" });
       const html = receiptHtml(sample);
