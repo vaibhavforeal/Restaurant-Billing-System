@@ -4,6 +4,8 @@ import { DEFAULT_GST_RATES, GST_MODES } from "./gst.js";
 import { GSTIN_STATE_MESSAGE, gstinMatchesState } from "./restaurant-profile.js";
 import { OptionalGstin } from "./gstin-schema.js";
 import { billTextLinesSchema } from "./bill-print.js";
+import { InvoicePrefix } from "./invoice-numbers.js";
+import { ROUND_OFF_MODES } from "./round-off.js";
 import { Fssai, Gstin, Phone, Pincode, StateCode } from "./restaurant-profile-schema.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
@@ -31,6 +33,10 @@ export const SettingsUpdate = z.object({
   /** Up to 3 lines under the restaurant name on every bill. */
   receiptHeader: billTextLinesSchema("Header lines").default(""),
   receiptFooter: billTextLinesSchema("Footer lines").default(""),
+  /** Printed before the financial year in invoice numbers; empty for none. */
+  invoicePrefix: InvoicePrefix.optional(),
+  /** How a bill total is rounded: to the rupee, to 50 paise, or not at all. */
+  roundOff: z.enum(ROUND_OFF_MODES).optional(),
   /** Optional bill lines; GSTIN is never hideable. */
   billShowFssai: z.boolean().optional(),
   billShowCustomer: z.boolean().optional(),

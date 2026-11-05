@@ -1,4 +1,4 @@
-import { GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, type GstMode, type ReceiptStyle } from "@masalapos/domain";
+import { GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, type GstMode, type ReceiptStyle, type RoundOff } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { sampleBill } from "./print/bill-preview.js";
 import { receiptHtml } from "./print/receipt.js";
@@ -31,11 +31,13 @@ interface SettingsRow {
   customer_usual_enabled: number;
   sac_code: string;
   zomato_gstin: string;
+  invoice_prefix: string;
+  round_off: RoundOff;
 }
 
 export function readSettings(db: Database) {
   const r = db
-    .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, receipt_header, bill_show_fssai, bill_show_customer, bill_show_table, bill_show_served_by, bill_show_item_gst, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled, sac_code, zomato_gstin FROM settings WHERE id = 1")
+    .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, receipt_header, bill_show_fssai, bill_show_customer, bill_show_table, bill_show_served_by, bill_show_item_gst, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled, sac_code, zomato_gstin, invoice_prefix, round_off FROM settings WHERE id = 1")
     .get() as SettingsRow;
   return {
     gstMode: r.gst_mode,
@@ -65,6 +67,8 @@ export function readSettings(db: Database) {
     customerUsualEnabled: r.customer_usual_enabled === 1,
     sacCode: r.sac_code,
     zomatoGstin: r.zomato_gstin,
+    invoicePrefix: r.invoice_prefix,
+    roundOff: r.round_off,
   };
 }
 
@@ -91,7 +95,7 @@ export function registerSettings(app: FastifyInstance): void {
     if (stateCode && !gstinMatchesState(body.gstin, stateCode)) return reply.status(400).send({ error: GSTIN_STATE_MESSAGE });
     if (stateCode && body.zomatoGstin && !gstinMatchesState(body.zomatoGstin, stateCode)) return reply.status(400).send({ error: "Use Zomato's GSTIN for your state" });
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin) WHERE id = 1")
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin), invoice_prefix = COALESCE(?, invoice_prefix), round_off = COALESCE(?, round_off) WHERE id = 1")
       .run(body.restaurantName, body.address, body.city ?? null, body.stateCode ?? null, body.pincode ?? null, body.phone ?? null, body.gstin, body.fssai, body.receiptFooter, body.receiptHeader,
         ...[body.billShowFssai, body.billShowCustomer, body.billShowTable, body.billShowServedBy, body.billShowItemGst].map((v) => (v === undefined ? null : v ? 1 : 0)),
         body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
@@ -100,7 +104,7 @@ export function registerSettings(app: FastifyInstance): void {
         body.popularByTimeEnabled === undefined ? null : body.popularByTimeEnabled ? 1 : 0,
         body.orderedTogetherEnabled === undefined ? null : body.orderedTogetherEnabled ? 1 : 0,
         body.customerUsualEnabled === undefined ? null : body.customerUsualEnabled ? 1 : 0,
-        body.sacCode ?? null, body.zomatoGstin ?? null);
+        body.sacCode ?? null, body.zomatoGstin ?? null, body.invoicePrefix ?? null, body.roundOff ?? null);
     // Order screens and captain tablets show or hide Hold, the Popular badges and the ordered-together suggestions from these settings.
     app.broadcast("settings.changed", {});
     return { settings: readSettings(app.db) };

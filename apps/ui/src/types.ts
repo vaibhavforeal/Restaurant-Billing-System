@@ -1,6 +1,7 @@
 import type { ItemPrices, PriceTier } from "@masalapos/domain/pricing";
 import type { DefaultGstRate, GstMode } from "@masalapos/domain/gst";
 import type { ReceiptStyle } from "@masalapos/domain/receipt-styles";
+import type { RoundOff } from "@masalapos/domain/round-off";
 import type { ComboGroup } from "@masalapos/domain/combos";
 export interface Category {
   id: string;
@@ -130,6 +131,10 @@ export interface SettingsData {
   sacCode: string;
   /** Zomato's GSTIN in the restaurant's state, for GSTR-1 Table 14. Empty when not known. */
   zomatoGstin: string;
+  /** Up to 4 letters or digits before the financial year in invoice numbers; empty for none. */
+  invoicePrefix: string;
+  /** How a bill total is rounded: to the rupee, to 50 paise, or not at all. */
+  roundOff: RoundOff;
 }
 
 export interface Customer {
