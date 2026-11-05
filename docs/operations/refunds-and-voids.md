@@ -128,7 +128,7 @@ every credit note on the bill, with date, kind, amount, reason, who requested
 and approved, and **View**. **Reprint** appears there once a receipt printer is
 set for the bill view.
 
-The slip shows the restaurant name and GSTIN, **CREDIT NOTE CN-n**, the original
+The slip shows the restaurant name and GSTIN, **CREDIT NOTE CN/YY-YY/NNN** (older credit notes show CN-n), the original
 bill number and date, the items and quantities, GST per rate, the total, the
 refund methods, the reason, and the approver. **View** opens the slip in the
 browser, where **Print / save PDF** gives an A4 copy. Printing uses the same print

@@ -96,7 +96,7 @@ Choose **Settings > Bill settings > Numbering & rounding**, then **Save**:
 
 - **Invoice prefix** - optional, up to 4 letters or digits, saved in capitals.
   "CN" is not allowed because credit notes use it.
-- **Round off total** - **To the nearest Rs 1** (default), **To the nearest 50
+- **Round off total** - **To the nearest ₹1** (default), **To the nearest 50
   paise**, or **No rounding (exact paise)**.
 
 Both apply to new bills only. Refunds and credit notes use the rounding each bill

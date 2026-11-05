@@ -26,7 +26,7 @@ What the screen shows depends on **Settings > Restaurant profile** (GSTIN) and *
 - **Table 8, nil rated**: items at 0%, split by registered and unregistered buyers.
 - **Table 9B, credit notes to registered buyers**: voids and refunds of B2B bills.
 - **Table 12, HSN/SAC summary**: per rate, split B2B and B2C, under the SAC code in Settings (996331, restaurant service).
-- **Table 13, documents issued**: the bill-number range, how many were cancelled, and the credit-note range.
+- **Table 13, documents issued**: the invoice-number range for each series (prefix and financial year), how many were cancelled, and the credit-note range.
 - **Table 14, supplies through Zomato**: Zomato orders, where Zomato pays the GST under section 9(5). Add **Zomato's
   GSTIN** in Settings (it is on Zomato's monthly statement); without it the table shows on screen but is left out of
   the JSON, with a warning.
@@ -47,7 +47,7 @@ is (IGST Act section 12(4)). The place of supply on every bill is the restaurant
 - If a period's walk-in credit notes are more than its sales at a rate, the Table 7 row is negative and the screen
   warns: ask the accountant to report it as an amendment (B2CSA).
 
-Warnings also appear for bills issued without GST in a GST period, gaps in the bill numbers, and a restaurant GSTIN
+Warnings also appear for bills issued without GST in a GST period, gaps in the invoice numbers (checked per financial year, since all prefixes share one counter), and a restaurant GSTIN
 that fails the GSTIN check character. The GSTR-1 JSON can't be downloaded until the GSTIN is fixed in Settings.
 
 ## GST invoices to a business
