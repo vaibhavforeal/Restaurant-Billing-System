@@ -46,8 +46,9 @@ Build the UI, start `node --import tsx tools/e2e/fake-openrouter.mts` (a scripte
 service on `:4162` (Worker code on the Node adapter, an enrolled counter, vendor key `sk-or-v1-vendor-e2e`), QA switches on `:4163` standing in
 for the portal, and the app on `http://127.0.0.1:4160/` connected to the service as that counter, with billed sales and a customer, Priya
 Sharma 98765 43210. Start both fresh for each run. Sign in as `admin` / `admin-password`, add `tools/e2e/ai-assistant.js` and require
-`window.__aiAssistantResult.status === "passed"` (16 checks):
+`window.__aiAssistantResult.status === "passed"` (18 checks):
 - While MasalaPOS hasn't switched it on, Settings says so (no key or model fields) and Ask points the admin to Settings.
+- Ask opens from the "Ask AI" tab on the right edge of Reports as a side panel over the open report (it is not in "More reports"), and closes.
 - After the QA switch turns it on, Check shows "On for this restaurant · 0 of 40 requests used today".
 - Ask shows "You asked" and a MasalaPOS AI card with real bold, list and italic elements (no raw `**`), and "Sales by day" as a figures chip.
 - A question mentioning "busy" (the fake's 429) shows "The AI service is busy right now"; one mentioning "slow" (the fake waits 20 s) still gets its answer.

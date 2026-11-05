@@ -45,7 +45,7 @@ A new section in Settings → Restaurant profile, below "Staff activity alerts".
   - Also shows the key's free-model requests today: `free_model_daily_requests` from `GET https://openrouter.ai/api/v1/key`, for example "12 of 50 used today".
 - **Usage:** requests and tokens so far for each feature, from each response's usage, kept on the hub. The point is to know real usage before choosing paid pricing.
 
-## 2. Ask your sales (Reports → More reports → "Ask MasalaPOS", admins)
+## 2. Ask your sales (Reports → the "Ask AI" side tab, admins; moved out of "More reports" on 2026-11-05)
 
 - A question box with three example chips: "How did this week compare with last week?", "Which dish should I promote?" and "Who cancels most after KOT?" The answer shows below, and the conversation continues until the screen is left. Nothing is saved.
 - **The model never sees the database.** It may only call these read-only lookups. Each wraps an existing server function and returns a trimmed, numbers-only result:

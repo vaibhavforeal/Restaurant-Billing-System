@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useModules } from "../modules";
 import { OPERATIONAL_REPORTS, type OperationalReportKind } from "@masalapos/domain/operational-reports";
 import { COST_REPORTS, OperationalReports, STAFF_ACTIVITY_TITLE, type CostReportKind } from "./OperationalReports";
-import { AskMasalaPOS } from "./AskMasalaPOS";
+import { AskSidePanel } from "./AskMasalaPOS";
 import { useAiStatus } from "../ai-status";
 import { askEntry } from "../ask-chat";
 import { COSTING_PRO_NOTE } from "../dish-costing";
@@ -54,7 +54,7 @@ function EssentialReports({ initialTab, initialPeriod, canSeeZomato = false, can
 function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeStaff = false, canSeeZomato = false, canSettle = false, onOpenOrder }: SalesReportsProps) {
   const can = useCan();
   const [view, setView] = useState<"reports" | "analytics">(initialTab === "analytics" ? "analytics" : "reports");
-  const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | "custom" | OperationalReportKind | CostReportKind | "staff-activity" | "ask">(initialTab === "analytics" ? "sales" : initialTab);
+  const [tab, setTab] = useState<SalesReportKind | "day-end" | "bills" | "zomato" | "cash" | "custom" | OperationalReportKind | CostReportKind | "staff-activity">(initialTab === "analytics" ? "sales" : initialTab);
   const { status } = useLicense();
   const profit = canSeeCosts && COST_REPORTS.some((r) => r.id === tab);
   const staffActivity = canSeeStaff && tab === "staff-activity";
@@ -80,19 +80,19 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
     </div>
     <div className="report-navigation" aria-label="Report type">
       <div className="report-tabs">{presets.map(({ id, title }) => <button key={id} aria-pressed={view === "reports" && tab === id} onClick={() => { setView("reports"); if (id === "day-end") setDay(report?.to ?? period?.to); setTab(id); setMessage(""); setExportError(""); }}>{title}</button>)}</div>
-      <select className="report-more" aria-label="More reports" value={view === "analytics" ? "analytics" : operational || tab === "cash" || tab === "custom" || (tab === "ask" && canAsk) ? tab : ""} onChange={(e) => {
+      <select className="report-more" aria-label="More reports" value={view === "analytics" ? "analytics" : operational || tab === "cash" || tab === "custom" ? tab : ""} onChange={(e) => {
         const next = e.target.value;
         if (!next) return;
         setView(next === "analytics" ? "analytics" : "reports");
-        if (next !== "analytics") setTab(next as OperationalReportKind | CostReportKind | "staff-activity" | "ask" | "cash" | "custom");
+        if (next !== "analytics") setTab(next as OperationalReportKind | CostReportKind | "staff-activity" | "cash" | "custom");
         setMessage(""); setExportError("");
       }}>
         <option value="">More reports...</option>
         <option value="analytics">Analytics</option><option value="cash">Cash &amp; day close</option><option value="custom">Custom reports</option>
-        {OPERATIONAL_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeCosts && COST_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeStaff && <option value="staff-activity">{STAFF_ACTIVITY_TITLE}</option>}{canAsk && <option value="ask">Ask MasalaPOS</option>}
+        {OPERATIONAL_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeCosts && COST_REPORTS.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}{canSeeStaff && <option value="staff-activity">{STAFF_ACTIVITY_TITLE}</option>}
       </select>
     </div>
-    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "ask" && canAsk ? <AskMasalaPOS setup={askMode === "setup"} /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={COST_REPORTS.find((r) => r.id === tab)!.title}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | CostReportKind | "staff-activity"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
+    {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={COST_REPORTS.find((r) => r.id === tab)!.title}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | CostReportKind | "staff-activity"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : <>
       <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { setMessage(""); setExportError(""); setPeriod(next); }} onRefresh={() => { setMessage(""); refresh(); }} />
       {(error || exportError) && <p role="alert">{error || exportError}</p>}
       {message && <p role="status">{message}</p>}
@@ -115,5 +115,6 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
         </div>
       </>}
     </>}
+    {canAsk && <AskSidePanel setup={askMode === "setup"} />}
   </section>;
 }

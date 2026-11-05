@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { apiFetch } from "../api";
 import { AiText } from "../AiText";
 import { aiErrorText, aiRequestInit, appendTurn, historyForRequest, type ChatTurn } from "../ask-chat";
@@ -67,4 +67,29 @@ export function AskMasalaPOS({ setup = false }: { setup?: boolean }) {
         <AiAnswerCard text={a.answer} figuresUsed={a.figuresUsed} model={a.model} />
       </div>)}</div>
   </section>;
+}
+
+/**
+ * Reports: a slim "Ask AI" tab on the right edge that slides Ask MasalaPOS in as a side panel over the open report, so questions can be
+ * asked while looking at the figures. Closing only hides it: the conversation stays until Reports is left.
+ */
+export function AskSidePanel({ setup }: { setup: boolean }) {
+  const [open, setOpen] = useState(false);
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    panel.current?.querySelector<HTMLInputElement>('input[aria-label="Your question"]')?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("dialog[open]")) setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  return <>
+    <button type="button" className="ask-side-tab" aria-expanded={open} aria-controls="ask-panel" onClick={() => setOpen(true)} title="Ask MasalaPOS about these figures">
+      <Icon name="sparkle" size={16} /><span>Ask AI</span>
+    </button>
+    <aside id="ask-panel" ref={panel} className="ask-panel" hidden={!open} aria-label="Ask MasalaPOS panel">
+      <button type="button" className="ask-panel-close" aria-label="Close Ask MasalaPOS" onClick={() => setOpen(false)}>×</button>
+      <AskMasalaPOS setup={setup} />
+    </aside>
+  </>;
 }

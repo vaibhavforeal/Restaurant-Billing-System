@@ -29,11 +29,12 @@
     return (await wait(() => [...document.querySelectorAll('legend')].find((l) => l.textContent.startsWith('AI assistant')), 'AI assistant settings')).closest('fieldset');
   };
   const moreReports = () => document.querySelector('select[aria-label="More reports"]');
+  /** Reports → the "Ask AI" tab on the right edge, which slides Ask MasalaPOS in as a side panel over the current report. */
   const openAsk = async () => {
     await nav('Reports & Analytics');
-    const select = await wait(moreReports, 'More reports');
-    setInput(select, 'ask');
-    return wait(() => document.querySelector('section[aria-label="Ask MasalaPOS"]'), 'Ask MasalaPOS');
+    const tab = await wait(() => document.querySelector('button.ask-side-tab'), 'Ask AI side tab');
+    if (tab.getAttribute('aria-expanded') !== 'true') { tab.click(); await pause(250); }
+    return wait(() => document.querySelector('aside.ask-panel:not([hidden]) section[aria-label="Ask MasalaPOS"]'), 'Ask MasalaPOS side panel');
   };
   const askQuestion = async (text) => {
     const input = await wait(() => document.querySelector('input[aria-label="Your question"]'), 'question box');
@@ -51,6 +52,11 @@
     check(box.textContent.includes('provided by MasalaPOS') && !box.querySelector('input[type="password"]') && !box.querySelector('select'), 'Settings shows "not switched on" with no key or model fields');
     const before = await openAsk();
     check(/isn't on for this restaurant yet/.test(before.textContent) && !before.querySelector('input[aria-label="Your question"]'), 'Ask MasalaPOS points the admin to Settings while it is off');
+    check(![...moreReports().options].some((o) => o.value === 'ask') && document.querySelector('section.sales-reports .report-tabs button[aria-pressed="true"]'),
+      'Ask is a side panel over the open report, no longer in "More reports"');
+    const closeButton = document.querySelector('aside.ask-panel button[aria-label="Close Ask MasalaPOS"]');
+    closeButton.click(); await pause(250);
+    check(document.querySelector('aside.ask-panel').hidden && document.querySelector('button.ask-side-tab').getAttribute('aria-expanded') === 'false', 'the side panel closes');
 
     // 2. MasalaPOS switches it on (the portal's switch); Check picks it up.
     await fetch(`${QA}/__qa/ai?enabled=1&limit=40`, { method: 'POST' });

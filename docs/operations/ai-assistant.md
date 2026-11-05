@@ -6,7 +6,7 @@ It does three jobs:
 
 | Feature | Where | Who |
 | --- | --- | --- |
-| **Ask MasalaPOS:** plain-English questions about sales | Reports → More reports → Ask MasalaPOS | Admins |
+| **Ask MasalaPOS:** plain-English questions about sales | Reports & Analytics → the **✦ Ask AI** tab on the right edge (opens a side panel over the report) | Admins |
 | **Write summary:** a short end-of-day summary with a Copy button for WhatsApp | Reports → Day-end / GST | Admins |
 | **Write description / Rewrite:** a draft menu description for the QR menu | Catalog → Edit dish → Description | Anyone who can edit dishes |
 
