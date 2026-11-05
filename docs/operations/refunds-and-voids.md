@@ -6,7 +6,7 @@ choose **Open bill**. Administrators and cashiers see **Void bill** and **Refund
 items**. Captains and the kitchen do not.
 
 Every void or refund creates a **credit note**: a numbered, dated record
-(CN-1, CN-2, ...) that is added to the books on the day it is made. The original
+(CN/26-27/001, CN/26-27/002, ...; the counter restarts every 1 April) that is added to the books on the day it is made. The original
 bill is never edited. Available on Basic and Pro.
 
 ## Void or refund?
