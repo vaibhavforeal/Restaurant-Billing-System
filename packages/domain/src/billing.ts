@@ -80,7 +80,7 @@ export interface ReceiptSnapshot {
   receiptHeader?: string;
   /** Which optional lines this bill prints; absent means the defaults. */
   billShow?: BillShow;
-  /** Who served the order; set only when the bill shows it. */
+  /** Who served the order, frozen whenever the order has a known staff name; the Bill settings toggle decides whether it prints. */
   servedBy?: string;
   /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BillTextLines, billShowOf, billTextLines, DEFAULT_BILL_SHOW } from "./bill-print.js";
+import { billShowOf, billTextLines, billTextLinesSchema, DEFAULT_BILL_SHOW } from "./bill-print.js";
 
 describe("billTextLines", () => {
   it("splits, trims and drops blank lines", () => {
@@ -8,8 +8,9 @@ describe("billTextLines", () => {
   });
 });
 
-describe("BillTextLines", () => {
-  const msg = "Use up to 3 lines of 48 characters each";
+describe("billTextLinesSchema", () => {
+  const BillTextLines = billTextLinesSchema("Footer lines");
+  const msg = "Footer lines: use up to 3 lines of 48 characters each";
   it("accepts 3 lines of 48 characters", () => {
     const line = "x".repeat(48);
     expect(BillTextLines.safeParse(`${line}\n${line}\n${line}`).success).toBe(true);
@@ -20,6 +21,14 @@ describe("BillTextLines", () => {
       expect(r.success).toBe(false);
       if (!r.success) expect(r.error.issues[0]?.message).toBe(msg);
     }
+  });
+});
+
+describe("billTextLinesSchema labels", () => {
+  it("names the field in the message", () => {
+    const r = billTextLinesSchema("Header lines").safeParse("a\nb\nc\nd");
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.message).toBe("Header lines: use up to 3 lines of 48 characters each");
   });
 });
 

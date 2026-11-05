@@ -105,7 +105,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         </label>
         {SHOW_TOGGLES.map(({ key, label }) => <label key={key} style={check}>
           <input type="checkbox" checked={form[key]} disabled={busy} onChange={(e) => update({ [key]: e.target.checked })} />
-          <span>{label}</span>
+          <span>{label}{key === "billShowItemGst" && <small> Only printed on bills that charge GST.</small>}</span>
         </label>)}
         <button type="button" className="link-button" onClick={onOpenPrinters}>Bill copies are set per printer</button>
       </fieldset>

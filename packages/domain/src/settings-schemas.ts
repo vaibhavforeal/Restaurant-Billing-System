@@ -3,7 +3,7 @@ import { RECEIPT_STYLES } from "./receipt-styles.js";
 import { DEFAULT_GST_RATES, GST_MODES } from "./gst.js";
 import { GSTIN_STATE_MESSAGE, gstinMatchesState } from "./restaurant-profile.js";
 import { OptionalGstin } from "./gstin-schema.js";
-import { BillTextLines } from "./bill-print.js";
+import { billTextLinesSchema } from "./bill-print.js";
 import { Fssai, Gstin, Phone, Pincode, StateCode } from "./restaurant-profile-schema.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
@@ -29,8 +29,8 @@ export const SettingsUpdate = z.object({
   gstin: Gstin.default(""),
   fssai: Fssai.default(""),
   /** Up to 3 lines under the restaurant name on every bill. */
-  receiptHeader: BillTextLines.default(""),
-  receiptFooter: BillTextLines.default(""),
+  receiptHeader: billTextLinesSchema("Header lines").default(""),
+  receiptFooter: billTextLinesSchema("Footer lines").default(""),
   /** Optional bill lines; GSTIN is never hideable. */
   billShowFssai: z.boolean().optional(),
   billShowCustomer: z.boolean().optional(),

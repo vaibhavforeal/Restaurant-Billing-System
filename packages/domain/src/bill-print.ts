@@ -14,10 +14,14 @@ export function billTextLines(text: string): string[] {
   return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== "");
 }
 
-export const BillTextLines = z.string().trim().refine((value) => {
-  const lines = billTextLines(value);
-  return lines.length <= BILL_TEXT_MAX_LINES && lines.every((line) => line.length <= BILL_TEXT_MAX_CHARS);
-}, `Use up to ${BILL_TEXT_MAX_LINES} lines of ${BILL_TEXT_MAX_CHARS} characters each`);
+/** Validates a header or footer; `label` names the field in the error ("Footer lines: use up to 3 lines of 48 characters each"). */
+export function billTextLinesSchema(label: string) {
+  const message = `${label}: use up to ${BILL_TEXT_MAX_LINES} lines of ${BILL_TEXT_MAX_CHARS} characters each`;
+  return z.string().trim().max(500, message).refine((value) => {
+    const lines = billTextLines(value);
+    return lines.length <= BILL_TEXT_MAX_LINES && lines.every((line) => line.length <= BILL_TEXT_MAX_CHARS);
+  }, message);
+}
 
 /** A snapshot's toggles; bills issued before Bill settings fall back to the defaults. */
 export function billShowOf(r: Pick<ReceiptSnapshot, "billShow">): BillShow {

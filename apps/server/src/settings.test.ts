@@ -68,6 +68,7 @@ describe("settings", () => {
     const put = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token),
       payload: { restaurantName: "Cafe", address: "FC Road", receiptFooter: "a\nb\nc\nd" } });
     expect(put.statusCode).toBe(400);
+    expect(JSON.stringify(put.json())).toContain("Footer lines: use up to 3 lines of 48 characters each");
   });
 
   it("updates city, state, PIN code and phone, and keeps them when a PUT leaves them out", async () => {
