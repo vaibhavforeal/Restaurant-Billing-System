@@ -81,6 +81,16 @@ Repeat last order adds Paneer tikka (Full) ×2, Butter naan and Dal tadka and na
 the menu") and the sold-out Lassi; with Suggest a customer's usual off, adding Priya again shows no row. It turns the
 setting back on at the end.
 
+## Bill settings
+
+Run a disposable copy beside any installed app: `MASALAPOS_PORT=4200 MASALAPOS_DATA_DIR=./data-billset npx tsx apps/server/src/main.ts`,
+`POST /api/setup` with admin / admin-password, then `MASALAPOS_PORT=4200 npm run dev -w @masalapos/ui -- --port 5190 --strictPort`.
+Open `http://localhost:5190/`, sign in, and add `tools/e2e/bill-settings.js` to the page. It saves settings and reloads, so add it
+again after the reload; require `window.__billSettingsResult.status === "passed"` (7 checks across both runs): Settings lists the
+Bill settings and AI suggestions cards; typing "Pure veg" into Header lines shows it in the preview iframe within 2 s; unticking
+Show FSSAI number and saving survives a reload (as does the header); AI suggestions has Show popular items. It restores the
+defaults. Stop both processes by PID and delete `data-billset` afterwards.
+
 ## Staff activity
 
 Build the UI and start `node --import tsx tools/e2e/staff-activity-server.mts` (fresh for each run). It is a

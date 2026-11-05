@@ -105,7 +105,15 @@ export interface SettingsData {
   phone: string;
   gstin: string;
   fssai: string;
+  /** Up to 3 lines of 48 characters printed above the bill items. */
+  receiptHeader: string;
   receiptFooter: string;
+  billShowFssai: boolean;
+  billShowCustomer: boolean;
+  billShowTable: boolean;
+  billShowServedBy: boolean;
+  /** Print each item's GST rate; the server only does so on bills that charge GST. */
+  billShowItemGst: boolean;
   /** Whether a change to a sent item prints a slip to the kitchen: staff choose, or always / never. */
   kotEditPrint: "ask" | "always" | "never";
   /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */

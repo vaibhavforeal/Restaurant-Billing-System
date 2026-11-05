@@ -1,9 +1,11 @@
 import type { IconName } from "./Icon";
 
-export type SettingsSectionId = "profile" | "order-types" | "printers" | "jobs" | "backups" | "plan" | "updates" | "shortcuts" | "support";
+export type SettingsSectionId = "profile" | "bill" | "ai-suggestions" | "order-types" | "printers" | "jobs" | "backups" | "plan" | "updates" | "shortcuts" | "support";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: string; blurb: string; icon: IconName }> = [
-  { id: "profile", title: "Restaurant profile", blurb: "Name, GST, bill style and UPI", icon: "marketplace" },
+  { id: "profile", title: "Restaurant profile", blurb: "Name, address, GSTIN and FSSAI", icon: "marketplace" },
+  { id: "bill", title: "Bill settings", blurb: "Tax, printed bill and order handling", icon: "bills" },
+  { id: "ai-suggestions", title: "AI suggestions", blurb: "Popular items, pairings and the AI assistant", icon: "reports" },
   { id: "order-types", title: "Order types", blurb: "Takeaway and delivery types", icon: "bag" },
   { id: "printers", title: "Printers", blurb: "Printers, print profiles and KOT stations", icon: "printer" },
   { id: "jobs", title: "Print jobs", blurb: "Check, retry or confirm printed copies", icon: "bills" },
