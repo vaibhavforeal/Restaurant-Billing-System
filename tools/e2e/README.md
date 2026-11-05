@@ -38,6 +38,21 @@ and require `window.__popularByTimeResult.status === "passed"` (4 checks): Match
 and Starters shows Samosa as Popular; with it off, Paneer tikka (the all-day best-seller) becomes Popular and first,
 live; turning it back on returns Samosa. It turns the setting back on at the end.
 
+## AI assistant
+
+Build the UI, start `node --import tsx tools/e2e/fake-openrouter.mts` (a scripted stand-in for OpenRouter on
+`http://127.0.0.1:4161/api/v1`, no key or cost) and then `node --import tsx tools/e2e/ai-assistant-server.mts` (the app on
+`http://127.0.0.1:4160/`, its AI pointed at the fake, with billed sales and a customer, Priya Sharma 98765 43210). Start both
+fresh for each run. Sign in as `admin` / `admin-password`, add `tools/e2e/ai-assistant.js` and require
+`window.__aiAssistantResult.status === "passed"` (10 checks):
+- Ask MasalaPOS is hidden before setup.
+- Settings saves the key and shows only "ending …4321", pre-selects Gemma 4 31B, lists only free models, and Test reports "… of 50".
+- Ask answers with "Sales by day" under Figures used, and a question mentioning "limit" shows the free-limit message.
+- Day-end Write summary and Copy work (clipboard replaced while it runs).
+- The dish editor's Write description fills the box and leaves it unsaved.
+- The fake's recorded requests contain neither "Priya" nor "98765".
+- After `POST /__qa/offline`, Ask shows the needs-internet message.
+
 ## Customer's usual
 
 Build the UI and start `node --import tsx tools/e2e/customer-usual-server.mts` (fresh for each run). It is a
