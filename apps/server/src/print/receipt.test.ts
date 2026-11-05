@@ -184,11 +184,11 @@ describe("receipts", () => {
     const withReceipt = (extra: Partial<Bill["receipt"]>): Bill => ({ ...bill, receipt: { ...bill.receipt, ...extra } });
     const show = (patch: Partial<NonNullable<Bill["receipt"]["billShow"]>>) =>
       ({ fssai: true, customer: true, table: true, servedBy: false, itemGst: false, ...patch });
-    const customer = { name: "Asha", phone: "9800000000" } as Bill["receipt"]["customer"];
+    const customer = { name: "Asha", phone: "9800000000" } as NonNullable<Bill["receipt"]["customer"]>;
     it("prints a snapshot without the new fields exactly as before", () => {
       for (const width of [58, 80] as const) {
         const plain = receiptSlip(bill, width);
-        expect(receiptSlip(withReceipt({ receiptHeader: "", billShow: undefined }), width)).toEqual(plain);
+        expect(receiptSlip(withReceipt({ receiptHeader: "" }), width)).toEqual(plain);
         expect(thermal(bill, width)).not.toContain("Served by");
       }
     });
