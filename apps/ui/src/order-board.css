@@ -1,0 +1,46 @@
+/* Orders tab: stage rail, then one column per stage. */
+.order-board { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.order-board-actions { display: flex; gap: 8px; }
+.order-board-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.order-board-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.order-board-search { display: flex; align-items: center; gap: 6px; flex: 1 1 260px; max-width: 420px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--muted); }
+.order-board-search input { flex: 1; min-width: 0; border: 0; background: transparent; box-shadow: none; }
+.order-board-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.order-board-chips button { min-height: 28px; padding: 3px 10px; font-size: 12px; border-radius: 999px; }
+.order-board-chips button[aria-pressed="true"] { background: var(--pos-accent-soft); border-color: var(--pos-accent); color: var(--pos-accent); font-weight: 600; }
+
+.order-board-body { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+.order-board-rail { display: flex; flex-direction: column; gap: 4px; }
+.order-board-rail button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; font-size: 12px; border: 1px solid transparent; background: transparent; box-shadow: none; color: var(--ink); }
+.order-board-rail button[aria-pressed="true"] { background: var(--surface); border-color: var(--line); border-left: 3px solid var(--pos-accent); font-weight: 600; }
+.order-board-count { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: var(--line); color: var(--ink); font-size: 11px; font-weight: 600; text-align: center; }
+
+.order-board-columns { display: grid; grid-template-columns: repeat(4, minmax(200px, 1fr)); gap: 10px; min-height: 0; overflow-x: auto; }
+.order-board-columns.is-single { grid-template-columns: minmax(0, 1fr); }
+.order-board-column { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
+.order-board-column header { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); }
+.order-board-column h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+.order-board-column ul { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.order-board-column.is-single ul, .is-single .order-board-column ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; }
+.order-board-note { margin: 6px 8px 0; font-size: 11px; color: var(--pos-warning); }
+.order-board-empty { padding: 32px 8px; text-align: center; color: var(--muted); font-size: 12px; }
+
+.order-card { display: flex; flex-direction: column; gap: 4px; padding: 4px; border: 1px solid var(--line); border-left: 3px solid var(--pos-success); border-radius: var(--radius-panel); background: var(--surface); }
+.order-card.order-age-warn { border-left-color: var(--pos-warning); background: var(--pos-warning-bg); }
+.order-card.order-age-late { border-left-color: var(--pos-danger); }
+.order-card.order-age-done { border-left-color: var(--line); }
+.order-card-open { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; padding: 4px 6px; border: 0; background: transparent; box-shadow: none; color: var(--ink); text-align: left; }
+.order-card-open:hover { background: var(--pos-accent-soft); }
+.order-card-title { font-weight: 650; font-size: 13px; overflow-wrap: anywhere; }
+.order-card-open small { grid-column: 1; font-size: 11px; color: var(--muted); }
+.order-card-open strong { grid-column: 2; justify-self: end; font-size: 12px; }
+.order-card-pill { justify-self: end; padding: 1px 6px; border-radius: 4px; font-size: 10px; color: var(--pos-warning); background: var(--pos-warning-bg); }
+.order-card-action { font-size: 11px; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .order-board-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .order-board-rail { flex-direction: row; align-items: center; overflow-x: auto; scrollbar-width: thin; }
+  .order-board-rail button { flex-direction: row; flex: 0 0 auto; }
+  .order-board-rail button[aria-pressed="true"] { border-left-width: 1px; border-bottom: 3px solid var(--pos-accent); }
+}
+@media (pointer: coarse) { .order-card-action, .order-board-chips button { min-height: 40px; } }

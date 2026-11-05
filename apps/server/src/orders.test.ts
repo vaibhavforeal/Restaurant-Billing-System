@@ -148,6 +148,28 @@ describe("orders: create/get/list", () => {
     expect(listAfter.json().orders).toHaveLength(0);
   });
 
+  it("GET /api/orders?closedSince= adds non-table orders settled since then", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const table = (await app.inject({ method: "POST", url: "/api/tables", payload: { name: "T1", area: "Main" }, headers: auth(admin.token) })).json().table;
+    for (const [clientRef, type, tableId] of [["pc-today", "parcel", null], ["pc-older", "parcel", null], ["dc-today", "dine_in", table.id], ["pc-open1", "parcel", null], ["pc-cancel", "parcel", null]] as const) {
+      const r = await app.inject({ method: "POST", url: "/api/orders", payload: { clientRef, type, tableId }, headers: auth(admin.token) }); expect(r.statusCode).toBe(201);
+    }
+    const settle = app.db.prepare("UPDATE orders SET status = ?, closed_at = ? WHERE client_ref = ?");
+    const now = Date.now(), hour = 60 * 60 * 1000;
+    settle.run("settled", now - hour, "pc-today");
+    settle.run("settled", now - 40 * hour, "pc-older");
+    settle.run("settled", now - hour, "dc-today");
+    settle.run("cancelled", now - hour, "pc-cancel");
+
+    const refs = async (url: string) => (await app.inject({ method: "GET", url, headers: auth(admin.token) })).json().orders.map((o: { clientRef: string }) => o.clientRef).sort();
+    expect(await refs("/api/orders")).toEqual(["pc-open1"]);
+    expect(await refs(`/api/orders?closedSince=${now - 2 * hour}`)).toEqual(["pc-open1", "pc-today"]);
+    // Capped at 36 hours: asking for all history still leaves out the order settled 40 hours ago.
+    expect(await refs("/api/orders?closedSince=0")).toEqual(["pc-open1", "pc-today"]);
+    expect((await app.inject({ method: "GET", url: "/api/orders?closedSince=-1", headers: auth(admin.token) })).statusCode).toBe(400);
+  });
+
   it("GET /api/orders/:id returns 404 for unknown id", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

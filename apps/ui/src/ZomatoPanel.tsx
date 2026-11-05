@@ -8,7 +8,7 @@ import { DEFAULT_ZOMATO_AGE, useZomatoStatus, ZOMATO_PILL, zomatoAgeTone, zomato
 import "./zomato.css";
 
 /** The restaurant's amber and red minutes: loaded once, reloaded when Zomato settings change, defaults until loaded or if loading fails. */
-function useZomatoAgeThresholds() {
+export function useZomatoAgeThresholds() {
   const [thresholds, setThresholds] = useState(DEFAULT_ZOMATO_AGE);
   useEffect(() => {
     let alive = true;

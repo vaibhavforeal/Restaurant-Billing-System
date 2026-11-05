@@ -4,6 +4,7 @@ const paths = {
   home: "M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9",
   tables: "M3 7h18v4H3zM6 11 4 21m14-10 2 10M7 16h10",
   bills: "M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6",
+  orders: "M4 4h4v16H4zM10 4h4v11h-4zM16 4h4v7h-4z",
   reports: "M4 20h17M7 16v-5m5 5V5m5 11V9",
   inventory: "m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4m-9 4v10M7.5 5 17 9",
   kitchen: "M7 16v5h10v-5M7 16h10V11a4 4 0 0 0 1-8 4 4 0 0 0-3 1 4 4 0 0 0-6 0 4 4 0 1 0-2 7v5Z",
