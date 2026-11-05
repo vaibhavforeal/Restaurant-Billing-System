@@ -66,6 +66,29 @@ The rate is recorded when the item is punched, so items already on an open order
 keep their rate when the default changes. In the item CSV, a blank `gst_rate`
 means "restaurant default" and exports and imports back unchanged.
 
+## Bill settings
+
+**Settings > Bill settings** holds the tax and printed-bill options, with a live
+preview beside the form. Printed bill options:
+
+- **Header lines** - up to 3 lines, 48 characters each, printed under the
+  restaurant name. Blank lines are dropped.
+- **Footer lines** - up to 3 lines, 48 characters each, replacing the default
+  thank-you message when any are set.
+- **Show FSSAI number** (on by default), **Show customer name and phone** (on),
+  **Show table** (on), **Show 'Served by'** (off) and **Show each item's GST
+  rate** (off). The GSTIN is always shown.
+- **Bill copies** stay on each printer's bill profile (Settings > Printers); Bill
+  settings only links there.
+
+These options are saved on each bill when it is issued, so they apply to **new
+bills only**. Reprints and older bills keep the layout they were issued with;
+bills issued before these options existed print exactly as they did.
+
+The item GST rate column or line appears only on bills that charge GST
+themselves: Prices include GST, and not a Zomato-paid order. No-GST bills, bills
+of supply and Zomato bills never show it, even when the option is on.
+
 ## The four bill types
 
 The receipt format follows the bill's saved GST mode. It applies to the HTML /
