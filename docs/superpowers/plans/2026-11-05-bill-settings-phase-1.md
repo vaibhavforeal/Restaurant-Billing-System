@@ -4,7 +4,7 @@
 
 **Goal:** Split bill options out of Restaurant profile into a new Bill settings card (with header/footer lines, show/hide toggles and a live bill preview) and a new AI suggestions card, with no change to bill money logic.
 
-**Architecture:** New typed columns on the `settings` singleton (migration 54) flow through the Zod `SettingsUpdate` schema and `apps/server/src/settings.ts`. At issue, `priceOrder` freezes them into `ReceiptSnapshot`; `receiptSlip`/`receiptHtml` read them through one domain helper that supplies defaults for old snapshots. A preview endpoint renders `receiptHtml` for a fixed sample bill built from the unsaved form. The UI gets two self-contained section components instead of growing `Settings.tsx`.
+**Architecture:** New typed columns on the `settings` singleton (migration 56) flow through the Zod `SettingsUpdate` schema and `apps/server/src/settings.ts`. At issue, `priceOrder` freezes them into `ReceiptSnapshot`; `receiptSlip`/`receiptHtml` read them through one domain helper that supplies defaults for old snapshots. A preview endpoint renders `receiptHtml` for a fixed sample bill built from the unsaved form. The UI gets two self-contained section components instead of growing `Settings.tsx`.
 
 **Tech Stack:** TypeScript, Zod, better-sqlite3 migrations, Fastify, React, vitest, browser e2e scripts in `tools/e2e`.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Migration version **54**, appended to the end of `MIGRATIONS` in `packages/domain/src/migrations/index.ts`.
+- Migration version **56** (54 and 55 were taken by order summary and item transfers), appended to the end of `MIGRATIONS` in `packages/domain/src/migrations/index.ts`.
 - Header lines and footer lines: at most **3 lines, each ≤ 48 characters**, after trimming each line; blank lines are dropped.
 - Toggle defaults: FSSAI **on**, customer **on**, table **on**, served-by **off**, item GST rate **off**.
 - GSTIN is never hideable.
@@ -32,7 +32,7 @@
 
 ---
 
-### Task 1: Domain — schema, snapshot fields, print helper, migration 54
+### Task 1: Domain — schema, snapshot fields, print helper, migration 56
 
 **Files:**
 - Create: `packages/domain/src/bill-print.ts`, `packages/domain/src/bill-print.test.ts`
@@ -49,7 +49,7 @@
   - `export function billShowOf(r: Pick<ReceiptSnapshot, "billShow">): BillShow`: `{ ...DEFAULT_BILL_SHOW, ...r.billShow }`.
 - Produces (`ReceiptSnapshot`, all optional): `receiptHeader?: string; billShow?: BillShow; servedBy?: string`.
 - Produces (`SettingsUpdate`, all optional): `receiptHeader: BillTextLines`, `receiptFooter` changes from `max(500)` to `BillTextLines.default("")`, `billShowFssai`, `billShowCustomer`, `billShowTable`, `billShowServedBy`, `billShowItemGst` (all `z.boolean().optional()`).
-- Produces (DB, migration `billSettings`, version 54, name `"bill_settings"`): on `settings`, `receipt_header TEXT NOT NULL DEFAULT ''`, `bill_show_fssai INTEGER NOT NULL DEFAULT 1 CHECK (bill_show_fssai IN (0,1))`, and the same for `bill_show_customer` (1), `bill_show_table` (1), `bill_show_served_by` (0) and `bill_show_item_gst` (0).
+- Produces (DB, migration `billSettings`, version 56, name `"bill_settings"`): on `settings`, `receipt_header TEXT NOT NULL DEFAULT ''`, `bill_show_fssai INTEGER NOT NULL DEFAULT 1 CHECK (bill_show_fssai IN (0,1))`, and the same for `bill_show_customer` (1), `bill_show_table` (1), `bill_show_served_by` (0) and `bill_show_item_gst` (0).
 
 - [ ] **Step 1: Write failing tests**
   - `bill-print.test.ts`:
@@ -57,13 +57,13 @@
     - `BillTextLines` accepts 3 lines of 48 chars; rejects 4 lines and a 49-char line with the message above.
     - `billShowOf({})` equals `DEFAULT_BILL_SHOW`; `billShowOf({ billShow: { ...DEFAULT_BILL_SHOW, fssai: false } }).fssai === false`.
   - `migrations/bill-settings.test.ts` (pattern: `migrations/gst-returns.test.ts`):
-    - After `migrate`, `user_version >= 54`.
+    - After `migrate`, `user_version >= 56`.
     - A SELECT of the six columns returns `{ receipt_header: "", bill_show_fssai: 1, bill_show_customer: 1, bill_show_table: 1, bill_show_served_by: 0, bill_show_item_gst: 0 }`.
     - `UPDATE settings SET bill_show_fssai = 2` throws.
 - [ ] **Step 2: Run** `npx vitest run packages/domain/src/bill-print.test.ts packages/domain/src/migrations/bill-settings.test.ts`. Expected: FAIL (module not found).
 - [ ] **Step 3: Implement** the interfaces above; register `billSettings` last in `MIGRATIONS`.
 - [ ] **Step 4: Run** the same command. Expected: PASS. Then `npx vitest run packages/domain`. Expected: all pass.
-- [ ] **Step 5: Commit** `feat(domain): bill print settings, snapshot fields and migration 54`.
+- [ ] **Step 5: Commit** `feat(domain): bill print settings, snapshot fields and migration 56`.
 
 ### Task 2: Server — settings round-trip
 

@@ -40,9 +40,10 @@ centered 110 mm-wide bill on A4. Long item lists continue onto additional pages
 with repeating column headings. Printed page footers include the bill number
 and page count. Credit-note layouts keep their existing A4 format.
 
-Set **Restaurant name**, **Address**, **GSTIN**, **FSSAI licence no.**, and
-**Receipt footer** in Settings. These details are saved when a bill is issued;
-reprints retain that saved information. When the saved footer is blank, the
+Set **Restaurant name**, **Address**, **GSTIN** and **FSSAI licence no.** in
+**Settings > Restaurant profile**, and the header and footer lines in
+**Settings > Bill settings > Printed bill**. These details are saved when a bill
+is issued; reprints retain that saved information. When the saved footer is blank, the
 design displays a short thank-you message.
 
 ## GST settings and item rates

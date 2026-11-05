@@ -16,7 +16,7 @@ copies live on each printer. The billing engine also lacks rules most Indian res
 
 This adds a dedicated **Bill settings** section that gathers the existing fields and adds those rules. MasalaPOS is
 not live with any restaurant yet, so there is no upgrade path to protect, but every phase still ships a forward
-migration (the next number is 54).
+migration (54 and 55 are taken by order summary and item transfers, so the next number is 56).
 
 ## Delivery
 
@@ -24,10 +24,10 @@ Four phases, each with its own implementation plan, session and commit, built in
 
 | # | Phase | Money logic | Migration |
 |---|---|---|---|
-| 1 | Cards + print content + live preview | None | 54 |
-| 2 | Invoice numbering + round-off | Rounding only | 55 |
-| 3 | GST added on top | Core calculation | 56 |
-| 4 | Service + packaging charges | New bill lines | 57 |
+| 1 | Cards + print content + live preview | None | 56 |
+| 2 | Invoice numbering + round-off | Rounding only | 57 |
+| 3 | GST added on top | Core calculation | 58 |
+| 4 | Service + packaging charges | New bill lines | 59 |
 
 GST on top comes before charges so the charges are designed once against all three GST modes.
 
@@ -158,7 +158,7 @@ using each bill's stored rounding.
 | `exclusive` | Prices exclude GST, added on the bill | New |
 | `none` | No GST charged | Today's behaviour |
 
-Migration 56 rebuilds the `settings` table to widen the `gst_mode` CHECK (SQLite cannot alter a CHECK in place). The
+Migration 58 rebuilds the `settings` table to widen the `gst_mode` CHECK (SQLite cannot alter a CHECK in place). The
 bill snapshot already records `gstMode`.
 
 ### Calculation (`calculateBill`, exclusive)
