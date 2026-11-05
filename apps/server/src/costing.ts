@@ -135,7 +135,7 @@ export function registerCosting(app: FastifyInstance): void {
  * Every billed line in the dates with its revenue (pre-GST) and the food cost frozen when it was sold, for the profit
  * and menu-engineering reports. Run it inside a read transaction to keep it on one snapshot with other reads.
  */
-function profitLines(db: FastifyInstance["db"], bounds: readonly [number, number]): ProfitLine[] {
+export function profitLines(db: FastifyInstance["db"], bounds: readonly [number, number]): ProfitLine[] {
   // Sale movements that were later reversed (cancelled items) no longer count as consumption; a KOT edit's partial
   // return (partial_of) takes its share off the sale it reduced.
   const sales = `(SELECT m.cost_paise + COALESCE((SELECT SUM(p.cost_paise) FROM stock_moves p WHERE p.partial_of = m.id), 0) AS cost_paise
