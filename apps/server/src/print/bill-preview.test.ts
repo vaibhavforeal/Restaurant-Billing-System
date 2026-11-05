@@ -10,8 +10,10 @@ describe("sampleBill", () => {
     expect(sampleBill(settings).invoiceNo).toBe("26-27/0001");
   });
   it("honours the round-off setting", () => {
-    const items = [{ pricePaise: 28000, qty: 1, gstRate: 5 }, { pricePaise: 9000, qty: 2, gstRate: 18 }];
+    const items = [{ pricePaise: 28000, qty: 1, gstRate: 5 }, { pricePaise: 9013, qty: 2, gstRate: 18 }];
+    const rounding = { rupee: -26, half: 24, off: 0 };
     for (const roundOff of ["rupee", "half", "off"] as const) {
+      expect(sampleBill({ ...settings, roundOff }).roundingPaise).toBe(rounding[roundOff]);
       expect(sampleBill({ ...settings, roundOff })).toMatchObject(calculateBill(items, 0, "included", roundOff));
     }
   });

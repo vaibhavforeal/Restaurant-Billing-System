@@ -4,7 +4,7 @@ type PreviewSettings = SettingsUpdateInput & { stateCode: string; city: string; 
 
 const ITEMS = [
   { name: "Paneer Tikka", pricePaise: 28000, qty: 1, gstRate: 5 },
-  { name: "Fresh Lime Soda", pricePaise: 9000, qty: 2, gstRate: 18 },
+  { name: "Fresh Lime Soda", pricePaise: 9013, qty: 2, gstRate: 18 },
 ];
 
 /** A fixed unpaid sample bill dressed in the (possibly unsaved) Bill settings, so the form can show what a printed bill will look like. */
