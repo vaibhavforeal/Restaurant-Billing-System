@@ -1,5 +1,7 @@
 import { GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, type GstMode, type ReceiptStyle } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
+import { sampleBill } from "./print/bill-preview.js";
+import { receiptHtml } from "./print/receipt.js";
 
 interface SettingsRow {
   gst_mode: GstMode;
@@ -70,6 +72,17 @@ export function registerSettings(app: FastifyInstance): void {
   const manage = app.requirePermission("settings.manage");
 
   app.get("/api/settings", { preHandler: manage }, async () => ({ settings: readSettings(app.db) }));
+
+  // Renders a fixed sample bill from the unsaved form; nothing is saved.
+  app.post("/api/settings/bill-preview", { preHandler: manage }, async (req) => {
+    const body = SettingsUpdate.parse(req.body);
+    const saved = readSettings(app.db);
+    const show = (v: boolean | undefined, fallback: boolean) => v ?? fallback;
+    return { html: receiptHtml(sampleBill({ ...body, city: body.city ?? saved.city, stateCode: body.stateCode ?? saved.stateCode, pincode: body.pincode ?? saved.pincode, phone: body.phone ?? saved.phone,
+      billShowFssai: show(body.billShowFssai, saved.billShowFssai), billShowCustomer: show(body.billShowCustomer, saved.billShowCustomer), billShowTable: show(body.billShowTable, saved.billShowTable),
+      billShowServedBy: show(body.billShowServedBy, saved.billShowServedBy), billShowItemGst: show(body.billShowItemGst, saved.billShowItemGst),
+      gstMode: body.gstMode ?? saved.gstMode, upiId: body.upiId ?? saved.upiId, receiptStyle: body.receiptStyle ?? saved.receiptStyle })) };
+  });
 
   app.put("/api/settings", { preHandler: manage }, async (req, reply) => {
     const body = SettingsUpdate.parse(req.body);

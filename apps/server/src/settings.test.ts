@@ -33,6 +33,23 @@ describe("settings", () => {
     expect(after.json().settings).toMatchObject({ gstin: "29ABCDE1234F1Z5", receiptFooter: "Thank you, visit again!" });
   });
 
+  it("previews an unsaved bill", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const preview = (token: string, payload: object) => app.inject({ method: "POST", url: "/api/settings/bill-preview", headers: auth(token), payload });
+    const ok = await preview(admin.token, { restaurantName: "Cafe Test", address: "12 MG Road", receiptHeader: "Pure veg", billShowFssai: false, fssai: "11223344556677" });
+    expect(ok.statusCode).toBe(200);
+    const { html } = ok.json() as { html: string };
+    expect(html).toContain("Pure veg");
+    expect(html).toContain("Paneer Tikka");
+    expect(html).not.toContain("FSSAI:");
+    const saved = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
+    expect(saved.json().settings.receiptHeader).toBe("");
+    expect((await preview(admin.token, { restaurantName: "Cafe", address: "FC Road", receiptHeader: "a\nb\nc\nd" })).statusCode).toBe(400);
+    const cashier = await createUser(app, admin.token, { name: "Ravi", pin: "4321", role: "cashier" });
+    expect((await preview(cashier.token, { restaurantName: "Cafe", address: "FC Road" })).statusCode).toBe(403);
+  });
+
   it("saves bill header lines and print toggles, and keeps toggles a PUT leaves out", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);
