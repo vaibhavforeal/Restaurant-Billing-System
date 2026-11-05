@@ -6,4 +6,6 @@ export function describeRequest(product: { name: string; categoryName: string; i
 }
 
 /** The day summary as copied for WhatsApp: a heading line, then the bullet points. */
-export const summaryClipboardText = (date: string, restaurant: string, text: string) => `${restaurant} · ${date}\n${text}`;
+export const summaryClipboardText = (date: string, restaurant: string, text: string) => `${restaurant} · ${date}\n${forWhatsApp(text)}`;
+/** WhatsApp's own formatting: *bold*, and "• " bullets in place of Markdown's "- " or "* ". */
+const forWhatsApp = (text: string) => text.replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, "*$1*").replace(/^(\s*)[-*]\s+/gm, "$1• ");

@@ -15,4 +15,8 @@ describe("AI button helpers", () => {
   it("formats the clipboard text", () => {
     expect(summaryClipboardText("2026-11-04", "Cafe Test", "• Sales were steady.")).toBe("Cafe Test · 2026-11-04\n• Sales were steady.");
   });
+
+  it("copies Markdown bold and bullets the way WhatsApp writes them", () => {
+    expect(summaryClipboardText("2026-11-04", "Cafe Test", "- **Net sales** ₹12,400\n* Voids: 2")).toBe("Cafe Test · 2026-11-04\n• *Net sales* ₹12,400\n• Voids: 2");
+  });
 });

@@ -1,9 +1,29 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { apiFetch } from "../api";
+import { AiText } from "../AiText";
 import { aiErrorText, aiRequestInit, appendTurn, historyForRequest, type ChatTurn } from "../ask-chat";
+import { Icon } from "../Icon";
+import "../ask-masalapos.css";
 
 const EXAMPLES = ["How did this week compare with last week?", "Which dish should I promote?", "Who cancels most after KOT?"];
 type Answer = { question: string; answer: string; figuresUsed: string[]; model: string };
+
+/** The answer's card: "MasalaPOS AI", the answer, the figures it used as chips, and the model that wrote it. */
+export function AiAnswerCard({ text, figuresUsed = [], model, label = "MasalaPOS AI", children }: { text: string; figuresUsed?: string[]; model: string; label?: string; children?: ReactNode }) {
+  return <article className="ai-card">
+    <div className="ai-card-label"><Icon name="sparkle" size={15} />{label}</div>
+    <AiText text={text} />
+    <div className="ai-card-foot">
+      {figuresUsed.length > 0 && <><span className="ai-figures-title">Figures used:</span>{figuresUsed.map((f, n) => <span key={n} className="ai-figure">{f}</span>)}</>}
+      {children}
+      {model && <span className="ai-model" title="The AI model that wrote this">{model}</span>}
+    </div>
+  </article>;
+}
+
+export function AiThinking({ text }: { text: string }) {
+  return <p role="status" className="ai-thinking"><span className="ai-dots" aria-hidden="true"><span /><span /><span /></span>{text}</p>;
+}
 
 /** Reports → Ask MasalaPOS (admins): plain-English questions answered from the restaurant's figures. Not saved. */
 export function AskMasalaPOS({ setup = false }: { setup?: boolean }) {
@@ -26,28 +46,25 @@ export function AskMasalaPOS({ setup = false }: { setup?: boolean }) {
     finally { setBusy(false); }
   }
 
-  if (setup) return <section className="ask-masalapos" aria-label="Ask MasalaPOS" style={{ display: "grid", gap: 12, maxWidth: 820 }}>
+  if (setup) return <section className="ask-masalapos" aria-label="Ask MasalaPOS">
     <div className="page-header"><h3>Ask MasalaPOS</h3></div>
-    <p className="ask-setup" role="status" style={{ margin: 0 }}>Set up the AI assistant in Settings → Restaurant profile → AI assistant: add an OpenRouter key and press Test. Then ask about sales in plain English here.</p>
+    <p className="ask-setup" role="status" style={{ margin: 0 }}>The AI assistant isn't on for this restaurant yet. See Settings → Restaurant profile → AI assistant, or contact MasalaPOS to add it. Then ask about sales in plain English here.</p>
   </section>;
-  return <section className="ask-masalapos" aria-label="Ask MasalaPOS" style={{ display: "grid", gap: 12, maxWidth: 820 }}>
+  return <section className="ask-masalapos" aria-label="Ask MasalaPOS">
     <div className="page-header"><h3>Ask MasalaPOS</h3></div>
-    <p className="muted" style={{ margin: 0 }}>Ask about sales in plain English. Answers come only from this restaurant's figures; nothing here is saved.</p>
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{EXAMPLES.map((example) =>
+    <p className="ask-intro">Ask about sales in plain English. Answers come only from this restaurant's figures; nothing here is saved.</p>
+    <div className="ask-examples">{EXAMPLES.map((example) =>
       <button key={example} type="button" className="ask-example" disabled={busy} onClick={() => void ask(example)}>{example}</button>)}</div>
-    <form onSubmit={(e) => { e.preventDefault(); void ask(question); }} style={{ display: "flex", gap: 8 }}>
-      <input aria-label="Your question" maxLength={1000} value={question} disabled={busy} placeholder="e.g. Why were Tuesday's sales low?" onChange={(e) => setQuestion(e.target.value)} style={{ flex: 1 }} />
+    <form className="ask-form" onSubmit={(e) => { e.preventDefault(); void ask(question); }}>
+      <input aria-label="Your question" maxLength={1000} value={question} disabled={busy} placeholder="e.g. Why were Tuesday's sales low?" onChange={(e) => setQuestion(e.target.value)} />
       <button className="primary" disabled={busy || !question.trim()}>{busy ? "Thinking…" : "Ask"}</button>
     </form>
-    {error && <p role="alert" style={{ color: "var(--danger-text, crimson)", margin: 0 }}>{error}</p>}
-    {busy && <p role="status" className="muted" style={{ margin: 0 }}>Looking at the figures… this can take a minute or two.</p>}
-    <div className="ask-answers" style={{ display: "grid", gap: 12 }}>{[...answers].reverse().map((a, i) =>
-      <article key={answers.length - i} className="ask-answer" style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-panel, 6px)", padding: 12 }}>
-        <p style={{ margin: "0 0 6px", fontWeight: 650 }}>{a.question}</p>
-        <div style={{ whiteSpace: "pre-wrap" }}>{a.answer}</div>
-        {a.figuresUsed.length > 0 && <details style={{ marginTop: 8 }}><summary className="muted" style={{ fontSize: 12 }}>Figures used</summary>
-          <ul className="ask-figures" style={{ margin: "4px 0 0", fontSize: 12 }}>{a.figuresUsed.map((f, n) => <li key={n}>{f}</li>)}</ul></details>}
-        <small className="muted">Answered by {a.model}</small>
-      </article>)}</div>
+    {error && <p role="alert" className="ask-error">{error}</p>}
+    {busy && <AiThinking text="Looking at the figures… this can take a minute or two." />}
+    <div className="ask-answers">{[...answers].reverse().map((a, i) =>
+      <div key={answers.length - i} className="ask-turn ask-answer">
+        <p className="ask-question"><small>You asked</small>{a.question}</p>
+        <AiAnswerCard text={a.answer} figuresUsed={a.figuresUsed} model={a.model} />
+      </div>)}</div>
   </section>;
 }

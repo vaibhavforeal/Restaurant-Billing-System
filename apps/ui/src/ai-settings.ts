@@ -1,20 +1,18 @@
 /** Mirrors of the server's AI assistant shapes (apps/server/src/ai). */
-export interface AiModelInfo { id: string; name: string; contextLength: number; free: boolean; supportsTools: boolean }
-export type AiFeature = "ask" | "daySummary" | "describe" | "test";
+export type AiFeature = "ask" | "daySummary" | "describe";
 export interface AiUsageTotals { requests: number; inputTokens: number; outputTokens: number }
-export interface AiSettingsView {
-  settings: { enabled: boolean; provider: "openrouter"; model: string; fallback: boolean };
-  keySaved: boolean; keyEnding: string | null; usage: Record<AiFeature, AiUsageTotals>; canSaveKey: boolean;
-}
-export interface AiCheckView { model: string; freeRequestsUsed: number | null; freeRequestsLimit: number | null }
+/** MasalaPOS's last answer about this restaurant: switched on or not, its daily limit and today's use. */
+export interface AiServiceView { enabled: boolean; dailyLimit: number; usedToday: number; checkedAt: number }
+export interface AiSettingsView { connected: boolean; localEnabled: boolean; service: AiServiceView | null; usage: Record<AiFeature, AiUsageTotals> }
 
-export const DEFAULT_AI_MODEL = "google/gemma-4-31b-it:free";
-const FEATURE_LABELS: Record<AiFeature, string> = { ask: "Ask MasalaPOS", daySummary: "Day summaries", describe: "Menu descriptions", test: "Tests" };
+const FEATURE_LABELS: Record<AiFeature, string> = { ask: "Ask MasalaPOS", daySummary: "Day summaries", describe: "Menu descriptions" };
 
-/** The model dropdown: a saved model OpenRouter no longer lists stays first and says so; the default is marked. */
-export function modelOptions(models: AiModelInfo[], saved: string): Array<{ value: string; label: string }> {
-  const options = models.map((m) => ({ value: m.id, label: `${m.name} · ${Math.round(m.contextLength / 1000)}K${m.id === DEFAULT_AI_MODEL ? " (recommended)" : ""}` }));
-  return models.some((m) => m.id === saved) ? options : [{ value: saved, label: `${saved} (no longer offered)` }, ...options];
+/** One line on where the AI assistant stands for this restaurant, from MasalaPOS's side. */
+export function serviceStatusText(view: AiSettingsView): string {
+  if (!view.connected) return "This copy isn't connected to MasalaPOS, so the AI assistant isn't available here.";
+  if (!view.service) return "Not checked with MasalaPOS yet. Press Check to see whether it's on for this restaurant.";
+  if (!view.service.enabled) return "Not switched on for this restaurant. Contact MasalaPOS to add the AI assistant.";
+  return `On for this restaurant · ${view.service.usedToday} of ${view.service.dailyLimit} requests used today`;
 }
 
 export function usageRows(usage: Record<AiFeature, AiUsageTotals>): Array<{ feature: string; requests: number; tokens: number }> {
