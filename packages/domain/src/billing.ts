@@ -158,6 +158,11 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   const taxes = allocation.map(({ rate, amount, discount }) => {
     const gross = amount - discount;
     if (mode === "none") return { gstRate: rate, taxablePaise: gross, cgstPaise: 0, sgstPaise: 0 };
+    // Exclusive: the discounted amount is the taxable value; CGST and SGST are each half the rate on it, rounded half up, and added on top.
+    if (mode === "exclusive") {
+      const half = Number((BigInt(gross) * BigInt(rate) + 100n) / 200n);
+      return { gstRate: rate, taxablePaise: gross, cgstPaise: half, sgstPaise: half };
+    }
     // Included: the discounted gross already contains the GST, so split it out. CGST and SGST are each half the rate on the same
     // taxable value, so they are always equal: when the rounded tax is odd, its odd paisa stays in the taxable value (each half
     // is then still within a paisa of taxable × rate / 2), and taxable + CGST + SGST is still exactly the gross.
@@ -168,7 +173,8 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   });
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
-  const unrounded = subtotalPaise - discountPaise;
+  const unrounded = subtotalPaise - discountPaise + (mode === "exclusive" ? cgstPaise + sgstPaise : 0);
+  if (!Number.isSafeInteger(unrounded) || unrounded > 1_000_000_000) throw new Error("Bill exceeds supported amount");
   const totalPaise = roundTotal(unrounded, roundOff);
   return { subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
 }

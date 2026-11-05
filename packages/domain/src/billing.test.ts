@@ -92,3 +92,61 @@ describe("round-off", () => {
     expect(calculateBill([{ pricePaise: 12350, qty: 1, gstRate: 5 }]).totalPaise).toBe(12400);
   });
 });
+
+describe("calculateBill exclusive", () => {
+  const halfTax = (taxable: number, rate: number) => Number((BigInt(taxable) * BigInt(rate) + 100n) / 200n);
+
+  it("adds CGST and SGST on top of a single-rate item", () => {
+    const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 5 }], 0, "exclusive");
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
+    expect(bill).toMatchObject({ subtotalPaise: 10000, cgstPaise: 250, sgstPaise: 250, totalPaise: 10500, roundingPaise: 0 });
+  });
+
+  it("taxes each rate group on its amount less the same discount share as included", () => {
+    const items = [{ pricePaise: 28000, qty: 1, gstRate: 5 }, { pricePaise: 9013, qty: 2, gstRate: 18 }];
+    const amounts = new Map([[5, 28000], [18, 18026]]);
+    const included = calculateBill(items, 4603, "included");
+    const bill = calculateBill(items, 4603, "exclusive");
+    expect(bill.taxes.map((t) => t.gstRate)).toEqual([5, 18]);
+    for (const t of bill.taxes) {
+      const inc = included.taxes.find((x) => x.gstRate === t.gstRate)!;
+      const allocated = amounts.get(t.gstRate)! - (inc.taxablePaise + inc.cgstPaise + inc.sgstPaise);
+      expect(t.taxablePaise).toBe(amounts.get(t.gstRate)! - allocated);
+      expect(t.cgstPaise).toBe(halfTax(t.taxablePaise, t.gstRate));
+      expect(t.sgstPaise).toBe(t.cgstPaise);
+    }
+    const taxable = bill.taxes.reduce((s, t) => s + t.taxablePaise, 0);
+    expect(taxable).toBe(46026 - 4603);
+    expect(bill.totalPaise - bill.roundingPaise).toBe(taxable + bill.cgstPaise + bill.sgstPaise);
+    expect(bill.subtotalPaise).toBe(46026);
+  });
+
+  it("rounds an odd half paisa of tax up", () => {
+    const bill = calculateBill([{ pricePaise: 101, qty: 1, gstRate: 5 }], 0, "exclusive", "off");
+    expect(bill.taxes[0]).toEqual({ gstRate: 5, taxablePaise: 101, cgstPaise: 3, sgstPaise: 3 });
+    expect(bill.totalPaise).toBe(107);
+  });
+
+  it("applies each round-off mode to the total including tax", () => {
+    const items = [{ pricePaise: 10050, qty: 1, gstRate: 5 }];
+    const cases: Array<[RoundOff, number, number]> = [["rupee", 10600, 48], ["half", 10550, -2], ["off", 10552, 0]];
+    for (const [mode, total, rounding] of cases) {
+      const bill = calculateBill(items, 0, "exclusive", mode);
+      expect(bill.cgstPaise).toBe(251);
+      expect(bill.sgstPaise).toBe(251);
+      expect({ total: bill.totalPaise, rounding: bill.roundingPaise }, mode).toEqual({ total, rounding });
+    }
+  });
+
+  it("charges nothing when the discount covers the whole subtotal", () => {
+    const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 5 }], 10000, "exclusive");
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0 }]);
+    expect(bill.totalPaise).toBe(0);
+  });
+
+  it("adds nothing for a 0% group", () => {
+    const bill = calculateBill([{ pricePaise: 5000, qty: 1, gstRate: 0 }, { pricePaise: 10000, qty: 1, gstRate: 5 }], 0, "exclusive");
+    expect(bill.taxes[0]).toEqual({ gstRate: 0, taxablePaise: 5000, cgstPaise: 0, sgstPaise: 0 });
+    expect(bill.totalPaise).toBe(15500);
+  });
+});
