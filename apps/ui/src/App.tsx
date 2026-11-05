@@ -170,12 +170,13 @@ function StaffApp() {
       const captain = user.role === "waiter" || (captainEntry && user.role !== "kitchen");
       const canQuickBill = !captain && userCan(user, "bills.settle");
       const canLeave = () => Array.from(navigationGuard.current).every(guard => guard());
-      const go = (next: Page) => { if ((next.name !== "takeaway" || canQuickBill) && canLeave()) setState({ kind: "in", user, page: next }); };
-      const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId } });
-      const onBack = () => setState({ kind: "in", user, page: { name: "tables" } });
+      const go = (next: Page) => { if ((next.name !== "takeaway" || canQuickBill) && canLeave()) setState({ kind: "in", user, page: next.name === "takeaway" ? { ...next, requestId: Date.now() } : next }); };
+      const orderReturn = page.name === "order" ? page.returnTo ?? "tables" : page.name === "orders" || page.name === "takeaway" ? "orders" : "tables";
+      const onOpenOrder = (orderId: string) => setState({ kind: "in", user, page: { name: "order", orderId, returnTo: orderReturn } });
+      const onBack = () => setState({ kind: "in", user, page: { name: orderReturn } });
       androidBack.current = () => { if (page.name === "tables") return false; if (canLeave()) onBack(); return true; };
       return (
-        <CurrentUserProvider user={user}><NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><ModulesProvider key={user.id}><div className={`app-shell${captain ? " captain-shell" : ""}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
+        <CurrentUserProvider user={user}><NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><ModulesProvider key={user.id}><div className={`app-shell${captain ? " captain-shell" : " sales-shell"}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
           <DemoBanner demo={demo} />
@@ -187,9 +188,9 @@ function StaffApp() {
           <QrNotifications key={`qr-${user.id}`} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
-          {page.name === "orders" && <OrderBoard user={user} onOpenOrder={onOpenOrder} onNewOrder={canQuickBill ? () => go({ name: "takeaway" }) : undefined} />}
+          {page.name === "orders" && <OrderBoard user={user} onOpenOrder={onOpenOrder} />}
           {page.name === "tables" && <Tables user={user} captain={captain} qrInbox={page.qrInbox} onOpenOrder={onOpenOrder} onTakeaway={() => go({ name: "takeaway" })} />}
-          {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={user.id} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
+          {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={`${user.id}-${page.requestId ?? 0}`} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
           {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}

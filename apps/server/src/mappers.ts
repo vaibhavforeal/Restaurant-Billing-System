@@ -3,6 +3,11 @@ import { orderTableLabel } from "./table-label.js";
 import { currentTier, spendableBalance } from "./loyalty.js";
 
 export interface OrderRow {
+  order_notes?: string;
+  guest_count?: number | null;
+  sold_by_id?: string | null;
+  sold_by_name?: string | null;
+  summary_revision?: number;
   captain_id?: string | null;
   captain_name?: string | null;
   id: string;
@@ -167,6 +172,11 @@ export function loadOrderJson(db: Database, orderId: string) {
     customer: row.customer_id ? customerJson(db, row.customer_id) : null,
     status: row.status,
     openedBy: row.opened_by,
+    notes: row.order_notes ?? "",
+    guestCount: row.guest_count ?? null,
+    soldById: row.sold_by_id ?? row.opened_by,
+    soldByName: row.sold_by_name ?? (db.prepare("SELECT name FROM users WHERE id = ?").get(row.opened_by) as { name: string } | undefined)?.name ?? null,
+    summaryRevision: row.summary_revision ?? 0,
     openedAt: row.opened_at,
     closedAt: row.closed_at,
     items: items.map(orderItemJson),

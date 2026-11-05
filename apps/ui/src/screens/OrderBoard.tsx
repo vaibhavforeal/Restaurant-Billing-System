@@ -15,7 +15,7 @@ import "../order-board.css";
 type View = "overview" | Stage;
 
 /** Takeaway, delivery and Zomato orders in stage columns, from just placed to settled today. Dine-in stays on Tables. */
-export function OrderBoard({ user, onOpenOrder, onNewOrder }: { user: User; onOpenOrder: (orderId: string) => void; onNewOrder?: (() => void) | undefined }) {
+export function OrderBoard({ user, onOpenOrder }: { user: User; onOpenOrder: (orderId: string) => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -82,9 +82,8 @@ export function OrderBoard({ user, onOpenOrder, onNewOrder }: { user: User; onOp
 
   return <section className="screen order-board">
     <div className="page-header">
-      <div><h2>Orders</h2><p>Takeaway, delivery and Zomato orders. Today's settled orders are under Processed.</p></div>
+      <div><h2>My Orders</h2><p>Takeaway, delivery and Zomato orders. Today's settled orders are under Processed.</p></div>
       <div className="order-board-actions">
-        {onNewOrder && <button type="button" className="primary" onClick={onNewOrder}><Icon name="plus" size={14} /> New takeaway</button>}
         <button type="button" onClick={refresh}><Icon name="refresh" size={14} /> Refresh</button>
       </div>
     </div>

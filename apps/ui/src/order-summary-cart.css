@@ -1,0 +1,30 @@
+html[data-theme] .order-screen.order-with-summary {
+  .order-cart > .table-summary-controls { max-height: 45%; overflow-y: auto; }
+  .table-summary-toolbar { grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr)); }
+  .table-summary-toolbar > .table-summary-type { grid-column: auto; min-height: 64px; justify-content: center; gap: 6px; padding: 8px 4px; border-bottom: 0; border-right: 1px solid var(--line); font-size: 12px; }
+  .cart-heading { padding: 8px 12px; }
+  .cart-heading h3 { font-size: 13px; }
+  .cart-row.draft-row, .cart-row.saved-row, .draft-row:has(.cart-hold) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-auto-flow: row; gap: 8px; padding: 12px 0; align-items: center; }
+  .cart-item-name, .saved-item-name { grid-column: 1 / -1; min-height: 0; }
+  .saved-item-name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .saved-item-name > strong { flex: 1; min-width: 100px; }
+  .cart-item-name strong, .saved-item-name strong { font-size: 13px; }
+  .cart-item-name small { margin-top: 6px; font-size: 11px; }
+  .qty-stepper { grid-column: 1; justify-self: start; }
+  .qty-stepper :is(input, button) { width: 32px; height: 32px; min-height: 32px; }
+  .cart-row > .pos-money { grid-column: 2; grid-row: 2; text-align: right; font-size: 14px; font-weight: 600; }
+  .pos-money > small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); font-weight: 400; }
+  .cart-remove, .saved-item-cancel { grid-column: 3; grid-row: 2; width: 28px; min-height: 32px; }
+  .saved-item-note { grid-column: 1; display: inline-flex; align-items: center; justify-self: start; gap: 6px; padding: 4px 0; border: 0; background: transparent; color: var(--muted); min-height: 32px; }
+  .cart-hold, .saved-item-fire, .saved-item-edit { min-height: 32px; padding: 4px 8px; font-size: 11px; justify-self: end; }
+  .order-held-banner { display: flex; align-items: center; justify-content: center; gap: 6px; grid-column: 1 / -1; width: 100%; min-height: 36px; border: 0; border-radius: 0; color: var(--pos-warning); background: var(--pos-warning-bg); font-size: 11px; }
+  .order-held-banner:not(:disabled):hover { box-shadow: inset 0 0 0 1px var(--pos-warning); }
+  .order-total-count { display: flex; justify-content: space-between; gap: 8px; padding-bottom: 4px; }
+  .table-order-note { margin: 8px 12px; }
+  @media (max-width: 700px) {
+    .order-cart > .table-summary-controls { max-height: 42%; }
+    .table-summary-toolbar > button { font-size: 10px; }
+    .table-summary-people.with-customer { grid-template-columns: minmax(0, 1.5fr) minmax(90px, 1fr); }
+    .order-header .actions { flex-wrap: wrap; justify-content: flex-end; }
+  }
+}

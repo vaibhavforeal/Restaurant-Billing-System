@@ -18,7 +18,7 @@ import { TableOrderPanel } from "./TableOrderPanel";
 import { WorkspaceDialog } from "../WorkspaceDialog";
 import { useShortcutLabels } from "../pos-shortcuts";
 import { useIntegrations } from "../integrations";
-import { openTakeaways, ZOMATO_PILL, zomatoOrders } from "../zomato-desk";
+import { zomatoOrders } from "../zomato-desk";
 import { ZomatoPanel } from "../ZomatoPanel";
 import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
@@ -32,7 +32,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const [filter, setFilter] = useState<"all" | TableInfo["status"]>("all");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
-  const [mobilePane, setMobilePane] = useState<"tables" | "reservations" | "parcels" | "zomato">("tables");
+  const [mobilePane, setMobilePane] = useState<"tables" | "reservations" | "zomato">("tables");
   const { isEnabled } = useIntegrations();
   const [zomatoDialog, setZomatoDialog] = useState(false);
   const [loadedTables, setTables] = useState<TableInfo[]>([]);
@@ -261,13 +261,12 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const zomatoList = canQuickBill ? zomatoOrders(orders) : [];
   const zomatoOn = canQuickBill && isEnabled("zomato");
   const showZomatoPanel = zomatoOn || zomatoList.length > 0;
-  const takeaways = openTakeaways(orders, zomatoList);
   const now = Date.now();
   const bookingSlots = reservationSlots(bookings?.reservations ?? [], now, bookings?.timezone);
   const bookingCount = bookingSlots.current.reservations.length + bookingSlots.upcoming.reservations.length;
   const showBookings = !!bookings && (modules.isActive("reservations") || bookingCount > 0);
   const bookingTime = (ms: number) => new Date(ms).toLocaleTimeString("en-IN", { timeZone: bookings?.timezone, hour: "2-digit", minute: "2-digit" });
-  const hasSide = !!selected || showBookings || takeaways.length > 0 || showZomatoPanel;
+  const hasSide = !!selected || showBookings || showZomatoPanel;
   const othersBusy = creating || actionBusy || qrBusy || qrManagerBusy || serviceBusy || reservationBusy;
   const busy = othersBusy || orderPanelBusy;
   const active = tables.filter((table) => table.isActive);
@@ -282,16 +281,16 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }
   const pickerTable = tables.find((table) => table.id === pickerTableId);
   // The highlighted card follows the selected order, so it moves with a Move table.
-  const selectedTableId = selected ? tables.find((table) => tableOpenTargets(table).some((target) => target.orderId === selected.orderId))?.id ?? selected.tableId : null;
-  const showParcels = mobilePane === "parcels" && takeaways.length > 0;
+  const selectedTableId = selected && orders.find((order) => order.id === selected.orderId)?.type !== "parcel"
+    ? tables.find((table) => tableOpenTargets(table).some((target) => target.orderId === selected.orderId))?.id ?? selected.tableId : null;
   const showZomato = mobilePane === "zomato" && showZomatoPanel;
   const showReservations = mobilePane === "reservations" && showBookings;
-  const visiblePane = showReservations ? "reservations" : showParcels ? "parcels" : showZomato ? "zomato" : "tables";
+  const visiblePane = showReservations ? "reservations" : showZomato ? "zomato" : "tables";
   return <section className="screen tables-screen table-overview">
-    <div className="page-header tables-header"><div className="tables-heading"><h2>{captain ? "Tables" : "Tables & orders"}</h2><p><span className="tables-available-dot" aria-hidden="true" />{active.filter((table) => table.status === "free").length} available <span aria-hidden="true">·</span> {active.length} tables across {areas.length} {areas.length === 1 ? "area" : "areas"}</p></div><div className="actions">
+    <div className="page-header tables-header"><div className="tables-heading"><h2>{captain ? "Tables" : "Table View"}</h2><p><span className="tables-available-dot" aria-hidden="true" />{active.filter((table) => table.status === "free").length} available <span aria-hidden="true">·</span> {active.length} tables across {areas.length} {areas.length === 1 ? "area" : "areas"}</p></div><div className="actions">
       <button disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>Reservations</button>
       {isAdmin && <>{qrOn && <button disabled={busy} aria-haspopup="dialog" onClick={() => setManagingQr(true)}>Table QR codes</button>}<button disabled={busy} aria-haspopup="dialog" onClick={() => setManaging(true)}>Manage tables</button></>}
-      {takeawayOn && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => {
+      {takeawayOn && !canQuickBill && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => {
         if (busy || actionLock.current || qrLock.current || qrManagerLock.current || serviceLock.current || reservationLock.current) return;
         if (canQuickBill) onTakeaway(); else newParcel();
       }} disabled={busy}><Icon name="bag" size={15} />{shortcut("takeaway", "Takeaway")}</button>}
@@ -305,7 +304,6 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     {hasSide && <div className="tables-pane-switch" aria-label="Tables view">
       <button aria-pressed={visiblePane === "tables"} aria-controls="table-list" onClick={() => setMobilePane("tables")}>Tables · {active.length}</button>
       {showBookings && <button aria-pressed={visiblePane === "reservations"} aria-controls="reservation-list" onClick={() => setMobilePane("reservations")}>Bookings · {bookingCount}</button>}
-      {takeaways.length > 0 && <button aria-pressed={visiblePane === "parcels"} aria-controls="parcel-list" onClick={() => setMobilePane("parcels")}>Takeaways · {takeaways.length}</button>}
       {showZomatoPanel && <button aria-pressed={visiblePane === "zomato"} aria-controls="zomato-list" onClick={() => setMobilePane("zomato")}>Zomato · {zomatoList.length}</button>}
     </div>}
     <div className="filter-bar tables-filter-bar"><div className="tabs" aria-label="Table status">
@@ -340,7 +338,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables using Manage tables." : "Ask an admin to add tables."}</p></div>}
       </div>
       {hasSide && <div className={`tables-side${showBookings || selected ? " has-reservations" : ""}`}>
-      {selected && <TableOrderPanel user={user} orderId={selected.orderId} disabled={othersBusy}
+      {selected && <TableOrderPanel key={selected.orderId} user={user} orderId={selected.orderId} disabled={othersBusy}
         onEditItems={openOrder}
         onSelectOrder={(id) => setSelected((old) => old && { ...old, orderId: id })}
         onClose={closeOrderPanel} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}
@@ -359,9 +357,6 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
         </div>
         <button type="button" className="reservation-view-all" disabled={busy} aria-haspopup="dialog" onClick={() => setReservationView({ tableId: null })}>View all reservations</button>
       </aside>}
-      {takeaways.length > 0 && <aside className="tables-parcels" aria-label="Open takeaways"><div className="panel-title"><h3>Open takeaways</h3><span>{takeaways.length}</span></div><div className="parcel-list" id="parcel-list" role="region" aria-label="Takeaway orders" tabIndex={0}>
-        {takeaways.map((order) => <button key={order.id} disabled={busy} onClick={() => openOrder(order.id)}><span className="takeaway-glyph"><Icon name="bag" size={17} /></span><span className="takeaway-info">{order.type === "zomato" ? `Zomato #${order.zomatoOrderId}` : `Takeaway ${order.clientRef.slice(0, 8)}`}<small>{order.type === "zomato" ? ZOMATO_PILL[order.zomatoStatus ?? "new"] : order.status === "billed" ? "Awaiting payment" : "Open order"}{savedFor([order.id]).length > 0 && " · saved on this device"}</small><strong className="pos-money">₹{paiseToRupees(order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.pricePaise * item.qty, 0))}</strong></span><Icon name="arrow" size={13} /></button>)}
-      </div></aside>}
       {showZomatoPanel && <aside className="tables-parcels tables-zomato" id="zomato-list" aria-label="Zomato orders"><ZomatoPanel orders={zomatoList} canCreate={zomatoOn} disabled={busy} onNew={() => setZomatoDialog(true)} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} /></aside>}
       </div>}
     </div>

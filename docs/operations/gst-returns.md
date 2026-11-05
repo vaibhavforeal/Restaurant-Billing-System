@@ -6,6 +6,11 @@ with GST. It is always available, even without the Reports & analytics module, t
 Choose the **Month**, and **Quarter** if the restaurant files quarterly (QRMP). Quarters follow the financial year:
 Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar. The screen opens on last month.
 
+Use **Send to auditor** to review and share the selected period's CSV and, when available, GSTR-1 JSON. The CSV includes
+the GSTIN and report warnings. **Share reports** opens the device's sharing menu where file sharing is supported.
+Otherwise download each file, enter the auditor's email, and choose **Open email draft**. Attach the downloaded files
+in the email app before sending; browser email links cannot add attachments automatically. No email is sent by the POS.
+
 What the screen shows depends on **Settings > Restaurant profile**:
 
 | Restaurant | Shown | Download |

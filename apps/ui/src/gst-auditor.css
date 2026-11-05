@@ -1,0 +1,10 @@
+html[data-theme] .gst-auditor-dialog { width: min(660px, calc(100vw - 24px)); }
+.gst-auditor-files { list-style: none; padding: 0; margin: 16px 0; }
+.gst-auditor-files li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.gst-auditor-files li span { overflow-wrap: anywhere; min-width: 0; }
+.gst-auditor-files button { flex-shrink: 0; }
+.gst-auditor-email { display: grid; gap: 8px; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.gst-auditor-email label { display: grid; gap: 6px; }
+.gst-auditor-email button { justify-self: start; }
+.gst-auditor-warnings { background: var(--pos-warning-bg); color: var(--pos-warning); padding: 12px; margin-block: 12px; }
+.gst-auditor-warnings ul { padding-left: 18px; margin-bottom: 0; }

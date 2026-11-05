@@ -6,6 +6,7 @@ import "./theme.css";
 import "./pos-tokens.css";
 import "./pos.css";
 import "./captain.css";
+import "./sales-navigation.css";
 import { applyTheme, readTheme } from "./theme";
 import { startCaptainPwa } from "./captain-pwa";
 import { startKitchenPwa } from "./kitchen-pwa";

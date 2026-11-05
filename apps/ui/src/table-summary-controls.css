@@ -1,0 +1,37 @@
+html[data-theme] {
+.table-summary-controls { flex-shrink: 0; border-bottom: 1px solid var(--line); }
+.table-summary-people { display: grid; grid-template-columns: minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+.table-summary-people.with-customer { grid-template-columns: minmax(0, 1.65fr) minmax(90px, 1fr); }
+.table-summary-customer { min-width: 0; background: var(--pos-accent-soft); border-right: 1px solid var(--line); }
+.table-summary-customer > button { display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; min-height: 64px; padding: 10px; border: 0; border-radius: 0; background: transparent; color: var(--pos-accent); text-align: left; font-size: 12px; }
+.table-summary-customer > button > svg { flex-shrink: 0; }
+.table-summary-customer > button > span { min-width: 0; overflow-wrap: anywhere; }
+.table-summary-customer small { display: block; margin-top: 2px; color: var(--ink); }
+.table-summary-sales { display: grid; align-content: center; gap: 3px; padding: 8px 10px; min-width: 0; color: var(--muted); font-size: 11px; }
+.table-summary-sales select { width: 100%; min-width: 0; min-height: 32px; padding: 3px 2px; border: 0; background-color: transparent; font-size: 13px; color: var(--ink); }
+.table-summary-toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.table-summary-toolbar > button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 64px; padding: 8px 3px; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--surface); color: var(--ink); font-size: 11px; line-height: 1.3; }
+.table-summary-toolbar > button:last-child { border-right: 0; }
+.table-summary-toolbar > .table-summary-type { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; min-height: 36px; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.table-summary-controls button:not(:disabled):hover { background: var(--pos-accent-soft); }
+.table-summary-controls button:not(:disabled):active { box-shadow: inset 0 0 0 1px var(--pos-accent); }
+.table-summary-controls button:disabled, .table-summary-controls select:disabled { cursor: not-allowed; opacity: .5; }
+.table-summary-controls :is(button, select):not(:disabled), .table-summary-dialog button:not(:disabled) { cursor: pointer; }
+.table-summary-controls :is(button, input, select):focus-visible, .table-summary-dialog :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--pos-accent); outline-offset: -2px; }
+.table-summary-disclosure { width: 100%; min-height: 40px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--pos-accent-soft); color: var(--pos-accent); font-size: 12px; font-weight: 600; }
+.table-summary-details { padding: 10px; display: grid; gap: 10px; background: var(--surface); border-top: 1px solid var(--line); }
+.table-summary-details dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 12px; }
+.table-summary-details dt { color: var(--muted); }
+.table-summary-details dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.table-summary-details label, .table-summary-dialog label { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
+.table-summary-details :is(input, select), .table-summary-dialog :is(input, select, textarea) { min-width: 0; width: 100%; box-sizing: border-box; }
+.table-summary-details form { display: flex; align-items: end; gap: 8px; }
+.table-summary-details form label { flex: 1; }
+.table-summary-details :is(button, input, select) { min-height: 36px; }
+.table-summary-feedback { margin: 0; padding: 8px 10px; font-size: 12px; }
+.table-summary-dialog form, .table-summary-customer-search { display: grid; gap: 12px; }
+.table-summary-dialog form > p { margin: 0; font-size: 13px; }
+.table-summary-dialog form > button { justify-self: end; min-height: 40px; }
+.table-order-note { margin: 0; padding: 8px; background: var(--pos-accent-soft); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.table-order-note strong { display: block; margin-bottom: 4px; }
+}

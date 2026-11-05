@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
 import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
@@ -21,6 +21,7 @@ import "../zomato.css";
 import { useCan } from "../permissions";
 import { gstinProblem } from "@masalapos/domain/gstin";
 import { GST_STATES } from "@masalapos/domain/restaurant-profile";
+import { Icon } from "../Icon";
 
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
@@ -51,7 +52,7 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
 
 const WHEN_BACK = "it reaches the hub when the connection returns";
 
-export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount = 0, onFireHeld, disabled = false, onBusyChange, onGoToTables, onClosed, role }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; /** Dishes held back from the kitchen; billing asks to fire them first. */ heldCount?: number; onFireHeld?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined }) {
+export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount = 0, onFireHeld, disabled = false, onBusyChange, onGoToTables, onClosed, role, checkoutRef, checkoutLabel, summaryFooter = false, onTotalChange }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; /** Dishes held back from the kitchen; billing asks to fire them first. */ heldCount?: number; onFireHeld?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined; checkoutRef?: Ref<() => void>; checkoutLabel?: string | undefined; summaryFooter?: boolean; onTotalChange?: (total: number | null) => void }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -92,7 +93,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const dialogTitle = useRef<HTMLHeadingElement>(null);
   const options = useRef<HTMLDetailsElement>(null);
   const dialogTitleId = useId();
-  const quick = !!onPrepare;
+  const [quickSettlement, setQuickSettlement] = useState(false);
+  const quick = !!onPrepare || quickSettlement;
+  useEffect(() => { onTotalChange?.(bill?.totalPaise ?? preview?.totalPaise ?? null); }, [bill?.totalPaise, preview?.totalPaise, onTotalChange]);
   const zomatoStatus = useZomatoStatus();
   const zomatoLock = useRef(false);
   const blocked = busy || disabled;
@@ -293,6 +296,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const quickReceived = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview?.totalPaise ?? 0;
   const cashValid = quickMode !== "cash" || (quickReceived !== null && quickReceived >= (preview?.totalPaise ?? 0));
   const previewDisabled = blocked || (!quick && hasDraft) || (!hasDraft && !order.items.some((item) => item.status !== "cancelled"));
+  useImperativeHandle(checkoutRef, () => () => {
+    if (blocked) return;
+    setQuickSettlement(false);
+    if (bill) openDialog();
+    else if (!previewDisabled && order.status === "open") void run(getPreview);
+  });
   const previewLabel = quick ? busy ? "Preparing checkout…" : preview ? "Refresh total" : "Checkout" : "Preview bill";
   const totals = bill ?? preview;
   const canShowQr = !!bill && bill.status === "unpaid" && !!bill.receipt.upiId && bill.totalPaise > 0;
@@ -307,20 +316,26 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   // A cancelled order with no bill has nothing to bill; a voided bill on a cancelled order stays viewable.
   if (order.status === "cancelled" && !bill) return null;
   return <section aria-label="Billing" className="billing-panel billing-footer">
-    {bill && <div className="billing-footer-total"><span>Bill #{bill.billNo}<span className={`status ${bill.status} refund-${bill.refundState}`}>{billStatusLabel(bill)}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
-    <div className="billing-footer-actions">
+    {bill && !summaryFooter && <div className="billing-footer-total"><span>Bill #{bill.billNo}<span className={`status ${bill.status} refund-${bill.refundState}`}>{billStatusLabel(bill)}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
+    {summaryFooter && <div className="table-bill-actions">
+      <button type="button" disabled={blocked || !!bill} title="Discount and bill options" onClick={() => { setQuickSettlement(false); openDialog(true); }}><span aria-hidden="true">%</span><span>Discount</span></button>
+      <button type="button" disabled={blocked || !bill || !can("bills.print")} title={bill ? "Open receipt and print options" : "Issue the bill before printing"} onClick={() => void run(viewReceipt)}><Icon name="printer" size={18} /><span>Print</span></button>
+      <button type="button" disabled={previewDisabled || !can("bills.settle") || (!!bill && bill.status !== "unpaid")} title="Review a single payment and confirm receipt" onClick={() => { setQuickSettlement(true); if (bill) openDialog(); else void run(getPreview); }}><span aria-hidden="true">₹</span><span>Quick settle</span></button>
+      <button type="button" className="primary" {...shortcutProps("billing")} disabled={bill ? blocked : previewDisabled} onClick={() => { setQuickSettlement(false); if (bill) openDialog(); else void run(getPreview); }}><Icon name="logout" size={18} /><span>{bill?.status === "paid" ? "View bill" : "Checkout"}</span></button>
+    </div>}
+    {!summaryFooter && <div className="billing-footer-actions">
       {!bill && order.status === "open" && zomatoDesk && <>
         <span className={`zomato-desk-pill is-${zomatoPill}`}>{ZOMATO_PILL[zomatoPill]}</span>
         <button className="primary pos-pay" disabled={blocked || hasDraft || zomatoAction.status === null || zomatoStatus.busyId !== null} onClick={() => void advanceZomato()}>{zomatoStatus.busyId !== null ? "Saving…" : zomatoAction.label}</button>
       </>}
       {!bill && order.status === "open" && !zomatoDesk && <>
         <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => openDialog(true)}>{shortcut("discount", "Discount")}</button>
-        <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Review total and payment")} disabled={previewDisabled} onClick={() => void run(getPreview)}>{quick ? busy ? "Preparing…" : shortcut("billing", "Pay") : shortcut("billing", "Preview bill")}</button>
+        <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Review total and payment")} disabled={previewDisabled} onClick={() => void run(getPreview)}>{quick && busy ? "Preparing…" : shortcut("billing", checkoutLabel ?? (quick ? "Pay" : "Preview bill"))}</button>
       </>}
       {bill && <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Open bill / payment")} disabled={busy} onClick={() => openDialog()}>{bill.status === "unpaid" ? "Record payment" : "View bill"}</button>}
       {canShowQr && <button disabled={blocked} onClick={() => setShowQr(true)}>Show UPI QR</button>}
       {canGoToTables && <button className="primary" disabled={blocked} onClick={goToTables}>Go to tables</button>}
-    </div>
+    </div>}
     {!bill && order.status === "open" && zomatoDesk && <>
       {zomatoStatus.error && <p className="error-message" role="alert">{zomatoStatus.error}</p>}
       {hasDraft ? <p className="billing-zomato-hint">Punch or remove the items in your cart first.</p> : zomatoAction.status === null && <p className="billing-zomato-hint">Add items to hand this order over.</p>}
@@ -329,7 +344,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     {error && <button className="billing-attention" onClick={() => openDialog()}>Billing needs attention</button>}
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
       <header className="billing-dialog-header">
-        <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill #${bill.billNo} — ${billStatusLabel(bill)}` : quick ? "Takeaway checkout" : "Billing"}</h2>
+        <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill #${bill.billNo} — ${billStatusLabel(bill)}` : quickSettlement ? "Quick settlement" : quick ? "Takeaway checkout" : "Billing"}</h2>
         {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector("input")?.focus(); }}>{shortcut("discount", "Discount")}</button>}
         <button disabled={blocked} onClick={closeDialog} aria-label="Close billing">Close</button>
       </header>

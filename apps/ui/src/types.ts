@@ -192,6 +192,11 @@ export interface OrderItem {
 }
 
 export interface Order {
+  notes?: string;
+  guestCount?: number | null;
+  soldById?: string | null;
+  soldByName?: string | null;
+  summaryRevision?: number;
   captainId?: string | null;
   captainName?: string | null;
   priceTier: PriceTier;
