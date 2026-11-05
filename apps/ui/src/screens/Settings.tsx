@@ -21,9 +21,9 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "" };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled" | "customerUsualEnabled" | "stateCode">; label: string; inputMode?: "numeric" | "tel" }> = [
+const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled" | "customerUsualEnabled" | "stateCode" | "sacCode" | "zomatoGstin">; label: string; inputMode?: "numeric" | "tel" }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Street address" },
   { key: "city", label: "City" },
@@ -311,6 +311,18 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               {DEFAULT_GST_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
             </select>
           </label>}
+          {form.gstin.trim() !== "" && <>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>SAC code <InfoTip id="sac-settings-help">Printed on tax invoices and used in the GSTR-1 HSN/SAC summary. 996331 is restaurant service; change it only if your accountant asks.</InfoTip></span>
+              <input value={form.sacCode} inputMode="numeric" maxLength={8} disabled={busy} aria-describedby="sac-settings-help"
+                onChange={(e) => { setForm({ ...form, sacCode: e.target.value.replace(/\D/g, "") }); setProfileStatus(""); }} />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Zomato's GSTIN <InfoTip id="zomato-gstin-help">Zomato pays the GST on its orders (section 9(5)); GSTR-1 Table 14 reports those sales against Zomato's GSTIN for your state. Find it on Zomato's monthly statement. Leave blank if you don't sell on Zomato.</InfoTip></span>
+              <input value={form.zomatoGstin} maxLength={15} autoCapitalize="characters" spellCheck={false} disabled={busy} aria-describedby="zomato-gstin-help"
+                onChange={(e) => { setForm({ ...form, zomatoGstin: e.target.value.toUpperCase() }); setProfileStatus(""); }} />
+            </label>
+          </>}
 
           <label style={{ display: "grid", gap: 4 }}>
             <span>UPI ID for bill payments <InfoTip id="upi-settings-help">Save your restaurant’s UPI ID once to print a payment QR on new unpaid bills, with the bill amount filled in. Leave blank to disable for new bills. Existing bills keep their saved UPI ID.</InfoTip></span>

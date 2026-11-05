@@ -16,6 +16,16 @@ waiter **3456**, kitchen **4567**); use the matching sign-in from this table.
 When a guide says to complete setup with admin PIN `1234`, set the username
 `admin`, password `admin-password` and approval PIN `1234`.
 
+## GST returns
+
+Build the UI and start `node --import tsx tools/e2e/gst-returns-server.mts` (fresh for each run): an in-memory
+restaurant on `http://127.0.0.1:4164/` (GSTIN 29AAPFU0939F1ZR, Zomato's GSTIN 29AAACZ1234A1ZR) with last month's
+bills: two walk-in bills (one with 0% water), a GST invoice to Acme Foods (29AAGCB7383J1Z4), a bill voided the same
+month, a refund of one thali, and a Zomato order. Reports > GST returns opens on that month and shows B2CS ₹1,250
+taxable at 5%, B2B ₹1,000, nil ₹40, Table 13 with 6 invoices and 1 cancelled, and Table 14 for Zomato. Download
+GSTR-1 JSON saves `GSTR1_29AAPFU0939F1ZR_<MMYYYY>.json`. At checkout, Bill options > GST invoice for a business
+checks the GSTIN as it is typed (try changing its last character).
+
 ## Popular items
 
 Build the UI and start `node --import tsx tools/e2e/popular-items-server.mts` (fresh for each run). It is a

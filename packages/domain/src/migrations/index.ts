@@ -9,6 +9,7 @@ import { restaurantProfile } from "./restaurant-profile.js";
 import { passwordLogin } from "./password-login.js";
 import { customerUsual } from "./customer-usual.js";
 import { activityAlerts } from "./activity-alerts.js";
+import { gstReturns } from "./gst-returns.js";
 
-/** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 53. */
-export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts];
+/** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 54. */
+export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns];

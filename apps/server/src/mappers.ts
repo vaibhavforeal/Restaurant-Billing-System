@@ -115,13 +115,14 @@ export function customerJson(db: Database, id: string) {
   const row = db.prepare(`SELECT c.*, t.name AS type_name FROM customers c LEFT JOIN customer_types t ON t.id = c.type_id WHERE c.id = ?`).get(id) as
     { id: string; name: string; phone: string; type_id: string | null; notes: string | null; created_at: number; type_name: string | null;
       email: string | null; birth_date: string | null; anniversary_date: string | null; gender: "female" | "male" | "other" | null;
-      marketing_opt_in: number; is_active: number } | undefined;
+      marketing_opt_in: number; is_active: number; gstin: string | null; legal_name: string | null } | undefined;
   if (!row) return null;
   const tier = currentTier(db, row.id);
   return {
     id: row.id, name: row.name, phone: row.phone, typeId: row.type_id, typeName: row.type_name, notes: row.notes ?? "",
     email: row.email, birthDate: row.birth_date, anniversaryDate: row.anniversary_date, gender: row.gender,
     marketingOptIn: row.marketing_opt_in === 1, isActive: row.is_active === 1, tags: customerTags(db, row.id),
+    gstin: row.gstin, legalName: row.legal_name,
     tier: tier && { id: tier.id, name: tier.name, earnMultiplier: tier.earnMultiplier },
     pointsBalance: pointsBalance(db, row.id), createdAt: row.created_at,
   };

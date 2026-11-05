@@ -20,7 +20,7 @@ export type Page =
   | { name: "settings"; section?: "plan" }
   | { name: "bills" }
   | { name: "marketplace" }
-  | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "analytics" | "bills" | "zomato" | "cash"; period?: { from: string; to: string } }
+  | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "gst" | "analytics" | "bills" | "zomato" | "cash"; period?: { from: string; to: string } }
   | { name: "inventory" }
   | { name: "customers" };
 // Billing and reports use the existing cashier/admin permissions.

@@ -24,6 +24,12 @@ function customerLines(bill: Bill): string[] {
   if (c.pointsBalance !== undefined) lines.push(`Points earned: ${c.pointsEarned ?? 0} | Balance: ${c.pointsBalance}`);
   return lines;
 }
+/** The registered business a tax invoice is issued to, and the place of supply (Rule 46). */
+export function buyerLines(r: Bill["receipt"]): string[] {
+  const b = r.buyer;
+  if (!b) return [];
+  return [`Billed to: ${b.name}`, `GSTIN: ${b.gstin}`, ...(b.address ? [b.address] : []), `Place of supply: ${b.stateName} (${b.stateCode})`];
+}
 const footer = (bill: Bill) => bill.receipt.receiptFooter || "Thank you for visiting. Please come again.";
 const paymentModes = (bill: Bill) => [...new Set(bill.payments.map((p) => p.mode.toUpperCase()))].join(" + ");
 // The declaration a composition-scheme bill of supply must carry.
@@ -105,6 +111,8 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   line(r.orderType === "zomato" ? contextLine(r.orderType, null, null, r.zomatoOrderId) :
     r.orderType === "parcel" ? (r.orderTypeName ? r.orderTypeName.toUpperCase() : "TAKEAWAY / Parcel") : `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}`);
   if (bill.payments.length) line(`Payment mode: ${paymentModes(bill)}`);
+  for (const text of buyerLines(r)) line(text);
+  if (r.sacCode) line(`SAC: ${r.sacCode} (restaurant service)`);
   line("All amounts in Rs.");
   rule().bold(true);
   row("Item", paperWidth === 80 ? ["Qty", "Rate", "Amount"] : ["Qty", "Amount"]);
@@ -195,7 +203,9 @@ export function receiptHtml(bill: Bill): string {
     <div><dt>Bill no.</dt><dd><strong>#${bill.billNo}</strong> <span class="status">${statusLabel(bill)}</span></dd></div>
     <div><dt>Service</dt><dd>${service}</dd></div>
     <div><dt>${r.orderType === "dine_in" ? "Table / Group" : "Order"}</dt><dd>${r.orderType === "dine_in" ? e(contextLine(r.orderType, r.tableName, r.splitLabel)) : order}</dd></div>
-    ${bill.payments.length ? `<div><dt>Payment mode</dt><dd>${e(paymentModes(bill))}</dd></div>` : ""}</dl>
+    ${bill.payments.length ? `<div><dt>Payment mode</dt><dd>${e(paymentModes(bill))}</dd></div>` : ""}
+    ${r.sacCode ? `<div><dt>SAC</dt><dd>${e(r.sacCode)}</dd></div>` : ""}</dl>
+  ${r.buyer ? `<section class="buyer" aria-label="Billed to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <p class="currency-note">All amounts in INR (₹)</p>
   <table class="items" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th><th scope="col">Amount</th></tr></thead><tbody>
     ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td><td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}

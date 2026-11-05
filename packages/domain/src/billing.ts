@@ -1,9 +1,17 @@
 import { z } from "zod";
 import type { GstMode } from "./gst.js";
 import type { ReceiptStyle } from "./receipt-styles.js";
+import { ValidGstin } from "./gstin-schema.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
 const Ref = z.string().min(8).max(64);
+/** A registered business the bill is issued to, which makes it a B2B invoice in GSTR-1. */
+export const BuyerDetails = z.object({
+  gstin: ValidGstin,
+  name: z.string().trim().min(1, "Enter the business's legal name").max(100),
+  address: z.string().trim().max(200).default(""),
+});
+export type BuyerDetailsInput = z.infer<typeof BuyerDetails>;
 export const BillPreview = z.object({
   discountPaise: Paise.default(0),
   discountNote: z.string().trim().max(200).default(""),
@@ -11,6 +19,8 @@ export const BillPreview = z.object({
   approverPin: z.string().regex(/^\d{4,6}$/, "Enter the admin PIN").optional(),
   /** Loyalty points the order's customer spends on this bill, as a discount. */
   redeemPoints: z.number().int().min(0).max(1_000_000).default(0),
+  /** The business buyer for a GST (B2B) invoice; null for a walk-in customer. */
+  buyer: BuyerDetails.nullable().default(null),
 }).superRefine((v, ctx) => {
   if (v.discountPaise > 0 && !v.discountNote) ctx.addIssue({ code: "custom", message: "Discount reason required", path: ["discountNote"] });
 });
@@ -61,8 +71,17 @@ export interface ReceiptSnapshot {
   customer?: ReceiptCustomer;
   /** Set when the platform collects and pays the GST (section 9(5)). */
   gstPaidBy?: "zomato";
+  /** The registered business this tax invoice was issued to (B2B). Absent for walk-in customers. */
+  buyer?: ReceiptBuyer;
+  /** The SAC code printed on a tax invoice; absent on bills issued before GST returns. */
+  sacCode?: string;
   /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;
+}
+export interface ReceiptBuyer {
+  gstin: string; name: string; address: string;
+  /** Place of supply: the restaurant's state, where restaurant service is supplied (IGST Act s.12(4)). */
+  stateCode: string; stateName: string;
 }
 export interface ReceiptCustomer {
   name: string;
