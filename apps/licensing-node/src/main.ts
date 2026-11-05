@@ -9,7 +9,7 @@ import { createApp } from "./app.js";
 import { connectorDistribution } from "./connector.js";
 import { directoryAssets } from "./assets.js";
 import { memoryLimiter } from "./limiter.js";
-import { readSecret } from "./secrets.js";
+import { aiEnv, readSecret } from "./secrets.js";
 import { fileD1 } from "./sqlite-d1.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +44,8 @@ const env: Env = {
   // The TURN relay for remote sessions (coturn on this machine); optional, see docs/operations/remote-support.md.
   ...(config["TURN_URLS"] ? { TURN_URLS: config["TURN_URLS"] } : {}),
   ...(secret("TURN_SECRET") ? { TURN_SECRET: secret("TURN_SECRET") as string } : {}),
+  // The AI assistant relay: MasalaPOS's OpenRouter key (OPENROUTER_API_KEY or OPENROUTER_API_KEY_FILE); optional, see docs/operations/ai-assistant.md.
+  ...aiEnv(config),
 };
 
 // Live support: chat pushes and remote sessions. One process, so one in-memory hub.

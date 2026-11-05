@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createOpenRouter, DEFAULT_OPENROUTER_MODEL, OPENROUTER_FALLBACK } from "./openrouter.js";
-import { AiError, type AiRequest } from "./provider.js";
+import type { AiRequest } from "@masalapos/domain/ai-wire";
+import { createOpenRouter, DEFAULT_OPENROUTER_MODEL, OPENROUTER_FALLBACK, ProviderError } from "./openrouter.js";
 
 const BASE = "https://openrouter.test/api/v1";
 type Call = { url: string; method: string; headers: Record<string, string>; body: unknown };
@@ -66,7 +66,7 @@ describe("OpenRouter provider", () => {
 
   it("maps failures to codes", async () => {
     const codeFor = async (fetch: typeof globalThis.fetch) => {
-      try { await provider(fetch).chat(request); return "none"; } catch (error) { return error instanceof AiError ? error.code : `other: ${String(error)}`; }
+      try { await provider(fetch).chat(request); return "none"; } catch (error) { return error instanceof ProviderError ? error.code : `other: ${String(error)}`; }
     };
     const throwing = (error: Error) => (async () => { throw error; }) as unknown as typeof globalThis.fetch;
     expect(await codeFor(throwing(new TypeError("fetch failed")))).toBe("offline");
@@ -78,31 +78,11 @@ describe("OpenRouter provider", () => {
     expect(await codeFor(fakeFetch(() => [200, reply({ content: "" })]).fetch)).toBe("no_answer");
   });
 
-  it("lists only free models that support tools", async () => {
-    const model = (id: string, prompt: string, tools: boolean) => ({ id, name: id.toUpperCase(), context_length: 262144, pricing: { prompt, completion: prompt }, supported_parameters: tools ? ["tools", "max_tokens"] : ["max_tokens"] });
-    const { fetch, calls } = fakeFetch(() => [200, { data: [model("a/free-tools:free", "0", true), model("b/free-plain:free", "0", false), model("c/paid", "0.000001", true), model("openrouter/free", "0", true)] }]);
-    const models = await provider(fetch).listModels();
-    expect(models.map((m) => m.id)).toEqual(["a/free-tools:free", "openrouter/free"]);
-    expect(models[0]).toEqual({ id: "a/free-tools:free", name: "A/FREE-TOOLS:FREE", contextLength: 262144, free: true, supportsTools: true });
-    expect(calls[0]!.url).toBe(`${BASE}/models`);
-    expect(calls[0]!.headers.authorization).toBeUndefined();
-  });
-
-  it("check reports the answering model and today's free requests", async () => {
-    const { fetch, calls } = fakeFetch((call) => call.url.endsWith("/key") ? [200, { data: { free_model_daily_requests: { used: 12, limit: 50, remaining: 38 } } }] : [200, reply({ content: "OK" })]);
-    expect(await provider(fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: 12, freeRequestsLimit: 50, usage: { inputTokens: 10, outputTokens: 3 } });
-    expect(calls.map((c) => c.url)).toEqual([`${BASE}/chat/completions`, `${BASE}/key`]);
-    expect(calls[1]!.headers.authorization).toBe("Bearer sk");
-    const bare = fakeFetch((call) => call.url.endsWith("/key") ? [200, { data: {} }] : [200, reply({ content: "OK" })]);
-    expect(await provider(bare.fetch).check()).toEqual({ model: DEFAULT_OPENROUTER_MODEL, freeRequestsUsed: null, freeRequestsLimit: null, usage: { inputTokens: 10, outputTokens: 3 } });
-  });
-
-  it("check calls a working key working even when the reply is empty or the daily count can't be read", async () => {
-    const { fetch, calls } = fakeFetch((call) => call.url.endsWith("/key") ? [500, { error: { message: "down" } }] : [200, reply({ content: "" }, { model: "openrouter/free" })]);
-    expect(await provider(fetch).check()).toEqual({ model: "openrouter/free", freeRequestsUsed: null, freeRequestsLimit: null, usage: { inputTokens: 10, outputTokens: 3 } });
-    expect((calls[0]!.body as { max_tokens: number }).max_tokens).toBeGreaterThanOrEqual(64);
-    const refused = fakeFetch(() => [401, { error: { message: "No auth" } }]);
-    await expect(provider(refused.fetch).check()).rejects.toMatchObject({ code: "bad_key" });
+  it("gives a tool call without an id one, and trims oversized arguments, so the next round stays valid", async () => {
+    const { fetch } = fakeFetch(() => [200, reply({ content: null, tool_calls: [{ id: "", type: "function", function: { name: "today", arguments: "x".repeat(5000) } }] })]);
+    const [call] = (await provider(fetch).chat(request)).toolCalls;
+    expect(call!.id).toBe("call-0");
+    expect(call!.arguments.length).toBeLessThanOrEqual(4000);
   });
 
   it("reads text sent as parts and turns badly shaped replies into no_answer", async () => {

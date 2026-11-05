@@ -26,7 +26,8 @@
     "./remote-support": "./src/remote-support.ts",
     "./dashboard": "./src/dashboard/index.ts",
     "./menu-insights": "./src/menu-insights.ts",
-    "./restaurant-profile": "./src/restaurant-profile.ts"
+    "./restaurant-profile": "./src/restaurant-profile.ts",
+    "./ai-wire": "./src/ai-wire.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

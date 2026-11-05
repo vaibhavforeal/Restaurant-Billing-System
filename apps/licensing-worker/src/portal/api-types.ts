@@ -80,6 +80,12 @@ export interface ModuleChoice { id: string; name: string; group: string; descrip
 export interface InstallationDetail extends InstallationSummary {
   modules: ModuleChoice[]; modulesUpdatedAt: number | null;
   moduleEvents: Array<{ id: number; moduleId: string; allowed: boolean | null; revision: number | null; at: number; actorName: string | null }>;
+  ai: InstallationAi;
+}
+/** The AI assistant MasalaPOS runs for this counter: off until an admin switches it on; `usage` is the last 7 UTC days, newest first. */
+export interface InstallationAi {
+  enabled: boolean; dailyLimit: number; updatedAt: number | null; usedToday: number;
+  usage: Array<{ day: string; requests: number; inputTokens: number; outputTokens: number }>;
 }
 export interface PaymentRecord {
   id: string; amountPaise: number; method: "cash" | "bank" | "upi" | "cheque" | "card" | "razorpay"; reference: string | null;

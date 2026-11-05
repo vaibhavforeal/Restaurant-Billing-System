@@ -32,4 +32,12 @@ export interface Env {
   /** TURN relay for remote sessions: comma-separated URLs (turn:host:3478?transport=udp,turns:host:5349) and the coturn static-auth-secret. */
   TURN_URLS?: string;
   TURN_SECRET?: string;
+  /** MasalaPOS's own OpenRouter key for the AI assistant relay (/v1/ai/*); without it AI requests answer 503. A secret. */
+  OPENROUTER_API_KEY?: string;
+  /** The model the relay asks for; defaults to Gemma 4 31B (free). */
+  OPENROUTER_MODEL?: string;
+  /** "off" stops naming openrouter/free as a second choice; on by default. */
+  OPENROUTER_FALLBACK?: string;
+  /** OpenRouter's API address; defaults to https://openrouter.ai/api/v1. Set for local end-to-end runs against a stand-in. */
+  OPENROUTER_BASE_URL?: string;
 }

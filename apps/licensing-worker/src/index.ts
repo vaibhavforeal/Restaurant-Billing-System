@@ -1,3 +1,4 @@
+import { handleAiChat, handleAiStatus } from "./ai/relay.js";
 import { overLimit } from "./limits.js";
 import { connectorRoute } from "./connector/routes.js";
 import { webCryptoSigner } from "@masalapos/license-issuer";
@@ -40,6 +41,13 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (method === "POST" && url.pathname === "/v1/support/link") {
     if (await overLimit(env.LIMITER, request, "")) return json({ error: "rate_limited" }, 429);
     return handleSupportLink(await deps(), request, request.headers.get(SECRET_HEADER));
+  }
+  // The AI assistant's relay, with its own rate count so a counter's questions don't crowd out licence checks.
+  if (url.pathname === "/v1/ai/chat" || url.pathname === "/v1/ai/status") {
+    if (await overLimit(env.LIMITER, request, "ai")) return json({ error: "rate_limited" }, 429);
+    if (method === "POST" && url.pathname === "/v1/ai/chat") return handleAiChat(await deps(), env, request);
+    if (method === "GET" && url.pathname === "/v1/ai/status") return handleAiStatus(await deps(), request);
+    return json({ error: "not_found" }, 404);
   }
   if (method === "POST" && url.pathname === "/v1/activate") {
     if (await overLimit(env.LIMITER, request, "")) return json({ error: "rate_limited" }, 429);

@@ -1,6 +1,7 @@
 import { MODULES, isModuleId, resolveModules, MODULE_IDS, type ModuleId, type ModuleOverrides } from "@masalapos/domain/modules";
 import { parseActivationRequest, readClaims } from "@masalapos/license-issuer";
 import { z } from "zod";
+import { aiDay, getAiSettings, setAiSettingsStatement, usageHistory } from "../ai/store.js";
 import { GRACE_MS } from "../dates.js";
 import { assignSeat, orderFull } from "../enroll.js";
 import { issueLicense, reissueLicense } from "../issue.js";
@@ -67,7 +68,14 @@ async function detail(ctx: Ctx, installation: InstallationRow): Promise<Installa
     ...summary!, modulesUpdatedAt: settings.updatedAt,
     modules: MODULES.map((m) => ({ id: m.id, name: m.name, group: m.group, description: m.description, inPlan: m.plans[plan], override: settings.overrides[m.id] ?? null, allowed: allowed[m.id] })),
     moduleEvents: await ownerEvents(ctx.deps.db, installation.installationId, 50),
+    ai: await aiFor(ctx, installation.installationId),
   };
+}
+
+async function aiFor(ctx: Ctx, installationId: string): Promise<InstallationDetail["ai"]> {
+  const settings = await getAiSettings(ctx.deps.db, installationId);
+  const usage = await usageHistory(ctx.deps.db, installationId, aiDay(ctx.deps.now()), 7);
+  return { ...settings, usedToday: usage[0]!.requests, usage };
 }
 
 /** An order's term starts at its first activation; once it has ended, a renewal order extends the counters already on it. */
@@ -81,6 +89,12 @@ const ModuleChange = z.object({
   /** true allows, false blocks, null goes back to the plan's default. */
   modules: z.record(z.string(), z.boolean().nullable()),
   /** The `modulesUpdatedAt` the page last saw, so two people editing at once do not silently overwrite each other. */
+  expectedUpdatedAt: z.number().int().nullable(),
+}).strict();
+const AiChange = z.object({
+  enabled: z.boolean(),
+  dailyLimit: z.number().int().min(1).max(1000),
+  /** The `ai.updatedAt` the page last saw. */
   expectedUpdatedAt: z.number().int().nullable(),
 }).strict();
 const LicenceChange = z.object({
@@ -120,6 +134,21 @@ export const installationsRoutes: Route[] = [
         summary: `${label(installation)}: ${changed.map((c) => `${MODULES.find((m) => m.id === c.id)!.name} ${c.allowed === null ? "follows the plan" : c.allowed ? "allowed" : "blocked"}`).join(", ")}` }),
     ]);
     return json({ installation: await detail(ctx, installation), issuedRevision: issued?.row.revision ?? null });
+  } },
+
+  // The AI assistant MasalaPOS runs: on or off for this counter, and its daily request limit. Takes effect on the counter's next request.
+  { method: "PATCH", path: path("/installations/:id/ai"), permission: "licences.manage", handler: async (ctx) => {
+    const installation = await visibleInstallation(ctx, ctx.params[0]!);
+    const change = await readBody(ctx.request, AiChange);
+    const current = await getAiSettings(ctx.deps.db, installation.installationId);
+    if (change.expectedUpdatedAt !== current.updatedAt) throw conflict("Someone else changed this counter's AI assistant. Reload and try again.", "stale");
+    const { db } = ctx.deps;
+    await db.batch([
+      setAiSettingsStatement(db, installation.installationId, change.enabled, change.dailyLimit, ctx.deps.now(), ctx.user.id),
+      logBy(ctx, { action: "installation.ai", entityType: "installation", entityId: installation.installationId, customerId: installation.customerId,
+        summary: `${label(installation)}: AI assistant ${change.enabled ? "on" : "off"}, ${change.dailyLimit} requests a day` }),
+    ]);
+    return json({ installation: await detail(ctx, installation) });
   } },
 
   // A staff adjustment: another plan, end date or device count, signed as the next revision with the reason in the log.
@@ -202,6 +231,12 @@ export const installationsRoutes: Route[] = [
       db.prepare(`UPDATE installations SET customer_id = ?, order_id = ?, max_devices = ?, activated_at = ?, outlet_name = ? WHERE installation_id = ?`)
         .bind(next.customerId, next.orderId, next.maxDevices, now, next.outletName, next.installationId),
       setOverridesStatement(db, next.installationId, overrides, now),
+      // The AI assistant follows the seat: the new computer gets the old one's switch and limit, and the old one is switched off.
+      db.prepare(`INSERT INTO ai_settings (installation_id, enabled, daily_limit, updated_at, updated_by)
+          SELECT ?, enabled, daily_limit, ?, ? FROM ai_settings WHERE installation_id = ?
+        ON CONFLICT(installation_id) DO UPDATE SET enabled = excluded.enabled, daily_limit = excluded.daily_limit, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+        .bind(next.installationId, now, ctx.user.id, old.installationId),
+      db.prepare(`UPDATE ai_settings SET enabled = 0, updated_at = ?, updated_by = ? WHERE installation_id = ?`).bind(now, ctx.user.id, old.installationId),
       statement,
       db.prepare(`UPDATE OR IGNORE order_installations SET installation_id = ? WHERE installation_id = ? AND order_id IN (SELECT id FROM orders WHERE status IN ('draft', 'confirmed'))`)
         .bind(next.installationId, old.installationId),
