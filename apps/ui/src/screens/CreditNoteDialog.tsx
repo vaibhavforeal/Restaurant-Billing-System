@@ -24,7 +24,7 @@ const modeLabel = (mode: string) => mode.toUpperCase();
 
 /** Print or view the slip of one credit note. `selectable` lets the cashier pick the printer; otherwise `printerId` is used as is. */
 export function CreditNoteActions({ note, printers, printerId, selectable = false, printLabel = "Print credit note" }: {
-  note: Pick<BillCreditNote, "id" | "cnNo">; printers: Printer[]; printerId: string; selectable?: boolean; printLabel?: string;
+  note: Pick<BillCreditNote, "id" | "creditNoteRef">; printers: Printer[]; printerId: string; selectable?: boolean; printLabel?: string;
 }) {
   const [chosen, setChosen] = useState(() => printers.some((p) => p.id === printerId) ? printerId : "");
   const [busy, setBusy] = useState(false);
@@ -46,7 +46,7 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
   }
   const print = () => run(async () => {
     const result = await apiFetch<{ job: PrintJobInfo }>(`/api/credit-notes/${note.id}/print`, { method: "POST", body: JSON.stringify({ printerId: target }) });
-    setMessage(`CN-${note.cnNo} queued for printing${result.job.printerName ? ` on ${result.job.printerName}` : ""}.`);
+    setMessage(`${note.creditNoteRef} queued for printing${result.job.printerName ? ` on ${result.job.printerName}` : ""}.`);
   });
   const view = () => run(async () => {
     const response = await fetch(`/api/credit-notes/${note.id}/receipt`, { headers: authHeaders() });
@@ -59,14 +59,14 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
       {selectable && printers.length > 0 && <label htmlFor={printerField}>Printer <select id={printerField} value={chosen} disabled={busy} onChange={(e) => setChosen(e.target.value)}>
         <option value="">Choose a printer</option>{printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select></label>}
-      {target && <button type="button" className={selectable ? "primary" : ""} disabled={busy} aria-label={`${printLabel} CN-${note.cnNo}`} onClick={() => void print()}>{printLabel}</button>}
-      <button type="button" disabled={busy} aria-label={`View CN-${note.cnNo}`} onClick={() => void view()}>View</button>
+      {target && <button type="button" className={selectable ? "primary" : ""} disabled={busy} aria-label={`${printLabel} ${note.creditNoteRef}`} onClick={() => void print()}>{printLabel}</button>}
+      <button type="button" disabled={busy} aria-label={`View ${note.creditNoteRef}`} onClick={() => void view()}>View</button>
       {html && <button type="button" disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
       {html && <button type="button" onClick={() => setHtml("")}>Hide</button>}
     </div>
     {error && <p className="billing-error" role="alert">{error}</p>}
     {message && <p className="billing-message" role="status">{message}</p>}
-    {html && <iframe className="billing-receipt-frame" ref={frame} title={`Credit note CN-${note.cnNo}`} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={() => setFrameReady(true)} />}
+    {html && <iframe className="billing-receipt-frame" ref={frame} title={`Credit note ${note.creditNoteRef}`} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={() => setFrameReady(true)} />}
   </div>;
 }
 
@@ -76,7 +76,7 @@ export function CreditNoteList({ notes, printers, printerId }: { notes: BillCred
   return <section className="credit-note-list" aria-label="Credit notes">
     <h3>Credit notes</h3>
     <ul>{notes.map((note) => <li key={note.id}>
-      <div className="credit-note-head"><strong>CN-{note.cnNo}</strong><span>{new Date(note.createdAt).toLocaleString()}</span><span className="credit-note-kind">{note.kind === "void" ? "Void" : "Refund"}</span><strong className="pos-money">{money(note.totalPaise)}</strong></div>
+      <div className="credit-note-head"><strong>{note.creditNoteRef}</strong><span>{new Date(note.createdAt).toLocaleString()}</span><span className="credit-note-kind">{note.kind === "void" ? "Void" : "Refund"}</span><strong className="pos-money">{money(note.totalPaise)}</strong></div>
       <p>Reason: {note.reason}</p>
       <p className="muted">Requested by {note.requestedByName} · Approved by {note.approvedByName}{note.refunds.length > 0 && ` · Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}`}</p>
       <CreditNoteActions note={note} printers={printers} printerId={printerId} printLabel="Reprint" />
@@ -108,7 +108,7 @@ export function CreditNoteDialog({ kind, bill, items, role, printers, printerId,
   onStale: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const title = `${kind === "refund" ? "Refund items" : "Void bill"} · Bill #${bill.billNo}`;
+  const title = `${kind === "refund" ? "Refund items" : "Void bill"} · Bill ${bill.invoiceNo}`;
   return <WorkspaceDialog open={kind !== null} title={title} className="credit-note-dialog" busy={busy} onClose={onClose}>
     {kind && <CreditBody kind={kind} bill={bill} items={items} role={role} printers={printers} printerId={printerId} onBusyChange={setBusy} onClose={onClose} onIssued={onIssued} onStale={onStale} />}
   </WorkspaceDialog>;
@@ -210,7 +210,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   if (result) {
     const note = result.creditNote;
     return <div className="credit-note-result">
-      <p className="billing-message" role="status">Credit note CN-{note.cnNo} issued for {money(note.totalPaise)}.{note.refunds.length > 0 && ` Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}.`}</p>
+      <p className="billing-message" role="status">Credit note {note.creditNoteRef} issued for {money(note.totalPaise)}.{note.refunds.length > 0 && ` Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}.`}</p>
       <CreditNoteActions note={note} printers={printers} printerId={printerId} selectable />
       <div className="credit-note-footer"><button type="button" className="primary" onClick={onClose}>Done</button></div>
     </div>;

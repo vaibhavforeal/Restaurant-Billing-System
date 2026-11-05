@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "../feedback-page.css";
 
-interface Visit { restaurantName: string; billNo: number; billedAt: number; submitted: boolean; open: boolean }
+interface Visit { restaurantName: string; invoiceNo: string; billedAt: number; submitted: boolean; open: boolean }
 type Ratings = { overall: number; food: number; service: number; ambience: number };
 const ASPECTS: Array<{ key: keyof Ratings; label: string }> = [
   { key: "overall", label: "Overall" }, { key: "food", label: "Food" }, { key: "service", label: "Service" }, { key: "ambience", label: "Ambience" },
@@ -41,7 +41,7 @@ export function FeedbackPage({ token }: { token: string }) {
 
   return <main className="feedback-page">
     <section className="feedback-card">
-      {visit && <header><h1>{visit.restaurantName}</h1><p>Bill #{visit.billNo} · {new Date(visit.billedAt).toLocaleDateString()}</p></header>}
+      {visit && <header><h1>{visit.restaurantName}</h1><p>Bill {visit.invoiceNo} · {new Date(visit.billedAt).toLocaleDateString()}</p></header>}
       {done || visit?.submitted ? <p className="feedback-thanks">Thank you for your feedback!</p>
         : visit && !visit.open ? <p>Ratings for this visit have closed. We hope to see you again soon.</p>
         : visit ? <>

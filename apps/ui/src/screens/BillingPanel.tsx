@@ -212,7 +212,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     if (outcome.saved) { setPreview(null); setMessage(`Bill saved on this device · ${WHEN_BACK}.`); return; }
     const { bill: value, job: printJob, printError } = outcome.value;
     acceptBill(value); setPreview(null); setApproverPin(""); setRedeem(""); setJob(printJob);
-    setMessage(`Bill #${value.billNo} issued. Record payment below.${printError ? ` ${printError}. Use Print receipt to try again.` : ""}`);
+    setMessage(`Bill ${value.invoiceNo} issued. Record payment below.${printError ? ` ${printError}. Use Print receipt to try again.` : ""}`);
     await onChanged();
   }
   async function issueAndPay() {
@@ -316,7 +316,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   // A cancelled order with no bill has nothing to bill; a voided bill on a cancelled order stays viewable.
   if (order.status === "cancelled" && !bill) return null;
   return <section aria-label="Billing" className="billing-panel billing-footer">
-    {bill && !summaryFooter && <div className="billing-footer-total"><span>Bill #{bill.billNo}<span className={`status ${bill.status} refund-${bill.refundState}`}>{billStatusLabel(bill)}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
+    {bill && !summaryFooter && <div className="billing-footer-total"><span>Bill {bill.invoiceNo}<span className={`status ${bill.status} refund-${bill.refundState}`}>{billStatusLabel(bill)}</span></span><strong>{money(bill.totalPaise)}</strong></div>}
     {summaryFooter && <div className="table-bill-actions">
       <button type="button" disabled={blocked || !!bill} title="Discount and bill options" onClick={() => { setQuickSettlement(false); openDialog(true); }}><span aria-hidden="true">%</span><span>Discount</span></button>
       <button type="button" disabled={blocked || !bill || !can("bills.print")} title={bill ? "Open receipt and print options" : "Issue the bill before printing"} onClick={() => void run(viewReceipt)}><Icon name="printer" size={18} /><span>Print</span></button>
@@ -343,7 +343,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     {error && <button className="billing-attention" onClick={() => openDialog()}>Billing needs attention</button>}
     {createPortal(<dialog ref={dialog} className="billing-dialog" aria-labelledby={dialogTitleId} onCancel={(event) => { if (lock.current || disabled) event.preventDefault(); }}>
       <header className="billing-dialog-header">
-        <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill #${bill.billNo} — ${billStatusLabel(bill)}` : quickSettlement ? "Quick settlement" : quick ? "Takeaway checkout" : "Billing"}</h2>
+        <h2 ref={dialogTitle} id={dialogTitleId} tabIndex={-1}>{bill ? `Bill ${bill.invoiceNo} — ${billStatusLabel(bill)}` : quickSettlement ? "Quick settlement" : quick ? "Takeaway checkout" : "Billing"}</h2>
         {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector("input")?.focus(); }}>{shortcut("discount", "Discount")}</button>}
         <button disabled={blocked} onClick={closeDialog} aria-label="Close billing">Close</button>
       </header>
@@ -427,7 +427,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             {job && <p className="billing-print-status" role="status">Receipt print: {job.status === "done" ? "submitted" : job.status}{job.error ? ` — ${job.error}. Check the paper before reprinting. An admin can retry the affected copy in Settings.` : ""}{job.copyCount > 1 ? ` · ${job.copyCount} copies requested; each copy is tracked in Settings.` : ""}</p>}
           </div>}
         </div>
-        {html && <iframe className="billing-receipt-frame" ref={frame} title={`Receipt for bill ${bill?.billNo}`} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={() => setFrameReady(true)} />}
+        {html && <iframe className="billing-receipt-frame" ref={frame} title={`Receipt for bill ${bill?.invoiceNo}`} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={() => setFrameReady(true)} />}
       </div>
     </dialog>, document.body)}
     {bill && <UpiQrPreview billId={bill.id} open={showQr && canShowQr} onClose={() => setShowQr(false)} />}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
+import { financialYear, formatInvoiceNo } from "@masalapos/domain/invoice-numbers";
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch } from "../api";
 import { InfoTip } from "../InfoTip";
@@ -41,6 +42,7 @@ function useBillPreview(form: SettingsData | null) {
 export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void }) {
   const { form, update, save, busy, status, message } = useSettingsForm("Could not save the bill settings");
   const preview = useBillPreview(form);
+  const fy = financialYear(Date.now()).short;
   if (!form) return <div className="panel">{status === "error" ? <p role="alert">{message}</p> : <p role="status">Loading settings…</p>}</div>;
   return <div className="panel bill-settings">
     <div className="settings-form bill-settings-form">
@@ -73,6 +75,25 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
               onChange={(e) => update({ zomatoGstin: e.target.value.toUpperCase() })} />
           </label>
         </>}
+      </fieldset>
+
+      <fieldset className="bill-settings-group">
+        <legend>Numbering &amp; rounding</legend>
+        <label style={field}>
+          <span>Invoice prefix <InfoTip id="invoice-prefix-help">Optional, up to 4 letters or digits. Bills are numbered {formatInvoiceNo(form.invoicePrefix, fy, 1)} and start again at 0001 every 1 April.</InfoTip></span>
+          <input value={form.invoicePrefix} maxLength={4} autoCapitalize="characters" spellCheck={false} disabled={busy} aria-describedby="invoice-prefix-help invoice-prefix-cn"
+            onChange={(e) => update({ invoicePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} />
+          <small id="invoice-prefix-cn">Credit notes are numbered CN/{fy}/001.</small>
+        </label>
+        <label style={field}>
+          <span>Round off total <InfoTip id="round-off-help">Applies to new bills. Refunds use each bill's own rounding.</InfoTip></span>
+          <select value={form.roundOff} disabled={busy} aria-describedby="round-off-help"
+            onChange={(e) => update({ roundOff: e.target.value as SettingsData["roundOff"] })}>
+            <option value="rupee">To the nearest ₹1</option>
+            <option value="half">To the nearest 50 paise</option>
+            <option value="off">No rounding (exact paise)</option>
+          </select>
+        </label>
       </fieldset>
 
       <fieldset className="bill-settings-group">

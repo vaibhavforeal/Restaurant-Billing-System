@@ -4,7 +4,7 @@ import { stars, todayKey } from "../crm";
 
 interface FeedbackRow {
   id: string; overall: number; food: number | null; service: number | null; ambience: number | null; comment: string | null;
-  source: "qr" | "staff"; createdAt: number; billNo: number; customerName: string | null; customerPhone: string | null; recordedBy: string | null;
+  source: "qr" | "staff"; createdAt: number; invoiceNo: string; customerName: string | null; customerPhone: string | null; recordedBy: string | null;
 }
 interface Summary { count: number; average: number | null; food: number | null; service: number | null; ambience: number | null }
 
@@ -46,7 +46,7 @@ export function CustomerFeedback() {
       </dl>
       <ul className="crm-feedback-list">{data.feedback.map((f) => <li key={f.id} className={f.overall <= 2 ? "crm-low" : ""}>
         <span className="crm-stars" aria-label={`${f.overall} out of 5`}>{stars(f.overall)}</span>{" "}
-        <strong>{f.customerName ?? "Walk-in"}</strong>{f.customerPhone ? ` · ${f.customerPhone}` : ""} · Bill #{f.billNo} · {new Date(f.createdAt).toLocaleString()}
+        <strong>{f.customerName ?? "Walk-in"}</strong>{f.customerPhone ? ` · ${f.customerPhone}` : ""} · Bill {f.invoiceNo} · {new Date(f.createdAt).toLocaleString()}
         {" · "}{f.source === "qr" ? "QR code" : `Recorded by ${f.recordedBy ?? "staff"}`}
         {(f.food || f.service || f.ambience) && <small className="muted"> · Food {f.food ?? "—"} · Service {f.service ?? "—"} · Ambience {f.ambience ?? "—"}</small>}
         {f.comment && <p>{f.comment}</p>}
