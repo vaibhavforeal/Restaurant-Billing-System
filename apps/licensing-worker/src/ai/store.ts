@@ -8,17 +8,23 @@ export interface AiUsageDay { day: string; requests: number; inputTokens: number
 /** The UTC day (YYYY-MM-DD) limits are counted in. */
 export const aiDay = (at: number) => new Date(at).toISOString().slice(0, 10);
 
-/** A counter with no row is off, with the default limit. */
-export async function getAiSettings(db: D1Like, installationId: string): Promise<AiSettingsRow> {
-  const row = await db.prepare(`SELECT enabled, daily_limit AS dailyLimit, updated_at AS updatedAt FROM ai_settings WHERE installation_id = ?`)
-    .bind(installationId).first<{ enabled: number; dailyLimit: number; updatedAt: number }>();
-  return row ? { enabled: row.enabled === 1, dailyLimit: row.dailyLimit, updatedAt: row.updatedAt } : { enabled: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, updatedAt: null };
+/**
+ * Whether the AI assistant is on for this counter in its current seat (`orderId`, null when it holds none), and its limit. A counter with
+ * no row is off with the default limit; a switch set for another seat (or none) counts as off.
+ */
+export async function getAiSettings(db: D1Like, installationId: string, orderId: string | null): Promise<AiSettingsRow> {
+  const row = await db.prepare(`SELECT enabled, order_id AS orderId, daily_limit AS dailyLimit, updated_at AS updatedAt FROM ai_settings WHERE installation_id = ?`)
+    .bind(installationId).first<{ enabled: number; orderId: string | null; dailyLimit: number; updatedAt: number }>();
+  if (!row) return { enabled: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, updatedAt: null };
+  return { enabled: row.enabled === 1 && orderId !== null && row.orderId === orderId, dailyLimit: row.dailyLimit, updatedAt: row.updatedAt };
 }
 
-export const setAiSettingsStatement = (db: D1Like, installationId: string, enabled: boolean, dailyLimit: number, at: number, by: string): D1StatementLike =>
-  db.prepare(`INSERT INTO ai_settings (installation_id, enabled, daily_limit, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(installation_id) DO UPDATE SET enabled = excluded.enabled, daily_limit = excluded.daily_limit, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
-    .bind(installationId, enabled ? 1 : 0, dailyLimit, at, by);
+/** Sets the switch for the counter's current seat (`orderId`). */
+export const setAiSettingsStatement = (db: D1Like, installationId: string, orderId: string | null, enabled: boolean, dailyLimit: number, at: number, by: string): D1StatementLike =>
+  db.prepare(`INSERT INTO ai_settings (installation_id, order_id, enabled, daily_limit, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(installation_id) DO UPDATE SET order_id = excluded.order_id, enabled = excluded.enabled, daily_limit = excluded.daily_limit,
+      updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+    .bind(installationId, orderId, enabled ? 1 : 0, dailyLimit, at, by);
 
 export async function usedOn(db: D1Like, installationId: string, day: string): Promise<number> {
   const row = await db.prepare(`SELECT requests FROM ai_usage WHERE installation_id = ? AND day = ?`).bind(installationId, day).first<{ requests: number }>();

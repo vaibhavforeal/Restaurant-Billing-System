@@ -11,12 +11,33 @@ import { createOpenRouter, DEFAULT_OPENROUTER_MODEL, ProviderError } from "./ope
 import { addTokens, aiDay, getAiSettings, releaseRequest, reserveRequest, usedOn } from "./store.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** Comfortably above the largest request the counter builds (AI_CHAT_LIMITS), so a body is never read without bound. */
+/** Comfortably above the largest request the counter builds (AI_CHAT_LIMITS); a bigger body is refused before it is all read. */
 const MAX_BODY_BYTES = 512 * 1024;
 /** Under the counter's own 75 s wait, so the counter hears the service's answer rather than timing out first. */
 const PROVIDER_TIMEOUT_MS = 65_000;
 
-type Authenticated = { ok: true; installationId: string } | { ok: false; response: Response };
+/** The body as text, or null once it is over `max` bytes: refused on its declared length, else read only until it passes the limit. */
+async function readCapped(request: Request, max: number): Promise<string | null> {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) { await reader.cancel().catch(() => undefined); return null; }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) { all.set(chunk, at); at += chunk.byteLength; }
+  return new TextDecoder().decode(all);
+}
+
+type Authenticated = { ok: true; installationId: string; orderId: string } | { ok: false; response: Response };
 
 /** The counter behind the request: a known installation with a matching secret, enrolled with a customer, with a licence still in grace. */
 export async function authenticateInstallation(deps: Deps, request: Request): Promise<Authenticated> {
@@ -28,14 +49,14 @@ export async function authenticateInstallation(deps: Deps, request: Request): Pr
   if (!installation.customerId || !installation.orderId) return { ok: false, response: json({ error: "not_enrolled", message: "This counter doesn't hold a seat on an order." }, 409) };
   const licence = await latestLicense(deps.db, installation.installationId);
   if (!licence || deps.now() >= licence.graceUntil) return { ok: false, response: json({ error: "licence_expired", message: "This counter's licence has ended." }, 403) };
-  return { ok: true, installationId: installation.installationId };
+  return { ok: true, installationId: installation.installationId, orderId: installation.orderId };
 }
 
 /** GET /v1/ai/status: costs no AI request. */
 export async function handleAiStatus(deps: Deps, request: Request): Promise<Response> {
   const auth = await authenticateInstallation(deps, request);
   if (!auth.ok) return auth.response;
-  const settings = await getAiSettings(deps.db, auth.installationId);
+  const settings = await getAiSettings(deps.db, auth.installationId, auth.orderId);
   const status: AiServiceStatus = { enabled: settings.enabled, dailyLimit: settings.dailyLimit, usedToday: await usedOn(deps.db, auth.installationId, aiDay(deps.now())) };
   return json(status);
 }
@@ -48,15 +69,15 @@ const RETRYABLE = new Set(["limit", "unavailable", "offline"]);
 export async function handleAiChat(deps: Deps, env: Env, request: Request): Promise<Response> {
   const auth = await authenticateInstallation(deps, request);
   if (!auth.ok) return auth.response;
-  const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) return json({ error: "bad_request", message: "That request is too large." }, 400);
+  const text = await readCapped(request, MAX_BODY_BYTES);
+  if (text === null) return json({ error: "payload_too_large", message: "That request is too large." }, 413);
   let body: unknown;
   try { body = JSON.parse(text); } catch { return json({ error: "bad_request" }, 400); }
   const parsed = AiChatRequest.safeParse(body);
   if (!parsed.success) return json({ error: "bad_request", message: "That AI request isn't in the expected form." }, 400);
 
   const { installationId } = auth;
-  const settings = await getAiSettings(deps.db, installationId);
+  const settings = await getAiSettings(deps.db, installationId, auth.orderId);
   if (!settings.enabled) return json({ error: "ai_not_enabled", message: "The AI assistant isn't switched on for this restaurant." }, 403);
   if (!env.OPENROUTER_API_KEY) return json({ error: "ai_unavailable", message: "The AI service isn't set up." }, 503);
   const day = aiDay(deps.now());
@@ -71,9 +92,9 @@ export async function handleAiChat(deps: Deps, env: Env, request: Request): Prom
     // zod reads optional fields as `T | undefined`; the parsed request is an AiRequest.
     reply = await provider.chat(parsed.data as AiRequest);
   } catch (error) {
-    // A request the provider refused or never got costs nothing, so it is given back. One it answered (even uselessly) may have been
-    // charged, so it stays counted; otherwise empty replies would be a way around the daily limit.
-    if (!(error instanceof ProviderError) || error.code !== "no_answer") await releaseRequest(deps.db, installationId, day);
+    // A request the provider refused or never got costs nothing, so it is given back. One it may have worked on (a timeout, or an
+    // unusable answer) stays counted; otherwise those would be a way around the daily limit.
+    if (!(error instanceof ProviderError && error.mayBeCharged)) await releaseRequest(deps.db, installationId, day);
     if (!(error instanceof ProviderError)) throw error;
     // The provider's own message stays in the log: it can name MasalaPOS's account, so it never reaches the counter.
     console.warn(`licensing-worker: AI request failed: ${error.code}${error.detail ? ` (${error.detail.slice(0, 200)})` : ""}`);

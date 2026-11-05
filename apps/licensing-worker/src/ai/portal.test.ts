@@ -65,6 +65,27 @@ describe("the AI assistant in the portal", () => {
     expect((await detail()).ai.enabled).toBe(false);
   });
 
+  it("releasing a seat switches the AI assistant off, and a counter that gets a seat again starts off", async () => {
+    const { installation } = await admin.ok<{ installation: InstallationDetail }>("GET", `/installations/${COUNTER}`);
+    await admin.ok("PATCH", `/installations/${COUNTER}/ai`, { enabled: true, dailyLimit: 25, expectedUpdatedAt: installation.ai.updatedAt });
+    await admin.ok("POST", `/installations/${COUNTER}/release`);
+    expect((await detail()).ai.enabled).toBe(false);
+    expect((await admin.call("PATCH", `/installations/${COUNTER}/ai`, { enabled: true, dailyLimit: 25, expectedUpdatedAt: (await detail()).ai.updatedAt })).status).toBe(409);
+    // The saved switch stays on, but it was for the old seat: activated again on a new order, the counter starts off.
+    const customer = (await env.DB.prepare(`SELECT c.id, c.code FROM customers c JOIN installations i ON i.customer_id = c.id WHERE i.installation_id = ?`).bind(COUNTER).first<{ id: string; code: string }>())!;
+    const order = await seedOrder(env.DB, customer);
+    expect((await send(env, "POST", "/v1/enroll", { activation: activation(COUNTER, fingerprint), customerId: customer.code, orderId: order.code }, withSecret())).status).toBe(200);
+    expect((await detail()).ai.enabled).toBe(false);
+  });
+
+  it("a replacement computer never keeps an AI setting of its own", async () => {
+    const NEW = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    await createInstallation(env.DB, { installationId: NEW, licenseId: crypto.randomUUID(), organizationId: crypto.randomUUID(), outletId: crypto.randomUUID(), revisionFloor: 0, createdAt: Date.now(), secretHash: null });
+    await env.DB.prepare(`INSERT INTO ai_settings (installation_id, enabled, daily_limit, updated_at) VALUES (?, 1, 999, ?)`).bind(NEW, Date.now()).run();
+    await admin.ok("POST", `/installations/${COUNTER}/replace`, { installationId: NEW });
+    expect((await admin.ok<{ installation: InstallationDetail }>("GET", `/installations/${NEW}`)).installation.ai).toMatchObject({ enabled: false, dailyLimit: 40 });
+  });
+
   it("shows today's use and the last 7 days' requests and tokens", async () => {
     const yesterday = aiDay(T0 - 86_400_000);
     await reserveRequest(env.DB, COUNTER, yesterday, 40);

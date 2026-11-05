@@ -68,13 +68,13 @@ async function detail(ctx: Ctx, installation: InstallationRow): Promise<Installa
     ...summary!, modulesUpdatedAt: settings.updatedAt,
     modules: MODULES.map((m) => ({ id: m.id, name: m.name, group: m.group, description: m.description, inPlan: m.plans[plan], override: settings.overrides[m.id] ?? null, allowed: allowed[m.id] })),
     moduleEvents: await ownerEvents(ctx.deps.db, installation.installationId, 50),
-    ai: await aiFor(ctx, installation.installationId),
+    ai: await aiFor(ctx, installation),
   };
 }
 
-async function aiFor(ctx: Ctx, installationId: string): Promise<InstallationDetail["ai"]> {
-  const settings = await getAiSettings(ctx.deps.db, installationId);
-  const usage = await usageHistory(ctx.deps.db, installationId, aiDay(ctx.deps.now()), 7);
+async function aiFor(ctx: Ctx, installation: InstallationRow): Promise<InstallationDetail["ai"]> {
+  const settings = await getAiSettings(ctx.deps.db, installation.installationId, installation.orderId);
+  const usage = await usageHistory(ctx.deps.db, installation.installationId, aiDay(ctx.deps.now()), 7);
   return { ...settings, usedToday: usage[0]!.requests, usage };
 }
 
@@ -140,11 +140,12 @@ export const installationsRoutes: Route[] = [
   { method: "PATCH", path: path("/installations/:id/ai"), permission: "licences.manage", handler: async (ctx) => {
     const installation = await visibleInstallation(ctx, ctx.params[0]!);
     const change = await readBody(ctx.request, AiChange);
-    const current = await getAiSettings(ctx.deps.db, installation.installationId);
+    const current = await getAiSettings(ctx.deps.db, installation.installationId, installation.orderId);
+    if (change.enabled && !installation.orderId) throw conflict("This counter doesn't hold a seat, so the AI assistant can't be switched on for it.", "not_enrolled");
     if (change.expectedUpdatedAt !== current.updatedAt) throw conflict("Someone else changed this counter's AI assistant. Reload and try again.", "stale");
     const { db } = ctx.deps;
     await db.batch([
-      setAiSettingsStatement(db, installation.installationId, change.enabled, change.dailyLimit, ctx.deps.now(), ctx.user.id),
+      setAiSettingsStatement(db, installation.installationId, installation.orderId, change.enabled, change.dailyLimit, ctx.deps.now(), ctx.user.id),
       logBy(ctx, { action: "installation.ai", entityType: "installation", entityId: installation.installationId, customerId: installation.customerId,
         summary: `${label(installation)}: AI assistant ${change.enabled ? "on" : "off"}, ${change.dailyLimit} requests a day` }),
     ]);
@@ -231,12 +232,11 @@ export const installationsRoutes: Route[] = [
       db.prepare(`UPDATE installations SET customer_id = ?, order_id = ?, max_devices = ?, activated_at = ?, outlet_name = ? WHERE installation_id = ?`)
         .bind(next.customerId, next.orderId, next.maxDevices, now, next.outletName, next.installationId),
       setOverridesStatement(db, next.installationId, overrides, now),
-      // The AI assistant follows the seat: the new computer gets the old one's switch and limit, and the old one is switched off.
-      db.prepare(`INSERT INTO ai_settings (installation_id, enabled, daily_limit, updated_at, updated_by)
-          SELECT ?, enabled, daily_limit, ?, ? FROM ai_settings WHERE installation_id = ?
-        ON CONFLICT(installation_id) DO UPDATE SET enabled = excluded.enabled, daily_limit = excluded.daily_limit, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
-        .bind(next.installationId, now, ctx.user.id, old.installationId),
-      db.prepare(`UPDATE ai_settings SET enabled = 0, updated_at = ?, updated_by = ? WHERE installation_id = ?`).bind(now, ctx.user.id, old.installationId),
+      // The AI assistant follows the seat: the new computer gets the old one's switch and limit, or the default (off) when it had none.
+      // The old computer no longer holds the seat, so its switch no longer counts.
+      db.prepare(`DELETE FROM ai_settings WHERE installation_id = ?`).bind(next.installationId),
+      db.prepare(`INSERT INTO ai_settings (installation_id, order_id, enabled, daily_limit, updated_at, updated_by)
+          SELECT ?, order_id, enabled, daily_limit, ?, ? FROM ai_settings WHERE installation_id = ?`).bind(next.installationId, now, ctx.user.id, old.installationId),
       statement,
       db.prepare(`UPDATE OR IGNORE order_installations SET installation_id = ? WHERE installation_id = ? AND order_id IN (SELECT id FROM orders WHERE status IN ('draft', 'confirmed'))`)
         .bind(next.installationId, old.installationId),

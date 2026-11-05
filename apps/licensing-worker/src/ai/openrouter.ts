@@ -3,7 +3,8 @@ import type { AiErrorCode, AiMessage, AiReply, AiRequest, AiToolCall } from "@ma
 
 /** A provider failure; `detail` is for the service's log, never for the counter. */
 export class ProviderError extends Error {
-  constructor(readonly code: AiErrorCode, readonly detail = "") { super(`${code}${detail ? `: ${detail}` : ""}`); this.name = "ProviderError"; }
+  /** `mayBeCharged`: the provider may have done (and billed) the work: it timed out mid-request, or answered with nothing usable. */
+  constructor(readonly code: AiErrorCode, readonly detail = "", readonly mayBeCharged = false) { super(`${code}${detail ? `: ${detail}` : ""}`); this.name = "ProviderError"; }
 }
 export interface ChatProvider { chat(request: AiRequest): Promise<AiReply> }
 
@@ -74,7 +75,9 @@ export function createOpenRouter(opts: { apiKey: string; model: string; fallback
         signal: AbortSignal.timeout(timeout),
       });
     } catch (error) {
-      throw new ProviderError("offline", error instanceof Error ? error.message : String(error));
+      // A connection that never opened costs nothing; one that timed out may have been worked on.
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      throw new ProviderError("offline", error instanceof Error ? error.message : String(error), timedOut);
     }
     const json = await res.json().catch(() => ({})) as WireReply;
     if (!res.ok) throw failure(res.status, json.error?.message ?? res.statusText);
@@ -92,7 +95,7 @@ export function createOpenRouter(opts: { apiKey: string; model: string; fallback
     const message = Array.isArray(json.choices) ? json.choices[0]?.message : undefined;
     const text = textOf(message?.content);
     const toolCalls = toolCallsOf(message?.tool_calls);
-    if (!text && !toolCalls.length) throw new ProviderError("no_answer", "empty reply");
+    if (!text && !toolCalls.length) throw new ProviderError("no_answer", "empty reply", true);
     return { text, toolCalls, model: json.model ?? opts.model, usage: { inputTokens: json.usage?.prompt_tokens ?? 0, outputTokens: json.usage?.completion_tokens ?? 0 } };
   }
 

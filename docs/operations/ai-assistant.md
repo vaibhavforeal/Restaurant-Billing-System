@@ -24,7 +24,7 @@ Billing, KOTs and everything else never depend on it. When the assistant is off 
    - with `OPENROUTER_API_KEY`
    - asking for `OPENROUTER_MODEL` (default `google/gemma-4-31b-it:free`)
    - with `openrouter/free` as a second choice unless `OPENROUTER_FALLBACK=off`
-4. It records the request and its tokens for that counter and UTC day. A failed request isn't counted.
+4. It records the request and its tokens for that counter and UTC day. A request OpenRouter refused or never received isn't counted; one it timed out on or answered with nothing usable is (it may have been charged).
 5. The hub caches what the service says (on or off, the limit, today's use). It refreshes that at start, when the cache is older than 15 minutes, when an admin presses **Check**, and after every AI request.
 
 ## Switching a restaurant on (portal)
@@ -32,6 +32,8 @@ Billing, KOTs and everything else never depend on it. When the assistant is off 
 1. Open the counter in the portal: from its customer's page, or search for the Installation ID.
 2. In **AI assistant**, tick **On for this counter** and set **Requests a day**: 40 by default, 1 to 1,000.
 3. Press **Save AI assistant**. This needs an admin, and the change goes into the activity log.
+
+The switch belongs to the counter's **seat**: if the seat is released, or the counter is activated again on another order, the assistant is off until switched on again. A replacement computer takes over the old one's setting with the seat.
 
 The counter picks it up within 15 minutes, or at once when the restaurant's admin presses **Check** in **Settings → Restaurant profile → AI assistant**.
 

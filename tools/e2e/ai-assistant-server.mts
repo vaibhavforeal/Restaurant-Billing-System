@@ -24,8 +24,10 @@ const order = await seedOrder(env.DB, customer);
 const enrolled = await send(env, "POST", "/v1/enroll", { activation: activation(installationId, await keys.fingerprint(), { outletName: "Spice Route Baner" }), customerId: customer.code, orderId: order.code }, withSecret());
 if (enrolled.status !== 200) throw new Error(`enrol failed: ${enrolled.status} ${await enrolled.text()}`);
 const service: Server = createApp(worker, env).listen(4162, "127.0.0.1");
-const setAi = (enabled: boolean, limit: number) => env.DB.prepare(`INSERT INTO ai_settings (installation_id, enabled, daily_limit, updated_at) VALUES (?, ?, ?, ?)
-  ON CONFLICT(installation_id) DO UPDATE SET enabled = excluded.enabled, daily_limit = excluded.daily_limit, updated_at = excluded.updated_at`).bind(installationId, enabled ? 1 : 0, limit, Date.now()).run();
+const setAi = (enabled: boolean, limit: number) => env.DB.prepare(`INSERT INTO ai_settings (installation_id, order_id, enabled, daily_limit, updated_at)
+    VALUES (?, (SELECT order_id FROM installations WHERE installation_id = ?), ?, ?, ?)
+  ON CONFLICT(installation_id) DO UPDATE SET order_id = excluded.order_id, enabled = excluded.enabled, daily_limit = excluded.daily_limit, updated_at = excluded.updated_at`)
+  .bind(installationId, installationId, enabled ? 1 : 0, limit, Date.now()).run();
 
 createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1:4163");

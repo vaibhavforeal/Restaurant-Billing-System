@@ -5,7 +5,8 @@ import { INSTALLATION_HEADER } from "../live/authorize.js";
 import { sha256Hex } from "../secret.js";
 import { createInstallation } from "../store.js";
 import { seedCustomer, seedOrder } from "../testing/fixtures.js";
-import { activation, keyPair, send, testEnv, withSecret } from "../testing/harness.js";
+import { activation, keyPair, ORIGIN, send, testEnv, withSecret } from "../testing/harness.js";
+import worker from "../index.js";
 import { TEST_SECRET } from "../testing/secret.js";
 import { DEFAULT_OPENROUTER_MODEL, OPENROUTER_FALLBACK } from "./openrouter.js";
 
@@ -24,8 +25,9 @@ const counter = (id = installationId, secret = TEST_SECRET) => ({ [INSTALLATION_
 const chat = (body: unknown = chatBody, headers: Record<string, string> = counter()) => send(env, "POST", "/v1/ai/chat", body, headers);
 const status = (headers: Record<string, string> = counter()) => send(env, "GET", "/v1/ai/status", undefined, headers);
 const switchOn = (dailyLimit = 40, id = installationId) =>
-  env.DB.prepare(`INSERT INTO ai_settings (installation_id, enabled, daily_limit, updated_at) VALUES (?, 1, ?, ?)
-    ON CONFLICT(installation_id) DO UPDATE SET enabled = 1, daily_limit = excluded.daily_limit`).bind(id, dailyLimit, Date.now()).run();
+  env.DB.prepare(`INSERT INTO ai_settings (installation_id, order_id, enabled, daily_limit, updated_at)
+      VALUES (?, (SELECT order_id FROM installations WHERE installation_id = ?), 1, ?, ?)
+    ON CONFLICT(installation_id) DO UPDATE SET enabled = 1, order_id = excluded.order_id, daily_limit = excluded.daily_limit`).bind(id, id, dailyLimit, Date.now()).run();
 
 beforeAll(async () => { vi.useFakeTimers({ toFake: ["Date"] }); fingerprint = await keys.fingerprint(); });
 beforeEach(async () => {
@@ -129,6 +131,29 @@ describe("POST /v1/ai/chat", () => {
     answer = () => [200, { model: "m", choices: [{ message: { content: "" } }], usage: { prompt_tokens: 900, completion_tokens: 1 } }];
     expect(await (await chat()).json()).toMatchObject({ error: "ai_no_answer" });
     expect(await (await status()).json()).toMatchObject({ usedToday: 1 });
+  });
+
+  it("counts a request the provider timed out on, but not one that never reached it", async () => {
+    await switchOn(5);
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed"); });
+    expect((await chat()).status).toBe(503);
+    expect(await (await status()).json()).toMatchObject({ usedToday: 0 });
+    vi.stubGlobal("fetch", async () => { throw Object.assign(new Error("The operation timed out."), { name: "TimeoutError" }); });
+    expect((await chat()).status).toBe(503);
+    expect(await (await status()).json()).toMatchObject({ usedToday: 1 });
+  });
+
+  it("refuses an oversized body without reading past the limit", async () => {
+    await switchOn();
+    const declared = await send(env, "POST", "/v1/ai/chat", chatBody, { ...counter(), "content-length": String(10 * 1024 * 1024) });
+    expect(declared.status).toBe(413);
+    let pulled = 0;
+    const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
+    const endless = new ReadableStream<Uint8Array>({ pull(controller) { pulled++; controller.enqueue(chunk); } });
+    const streamed = await worker.fetch(new Request(`${ORIGIN}/v1/ai/chat`, { method: "POST", body: endless, headers: counter(), duplex: "half" } as RequestInit), env);
+    expect(streamed.status).toBe(413);
+    expect(pulled).toBeLessThan(20);
+    expect(sent).toHaveLength(0);
   });
 
   it("refuses a counter whose seat was released or handed to another computer", async () => {
