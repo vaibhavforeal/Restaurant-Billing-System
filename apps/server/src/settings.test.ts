@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "",
+      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", receiptHeader: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "",
     });
 
     const put = await app.inject({
@@ -31,6 +31,26 @@ describe("settings", () => {
 
     const after = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
     expect(after.json().settings).toMatchObject({ gstin: "29ABCDE1234F1Z5", receiptFooter: "Thank you, visit again!" });
+  });
+
+  it("saves bill header lines and print toggles, and keeps toggles a PUT leaves out", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const put = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token),
+      payload: { restaurantName: "Cafe", address: "FC Road", receiptHeader: "Pure veg\nSince 1998", billShowFssai: false, billShowServedBy: true } });
+    expect(put.statusCode, put.body).toBe(200);
+    const get = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
+    expect(get.json().settings).toMatchObject({ receiptHeader: "Pure veg\nSince 1998", billShowFssai: false, billShowServedBy: true, billShowCustomer: true, billShowTable: true, billShowItemGst: false });
+    const partial = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe", address: "FC Road" } });
+    expect(partial.json().settings).toMatchObject({ billShowFssai: false, billShowServedBy: true });
+  });
+
+  it("refuses a footer of 4 lines with a 400", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const put = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token),
+      payload: { restaurantName: "Cafe", address: "FC Road", receiptFooter: "a\nb\nc\nd" } });
+    expect(put.statusCode).toBe(400);
   });
 
   it("updates city, state, PIN code and phone, and keeps them when a PUT leaves them out", async () => {
