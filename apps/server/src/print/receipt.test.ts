@@ -204,12 +204,21 @@ describe("receipts", () => {
       expect(html).toContain('class="header-line">Pure veg'); expect(html).toContain('class="header-line">Since 1998');
     });
     it("prints each footer line and drops the default thank-you", () => {
-      const sample = withReceipt({ receiptFooter: "Line one\nLine two" });
+      const sample = withReceipt({ receiptHeader: "", receiptFooter: "Line one\nLine two" });
       for (const rendered of [receiptHtml(sample), thermal(sample, 58), thermal(sample, 80)]) {
         expect(rendered).toContain("Line one"); expect(rendered).toContain("Line two");
         expect(rendered).not.toContain("Thank you for visiting");
       }
-      expect(thermal(withReceipt({ receiptFooter: " \n " }), 58)).toContain("Thank you for visiting");
+      expect(thermal(withReceipt({ receiptHeader: "", receiptFooter: " \n " }), 58)).toContain("Thank you for visiting");
+    });
+    it("reprints a legacy snapshot's footer raw, exactly as before", () => {
+      const legacy = withReceipt({ receiptFooter: "Line one\n\n    Indented" });
+      expect(legacy.receipt.receiptHeader).toBeUndefined();
+      expect(receiptHtml(legacy)).toContain("<footer>Line one\n\n    Indented</footer>");
+      const trimmed = receiptHtml(withReceipt({ receiptHeader: "", receiptFooter: "Line one\n\n    Indented" }));
+      expect(trimmed).toContain("<footer>Line one\nIndented</footer>");
+      const text = thermal(legacy, 80);
+      expect(text).toContain("Line one"); expect(text).toContain("Indented");
     });
     it("hides FSSAI, customer and table when switched off, and shows them otherwise", () => {
       const base = withReceipt({ customer });

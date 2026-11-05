@@ -30,10 +30,15 @@ export function buyerLines(r: Bill["receipt"]): string[] {
   if (!b) return [];
   return [`Billed to: ${b.name}`, `GSTIN: ${b.gstin}`, ...(b.address ? [b.address] : []), `Place of supply: ${b.stateName} (${b.stateCode})`];
 }
-/** The footer's saved lines, or the default thank-you when there are none. */
+const DEFAULT_FOOTER = "Thank you for visiting. Please come again.";
+/**
+ * The footer's printable lines. A bill issued before Bill settings has no receiptHeader (new bills always carry it) and
+ * reprints its footer exactly as it always did, raw; newer bills print trimmed, non-blank lines.
+ */
 const footerLines = (bill: Bill) => {
+  if (bill.receipt.receiptHeader === undefined) return [bill.receipt.receiptFooter || DEFAULT_FOOTER];
   const lines = billTextLines(bill.receipt.receiptFooter ?? "");
-  return lines.length ? lines : ["Thank you for visiting. Please come again."];
+  return lines.length ? lines : [DEFAULT_FOOTER];
 };
 const paymentModes = (bill: Bill) => [...new Set(bill.payments.map((p) => p.mode.toUpperCase()))].join(" + ");
 // The declaration a composition-scheme bill of supply must carry.
@@ -50,9 +55,9 @@ function billHeading(r: Bill["receipt"]): { thermal: string; html: string; decla
   if (r.gstin.trim()) return { thermal: "BILL OF SUPPLY", html: "Bill of supply", declaration: compositionNote };
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
-/** The per-rate GST shown after the total: only a tax invoice carries it. */
 const chargesGst = (r: Bill["receipt"]) => r.gstPaidBy !== "zomato" && r.gstMode === "included";
-const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && bill.receipt.gstMode === "included" ? bill.taxes : [];
+/** The per-rate GST shown after the total: only a tax invoice carries it. */
+const includedGst = (bill: Bill) => chargesGst(bill.receipt) ? bill.taxes : [];
 
 function wrapText(value: string, width: number): string[] {
   return value.split(/\r?\n/).flatMap((part) => {
