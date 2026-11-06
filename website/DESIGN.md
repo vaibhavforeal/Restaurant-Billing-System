@@ -30,6 +30,9 @@ Reference: `reference/petpooja/` (extracted 2026-11-06). Their order: hero, logo
 ## Recommendation
 Direction A. It is the only idea here a competitor could not copy, and it ties the orange to the name. If you want a calmer, more explanatory page, choose B.
 
+## Phase 2 status
+Screenshots are captured and listed in `SHOTS.md` (seven kept, three deleted for naming aggregators, five still to capture, including the hero bill screen).
+
 ## Still open
 - Orange logo variant for the site (red mark stays unless approved).
 - Final type family and hex values: dealt at the start of Phase 3 with `--keep` for the orange.
