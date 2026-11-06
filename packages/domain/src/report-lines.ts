@@ -40,8 +40,15 @@ export function saveReportLines(db: Database, billId: string) {
   const taxes = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_taxes WHERE bill_id = ?").all(billId) as Array<{
     gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number;
   }>;
+  // Charges carry their own tax and no rounding: take it out of the rate's row so only the items' share is spread over item lines.
+  const charges = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_charges WHERE bill_id = ?").all(billId) as typeof taxes;
+  for (const charge of charges) {
+    const row = taxes.find((tax) => tax.gst_rate === charge.gst_rate);
+    if (row) { row.taxable_paise -= charge.taxable_paise; row.cgst_paise -= charge.cgst_paise; row.sgst_paise -= charge.sgst_paise; }
+  }
   for (const tax of taxes) {
     const group = lines.filter((line) => line.rate === tax.gst_rate);
+    if (!group.length) continue;
     const weights = group.map((line) => line.subtotal);
     const discount = weights.reduce((sum, n) => sum + n, 0) - tax.taxable_paise - (taxOnTop ? 0 : tax.cgst_paise + tax.sgst_paise);
     const discounts = allocatePaise(discount, weights);

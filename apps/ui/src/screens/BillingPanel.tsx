@@ -207,7 +207,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     setPreview(value);
     setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
-    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, ...(pin ? { approverPin: pin } : {}) };
+    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge: true, ...(pin ? { approverPin: pin } : {}) };
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");

@@ -23,6 +23,8 @@ export const BillPreview = z.object({
   redeemPoints: z.number().int().min(0).max(1_000_000).default(0),
   /** The business buyer for a GST (B2B) invoice; null for a walk-in customer. */
   buyer: BuyerDetails.nullable().default(null),
+  /** Cashier's choice to keep the service charge; false removes it from a dine-in bill. */
+  serviceCharge: z.boolean().default(true),
 }).superRefine((v, ctx) => {
   if (v.discountPaise > 0 && !v.discountNote) ctx.addIssue({ code: "custom", message: "Discount reason required", path: ["discountNote"] });
 });
@@ -81,6 +83,10 @@ export interface ReceiptSnapshot {
   zomatoOrderId?: string;
   /** The restaurant's own order type (e.g. "Home delivery") on a takeaway order; absent for the built-in types. */
   orderTypeName?: string;
+  /** The kind of the order's type; decides which charge applied. Absent on bills issued before charges. */
+  orderTypeKind?: "dine_in" | "takeaway" | "delivery" | "aggregator";
+  /** Set when the service charge was due but the cashier removed it. */
+  serviceChargeRemoved?: true;
   /** The order's customer, with the discount and points this bill gave them. Absent when no customer was attached. */
   customer?: ReceiptCustomer;
   /** Set when the platform collects and pays the GST (section 9(5)). */

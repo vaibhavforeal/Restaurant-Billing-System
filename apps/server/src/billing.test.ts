@@ -385,4 +385,86 @@ describe("billing and day-end", () => {
       expect(qr.payment.invoiceNo).toBe(bill.invoiceNo);
     });
   });
+
+  describe("service and packaging charges", () => {
+    const charges = { serviceChargeBp: 1000, packagingChargePaise: 2000 };
+    const post = (orderId: string, payload: object) => app.inject({ method: "POST", url: `/api/orders/${orderId}/bill`, headers: auth(token), payload });
+    const previewOf = async (orderId: string, extra: object = {}) => (await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill-preview`, headers: auth(token), payload: extra })).json().preview;
+    async function dineIn(empty = false) {
+      const table = (await app.inject({ method: "POST", url: "/api/tables", headers: auth(token), payload: { name: `T${uuidv7().slice(-6)}` } })).json().table.id as string;
+      return order(table, empty);
+    }
+    async function customParcel(kind: "delivery" | "takeaway") {
+      const type = (await app.inject({ method: "POST", url: "/api/order-types", headers: auth(token), payload: { name: `Custom ${kind}`, kind } })).json().orderType.id as string;
+      const id = await order();
+      app.db.prepare("UPDATE orders SET order_type_id = ? WHERE id = ?").run(type, id);
+      return id;
+    }
+    beforeEach(async () => { expect((await putSettings(charges)).statusCode).toBe(200); });
+
+    it("charges service on dine-in and packaging on takeaway and delivery parcels, and records the order kind", async () => {
+      const dine = await issue(await dineIn());
+      expect(dine.charges).toEqual([{ kind: "service", label: "Service charge", percentBp: 1000, gstRate: 5, amountPaise: 1050, taxablePaise: expect.any(Number), cgstPaise: expect.any(Number), sgstPaise: expect.any(Number) }]);
+      expect(dine.receipt.orderTypeKind).toBe("dine_in");
+      expect(app.db.prepare("SELECT charges_paise FROM bills WHERE id = ?").get(dine.id)).toEqual({ charges_paise: 1050 });
+      const takeaway = await issue(await order());
+      expect(takeaway.charges!.map((c) => [c.kind, c.amountPaise, c.percentBp])).toEqual([["packaging", 2000, undefined]]);
+      expect(takeaway.receipt.orderTypeKind).toBe("takeaway");
+      const delivery = await issue(await customParcel("delivery"));
+      expect(delivery.charges!.map((c) => c.kind)).toEqual(["packaging"]);
+      expect(delivery.receipt.orderTypeKind).toBe("delivery");
+    });
+    it("lets the cashier remove the service charge, with a different preview key, and records it", async () => {
+      const id = await dineIn();
+      const kept = await previewOf(id), removed = await previewOf(id, { serviceCharge: false });
+      expect(kept.charges).toHaveLength(1); expect(removed.charges).toEqual([]);
+      expect(removed.previewKey).not.toBe(kept.previewKey);
+      expect((await post(id, { clientRef: uuidv7(), previewKey: kept.previewKey, serviceCharge: false })).statusCode).toBe(409);
+      const res = await post(id, { clientRef: uuidv7(), previewKey: removed.previewKey, serviceCharge: false });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().bill.charges).toEqual([]);
+      expect(res.json().bill.receipt.serviceChargeRemoved).toBe(true);
+    });
+    it("refuses a preview taken before a charge setting changed", async () => {
+      const id = await dineIn(); const key = (await previewOf(id)).previewKey;
+      expect((await putSettings({ serviceChargeBp: 500 })).statusCode).toBe(200);
+      const res = await post(id, { clientRef: uuidv7(), previewKey: key });
+      expect(res.statusCode).toBe(409); expect(res.json().error).toBe("Order changed; review a fresh bill preview");
+    });
+    it("reprints the same charges and labels after the settings are cleared", async () => {
+      await putSettings({ serviceChargeLabel: "Service" });
+      const bill = await issue(await dineIn());
+      await putSettings({ serviceChargeBp: 0, packagingChargePaise: 0 });
+      const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill as Bill;
+      expect(stored.charges).toEqual(bill.charges); expect(stored.charges![0]).toMatchObject({ label: "Service", percentBp: 1000 });
+    });
+    it("includes the charge tax in the day report on an exclusive bill", async () => {
+      await putSettings({ ...charges, gstMode: "exclusive" });
+      const bill = await issue(await dineIn());
+      // 10500 + 1050 service; CGST = SGST = round-half-up(0.025 * 11550) = 289 (288.75).
+      expect(bill).toMatchObject({ cgstPaise: 289, sgstPaise: 289 });
+      const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+      expect(day.sales.totalPaise).toBe(bill.totalPaise);
+      expect(day.taxes).toEqual([{ gstRate: 5, taxablePaise: 11550, cgstPaise: 289, sgstPaise: 289 }]);
+    });
+    it("keeps report lines adding up with the charges in every GST mode, with no line for a charge", async () => {
+      const category = (await app.inject({ url: "/api/categories", headers: auth(token) })).json().categories[0].id as string;
+      const soda = (await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Soda", categoryId: category, pricePaise: 9013, gstRate: 18, kotStationId: null } })).json().product.id as string;
+      for (const gstMode of ["included", "exclusive", "none"]) {
+        await putSettings({ ...charges, gstMode, gstRate: 18 });
+        for (const dine of [true, false]) {
+          const id = dine ? await dineIn(true) : await order(undefined, true);
+          await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId, qty: 1, clientRef: uuidv7() }, { productId: soda, qty: 2, clientRef: uuidv7() }] } });
+          const bill = (await post(id, await billRequest(id, { discountPaise: 4603, discountNote: "Regular" }))).json().bill as Bill;
+          expect(bill.charges, gstMode).toHaveLength(1);
+          const lines = app.db.prepare("SELECT discount_paise AS d, total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ d: number; total: number }>;
+          expect(lines, gstMode).toHaveLength(2);
+          for (const line of lines) expect(line.d, gstMode).toBeGreaterThanOrEqual(0);
+          expect(lines.reduce((sum, l) => sum + l.d, 0), gstMode).toBe(4603);
+          const chargeTotal = bill.charges!.reduce((sum, c) => sum + c.taxablePaise + c.cgstPaise + c.sgstPaise, 0);
+          expect(lines.reduce((sum, l) => sum + l.total, 0) + chargeTotal, gstMode).toBe(bill.totalPaise);
+        }
+      }
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { uuidv7 } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
 import { nextZomatoStatus } from "./zomato-desk.js";
+import { loadBill } from "./billing.js";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => { await app?.close(); });
@@ -259,6 +260,19 @@ describe("Zomato status and Picked up", () => {
     const res = await setStatus(admin.token, order.id, "ready");
     expect(res.statusCode).toBe(409);
     expect(res.json().code).toBe("zomato_status");
+  });
+
+  it("adds no service or packaging charge to a Zomato bill", async () => {
+    const admin = await setup();
+    app.db.prepare("UPDATE settings SET service_charge_bp = 1000, packaging_charge_paise = 2000 WHERE id = 1").run();
+    const order = await zomatoOrder(admin.token);
+    setDbStatus(order.id, "ready");
+    const res = await setStatus(admin.token, order.id, "picked_up");
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().bill.charges).toEqual([]);
+    const bill = app.db.prepare("SELECT id FROM bills WHERE order_id = ?").get(order.id) as { id: string };
+    expect(count("SELECT COUNT(*) n FROM bill_charges WHERE bill_id = ?", bill.id)).toBe(0);
+    expect(loadBill(app.db, bill.id).charges).toEqual([]);
   });
 
   it("refuses Picked up before Ready", async () => {
