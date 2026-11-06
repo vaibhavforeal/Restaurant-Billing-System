@@ -106,7 +106,7 @@ export function operationalReport(db: Database, kind: OperationalReportKind, ran
           FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.created_at >= ? AND b.created_at < ?
           UNION ALL
           SELECT COALESCE(o.order_type_id, o.type), 0, 0, 0, -(c.cgst_paise + c.sgst_paise),
-            -COALESCE((SELECT SUM(bc.amount_paise) FROM credit_note_charges cc JOIN bill_charges bc ON bc.bill_id = c.bill_id AND bc.kind = cc.kind WHERE cc.credit_note_id = c.id), 0), -c.total_paise, c.total_paise
+            -COALESCE((SELECT SUM(cc.amount_paise) FROM credit_note_charges cc WHERE cc.credit_note_id = c.id), 0), -c.total_paise, c.total_paise
           FROM credit_notes c JOIN bills b ON b.id = c.bill_id JOIN orders o ON o.id = b.order_id WHERE c.created_at >= ? AND c.created_at < ?)
         SELECT COALESCE(t.name, e.typeId) AS orderType, CASE t.kind WHEN 'dine_in' THEN 'Dine-in' WHEN 'takeaway' THEN 'Takeaway' WHEN 'delivery' THEN 'Delivery' WHEN 'aggregator' THEN 'Aggregator' ELSE '' END AS kind,
           SUM(e.bills) AS bills, SUM(e.subtotal) AS subtotal, SUM(e.discount) AS discount, SUM(e.gst) AS gst, SUM(e.charges) AS charges, SUM(e.credit) AS credit, SUM(e.total) AS total

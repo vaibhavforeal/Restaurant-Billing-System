@@ -860,4 +860,109 @@ describe("credit preview, approval and bill credit data", () => {
       expect((await billJson(b.id)).creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(b.totalPaise);
     });
   });
+
+  describe("per-item packaging on credit notes", () => {
+    /** A paid takeaway bill: 2 biryanis with ₹10 packaging each, 1 thali with none, ₹5 flat — packaging charge 2500. */
+    async function packedBill(): Promise<{ b: Bill; biryani: string; thali: string }> {
+      const settings = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token),
+        payload: { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", gstMode: "exclusive", packagingChargePaise: 500, packagingPerItem: true } });
+      expect(settings.statusCode, settings.body).toBe(200);
+      const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token),
+        payload: { name: "Biryani", categoryId, pricePaise: 20000, gstRate: 5, kotStationId: null, packagingPaise: 1000 } });
+      expect(product.statusCode, product.body).toBe(201);
+      const created = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } });
+      const orderId = created.json().order.id as string;
+      const add = await app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers: auth(admin.token),
+        payload: { items: [{ productId: product.json().product.id, qty: 2, clientRef: uuidv7() }, { productId, qty: 1, clientRef: uuidv7() }] } });
+      expect(add.statusCode, add.body).toBe(200);
+      const prev = await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill-preview`, headers: auth(admin.token), payload: {} });
+      const issued = await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill`, headers: auth(admin.token), payload: { clientRef: uuidv7(), previewKey: prev.json().preview.previewKey } });
+      expect(issued.statusCode, issued.body).toBe(201);
+      const unpaid = issued.json().bill as Bill;
+      const paid = await app.inject({ method: "POST", url: `/api/bills/${unpaid.id}/settle`, headers: auth(admin.token), payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: unpaid.totalPaise }] } });
+      expect(paid.statusCode, paid.body).toBe(200);
+      const b = paid.json().bill as Bill;
+      expect(b.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 2500]]);
+      const lines = app.db.prepare("SELECT order_item_id AS id, packaging_paise AS p FROM bill_report_lines WHERE bill_id = ?").all(b.id) as Array<{ id: string; p: number }>;
+      return { b, biryani: lines.find((l) => l.p === 2000)!.id, thali: lines.find((l) => l.p === 0)!.id };
+    }
+    const post = (billId: string, action: "refund" | "void", payload: Record<string, unknown>) =>
+      app.inject({ method: "POST", url: `/api/bills/${billId}/${action}`, headers: auth(admin.token), payload: { clientRef: uuidv7(), reason: "Cancelled", ...payload } });
+    /** Refund what the preview of the same request says, in cash. */
+    async function refund(billId: string, lines: Array<{ orderItemId: string; qty: number }>, refundPackaging: boolean, clientRef = uuidv7()) {
+      const prev = await preview(billId, { kind: "refund", lines, refundPackaging }, admin.token);
+      expect(prev.statusCode, prev.body).toBe(200);
+      return post(billId, "refund", { clientRef, lines, refundPackaging, refunds: [{ mode: "cash", amountPaise: prev.json().preview.totals.totalPaise }] });
+    }
+    const chargeAmounts = (noteId: string) => app.db.prepare("SELECT kind, amount_paise AS amount FROM credit_note_charges WHERE credit_note_id = ?").all(noteId);
+    const billJson = async (id: string) => (await app.inject({ url: `/api/bills/${id}`, headers: auth(admin.token) })).json().bill as Bill;
+
+    it("previews the packaging a refund would credit, ticked by default", async () => {
+      const { b, biryani, thali } = await packedBill();
+      const one = (await preview(b.id, { kind: "refund", lines: [{ orderItemId: biryani, qty: 1 }] }, admin.token)).json().preview;
+      expect(one.packagingPaise).toBe(1000);
+      expect(one.charges).toMatchObject([{ kind: "packaging", amountPaise: 1000 }]);
+      const unticked = (await preview(b.id, { kind: "refund", lines: [{ orderItemId: biryani, qty: 1 }], refundPackaging: false }, admin.token)).json().preview;
+      expect(unticked.packagingPaise).toBe(1000);
+      expect(unticked.charges).toEqual([]);
+      expect(unticked.totals.totalPaise).toBe(one.totals.totalPaise - one.charges[0].totalPaise);
+      expect((await preview(b.id, { kind: "refund", lines: [{ orderItemId: thali, qty: 1 }] }, admin.token)).json().preview.packagingPaise).toBe(0);
+      expect((await preview(b.id, { kind: "void" }, admin.token)).json().preview.packagingPaise).toBe(0);
+    });
+
+    it("keeps packaging on an unticked refund and credits an item's share when ticked", async () => {
+      const { b, biryani } = await packedBill();
+      const kept = await refund(b.id, [{ orderItemId: biryani, qty: 1 }], false);
+      expect(kept.statusCode, kept.body).toBe(201);
+      expect(kept.json().creditNote.charges).toEqual([]);
+      expect(chargeAmounts(kept.json().creditNote.id)).toEqual([]);
+      expect((await billJson(b.id)).refundState).toBe("partly_refunded");
+      const ticked = await refund(b.id, [{ orderItemId: biryani, qty: 1 }], true);
+      expect(ticked.statusCode, ticked.body).toBe(201);
+      expect(chargeAmounts(ticked.json().creditNote.id)).toEqual([{ kind: "packaging", amount: 1000 }]);
+    });
+
+    it("refuses another refund once every item is refunded with the packaging kept, and a void then credits exactly the kept packaging", async () => {
+      const { b, biryani, thali } = await packedBill();
+      const all = await refund(b.id, [{ orderItemId: biryani, qty: 2 }, { orderItemId: thali, qty: 1 }], false);
+      expect(all.statusCode, all.body).toBe(201);
+      expect((await billJson(b.id)).refundState).toBe("partly_refunded");
+      const kept = b.totalPaise - (all.json().creditNote.totalPaise as number);
+      expect(kept).toBe(b.charges![0]!.taxablePaise + b.charges![0]!.cgstPaise + b.charges![0]!.sgstPaise);
+
+      const again = await post(b.id, "refund", { lines: [{ orderItemId: thali, qty: 1 }], refunds: [{ mode: "cash", amountPaise: 1 }] });
+      expect(again.statusCode).toBe(409);
+      expect(again.json().error).toBe("Nothing left to refund on this bill");
+      expect((await preview(b.id, { kind: "refund", lines: [{ orderItemId: thali, qty: 1 }] }, admin.token)).statusCode).toBe(409);
+
+      const voidPreview = (await preview(b.id, { kind: "void" }, admin.token)).json().preview;
+      expect(voidPreview.lines).toEqual([]);
+      expect(voidPreview.totals.totalPaise).toBe(kept);
+      const voided = await post(b.id, "void", { refunds: [{ mode: "cash", amountPaise: kept }] });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect(chargeAmounts(voided.json().creditNote.id)).toEqual([{ kind: "packaging", amount: 2500 }]);
+      const after = await billJson(b.id);
+      expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(b.totalPaise);
+    });
+
+    it("refuses a reused reference whose refundPackaging differs", async () => {
+      const { b, biryani } = await packedBill();
+      const lines = [{ orderItemId: biryani, qty: 1 }];
+      const first = await refund(b.id, lines, true, "pack-ref-0001");
+      expect(first.statusCode, first.body).toBe(201);
+      const flipped = await refund(b.id, lines, false, "pack-ref-0001");
+      expect(flipped.statusCode).toBe(409);
+      expect(flipped.json().error).toBe("Credit note reference already used for a different request");
+      expect((app.db.prepare("SELECT COUNT(*) AS n FROM credit_notes").get() as { n: number }).n).toBe(1);
+    });
+
+    it("loads line packaging, charge amounts and credited charge amounts", async () => {
+      const { b, biryani } = await packedBill();
+      expect((await refund(b.id, [{ orderItemId: biryani, qty: 1 }], true)).statusCode).toBe(201);
+      const credit = loadBillCredit(app.db, b.id);
+      expect(credit.lines.find((l) => l.orderItemId === biryani)!.packagingPaise).toBe(2000);
+      expect(credit.charges).toMatchObject([{ kind: "packaging", amountPaise: 2500 }]);
+      expect(credit.creditedCharges.packaging).toMatchObject({ amountPaise: 1000, taxablePaise: 1000 });
+    });
+  });
 });

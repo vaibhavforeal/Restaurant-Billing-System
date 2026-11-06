@@ -134,7 +134,8 @@ describe("refund state and mode limits", () => {
 
 describe("credit schemas", () => {
   it("validates previews, voids and refunds strictly", () => {
-    expect(CreditPreview.parse({ kind: "void" })).toEqual({ kind: "void" });
+    expect(CreditPreview.parse({ kind: "void" })).toEqual({ kind: "void", refundPackaging: true });
+    expect(CreditPreview.parse({ kind: "refund", lines: [{ orderItemId: "i1", qty: 1 }], refundPackaging: false }).refundPackaging).toBe(false);
     expect(CreditPreview.parse({ kind: "refund", lines: [{ orderItemId: "i1", qty: 1 }] }).lines).toHaveLength(1);
     expect(() => CreditPreview.parse({ kind: "swap" })).toThrow();
     expect(() => CreditPreview.parse({ kind: "void", extra: 1 })).toThrow();
@@ -152,6 +153,8 @@ describe("credit schemas", () => {
     expect(() => RefundBill.parse({ clientRef: "abcdefgh", reason: "x", lines: [] })).toThrow();
     expect(() => RefundBill.parse({ clientRef: "abcdefgh", reason: "x" })).toThrow();
     expect(RefundBill.parse({ clientRef: "abcdefgh", reason: "x", lines: [{ orderItemId: "i1", qty: 2 }] }).lines).toEqual([{ orderItemId: "i1", qty: 2 }]);
+    expect(RefundBill.parse({ clientRef: "abcdefgh", reason: "x", lines: [{ orderItemId: "i1", qty: 2 }] }).refundPackaging).toBe(true);
+    expect(() => RefundBill.parse({ clientRef: "abcdefgh", reason: "x", lines: [{ orderItemId: "i1", qty: 2 }], refundPackaging: "no" })).toThrow();
   });
 });
 

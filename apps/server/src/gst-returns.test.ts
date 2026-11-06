@@ -74,6 +74,32 @@ describe("GST returns", () => {
     expect(rows.find((r) => r.rate === "18%")!.taxable).toBe(b.charges![0]!.taxablePaise);
   });
 
+  it("nets a partial packaging credit out of the GSTR-1 totals", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 500, packaging_per_item = 1, gst_rate = 18 WHERE id = 1").run();
+    expect((await app.inject({ method: "PATCH", url: `/api/products/${productId}`, headers: auth(token), payload: { packagingPaise: 1000 } })).statusCode).toBe(200);
+    const b = await bill(2, JAN);
+    expect(b.charges).toMatchObject([{ kind: "packaging", amountPaise: 2500, gstRate: 18 }]);
+    const pay = await app.inject({ method: "POST", url: `/api/bills/${b.id}/settle`, headers: auth(token), payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: b.totalPaise }] } });
+    expect(pay.statusCode, pay.body).toBe(200);
+    const orderItemId = (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(b.id) as { id: string }).id;
+    const lines = [{ orderItemId, qty: 1 }];
+    const preview = (await app.inject({ method: "POST", url: `/api/bills/${b.id}/credit-preview`, headers: auth(token), payload: { kind: "refund", lines } })).json().preview;
+    expect(preview.charges).toMatchObject([{ kind: "packaging", amountPaise: 1000 }]);
+    const res = await app.inject({ method: "POST", url: `/api/bills/${b.id}/refund`, headers: auth(token),
+      payload: { clientRef: uuidv7(), reason: "Cancelled", lines, refunds: [{ mode: "cash", amountPaise: preview.totals.totalPaise }] } });
+    expect(res.statusCode, res.body).toBe(201);
+    app.db.exec("DROP TRIGGER IF EXISTS credit_notes_no_update");
+    app.db.prepare("UPDATE credit_notes SET created_at = ? WHERE bill_id = ?").run(JAN, b.id);
+    const sum = (sql: string) => (app.db.prepare(sql).get(b.id) as { v: number }).v;
+    const net = (col: string) => sum(`SELECT SUM(${col}) AS v FROM bill_taxes WHERE bill_id = ?`)
+      - sum(`SELECT SUM(${col}) AS v FROM credit_note_taxes WHERE credit_note_id IN (SELECT id FROM credit_notes WHERE bill_id = ?)`);
+    const rows = table(await report("2026-01"), "Table 7").rows as Array<{ rate: string; taxable: number; cgst: number; sgst: number }>;
+    expect(rows.reduce((s, r) => s + r.taxable, 0)).toBe(net("taxable_paise"));
+    expect(rows.reduce((s, r) => s + r.cgst, 0)).toBe(net("cgst_paise"));
+    expect(rows.reduce((s, r) => s + r.sgst, 0)).toBe(net("sgst_paise"));
+    expect(rows.find((r) => r.rate === "18%")!.taxable).toBe(b.charges![0]!.taxablePaise - preview.charges[0].taxablePaise);
+  });
+
   it("reports a later void as a credit note in its own month, leaving the bill's month unchanged", async () => {
     const business = await bill(1, JAN, ACME);
     const before = await report("2026-01");

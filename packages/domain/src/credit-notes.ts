@@ -191,6 +191,8 @@ const CreditLines = z.array(z.strictObject({ orderItemId: z.string().min(1), qty
 export const CreditPreview = z.strictObject({
   kind: z.enum(["void", "refund"]),
   lines: CreditLines.optional(),
+  /** Credit the refunded items' packaging (ticked by default); ignored by a void. */
+  refundPackaging: z.boolean().default(true),
 });
 export const VoidBill = z.strictObject({
   clientRef: Ref,
@@ -202,7 +204,7 @@ export const VoidBill = z.strictObject({
   })).default([]),
   approverPin: PIN.optional(),
 });
-export const RefundBill = VoidBill.safeExtend({ lines: CreditLines.min(1) });
+export const RefundBill = VoidBill.safeExtend({ lines: CreditLines.min(1), refundPackaging: z.boolean().default(true) });
 export type CreditPreviewInput = z.infer<typeof CreditPreview>;
 export type VoidBillInput = z.infer<typeof VoidBill>;
 export type RefundBillInput = z.infer<typeof RefundBill>;
