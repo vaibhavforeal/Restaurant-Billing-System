@@ -210,6 +210,7 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
     if (amountPaise === 0) continue;
     const tax = taxGroup(amountPaise, charge.gstRate, mode);
     lines.push({ kind: charge.kind, label: charge.label, ...(charge.kind === "service" ? { percentBp: charge.bp } : {}), gstRate: charge.gstRate, amountPaise, ...tax });
+    // Each charge is taxed on its own ("taxed on their own"), so a merged rate row's CGST can differ by up to 1 paisa from taxing the combined amount once.
     const row = taxes.find((t) => t.gstRate === charge.gstRate);
     if (row) { row.taxablePaise += tax.taxablePaise; row.cgstPaise += tax.cgstPaise; row.sgstPaise += tax.sgstPaise; }
     else taxes.push({ gstRate: charge.gstRate, ...tax });

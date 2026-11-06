@@ -832,6 +832,12 @@ describe("credit preview, approval and bill credit data", () => {
       expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(b.totalPaise);
     });
 
+    it("carries the service charge percentage on the credit preview", async () => {
+      const b = await chargedBill();
+      const prev = (await preview(b.id, { kind: "void" }, admin.token)).json().preview;
+      expect(prev.charges[0]).toMatchObject({ kind: "service", label: "Service charge", percentBp: 1000 });
+    });
+
     it("credits the remaining unit and the charge on a void, matching the bill taxes", async () => {
       const b = await chargedBill();
       const item = orderItemOf(b.id);

@@ -42,7 +42,7 @@ function sourceSql(id: string, start: number, end: number): SourceSql {
         paymentModes: "COALESCE((SELECT group_concat(DISTINCT p.mode) FROM payments p WHERE p.bill_id = b.id), '')",
         bills: "1", subtotal: "b.subtotal_paise", discount: "b.discount_paise", customerDiscount: "b.customer_discount_paise", pointsValue: "b.points_value_paise",
         taxable: "COALESCE((SELECT SUM(t.taxable_paise) FROM bill_taxes t WHERE t.bill_id = b.id), 0)", cgst: "b.cgst_paise", sgst: "b.sgst_paise",
-        gst: "b.cgst_paise + b.sgst_paise", rounding: "b.rounding_paise", total: "b.total_paise", averageBill: "b.total_paise",
+        gst: "b.cgst_paise + b.sgst_paise", charges: "b.charges_paise", rounding: "b.rounding_paise", total: "b.total_paise", averageBill: "b.total_paise",
       },
     };
   }

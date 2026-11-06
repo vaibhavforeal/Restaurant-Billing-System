@@ -42,6 +42,8 @@ interface SettingsRow {
 const DEFAULT_SERVICE_LABEL = "Service charge";
 const DEFAULT_PACKAGING_LABEL = "Packaging";
 /** Not sent keeps the saved label; blank saves the default name. */
+/** The label the preview shows, by the same rule as saving: omitted keeps the saved label, blank becomes the default. */
+const previewLabel = (label: string | undefined, saved: string, fallback: string) => (label === undefined ? saved : label.trim() || fallback);
 const chargeLabel = (label: string | undefined, fallback: string) => (label === undefined ? null : label === "" ? fallback : label);
 
 export function readSettings(db: Database) {
@@ -100,7 +102,7 @@ export function registerSettings(app: FastifyInstance): void {
       billShowServedBy: show(body.billShowServedBy, saved.billShowServedBy), billShowItemGst: show(body.billShowItemGst, saved.billShowItemGst),
       gstMode: body.gstMode ?? saved.gstMode,
       gstRate: body.gstRate ?? (saved.gstRate as 5 | 12 | 18), serviceChargeBp: body.serviceChargeBp ?? saved.serviceChargeBp, packagingChargePaise: body.packagingChargePaise ?? saved.packagingChargePaise,
-      serviceChargeLabel: body.serviceChargeLabel?.trim() || saved.serviceChargeLabel, packagingChargeLabel: body.packagingChargeLabel?.trim() || saved.packagingChargeLabel,
+      serviceChargeLabel: previewLabel(body.serviceChargeLabel, saved.serviceChargeLabel, DEFAULT_SERVICE_LABEL), packagingChargeLabel: previewLabel(body.packagingChargeLabel, saved.packagingChargeLabel, DEFAULT_PACKAGING_LABEL),
       upiId: body.upiId ?? saved.upiId, receiptStyle: body.receiptStyle ?? saved.receiptStyle })) };
   });
 

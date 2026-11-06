@@ -74,7 +74,8 @@ describe("settings", () => {
     const put = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { ...base, serviceChargeBp: 500, serviceChargeLabel: "Service" } });
     expect(put.statusCode, put.body).toBe(200);
     expect(await preview({})).toContain("Service 5%");
-    expect(await preview({ serviceChargeLabel: " " })).toContain("Service 5%");
+    // Blank means the default, as on save; an omitted label keeps the saved one.
+    expect(await preview({ serviceChargeLabel: " " })).toContain("Service charge 5%");
     expect(await preview({ serviceChargeBp: 0 })).not.toContain("Service 5%");
   });
 

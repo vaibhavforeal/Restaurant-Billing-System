@@ -68,6 +68,8 @@ describe("credit note slip", () => {
       const rendered = renderBytes(creditNoteSlip(note, bill, width));
       expect(rendered.indexOf("Thali")).toBeLessThan(rendered.indexOf("Service charge"));
       expect(rendered).toContain("3.50");
+      expect(rendered).not.toContain("Charge  ");
+      expect(rendered).toMatch(/Service charge\s+3\.50/);
     }
     expect(creditNoteHtml(view(bill.creditNotes[0]!), bill)).not.toContain("Service charge");
   });

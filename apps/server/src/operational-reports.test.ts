@@ -75,6 +75,15 @@ describe("operational reports", () => {
     expect((await report("cashiers")).tables[0]!.rows).toEqual(table.rows);
   });
 
+  it("shows the service and packaging charges on the order type report", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 2000").run();
+    const bill = await issue((await order()).id);
+    const result = (await report("order-types")).tables[0]!;
+    expect(result.columns.map((c) => c.key)).toContain("charges");
+    expect(result.rows.map((r) => [r.orderType, r.charges])).toEqual([["Takeaway", 2000]]);
+    expect(result.totals).toMatchObject({ charges: 2000, total: bill.totalPaise });
+  });
+
   it("shows all local hours and respects inclusive dates and midnight boundaries", async () => {
     const first = await issue((await order()).id), last = await issue((await order()).id), outside = await issue((await order()).id);
     app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(at(27, 0), first.id);

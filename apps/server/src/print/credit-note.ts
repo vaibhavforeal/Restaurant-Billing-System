@@ -41,7 +41,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
     pos.bold(true); line(`${index + 1}. ${item.name}`); pos.bold(false);
     pair(`Qty ${item.qty}`, money(item.totalPaise));
   });
-  for (const c of note.charges ?? []) { pos.bold(true); line(c.label); pos.bold(false); pair("Charge", money(c.totalPaise)); }
+  for (const c of note.charges ?? []) { pos.bold(true); pair(c.label, money(c.totalPaise)); pos.bold(false); }
   pos.hr(width);
   // A bill that charged no GST (no-GST restaurant or Zomato) has a credit note with none either.
   if (billChargesGst(r)) for (const t of note.taxes) {

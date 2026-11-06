@@ -102,18 +102,19 @@ export function operationalReport(db: Database, kind: OperationalReportKind, ran
         "Restaurant-defined takeaway and delivery types are listed under their current name. Average bill is net sales divided by bills issued.");
       const rows = query(`WITH entries AS (
           SELECT COALESCE(o.order_type_id, o.type) AS typeId, 1 AS bills, b.subtotal_paise AS subtotal, b.discount_paise AS discount,
-            b.cgst_paise + b.sgst_paise AS gst, b.total_paise AS total, 0 AS credit
+            b.cgst_paise + b.sgst_paise AS gst, b.charges_paise AS charges, b.total_paise AS total, 0 AS credit
           FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.created_at >= ? AND b.created_at < ?
           UNION ALL
-          SELECT COALESCE(o.order_type_id, o.type), 0, 0, 0, -(c.cgst_paise + c.sgst_paise), -c.total_paise, c.total_paise
+          SELECT COALESCE(o.order_type_id, o.type), 0, 0, 0, -(c.cgst_paise + c.sgst_paise),
+            -COALESCE((SELECT SUM(bc.amount_paise) FROM credit_note_charges cc JOIN bill_charges bc ON bc.bill_id = c.bill_id AND bc.kind = cc.kind WHERE cc.credit_note_id = c.id), 0), -c.total_paise, c.total_paise
           FROM credit_notes c JOIN bills b ON b.id = c.bill_id JOIN orders o ON o.id = b.order_id WHERE c.created_at >= ? AND c.created_at < ?)
         SELECT COALESCE(t.name, e.typeId) AS orderType, CASE t.kind WHEN 'dine_in' THEN 'Dine-in' WHEN 'takeaway' THEN 'Takeaway' WHEN 'delivery' THEN 'Delivery' WHEN 'aggregator' THEN 'Aggregator' ELSE '' END AS kind,
-          SUM(e.bills) AS bills, SUM(e.subtotal) AS subtotal, SUM(e.discount) AS discount, SUM(e.gst) AS gst, SUM(e.credit) AS credit, SUM(e.total) AS total
+          SUM(e.bills) AS bills, SUM(e.subtotal) AS subtotal, SUM(e.discount) AS discount, SUM(e.gst) AS gst, SUM(e.charges) AS charges, SUM(e.credit) AS credit, SUM(e.total) AS total
         FROM entries e LEFT JOIN order_types t ON t.id = e.typeId GROUP BY e.typeId ORDER BY total DESC, orderType`, ...bounds, ...bounds)
         .map((row) => ({ ...row, average: Number(row.bills) ? Math.round(Number(row.total) / Number(row.bills)) : 0 }));
-      const totals = sum(rows, ["bills", "subtotal", "discount", "gst", "credit", "total"]);
+      const totals = sum(rows, ["bills", "subtotal", "discount", "gst", "charges", "credit", "total"]);
       tables.push({ title: "Order type sales", columns: [column("orderType", "Order type"), column("kind", "Kind"), column("bills", "Bills"),
-        column("subtotal", "Subtotal", "money"), column("discount", "Discount", "money"), column("gst", "Net GST", "money"), column("credit", "Credit notes", "money"),
+        column("subtotal", "Subtotal", "money"), column("discount", "Discount", "money"), column("gst", "Net GST", "money"), column("charges", "Service and packaging", "money"), column("credit", "Credit notes", "money"),
         column("total", "Net sales", "money"), column("average", "Average bill", "money")],
         rows, totals: { orderType: "Total", ...totals, average: totals.bills ? Math.round(totals.total! / totals.bills) : 0 } });
     }
