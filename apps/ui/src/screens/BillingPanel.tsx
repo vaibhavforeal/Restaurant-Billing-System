@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
-import { chargeLabel, type Bill, type BillCreateInput, type BillTotals } from "@masalapos/domain";
+import { chargeLabel, type Bill, type BillCreateInput, type BillTotals } from "@masalapos/domain/billing";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";

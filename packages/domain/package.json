@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./pricing": "./src/pricing.ts",
     "./combos": "./src/combos.ts",
+    "./billing": "./src/billing.ts",
     "./gst": "./src/gst.ts",
     "./invoice-numbers": "./src/invoice-numbers.ts",
     "./round-off": "./src/round-off.ts",
