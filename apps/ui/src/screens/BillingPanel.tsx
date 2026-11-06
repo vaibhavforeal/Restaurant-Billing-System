@@ -23,6 +23,7 @@ import { gstinProblem } from "@masalapos/domain/gstin";
 import { billChargesGst } from "@masalapos/domain/gst";
 import { GST_STATES } from "@masalapos/domain/restaurant-profile";
 import { Icon } from "../Icon";
+import { showServiceChargeBox } from "../charges-form";
 
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
@@ -70,7 +71,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const [buyerAddress, setBuyerAddress] = useState("");
   // The restaurant's service charge is on by default for dine-in; the cashier can take it off one bill.
   const [serviceCharge, setServiceCharge] = useState(true);
-  useEffect(() => { setBusiness(false); setBuyerGstin(""); setBuyerName(""); setBuyerAddress(""); setServiceCharge(true); }, [order.id]);
+  // Set once a preview of this order carried a service charge, so the box stays when a new preview is pending.
+  const [serviceDue, setServiceDue] = useState(false);
+  useEffect(() => { setBusiness(false); setBuyerGstin(""); setBuyerName(""); setBuyerAddress(""); setServiceCharge(true); setServiceDue(false); }, [order.id]);
   const can = useCan();
   const crm = useIntegrations().isEnabled("crm");
   // The most points the last preview allowed on this bill; kept while the cashier edits the amount.
@@ -207,6 +210,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}), ...(buyer ? { buyer } : {}), serviceCharge }),
     });
     setPreview(value);
+    if (value.charges?.some((c) => c.kind === "service")) setServiceDue(true);
     setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
     createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge, ...(pin ? { approverPin: pin } : {}) };
@@ -358,7 +362,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
         <div className={`billing-dialog-grid${totals ? "" : " billing-awaiting-preview"}`}>
           <div className="billing-review">
             {totals && <BillSummary value={totals} compact gst={totals.receipt} />}
-            {!bill && order.status === "open" && order.type === "dine_in" && (!serviceCharge || preview?.charges?.some((c) => c.kind === "service")) &&
+            {showServiceChargeBox({ billed: !!bill, open: order.status === "open", orderType: order.type, serviceDue, serviceCharge }) &&
               <label className="billing-check"><input type="checkbox" checked={serviceCharge} disabled={blocked} onChange={(e) => setServiceCharge(e.target.checked)} /> Service charge</label>}
             {totals?.receipt.buyer && <p className="billing-note">GST invoice to <strong>{totals.receipt.buyer.name}</strong> · GSTIN {totals.receipt.buyer.gstin}</p>}
             {bill?.discountNote && <p className="billing-note">Discount reason: {bill.discountNote}</p>}

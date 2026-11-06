@@ -4,6 +4,7 @@ import { financialYear, formatInvoiceNo } from "@masalapos/domain/invoice-number
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch } from "../api";
 import { InfoTip } from "../InfoTip";
+import { percentToBp, rupeesToChargePaise } from "../charges-form";
 import { settingsForSave } from "../settings-save";
 import { SaveStatus, useSettingsForm } from "../use-settings-form";
 import type { SettingsData } from "../types";
@@ -103,7 +104,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         <label style={field}>
           <span>Service charge (%) <InfoTip id="service-charge-help">{CHARGES_HELP}</InfoTip></span>
           <input type="number" min={0} max={20} step={0.01} inputMode="decimal" value={form.serviceChargeBp / 100} disabled={busy} aria-describedby="service-charge-help"
-            onChange={(e) => update({ serviceChargeBp: Math.min(2000, Math.max(0, Math.round(Number(e.target.value) * 100) || 0)) })} />
+            onChange={(e) => update({ serviceChargeBp: percentToBp(e.target.value) })} />
         </label>
         <label style={field}>
           <span>Service charge label</span>
@@ -112,7 +113,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         <label style={field}>
           <span>Packaging charge (₹)</span>
           <input type="number" min={0} max={1000} step={0.01} inputMode="decimal" value={form.packagingChargePaise / 100} disabled={busy}
-            onChange={(e) => update({ packagingChargePaise: Math.min(100000, Math.max(0, Math.round(Number(e.target.value) * 100) || 0)) })} />
+            onChange={(e) => update({ packagingChargePaise: rupeesToChargePaise(e.target.value) })} />
         </label>
         <label style={field}>
           <span>Packaging label</span>
