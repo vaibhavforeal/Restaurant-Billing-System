@@ -10,8 +10,13 @@ html[data-theme] .inventory-tabs button[aria-selected="true"] { background: var(
 .recipe-product-search, .recipe-picker-search, .recipe-stock-form label { display: grid; gap: 4px; }
 .recipe-product-search input, .recipe-picker-search input, .recipe-stock-form input, .recipe-stock-form select { width: 100%; }
 .recipe-inactive-filter { display: flex; align-items: center; gap: 6px; margin-block: 10px; }
-.recipe-product-list { display: grid; gap: 4px; max-height: calc(100dvh - 260px); min-height: 180px; overflow: auto; scrollbar-width: thin; }
-html[data-theme] .recipe-product-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; min-height: 40px; padding: 8px; border-color: transparent; background: transparent; font-weight: 500; }
+.recipe-product-list { display: grid; align-content: start; grid-auto-rows: max-content; gap: 4px; max-height: calc(100dvh - 260px); min-height: 0; overflow: auto; scrollbar-width: thin; }
+html[data-theme] .recipe-product-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; min-height: 32px; padding: 4px 8px; border-color: transparent; background: transparent; font-size: 13px; font-weight: 500; }
+html[data-theme] .recipe-product-pane { padding: 10px; }
+html[data-theme] .recipe-product-pane .recipe-list-heading h3 { margin: 0; font-size: 16px; }
+html[data-theme] .recipe-product-pane .recipe-product-search { font-size: 12px; gap: 4px; margin-top: 8px; }
+html[data-theme] .recipe-product-pane .recipe-product-search input { min-height: 32px; padding: 4px 8px; font-size: 13px; }
+html[data-theme] .recipe-product-pane .recipe-inactive-filter { margin-block: 6px; font-size: 12px; }
 .recipe-product-list button span { min-width: 0; overflow-wrap: anywhere; }
 .recipe-product-list button small { display: block; color: var(--muted); }
 html[data-theme] .recipe-product-list button.selected { background: var(--pos-accent-soft); border-color: var(--line); color: var(--pos-accent); font-weight: 600; }

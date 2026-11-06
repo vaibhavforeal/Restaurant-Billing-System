@@ -55,7 +55,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   const [profileError, setProfileError] = useState("");
 
   // Printers section
-  const [printerSection, setPrinterSection] = useState<"devices" | "stations">("devices");
+  const [printerSection, setPrinterSection] = useState<"devices" | "stations" | "jobs">("devices");
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
   const [editPrinter, setEditPrinter] = useState<Partial<PrinterInfo>>({});
@@ -269,7 +269,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       ) : <>
       <div className="settings-detail-head">
         <button type="button" disabled={tableBusy} onClick={() => setActive(null)}>← Settings</button>
-        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title} {active === "jobs" && <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip>}</h3>
+        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title}</h3>
       </div>
       <div className="pos-section settings-detail">
       {active === "shortcuts" && <KeyboardSettings />}
@@ -318,6 +318,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
         <div className="tabs" role="group" aria-label="Printer settings sections">
           <button type="button" className={printerSection === "devices" ? "selected" : ""} aria-pressed={printerSection === "devices"} onClick={() => setPrinterSection("devices")}>Printers</button>
           <button type="button" className={printerSection === "stations" ? "selected" : ""} aria-pressed={printerSection === "stations"} onClick={() => setPrinterSection("stations")}>KOT stations</button>
+          <button type="button" className={printerSection === "jobs" ? "selected" : ""} aria-pressed={printerSection === "jobs"} onClick={() => setPrinterSection("jobs")}>Print jobs</button>
         </div>
         {error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>}
       </>}
@@ -510,7 +511,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       </div>}
 
       {/* Print jobs section */}
-      {active === "jobs" && <div className="panel">
+      {active === "printers" && printerSection === "jobs" && <div className="panel" role="region" aria-label="Print jobs">
+        <h3>Print jobs <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip></h3>
 
         {error && <p role="alert">{error}</p>}
 

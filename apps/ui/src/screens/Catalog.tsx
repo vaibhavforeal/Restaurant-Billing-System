@@ -154,20 +154,19 @@ export function Catalog() {
       </aside>
 
       <div className="panel catalog-products">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="catalog-products-heading">
           <h2>Products</h2>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+          <div className="catalog-create-actions">
+            <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null}>
               New combo
             </button>
-            <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+            <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null}>
               New product
             </button>
           </div>
         </div>
-        <p className="product-editor-help">Availability applies to new orders. Existing orders stay unchanged.</p>
         <CatalogTransfer busy={busy !== null} run={run} onImported={setMessage} />
-        <div role="alert" style={{ color: "var(--danger-text, crimson)", minHeight: 20 }}>{error}</div>
+        {error && <div role="alert" className="error-message">{error}</div>}
         {message && <p role="status">{message}</p>}
         <div className="catalog-table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>

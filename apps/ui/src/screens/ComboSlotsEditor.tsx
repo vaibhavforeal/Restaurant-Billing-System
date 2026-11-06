@@ -56,12 +56,18 @@ export function ComboSlotsEditor({ slots, products, disabled, onChange }: { slot
   const setOption = (slot: Slot, optionKey: string, patch: Partial<SlotOption>) =>
     setSlot(slot.key, { options: slot.options.map((option) => option.key === optionKey ? { ...option, ...patch } : option) });
   return <section className="combo-slots-editor" aria-label="Combo slots">
-    <h3>What is in the combo <InfoTip>A fixed slot is always included, such as the burger and fries. A choice slot lets staff or the guest pick, such as 1 drink from 3. An extra price is added to the combo price when that item is picked. Each item goes to its own kitchen station and uses its own recipe.</InfoTip></h3>
-    {slots.map((slot, index) => <fieldset key={slot.key} className="combo-slot-editor" disabled={disabled}>
+    <div className="combo-slots-heading">
+      <h3>Combo items <InfoTip>A fixed slot is always included, such as the burger and fries. A choice slot lets staff or the guest pick, such as 1 drink from 3. An extra price is added to the combo price when that item is picked. Each item goes to its own kitchen station and uses its own recipe.</InfoTip></h3>
+      <div className="combo-slot-actions">
+        <button type="button" disabled={disabled} onClick={() => onChange([...slots, emptySlot(true)])}>Add fixed slot</button>
+        <button type="button" disabled={disabled} onClick={() => onChange([...slots, emptySlot(false)])}>Add choice slot</button>
+      </div>
+    </div>
+    {slots.map((slot, index) => <fieldset key={slot.key} className={`combo-slot-editor ${slot.fixed ? "fixed-slot" : "choice-slot"}`} disabled={disabled}>
       <legend>Slot {index + 1}</legend>
       <div className="combo-slot-settings">
         <label>Slot name<input value={slot.name} placeholder="e.g. Drink" maxLength={60} onChange={(event) => setSlot(slot.key, { name: event.target.value })} /></label>
-        <label className="combo-slot-fixed"><input type="checkbox" checked={slot.fixed} onChange={(event) => setSlot(slot.key, { fixed: event.target.checked })} /> Fixed: every item included</label>
+        <label className="combo-slot-fixed"><input type="checkbox" checked={slot.fixed} onChange={(event) => setSlot(slot.key, { fixed: event.target.checked })} /> Include every item</label>
         {!slot.fixed && <>
           <label>Choose at least<input inputMode="numeric" value={slot.minPicks} onChange={(event) => setSlot(slot.key, { minPicks: event.target.value })} /></label>
           <label>Choose at most<input inputMode="numeric" value={slot.maxPicks} onChange={(event) => setSlot(slot.key, { maxPicks: event.target.value })} /></label>
@@ -81,9 +87,5 @@ export function ComboSlotsEditor({ slots, products, disabled, onChange }: { slot
         <button type="button" onClick={() => onChange(slots.filter((value) => value.key !== slot.key))}>Remove slot</button>
       </div>
     </fieldset>)}
-    <div className="combo-slot-actions">
-      <button type="button" disabled={disabled} onClick={() => onChange([...slots, emptySlot(true)])}>Add fixed slot</button>
-      <button type="button" disabled={disabled} onClick={() => onChange([...slots, emptySlot(false)])}>Add choice slot</button>
-    </div>
   </section>;
 }

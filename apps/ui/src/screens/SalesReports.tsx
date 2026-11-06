@@ -77,7 +77,10 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
   const presets: Array<{ id: "bills" | "sales" | "collections" | "day-end" | "gst" | "zomato"; title: string }> = [{ id: "sales", title: "Sales" }, { id: "collections", title: "Collections" }, { id: "bills", title: "Bills" }, { id: "day-end", title: "Day-end / GST" }, { id: "gst", title: "GST returns" }, ...(canSeeZomato ? [{ id: "zomato" as const, title: "Zomato reconciliation" }] : [])];
   return <section className="sales-reports">
     <div className="page-header"><h2>Reports &amp; Analytics</h2>
-      {view === "reports" && (tab === "sales" || tab === "collections") && <OverflowMenu label="Export"><button disabled={!report || loading} onClick={exportReport}>Export {tab === "sales" ? "sales" : "collections"} CSV</button></OverflowMenu>}
+      <div className="report-heading-actions">
+        {view === "reports" && (tab === "sales" || tab === "collections") && <OverflowMenu label="Export"><button disabled={!report || loading} onClick={exportReport}>Export {tab === "sales" ? "sales" : "collections"} CSV</button></OverflowMenu>}
+        {canAsk && <AskSidePanel setup={askMode === "setup"} />}
+      </div>
     </div>
     <div className="report-navigation" aria-label="Report type">
       <div className="report-tabs">{presets.map(({ id, title }) => <button key={id} aria-pressed={view === "reports" && tab === id} onClick={() => { setView("reports"); if (id === "day-end") setDay(report?.to ?? period?.to); setTab(id); setMessage(""); setExportError(""); }}>{title}</button>)}</div>
@@ -116,6 +119,5 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
         </div>
       </>}
     </>}
-    {canAsk && <AskSidePanel setup={askMode === "setup"} />}
   </section>;
 }

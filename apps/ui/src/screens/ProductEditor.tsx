@@ -166,7 +166,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     finally { setDrafting(false); }
   }
 
-  return <section className="product-editor panel" aria-label="Product editor">
+  return <section className={`product-editor panel${isCombo ? " combo-product-editor" : ""}`} aria-label="Product editor">
     <div className="product-editor-heading"><h2>{product ? `Edit: ${product.name}` : isCombo ? "New combo" : "New product"}</h2><span role="status">{dirty ? "Unsaved changes" : ""}</span></div>
     <form onSubmit={(event) => { event.preventDefault(); save(); }}>
       <div className="product-editor-layout"><div className="product-editor-fields">
