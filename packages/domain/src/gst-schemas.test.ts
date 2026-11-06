@@ -20,3 +20,16 @@ describe("GST settings and catalog schemas", () => {
     expect(ProductUpdate.parse({ gstRate: null }).gstRate).toBeNull();
   });
 });
+
+describe("bill charge settings", () => {
+  const base = { restaurantName: "Cafe" };
+  it("bounds the service percentage, packaging amount and labels", () => {
+    expect(SettingsUpdate.parse({ ...base, serviceChargeBp: 2000 }).serviceChargeBp).toBe(2000);
+    expect(SettingsUpdate.safeParse({ ...base, serviceChargeBp: 2001 }).success).toBe(false);
+    expect(SettingsUpdate.safeParse({ ...base, serviceChargeBp: 12.5 }).success).toBe(false);
+    expect(SettingsUpdate.parse({ ...base, packagingChargePaise: 100000 }).packagingChargePaise).toBe(100000);
+    expect(SettingsUpdate.safeParse({ ...base, packagingChargePaise: 100001 }).success).toBe(false);
+    expect(SettingsUpdate.safeParse({ ...base, serviceChargeLabel: "x".repeat(25) }).success).toBe(false);
+    expect(SettingsUpdate.parse({ ...base, packagingChargeLabel: "  Box  " }).packagingChargeLabel).toBe("Box");
+  });
+});

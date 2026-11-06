@@ -15,7 +15,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", receiptHeader: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee",
+      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", receiptHeader: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "Service charge", packagingChargeLabel: "Packaging",
     });
 
     const put = await app.inject({
@@ -31,6 +31,19 @@ describe("settings", () => {
 
     const after = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
     expect(after.json().settings).toMatchObject({ gstin: "29ABCDE1234F1Z5", receiptFooter: "Thank you, visit again!" });
+  });
+
+  it("saves the bill charges, keeps them on unrelated saves and defaults blank labels", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const save = (payload: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe Test", ...payload } });
+    const charges = { serviceChargeBp: 1000, packagingChargePaise: 2000, serviceChargeLabel: "Service", packagingChargeLabel: "Box" };
+    const put = await save(charges);
+    expect(put.statusCode).toBe(200);
+    expect(put.json().settings).toMatchObject(charges);
+    expect((await save({ address: "New road" })).json().settings).toMatchObject(charges);
+    expect((await save({ serviceChargeLabel: "  " })).json().settings).toMatchObject({ serviceChargeLabel: "Service charge", packagingChargeLabel: "Box", serviceChargeBp: 1000 });
+    expect((await save({ serviceChargeBp: 2001 })).statusCode).toBe(400);
   });
 
   it("previews an unsaved bill", async () => {

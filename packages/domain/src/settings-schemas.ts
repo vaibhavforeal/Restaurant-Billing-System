@@ -37,6 +37,13 @@ export const SettingsUpdate = z.object({
   invoicePrefix: InvoicePrefix.optional(),
   /** How a bill total is rounded: to the rupee, to 50 paise, or not at all. */
   roundOff: z.enum(ROUND_OFF_MODES).optional(),
+  /** Service charge on dine-in bills, in basis points (1000 = 10%); 0 is off. */
+  serviceChargeBp: z.number().int().min(0).max(2000).optional(),
+  /** Flat packaging charge on takeaway and delivery bills, in paise; 0 is off. */
+  packagingChargePaise: z.number().int().min(0).max(100000).optional(),
+  /** What each charge is called on the bill; blank saves the default name. */
+  serviceChargeLabel: z.string().trim().max(24).optional(),
+  packagingChargeLabel: z.string().trim().max(24).optional(),
   /** Optional bill lines; GSTIN is never hideable. */
   billShowFssai: z.boolean().optional(),
   billShowCustomer: z.boolean().optional(),
