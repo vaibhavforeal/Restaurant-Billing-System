@@ -40,8 +40,8 @@ export function saveReportLines(db: Database, billId: string) {
   const taxes = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_taxes WHERE bill_id = ?").all(billId) as Array<{
     gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number;
   }>;
-  // Charges carry their own tax and no rounding: take it out of the rate's row so only the items' share is spread over item lines.
-  const charges = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_charges WHERE bill_id = ?").all(billId) as typeof taxes;
+  // Charges carry their own tax (and round-off only when no item has value): take it out of the rate's row so only the items' share is spread over item lines.
+  const charges = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise, rounding_paise FROM bill_charges WHERE bill_id = ?").all(billId) as Array<(typeof taxes)[number] & { rounding_paise: number }>;
   for (const charge of charges) {
     const row = taxes.find((tax) => tax.gst_rate === charge.gst_rate);
     if (row) { row.taxable_paise -= charge.taxable_paise; row.cgst_paise -= charge.cgst_paise; row.sgst_paise -= charge.sgst_paise; }
@@ -57,7 +57,7 @@ export function saveReportLines(db: Database, billId: string) {
     const cgst = allocatePaise(tax.cgst_paise, netWeights), sgst = allocatePaise(tax.sgst_paise, netWeights);
     group.forEach((line, i) => Object.assign(line, { discount: discounts[i]!, taxable: taxable[i]!, cgst: cgst[i]!, sgst: sgst[i]! }));
   }
-  const rounding = allocatePaise(bill.rounding_paise, lines.map((line) => line.taxable + line.cgst + line.sgst));
+  const rounding = allocatePaise(bill.rounding_paise - charges.reduce((sum, c) => sum + c.rounding_paise, 0), lines.map((line) => line.taxable + line.cgst + line.sgst));
   const insert = db.prepare(`INSERT INTO bill_report_lines (bill_id, order_item_id, product_id, variant_id, name,
     category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, parent_order_item_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);

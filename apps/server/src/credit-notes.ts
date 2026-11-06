@@ -42,10 +42,10 @@ export function loadBillCredit(db: Database, billId: string): BillCredit {
     WHERE c.bill_id = ? GROUP BY cl.order_item_id`).all(billId) as Array<MoneyRow & { order_item_id: string; qty: number }>;
   for (const r of creditedRows) credited[r.order_item_id] = { qty: r.qty, ...money(r) };
 
-  const charges = (db.prepare(`SELECT kind, label, gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_charges WHERE bill_id = ? ORDER BY kind`).all(billId) as Array<
-    { kind: ChargeKind; label: string; gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number }>)
+  const charges = (db.prepare(`SELECT kind, label, percent_bp, gst_rate, taxable_paise, cgst_paise, sgst_paise, rounding_paise FROM bill_charges WHERE bill_id = ? ORDER BY kind`).all(billId) as Array<
+    { kind: ChargeKind; label: string; percent_bp: number | null; gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number; rounding_paise: number }>)
     .map((r): BillChargeCredit => ({ kind: r.kind, label: r.label, gstRate: r.gst_rate, taxablePaise: r.taxable_paise, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
-      roundingPaise: 0, totalPaise: r.taxable_paise + r.cgst_paise + r.sgst_paise }));
+      ...(r.percent_bp !== null ? { percentBp: r.percent_bp } : {}), roundingPaise: r.rounding_paise, totalPaise: r.taxable_paise + r.cgst_paise + r.sgst_paise + r.rounding_paise }));
   const creditedCharges = (db.prepare(`SELECT DISTINCT cc.kind FROM credit_note_charges cc JOIN credit_notes c ON c.id = cc.credit_note_id
     WHERE c.bill_id = ?`).all(billId) as Array<{ kind: ChargeKind }>).map((r) => r.kind);
 
@@ -201,8 +201,8 @@ function writeCreditNote(db: Database, note: {
   for (const l of note.draft.lines) {
     line.run(id, l.orderItemId, l.name, l.categoryId, l.categoryName, l.gstRate, l.qty, l.taxablePaise, l.cgstPaise, l.sgstPaise, l.roundingPaise, l.totalPaise);
   }
-  const charge = db.prepare("INSERT INTO credit_note_charges (credit_note_id, kind, label, gst_rate, taxable_paise, cgst_paise, sgst_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-  for (const c of note.draft.charges) charge.run(id, c.kind, c.label, c.gstRate, c.taxablePaise, c.cgstPaise, c.sgstPaise, c.totalPaise);
+  const charge = db.prepare("INSERT INTO credit_note_charges (credit_note_id, kind, label, gst_rate, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  for (const c of note.draft.charges) charge.run(id, c.kind, c.label, c.gstRate, c.taxablePaise, c.cgstPaise, c.sgstPaise, c.roundingPaise, c.totalPaise);
   const tax = db.prepare("INSERT INTO credit_note_taxes (credit_note_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?)");
   for (const x of note.draft.taxes) tax.run(id, x.gstRate, x.taxablePaise, x.cgstPaise, x.sgstPaise);
   const refund = db.prepare("INSERT INTO refund_payments (id, credit_note_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)");

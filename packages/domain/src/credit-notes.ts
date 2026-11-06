@@ -10,8 +10,8 @@ export type Money = { taxablePaise: number; cgstPaise: number; sgstPaise: number
 export interface BillLine extends Money { orderItemId: string; qty: number; name: string; categoryId: string | null; categoryName: string; gstRate: number }
 /** What earlier credit notes already took off one order item. */
 export interface Credited extends Money { qty: number }
-/** A service or packaging charge as billed; its credit is the whole charge (rounding is always 0). */
-export interface BillChargeCredit extends Money { kind: ChargeKind; label: string; gstRate: number }
+/** A service or packaging charge as billed; its credit is the whole charge. Its rounding is 0 unless every item was discounted to nothing. */
+export interface BillChargeCredit extends Money { kind: ChargeKind; label: string; gstRate: number; percentBp?: number }
 /** The lines of a draft carry the credited qty and money, not the billed ones. */
 export interface CreditDraft {
   lines: Array<BillLine>;

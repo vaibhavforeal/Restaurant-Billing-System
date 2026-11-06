@@ -10,7 +10,7 @@ import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
 import { billUpiPayment, upiQrSvg } from "./print/upi.js";
-import { consumeStock, formatRestaurantAddress, saveReportLines } from "@masalapos/domain";
+import { allocatePaise, consumeStock, formatRestaurantAddress, saveReportLines } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
@@ -193,7 +193,13 @@ export function issueBill(db: Database, orderId: string, opts: {
   if (loyalty.customerId && loyalty.pointsRedeemed) ledger.run(uuidv7(), loyalty.customerId, "redeem", -loyalty.pointsRedeemed, id, now, opts.actorId, null);
   if (loyalty.customerId && loyalty.pointsEarned) ledger.run(uuidv7(), loyalty.customerId, "earn", loyalty.pointsEarned, id, now, opts.actorId, earnExpiry(settings, now));
   for (const tax of totals.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
-  for (const c of totals.charges ?? []) db.prepare("INSERT INTO bill_charges (bill_id, kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, c.kind, c.label, c.percentBp ?? null, c.gstRate, c.amountPaise, c.taxablePaise, c.cgstPaise, c.sgstPaise);
+  // Charges carry no rounding, except when every item is worth 0 after discount: then the bill's round-off goes on the charges
+  // (by value) so no item report line is left with a negative total.
+  const charges = totals.charges ?? [];
+  const chargeValues = charges.map((c) => c.taxablePaise + c.cgstPaise + c.sgstPaise);
+  const itemValue = totals.totalPaise - totals.roundingPaise - chargeValues.reduce((sum, n) => sum + n, 0);
+  const chargeRounding = charges.length && itemValue === 0 && totals.roundingPaise !== 0 ? allocatePaise(totals.roundingPaise, chargeValues) : charges.map(() => 0);
+  charges.forEach((c, i) => db.prepare("INSERT INTO bill_charges (bill_id, kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, c.kind, c.label, c.percentBp ?? null, c.gstRate, c.amountPaise, c.taxablePaise, c.cgstPaise, c.sgstPaise, chargeRounding[i]!));
   saveReportLines(db, id);
   // All remaining pending items are stationless; deduct before changing status.
   const pending = db.prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'pending'").all(orderId) as { id: string }[];

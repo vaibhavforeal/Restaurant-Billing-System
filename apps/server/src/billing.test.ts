@@ -474,5 +474,22 @@ describe("billing and day-end", () => {
         }
       }
     });
+    it.each([[18, 3000, -40], [5, 2200, -10]])("keeps every report line non-negative when a takeaway's items are fully discounted (%i%% charge, %i paise packaging)", async (gstRate, packaging, rounding) => {
+      await putSettings({ gstMode: "exclusive", gstRate, serviceChargeBp: 0, packagingChargePaise: packaging });
+      const id = await order();
+      const bill = (await post(id, await billRequest(id, { discountPaise: 10500, discountNote: "Comp" }))).json().bill as Bill;
+      expect(bill.roundingPaise).toBe(rounding);
+      const lines = app.db.prepare("SELECT total_paise AS total, rounding_paise AS rounding FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ total: number; rounding: number }>;
+      expect(lines).toHaveLength(1);
+      for (const line of lines) { expect(line.total).toBeGreaterThanOrEqual(0); expect(line.rounding).toBe(0); }
+      const charge = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total, rounding_paise AS rounding FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number; rounding: number };
+      expect(charge.rounding).toBe(rounding);
+      expect(lines.reduce((sum, l) => sum + l.total, 0) + charge.total).toBe(bill.totalPaise);
+      // A void credits the charge with its rounding, so the credits sum to the bill.
+      const voided = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(token), payload: { clientRef: uuidv7(), reason: "Test", refunds: [] } });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect(app.db.prepare("SELECT SUM(total_paise) AS n FROM credit_notes WHERE bill_id = ?").get(bill.id)).toEqual({ n: bill.totalPaise });
+      expect(app.db.prepare("SELECT rounding_paise, total_paise FROM credit_note_charges").get()).toEqual({ rounding_paise: rounding, total_paise: charge.total });
+    });
   });
 });
