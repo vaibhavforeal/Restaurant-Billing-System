@@ -10,7 +10,7 @@ import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
 import { billUpiPayment, upiQrSvg } from "./print/upi.js";
-import { allocatePaise, consumeStock, formatRestaurantAddress, saveReportLines } from "@masalapos/domain";
+import { allocatePaise, consumeStock, formatRestaurantAddress, orderItemPackaging, saveReportLines } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
@@ -80,7 +80,11 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const serviceDue = orderType === "dine_in" && settings.serviceChargeBp > 0;
   const charges: ChargeInput[] = [];
   if (serviceDue && serviceCharge) charges.push({ kind: "service", label: settings.serviceChargeLabel, gstRate: settings.gstRate, bp: settings.serviceChargeBp });
-  if (orderType === "parcel" && (orderTypeKind === "takeaway" || orderTypeKind === "delivery")) charges.push({ kind: "packaging", label: settings.packagingChargeLabel, gstRate: settings.gstRate, amountPaise: settings.packagingChargePaise });
+  if (orderType === "parcel" && (orderTypeKind === "takeaway" || orderTypeKind === "delivery")) {
+    // The flat amount per bill plus, with "Charge packaging per item" on, each line's packaging; one charge line either way.
+    const perItem = [...orderItemPackaging(db, orderId).values()].reduce((sum, paise) => sum + paise, 0);
+    charges.push({ kind: "packaging", label: settings.packagingChargeLabel, gstRate: settings.gstRate, amountPaise: settings.packagingChargePaise + perItem });
+  }
   try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff, charges); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message.replace("Discount exceeds subtotal", "The discounts are more than the bill") : "Invalid bill"); }
   // The limit is on what staff choose to give; slab discounts are set by an admin and points were earned.

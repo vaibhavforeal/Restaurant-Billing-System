@@ -474,6 +474,56 @@ describe("billing and day-end", () => {
         }
       }
     });
+    describe("per-item packaging", () => {
+      const setPackaging = (paise: number) => app.inject({ method: "PATCH", url: `/api/products/${productId}`, headers: auth(token), payload: { packagingPaise: paise } });
+      async function withTwo(id: string) {
+        const add = await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId, qty: 2, clientRef: uuidv7() }] } });
+        expect(add.statusCode).toBe(200);
+        return id;
+      }
+      const linePackaging = (billId: string) => app.db.prepare("SELECT packaging_paise AS p FROM bill_report_lines WHERE bill_id = ?").all(billId).map((r) => (r as { p: number }).p);
+      const packagingRows = (billId: string) => app.db.prepare("SELECT amount_paise AS amount FROM bill_charges WHERE bill_id = ? AND kind = 'packaging'").all(billId);
+      beforeEach(async () => {
+        expect((await putSettings({ ...charges, packagingPerItem: true })).statusCode).toBe(200);
+        expect((await setPackaging(1000)).statusCode).toBe(200);
+      });
+
+      it("adds each item's packaging to the flat amount on takeaway and delivery bills", async () => {
+        const takeaway = await issue(await withTwo(await order(undefined, true)));
+        expect(takeaway.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 4000]]);
+        expect(packagingRows(takeaway.id)).toEqual([{ amount: 4000 }]);
+        expect(linePackaging(takeaway.id)).toEqual([2000]);
+        // customParcel already holds 1 of the item: 2000 flat + 3 x 1000.
+        const delivery = await issue(await withTwo(await customParcel("delivery")));
+        expect(delivery.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 5000]]);
+        expect(packagingRows(delivery.id)).toEqual([{ amount: 5000 }]);
+        expect(linePackaging(delivery.id).sort()).toEqual([1000, 2000]);
+      });
+      it("charges only the flat amount with the toggle off", async () => {
+        await putSettings({ packagingPerItem: false });
+        const bill = await issue(await withTwo(await order(undefined, true)));
+        expect(bill.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 2000]]);
+        expect(linePackaging(bill.id)).toEqual([0]);
+      });
+      it("adds no packaging to a dine-in bill", async () => {
+        const bill = await issue(await withTwo(await dineIn(true)));
+        expect(bill.charges!.map((c) => c.kind)).toEqual(["service"]);
+        expect(linePackaging(bill.id)).toEqual([0]);
+      });
+      it("adds no packaging row when the flat and item amounts are 0", async () => {
+        await putSettings({ packagingChargePaise: 0 }); await setPackaging(0);
+        const bill = await issue(await withTwo(await order(undefined, true)));
+        expect(bill.charges).toEqual([]);
+        expect(packagingRows(bill.id)).toEqual([]);
+      });
+      it("refuses a preview taken before an item's packaging changed", async () => {
+        const id = await withTwo(await order(undefined, true));
+        const key = (await previewOf(id)).previewKey;
+        expect((await setPackaging(1500)).statusCode).toBe(200);
+        const res = await post(id, { clientRef: uuidv7(), previewKey: key });
+        expect(res.statusCode).toBe(409); expect(res.json().error).toBe("Order changed; review a fresh bill preview");
+      });
+    });
     it.each([[18, 3000, -40], [5, 2200, -10]])("keeps every report line non-negative when a takeaway's items are fully discounted (%i%% charge, %i paise packaging)", async (gstRate, packaging, rounding) => {
       await putSettings({ gstMode: "exclusive", gstRate, serviceChargeBp: 0, packagingChargePaise: packaging });
       const id = await order();

@@ -1,4 +1,5 @@
 import type { Database } from "./db.js";
+import { orderItemPackaging } from "./packaging.js";
 
 /** Largest-remainder allocation keeps every stored paise, including negative round-off. */
 export function allocatePaise(total: number, weights: number[]): number[] {
@@ -57,13 +58,15 @@ export function saveReportLines(db: Database, billId: string) {
     const cgst = allocatePaise(tax.cgst_paise, netWeights), sgst = allocatePaise(tax.sgst_paise, netWeights);
     group.forEach((line, i) => Object.assign(line, { discount: discounts[i]!, taxable: taxable[i]!, cgst: cgst[i]!, sgst: sgst[i]! }));
   }
+  // Each line keeps its share of the packaging charge, so a refund can credit it item by item.
+  const packaging = orderItemPackaging(db, bill.order_id);
   const rounding = allocatePaise(bill.rounding_paise - charges.reduce((sum, c) => sum + c.rounding_paise, 0), lines.map((line) => line.taxable + line.cgst + line.sgst));
   const insert = db.prepare(`INSERT INTO bill_report_lines (bill_id, order_item_id, product_id, variant_id, name,
-    category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, parent_order_item_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    category_id, category_name, qty, subtotal_paise, discount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, parent_order_item_id, packaging_paise)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   lines.forEach((line, i) => insert.run(billId, line.id, line.product_id, line.variant_id, line.name_snapshot,
     line.category_id, line.category_name,
-    line.qty, line.subtotal, line.discount, line.taxable, line.cgst, line.sgst, rounding[i]!, line.taxable + line.cgst + line.sgst + rounding[i]!, null));
+    line.qty, line.subtotal, line.discount, line.taxable, line.cgst, line.sgst, rounding[i]!, line.taxable + line.cgst + line.sgst + rounding[i]!, null, packaging.get(line.id) ?? 0));
   for (const item of rows.filter((row) => row.parent_item_id)) insert.run(billId, item.id, item.product_id, item.variant_id, item.name_snapshot,
-    item.category_id, item.category_name, item.qty, 0, 0, 0, 0, 0, 0, 0, item.parent_item_id);
+    item.category_id, item.category_name, item.qty, 0, 0, 0, 0, 0, 0, 0, item.parent_item_id, 0);
 }

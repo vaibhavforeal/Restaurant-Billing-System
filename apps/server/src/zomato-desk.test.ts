@@ -264,7 +264,8 @@ describe("Zomato status and Picked up", () => {
 
   it("adds no service or packaging charge to a Zomato bill", async () => {
     const admin = await setup();
-    app.db.prepare("UPDATE settings SET service_charge_bp = 1000, packaging_charge_paise = 2000 WHERE id = 1").run();
+    app.db.prepare("UPDATE settings SET service_charge_bp = 1000, packaging_charge_paise = 2000, packaging_per_item = 1 WHERE id = 1").run();
+    app.db.prepare("UPDATE products SET packaging_paise = 1000").run();
     const order = await zomatoOrder(admin.token);
     setDbStatus(order.id, "ready");
     const res = await setStatus(admin.token, order.id, "picked_up");
@@ -273,6 +274,7 @@ describe("Zomato status and Picked up", () => {
     const bill = app.db.prepare("SELECT id FROM bills WHERE order_id = ?").get(order.id) as { id: string };
     expect(count("SELECT COUNT(*) n FROM bill_charges WHERE bill_id = ?", bill.id)).toBe(0);
     expect(loadBill(app.db, bill.id).charges).toEqual([]);
+    expect(count("SELECT COUNT(*) n FROM bill_report_lines WHERE bill_id = ? AND packaging_paise != 0", bill.id)).toBe(0);
   });
 
   it("refuses Picked up before Ready", async () => {
