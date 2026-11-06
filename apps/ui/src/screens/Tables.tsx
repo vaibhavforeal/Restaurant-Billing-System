@@ -23,6 +23,7 @@ import { NewZomatoOrderDialog } from "../NewZomatoOrderDialog";
 import "../tables-screen.css";
 import "../tables-overview.css";
 import "../table-toolbar.css";
+import "../table-cards.css";
 import { useModules } from "../modules";
 import { userCan } from "../permissions";
 import { reservationSlots } from "../reservation-panel";
@@ -292,16 +293,16 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
           const ready = captain && running.some((order) => order.kots.some((kot) => kot.doneAt));
           const saved = savedFor(tableOpenTargets(t).map((target) => target.orderId));
           return <button key={t.id} className={`table-card ${t.status}${selectedTableId === t.id ? " selected" : ""}`} aria-pressed={selected ? selectedTableId === t.id : undefined} onClick={() => openTable(t)} onDoubleClick={() => openTable(t, true)} disabled={busy}>
-          <div className="table-card-heading"><strong>{combined ?? t.name}</strong><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span>{saved.length > 0 && <span className={`status saved-actions${saved.some((r) => r.status === "attention") ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{saved.some((r) => r.status === "attention") ? "Review" : "Saved"}</span>}</div>
-          <span className="table-state"><span aria-hidden="true" />{({ free: "Available", occupied: "Occupied", reserved: "Reserved", billed: "Billed" })[t.status]}</span>
+          <div className="table-card-heading"><strong>{combined ?? t.name}</strong><span className="table-state"><span aria-hidden="true" />{({ free: "Available", occupied: "Occupied", reserved: "Reserved", billed: "Billed" })[t.status]}</span></div>
           <div className="table-card-detail">
+            {saved.length > 0 && <span className={`status saved-actions${saved.some((r) => r.status === "attention") ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{saved.some((r) => r.status === "attention") ? "Review" : "Saved"}</span>}
             {running.some((o) => o.captainName) && <span className="table-ready-label">Captain: {[...new Set(running.map((o) => o.captainName).filter(Boolean))].join(", ")}</span>}
             {running.length > 0 ? <span className="table-amount-row"><span className="pos-money" title="Items subtotal before billing">₹{paiseToRupees(subtotal)}</span><small><Icon name="clock" size={12} />{minutes} min</small></span>
               : !t.reservation && !t.link && <span className="table-ready-label">Ready for guests</span>}
             {note && <span className="table-ready-label">{note}</span>}
             {t.reservation && <span className="table-reservation-note"><span>{t.status === "reserved" ? "Reserved for" : "Next booking:"} {t.reservation.customerName}</span><small>{t.reservation.startsLocal.replace("T", " ")} · {t.reservation.partySize} guests</small></span>}
           </div>
-          <div className="table-card-footer"><span><Icon name="tables" size={16} />{ready ? "Kitchen ready" : targetCount > 1 ? `${targetCount} split bills` : t.status === "billed" ? "Awaiting payment" : targetCount ? selectedTableId === t.id ? "Tap again to open" : "View order" : t.status === "reserved" ? "View reservation" : "Open table"}</span><Icon name={ready ? "check" : "arrow"} size={14} /></div>
+          <div className="table-card-footer"><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span><span className="table-card-action">{ready ? "Kitchen ready" : targetCount > 1 ? `${targetCount} split bills` : t.status === "billed" ? "Awaiting payment" : targetCount ? selectedTableId === t.id ? "Tap again to open" : "View order" : t.status === "reserved" ? "View reservation" : "Open table"}<Icon name={ready ? "check" : "arrow"} size={14} /></span></div>
         </button>; })}</div>
       </section>)}
       {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables in Settings → Table Settings." : "Ask an admin to add tables."}</p></div>}
