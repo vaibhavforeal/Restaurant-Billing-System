@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, refundRowsError, refundableQty } from "./credit-note-form";
+import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, itemsLeftToRefund, refundRowsError, refundableQty } from "./credit-note-form";
 
 describe("defaultRefundRows", () => {
   it("refunds a single payment method in full", () => {
@@ -53,6 +53,15 @@ describe("REFUND_REASONS", () => {
 });
 
 describe("refund quantities", () => {
+  it("knows when every billed line has been refunded", () => {
+    const line = (id: string, qty: number, extra: Partial<{ status: "pending" | "sent" | "cancelled"; parentItemId: string | null }> = {}) =>
+      ({ id, qty, status: "sent" as const, parentItemId: null, ...extra });
+    const items = [line("a", 2), line("b", 1), line("c", 3, { status: "cancelled" }), line("d", 1, { parentItemId: "b" })];
+    expect(itemsLeftToRefund(items, {})).toBe(true);
+    expect(itemsLeftToRefund(items, { a: 2 })).toBe(true);
+    // Cancelled lines and items inside a combo are never refunded on their own.
+    expect(itemsLeftToRefund(items, { a: 2, b: 1 })).toBe(false);
+  });
   it("bounds a line by billed minus already refunded", () => {
     expect(refundableQty(5, undefined)).toBe(5);
     expect(refundableQty(5, 2)).toBe(3);

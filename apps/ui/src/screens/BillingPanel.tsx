@@ -3,7 +3,7 @@ import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
 import { chargeLabel, type Bill, type BillCreateInput, type BillTotals } from "@masalapos/domain/billing";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
-import { billStatusLabel } from "../credit-note-form";
+import { billStatusLabel, itemsLeftToRefund } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -321,7 +321,10 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const zomatoAction = zomatoCardAction(order);
   const zomatoPill = order.zomatoStatus ?? "new";
   const canVoid = !!bill && !zomatoBill && can("bills.refund") && bill.status !== "void" && bill.refundState !== "refunded";
-  const canRefund = canVoid && bill?.status === "paid" && bill.totalPaise > 0;
+  const refundablePaidBill = canVoid && bill?.status === "paid" && bill.totalPaise > 0;
+  const canRefund = refundablePaidBill && itemsLeftToRefund(order.items, bill.refundedQty);
+  // Every item refunded with the packaging kept: only a void can return the rest.
+  const onlyVoidLeft = refundablePaidBill && !canRefund;
   // A cancelled order with no bill has nothing to bill; a voided bill on a cancelled order stays viewable.
   if (order.status === "cancelled" && !bill) return null;
   return <section aria-label="Billing" className="billing-panel billing-footer">
@@ -434,6 +437,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
               {canRefund && <button disabled={blocked} onClick={() => setCreditKind("refund")}>Refund items</button>}
               {canVoid && <button className="billing-void" disabled={blocked} onClick={() => setCreditKind("void")}>Void bill</button>}
             </div>
+            {onlyVoidLeft && <p className="billing-refund-hint muted">All items are refunded. The packaging was kept; void the bill to return it.</p>}
             <CreditNoteList notes={bill.creditNotes} printers={printers} printerId={printerId} />
             {job && <p className="billing-print-status" role="status">Receipt print: {job.status === "done" ? "submitted" : job.status}{job.error ? ` — ${job.error}. Check the paper before reprinting. An admin can retry the affected copy in Settings.` : ""}{job.copyCount > 1 ? ` · ${job.copyCount} copies requested; each copy is tracked in Settings.` : ""}</p>}
           </div>}

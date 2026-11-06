@@ -1,10 +1,11 @@
 # Per-item packaging charges
 
 Takeaway and delivery bills can charge packaging per item, for example ₹10 for each biryani container and ₹5 for
-each curry box, on top of the flat packaging amount per bill. Restaurants that never turn it on see no change.
+each curry box, on top of the flat packaging amount per bill. Restaurants that leave it off keep one flat amount per
+bill; the one change they see is the refund tickbox (see [Refunds and voids](#refunds-and-voids)), which lets them keep
+the flat packaging on a refund that returns every item.
 
-> **Status (2026-11-06):** built on `feat/bill-settings`, not released. The whole-branch review is still to run. See
-> [What is left](#what-is-left).
+> **Status (2026-11-06):** built and reviewed on `feat/bill-settings`, not released. See [What is left](#what-is-left).
 
 ## Turning it on
 
@@ -67,8 +68,9 @@ Amounts above 1000.00 are refused with a row error. Older CSV files without thes
 ## Refunds and voids
 
 When refunding items from a takeaway or delivery bill, the refund screen shows a **Refund packaging (₹X)** tickbox,
-ticked by default, once the chosen items carry packaging. X is the packaging those items would give back. Unticking
-it updates the credit preview. Whether the packaging goes back depends on when the order was cancelled:
+ticked by default, whenever the refund would give back packaging: the chosen items' packaging, plus the flat amount
+when the refund returns every item left. X is that amount. The tickbox shows even with per-item packaging off, when a
+refund clears a bill with flat packaging. Unticking it updates the credit preview. Whether the packaging goes back depends on when the order was cancelled:
 
 | Situation | What to do | Packaging |
 |---|---|---|
@@ -83,7 +85,8 @@ it updates the credit preview. Whether the packaging goes back depends on when t
   clears every remaining item.
 - **Void** credits all packaging not yet credited, including packaging kept by an earlier refund.
 - A bill whose items are all refunded but whose packaging was kept stays **Partly refunded**. The kept packaging stays
-  in sales and GST. Only a void can credit it after that.
+  in sales and GST. Only a void can credit it after that: the bill hides **Refund items** and shows "All items are
+  refunded. The packaging was kept; void the bill to return it."
 - The service charge is unchanged: credited whole, only by a refund that clears the bill or by a void.
 
 ## For developers
@@ -120,4 +123,7 @@ Plan: [`docs/superpowers/plans/2026-11-06-per-item-packaging.md`](../superpowers
 | 5 | Refunds, voids and reports on the server (`refundPackaging`, `credit_note_charges.amount_paise`) | Done, `1d5bfea` |
 | 6 | UI: Bill settings tickbox, product/variant fields, refund tickbox, `bill-format.md`, dev-app check | Done |
 
-Still to run: the whole-branch review.
+The whole-branch review ran on 2026-11-06 with no money or accounting issues. Its doc fixes and the refund dead end
+(Refund items offered when nothing is left to refund) are fixed. Left as minor follow-ups: the refund tickbox briefly
+hides while a new preview loads, and billing tests for per-item plus flat packaging under the `included` and `none`
+GST modes.

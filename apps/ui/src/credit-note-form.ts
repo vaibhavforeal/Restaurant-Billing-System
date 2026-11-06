@@ -44,6 +44,17 @@ export function refundableQty(billed: number, refunded: number | undefined): num
   return Math.max(0, billed - (refunded ?? 0));
 }
 
+/**
+ * Whether any billed line still has units to refund. A bill whose items were all refunded with the
+ * packaging kept stays partly refunded, but only a void can return what is left.
+ */
+export function itemsLeftToRefund(
+  items: Array<{ id: string; qty: number; status: string; parentItemId?: string | null }>,
+  refundedQty: Record<string, number>,
+): boolean {
+  return items.some((item) => item.status !== "cancelled" && !item.parentItemId && refundableQty(item.qty, refundedQty[item.id]) > 0);
+}
+
 /** A typed quantity as a whole number between 0 and what is left to refund. */
 export function clampRefundQty(value: number, billed: number, refunded: number | undefined): number {
   if (!Number.isFinite(value)) return 0;

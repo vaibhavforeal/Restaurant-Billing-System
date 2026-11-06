@@ -146,12 +146,14 @@ No reason or approval is needed. The bill records that it was removed.
 On the bill, each charge is one line after Discount, for example `Service charge 10%` and `Packaging`. Day-end and
 Sales reports show a **Charges** total.
 
-Refunds: a refund that returns every item on the bill also returns the charges, and the bill becomes **Refunded**. A
-part refund leaves the charges. Voiding a bill returns its charges too. Credit notes list each charge they return.
+Refunds: a refund that returns every item left on the bill also returns the service charge, and the bill becomes
+**Refunded** unless the packaging is kept (below). A part refund leaves the service charge. Voiding a bill returns all
+its charges. Credit notes list each charge they return.
 
-With per-item packaging, the refund screen shows a **Refund packaging (₹X)** tickbox, ticked by default, once the
-chosen items carry packaging. Ticked, the refund gives back those items' packaging (and the flat amount when it
-clears the bill); unticked, the packaging is kept. Which to choose depends on when the order was cancelled:
+The refund screen shows a **Refund packaging (₹X)** tickbox, ticked by default, whenever the refund would give back
+packaging: the chosen items' per-item packaging, or the flat amount when the refund returns every item left. This
+also applies to restaurants that use only the flat amount. Ticked, the refund gives back that packaging; unticked,
+the packaging is kept. Which to choose depends on when the order was cancelled:
 
 | Situation | What to do | Packaging |
 |---|---|---|
@@ -163,7 +165,7 @@ clears the bill); unticked, the packaging is kept. Which to choose depends on wh
 | Zomato order | Zomato bills never carry packaging | — |
 
 A bill whose items are all refunded with packaging kept stays **Partly refunded**; only a void can credit the kept
-packaging after that.
+packaging after that. The bill then hides **Refund items** and says to void the bill to return the packaging.
 
 Example, a ₹100 item at 5% with a 10% service charge:
 
