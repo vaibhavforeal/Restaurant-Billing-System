@@ -1,7 +1,7 @@
 import { verifyPassword } from "@masalapos/core";
 import { reverseLoyalty } from "./customers.js";
 import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextCreditNoteNo, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
-  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@masalapos/domain";
+  type Bill, type BillChargeCredit, type BillCreditNote, type BillLine, type ChargeKind, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";
@@ -16,6 +16,10 @@ export interface BillCredit {
   lines: BillLine[];
   /** Units and money already taken off each order item by earlier credit notes. */
   credited: Record<string, Credited>;
+  /** The charges billed (service, packaging); each is credited whole, with the note that credits the last items or voids. */
+  charges: BillChargeCredit[];
+  /** Kinds of charge earlier credit notes already took off. */
+  creditedCharges: ChargeKind[];
   paid: Array<{ mode: PayMode; amountPaise: number }>;
   refunded: Array<{ mode: PayMode; amountPaise: number }>;
   creditedTotalPaise: number;
@@ -38,11 +42,18 @@ export function loadBillCredit(db: Database, billId: string): BillCredit {
     WHERE c.bill_id = ? GROUP BY cl.order_item_id`).all(billId) as Array<MoneyRow & { order_item_id: string; qty: number }>;
   for (const r of creditedRows) credited[r.order_item_id] = { qty: r.qty, ...money(r) };
 
+  const charges = (db.prepare(`SELECT kind, label, gst_rate, taxable_paise, cgst_paise, sgst_paise FROM bill_charges WHERE bill_id = ? ORDER BY kind`).all(billId) as Array<
+    { kind: ChargeKind; label: string; gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number }>)
+    .map((r): BillChargeCredit => ({ kind: r.kind, label: r.label, gstRate: r.gst_rate, taxablePaise: r.taxable_paise, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
+      roundingPaise: 0, totalPaise: r.taxable_paise + r.cgst_paise + r.sgst_paise }));
+  const creditedCharges = (db.prepare(`SELECT DISTINCT cc.kind FROM credit_note_charges cc JOIN credit_notes c ON c.id = cc.credit_note_id
+    WHERE c.bill_id = ?`).all(billId) as Array<{ kind: ChargeKind }>).map((r) => r.kind);
+
   const paid = db.prepare("SELECT mode, amount_paise AS amountPaise FROM payments WHERE bill_id = ? ORDER BY id").all(billId) as BillCredit["paid"];
   const refunded = db.prepare(`SELECT rp.mode, rp.amount_paise AS amountPaise FROM refund_payments rp
     JOIN credit_notes c ON c.id = rp.credit_note_id WHERE c.bill_id = ? ORDER BY rp.id`).all(billId) as BillCredit["refunded"];
   const { total } = db.prepare("SELECT COALESCE(SUM(total_paise), 0) AS total FROM credit_notes WHERE bill_id = ?").get(billId) as { total: number };
-  return { lines, credited, paid, refunded, creditedTotalPaise: total };
+  return { lines, credited, charges, creditedCharges, paid, refunded, creditedTotalPaise: total };
 }
 
 /** The credit-note part of a bill's JSON: its notes, the derived refund state and the units credited per item. */
@@ -53,11 +64,14 @@ export function loadBillCreditNotes(db: Database, billId: string, billTotalPaise
       c.taxable_paise AS taxablePaise, c.cgst_paise AS cgstPaise, c.sgst_paise AS sgstPaise,
       rb.name AS requestedByName, ab.name AS approvedByName
     FROM credit_notes c JOIN users rb ON rb.id = c.requested_by JOIN users ab ON ab.id = c.approved_by
-    WHERE c.bill_id = ? ORDER BY c.cn_no`).all(billId) as Array<Omit<BillCreditNote, "refunds" | "lines">>;
+    WHERE c.bill_id = ? ORDER BY c.cn_no`).all(billId) as Array<Omit<BillCreditNote, "refunds" | "lines" | "charges">>;
   const refunds = db.prepare(`SELECT rp.credit_note_id AS noteId, rp.mode, rp.amount_paise AS amountPaise, rp.ref_note AS refNote
     FROM refund_payments rp JOIN credit_notes c ON c.id = rp.credit_note_id WHERE c.bill_id = ? ORDER BY rp.id`).all(billId) as Array<BillCreditNote["refunds"][number] & { noteId: string }>;
   const lines = db.prepare(`SELECT cl.credit_note_id AS noteId, cl.order_item_id AS orderItemId, cl.name, cl.qty, cl.total_paise AS totalPaise
     FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id WHERE c.bill_id = ? ORDER BY cl.rowid`).all(billId) as Array<BillCreditNote["lines"][number] & { noteId: string }>;
+
+  const charges = db.prepare(`SELECT cc.credit_note_id AS noteId, cc.kind, cc.label, cc.total_paise AS totalPaise
+    FROM credit_note_charges cc JOIN credit_notes c ON c.id = cc.credit_note_id WHERE c.bill_id = ? ORDER BY cc.rowid`).all(billId) as Array<BillCreditNote["charges"][number] & { noteId: string }>;
 
   const refundedQty: Record<string, number> = {};
   for (const l of lines) refundedQty[l.orderItemId] = (refundedQty[l.orderItemId] ?? 0) + l.qty;
@@ -65,6 +79,7 @@ export function loadBillCreditNotes(db: Database, billId: string, billTotalPaise
     ...n,
     refunds: refunds.filter((r) => r.noteId === n.id).map(({ mode, amountPaise, refNote }) => ({ mode, amountPaise, refNote })),
     lines: lines.filter((l) => l.noteId === n.id).map(({ orderItemId, name, qty, totalPaise }) => ({ orderItemId, name, qty, totalPaise })),
+    charges: charges.filter((c) => c.noteId === n.id).map(({ kind, label, totalPaise }) => ({ kind, label, totalPaise })),
   }));
   return { refundState: refundState(billTotalPaise, creditNotes.reduce((sum, n) => sum + n.totalPaise, 0)), creditNotes, refundedQty };
 }
@@ -96,7 +111,8 @@ function draftCredit(db: Database, billId: string, kind: "void" | "refund", requ
   if (kind === "refund") {
     if (bill.status !== "paid") throw httpError(409, "Only paid bills can be refunded");
     if (credit.lines.length === 0) throw httpError(409, "This older bill can only be voided");
-    if (credit.lines.every((l) => (credit.credited[l.orderItemId]?.qty ?? 0) >= l.qty)) throw httpError(409, "Nothing left to refund on this bill");
+    const chargesLeft = credit.charges.some((c) => !credit.creditedCharges.includes(c.kind));
+    if (!chargesLeft && credit.lines.every((l) => (credit.credited[l.orderItemId]?.qty ?? 0) >= l.qty)) throw httpError(409, "Nothing left to refund on this bill");
     if (requested.length === 0) throw httpError(400, "Choose the items to refund");
   }
   if (credit.lines.length === 0) {
@@ -106,10 +122,10 @@ function draftCredit(db: Database, billId: string, kind: "void" | "refund", requ
     const sum = (f: "taxablePaise" | "cgstPaise" | "sgstPaise") => taxes.reduce((s, t) => s + t[f], 0);
     const taxablePaise = sum("taxablePaise"), cgstPaise = sum("cgstPaise"), sgstPaise = sum("sgstPaise");
     const totals: Money = { taxablePaise, cgstPaise, sgstPaise, roundingPaise: bill.total_paise - taxablePaise - cgstPaise - sgstPaise, totalPaise: bill.total_paise };
-    return { bill, credit, draft: { lines: [], taxes, totals } };
+    return { bill, credit, draft: { lines: [], charges: [], taxes, totals } };
   }
   try {
-    return { bill, credit, draft: kind === "void" ? voidRemainder(credit.lines, credit.credited) : creditFor(credit.lines, credit.credited, requested) };
+    return { bill, credit, draft: kind === "void" ? voidRemainder(credit.lines, credit.credited, credit.charges, credit.creditedCharges) : creditFor(credit.lines, credit.credited, requested, credit.charges, credit.creditedCharges) };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid credit";
     throw httpError(message === "Nothing left to refund on this bill" ? 409 : 400, message);
@@ -185,6 +201,8 @@ function writeCreditNote(db: Database, note: {
   for (const l of note.draft.lines) {
     line.run(id, l.orderItemId, l.name, l.categoryId, l.categoryName, l.gstRate, l.qty, l.taxablePaise, l.cgstPaise, l.sgstPaise, l.roundingPaise, l.totalPaise);
   }
+  const charge = db.prepare("INSERT INTO credit_note_charges (credit_note_id, kind, label, gst_rate, taxable_paise, cgst_paise, sgst_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  for (const c of note.draft.charges) charge.run(id, c.kind, c.label, c.gstRate, c.taxablePaise, c.cgstPaise, c.sgstPaise, c.totalPaise);
   const tax = db.prepare("INSERT INTO credit_note_taxes (credit_note_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?)");
   for (const x of note.draft.taxes) tax.run(id, x.gstRate, x.taxablePaise, x.cgstPaise, x.sgstPaise);
   const refund = db.prepare("INSERT INTO refund_payments (id, credit_note_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)");
@@ -319,7 +337,7 @@ export function registerCreditNotes(app: FastifyInstance): void {
     const { id } = req.params as { id: string };
     const body = CreditPreview.parse(req.body ?? {});
     const { credit, draft } = draftCredit(db, id, body.kind, body.lines ?? []);
-    return { preview: { lines: draft.lines, taxes: draft.taxes, totals: draft.totals, refundable: refundableOf(credit) } };
+    return { preview: { lines: draft.lines, charges: draft.charges, taxes: draft.taxes, totals: draft.totals, refundable: refundableOf(credit) } };
   });
 
   app.post("/api/bills/:id/void", { preHandler: refundPermission }, async (req, reply) => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PIN } from "./auth-schemas.js";
+import type { ChargeKind } from "./billing.js";
 
 export type PayMode = "cash" | "upi" | "card";
 const PAY_MODES: readonly PayMode[] = ["cash", "upi", "card"];
@@ -9,9 +10,13 @@ export type Money = { taxablePaise: number; cgstPaise: number; sgstPaise: number
 export interface BillLine extends Money { orderItemId: string; qty: number; name: string; categoryId: string | null; categoryName: string; gstRate: number }
 /** What earlier credit notes already took off one order item. */
 export interface Credited extends Money { qty: number }
+/** A service or packaging charge as billed; its credit is the whole charge (rounding is always 0). */
+export interface BillChargeCredit extends Money { kind: ChargeKind; label: string; gstRate: number }
 /** The lines of a draft carry the credited qty and money, not the billed ones. */
 export interface CreditDraft {
   lines: Array<BillLine>;
+  /** Charges credited by this note: only when it credits every remaining item (or voids the bill). */
+  charges: BillChargeCredit[];
   taxes: Array<{ gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }>;
   totals: Money;
 }
@@ -44,7 +49,7 @@ function creditOne(line: BillLine, already: Credited | undefined, q: number): Bi
   return { ...line, qty: q, ...credit, totalPaise };
 }
 
-function groupTaxes(lines: readonly BillLine[]): CreditDraft["taxes"] {
+function groupTaxes(lines: ReadonlyArray<Pick<BillLine, "gstRate" | "taxablePaise" | "cgstPaise" | "sgstPaise">>): CreditDraft["taxes"] {
   const byRate = new Map<number, CreditDraft["taxes"][number]>();
   for (const l of lines) {
     const t = byRate.get(l.gstRate) ?? { gstRate: l.gstRate, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0 };
@@ -61,6 +66,8 @@ export function creditFor(
   lines: BillLine[],
   credited: Record<string, Credited>,
   requested: Array<{ orderItemId: string; qty: number }>,
+  charges: BillChargeCredit[] = [],
+  creditedKinds: ChargeKind[] = [],
 ): CreditDraft {
   const wanted = new Map<string, number>();
   for (const r of requested) wanted.set(r.orderItemId, (wanted.get(r.orderItemId) ?? 0) + r.qty);
@@ -74,16 +81,19 @@ export function creditFor(
     if (q > left) throw new Error(`Cannot refund ${q} of ${line.name}: only ${left} left on this bill`);
     out.push(creditOne(line, credited[orderItemId], q));
   }
-  if (out.length === 0) throw new Error("Nothing left to refund on this bill");
-  return { lines: out, taxes: groupTaxes(out), totals: sumMoney(out) };
+  // A note that credits every remaining unit also credits the charges not credited yet; a partial refund leaves them on the bill.
+  const clears = lines.every((l) => (credited[l.orderItemId]?.qty ?? 0) + (wanted.get(l.orderItemId) ?? 0) === l.qty);
+  const chargeCredits = clears ? charges.filter((c) => !creditedKinds.includes(c.kind)) : [];
+  if (out.length === 0 && chargeCredits.length === 0) throw new Error("Nothing left to refund on this bill");
+  return { lines: out, charges: chargeCredits, taxes: groupTaxes([...out, ...chargeCredits]), totals: sumMoney([...out, ...chargeCredits]) };
 }
 
-/** Credit for every unit not yet credited. */
-export function voidRemainder(lines: BillLine[], credited: Record<string, Credited>): CreditDraft {
+/** Credit for every unit not yet credited, plus every charge not yet credited. */
+export function voidRemainder(lines: BillLine[], credited: Record<string, Credited>, charges: BillChargeCredit[] = [], creditedKinds: ChargeKind[] = []): CreditDraft {
   const remaining = lines
     .map((l) => ({ orderItemId: l.orderItemId, qty: l.qty - (credited[l.orderItemId]?.qty ?? 0) }))
     .filter((r) => r.qty > 0);
-  return creditFor(lines, credited, remaining);
+  return creditFor(lines, credited, remaining, charges, creditedKinds);
 }
 
 export function refundState(billTotalPaise: number, creditedTotalPaise: number): "none" | "partly_refunded" | "refunded" {

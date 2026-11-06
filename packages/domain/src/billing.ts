@@ -134,6 +134,8 @@ export interface BillCreditNote {
   requestedByName: string; approvedByName: string;
   refunds: Array<{ mode: "cash" | "upi" | "card"; amountPaise: number; refNote: string | null }>;
   lines: Array<{ orderItemId: string; name: string; qty: number; totalPaise: number }>;
+  /** Charges this note credited (taxable + CGST + SGST); only a note that credits every remaining item or voids the bill has any. */
+  charges: Array<{ kind: ChargeKind; label: string; totalPaise: number }>;
 }
 export interface Bill extends BillTotals {
   id: string; billNo: number;
