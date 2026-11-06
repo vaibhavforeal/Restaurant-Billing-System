@@ -10,6 +10,7 @@ import type { SettingsData } from "../types";
 import "../bill-settings.css";
 
 const LINES_HINT = "Up to 3 lines, 48 characters each";
+const CHARGES_HELP = "Service charge is added to dine-in bills only; staff can remove it on any bill. Packaging is added to takeaway and delivery bills. Both are taxed at your default GST rate and follow your GST setting. Zomato orders get neither.";
 const field = { display: "grid", gap: 4 } as const;
 const check = { display: "flex", alignItems: "center", gap: 8 } as const;
 
@@ -94,6 +95,28 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
             <option value="half">To the nearest 50 paise</option>
             <option value="off">No rounding (exact paise)</option>
           </select>
+        </label>
+      </fieldset>
+
+      <fieldset className="bill-settings-group">
+        <legend>Charges</legend>
+        <label style={field}>
+          <span>Service charge (%) <InfoTip id="service-charge-help">{CHARGES_HELP}</InfoTip></span>
+          <input type="number" min={0} max={20} step={0.01} inputMode="decimal" value={form.serviceChargeBp / 100} disabled={busy} aria-describedby="service-charge-help"
+            onChange={(e) => update({ serviceChargeBp: Math.min(2000, Math.max(0, Math.round(Number(e.target.value) * 100) || 0)) })} />
+        </label>
+        <label style={field}>
+          <span>Service charge label</span>
+          <input value={form.serviceChargeLabel} maxLength={24} placeholder="Service charge" disabled={busy} onChange={(e) => update({ serviceChargeLabel: e.target.value })} />
+        </label>
+        <label style={field}>
+          <span>Packaging charge (₹)</span>
+          <input type="number" min={0} max={1000} step={0.01} inputMode="decimal" value={form.packagingChargePaise / 100} disabled={busy}
+            onChange={(e) => update({ packagingChargePaise: Math.min(100000, Math.max(0, Math.round(Number(e.target.value) * 100) || 0)) })} />
+        </label>
+        <label style={field}>
+          <span>Packaging label</span>
+          <input value={form.packagingChargeLabel} maxLength={24} placeholder="Packaging" disabled={busy} onChange={(e) => update({ packagingChargeLabel: e.target.value })} />
         </label>
       </fieldset>
 

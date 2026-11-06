@@ -1,4 +1,4 @@
-import { billChargesGst, billShowOf, billTextLines, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
+import { billChargesGst, billShowOf, chargeLabel, billTextLines, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { contextLine } from "./templates.js";
@@ -56,7 +56,7 @@ function billHeading(r: Bill["receipt"]): { thermal: string; html: string; decla
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
 /** A charge line's printed label: its name, plus the percentage when it is a percent of the subtotal. */
-export const chargeLabel = (c: { label: string; percentBp?: number | null }) => c.percentBp ? `${c.label} ${c.percentBp / 100}%` : c.label;
+export { chargeLabel };
 /** The per-rate GST the prices already contain, shown after the total. */
 const includedGst = (bill: Bill) => billChargesGst(bill.receipt) && bill.receipt.gstMode === "included" ? bill.taxes : [];
 /** The per-rate GST added on top of the prices, shown as additions before round-off and the total. */

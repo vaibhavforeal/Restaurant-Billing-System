@@ -135,6 +135,12 @@ export interface SettingsData {
   invoicePrefix: string;
   /** How a bill total is rounded: to the rupee, to 50 paise, or not at all. */
   roundOff: RoundOff;
+  /** Service charge on dine-in bills, in basis points (1000 = 10%); 0 for none. */
+  serviceChargeBp: number;
+  /** Packaging charge on takeaway and delivery bills, in paise; 0 for none. */
+  packagingChargePaise: number;
+  serviceChargeLabel: string;
+  packagingChargeLabel: string;
 }
 
 export interface Customer {

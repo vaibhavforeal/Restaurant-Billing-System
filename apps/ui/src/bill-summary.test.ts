@@ -33,3 +33,20 @@ describe("BillSummary with GST added on the bill", () => {
     expect(html).not.toContain("<dt>CGST</dt>");
   });
 });
+
+describe("BillSummary with service and packaging charges", () => {
+  const charge = { kind: "service" as const, label: "Service charge", percentBp: 1000, gstRate: 5, amountPaise: 900, taxablePaise: 900, cgstPaise: 22, sgstPaise: 22 };
+  const withCharges = { subtotalPaise: 10000, discountPaise: 1000, roundingPaise: 0, totalPaise: 9990, taxablePaise: 9900, cgstPaise: 45, sgstPaise: 45, taxes: [{ gstRate: 5, taxablePaise: 9900, cgstPaise: 45, sgstPaise: 45 }], charges: [charge, { kind: "packaging" as const, label: "Packaging", gstRate: 5, amountPaise: 2000, taxablePaise: 2000, cgstPaise: 50, sgstPaise: 50 }] };
+  it("lists each charge between Discount and CGST when GST is added", () => {
+    const html = renderToStaticMarkup(createElement(BillSummary, { value: withCharges, gst: { gstMode: "exclusive" } }));
+    expect(html).toMatch(/<dt>Discount<\/dt><dd>[^<]*10\.00<\/dd><dt>Service charge 10%<\/dt><dd>[^<]*9\.00<\/dd><dt>Packaging<\/dt><dd>[^<]*20\.00<\/dd><dt>CGST<\/dt>/);
+  });
+  it("lists charges between Discount and Round off when GST is included", () => {
+    const html = renderToStaticMarkup(createElement(BillSummary, { value: withCharges, gst: { gstMode: "included" } }));
+    expect(html).toMatch(/<dt>Discount<\/dt><dd>[^<]*10\.00<\/dd><dt>Service charge 10%<\/dt><dd>[^<]*9\.00<\/dd><dt>Packaging<\/dt><dd>[^<]*20\.00<\/dd><dt>Round off<\/dt>/);
+  });
+  it("renders as before without charges", () => {
+    const html = renderToStaticMarkup(createElement(BillSummary, { value: { ...withCharges, charges: [] }, gst: { gstMode: "included" } }));
+    expect(html).toContain("<dt>Discount</dt><dd>₹10.00</dd><dt>Round off</dt>");
+  });
+});

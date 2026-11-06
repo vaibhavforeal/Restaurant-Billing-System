@@ -1,7 +1,7 @@
-import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { Fragment, useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
-import type { Bill, BillCreateInput, BillTotals } from "@masalapos/domain";
+import { chargeLabel, type Bill, type BillCreateInput, type BillTotals } from "@masalapos/domain";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { billStatusLabel } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
@@ -45,7 +45,7 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
       <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
     </table></div>}
   </>;
-  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
+  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{(value.charges ?? []).map((c) => <Fragment key={c.kind}><dt>{chargeLabel(c)}</dt><dd>{money(c.amountPaise)}</dd></Fragment>)}{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
   const includes = !noGst && !added && includedPaise > 0 && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
@@ -68,7 +68,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const [buyerGstin, setBuyerGstin] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [buyerAddress, setBuyerAddress] = useState("");
-  useEffect(() => { setBusiness(false); setBuyerGstin(""); setBuyerName(""); setBuyerAddress(""); }, [order.id]);
+  // The restaurant's service charge is on by default for dine-in; the cashier can take it off one bill.
+  const [serviceCharge, setServiceCharge] = useState(true);
+  useEffect(() => { setBusiness(false); setBuyerGstin(""); setBuyerName(""); setBuyerAddress(""); setServiceCharge(true); }, [order.id]);
   const can = useCan();
   const crm = useIntegrations().isEnabled("crm");
   // The most points the last preview allowed on this bill; kept while the cashier edits the amount.
@@ -144,7 +146,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     });
     return () => { active = false; };
   }, [order.id, order.status]);
-  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin, redeem, order.customer?.id, business, buyerGstin, buyerName, buyerAddress]);
+  useEffect(() => { setPreview(null); createRequest.current = null; }, [itemsKey, hasDraft, discount, reason, approverPin, redeem, order.customer?.id, business, buyerGstin, buyerName, buyerAddress, serviceCharge]);
   useEffect(() => { setHtml(""); setFrameReady(false); }, [bill?.id, bill?.status]);
   useEffect(() => { setShowQr(false); }, [bill?.id, bill?.status]);
   useEffect(() => {
@@ -202,12 +204,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       if (!buyer.name) throw new Error("Enter the business's legal name");
     }
     const { preview: value } = await apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
-      method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}), ...(buyer ? { buyer } : {}) }),
+      method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}), ...(buyer ? { buyer } : {}), serviceCharge }),
     });
     setPreview(value);
     setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
-    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge: true, ...(pin ? { approverPin: pin } : {}) };
+    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge, ...(pin ? { approverPin: pin } : {}) };
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
@@ -356,6 +358,8 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
         <div className={`billing-dialog-grid${totals ? "" : " billing-awaiting-preview"}`}>
           <div className="billing-review">
             {totals && <BillSummary value={totals} compact gst={totals.receipt} />}
+            {!bill && order.status === "open" && order.type === "dine_in" && (!serviceCharge || preview?.charges?.some((c) => c.kind === "service")) &&
+              <label className="billing-check"><input type="checkbox" checked={serviceCharge} disabled={blocked} onChange={(e) => setServiceCharge(e.target.checked)} /> Service charge</label>}
             {totals?.receipt.buyer && <p className="billing-note">GST invoice to <strong>{totals.receipt.buyer.name}</strong> · GSTIN {totals.receipt.buyer.gstin}</p>}
             {bill?.discountNote && <p className="billing-note">Discount reason: {bill.discountNote}</p>}
             {bill && <BillItemLines items={order.items} refundedQty={bill.refundedQty} showRefunded={bill.creditNotes.length > 0} />}

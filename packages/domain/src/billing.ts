@@ -63,6 +63,8 @@ export interface ChargeLine {
   kind: ChargeKind; label: string; percentBp?: number; gstRate: number;
   amountPaise: number; taxablePaise: number; cgstPaise: number; sgstPaise: number;
 }
+/** A charge's name on a bill: the label, then its percentage when it has one (`Service charge 10%`). */
+export const chargeLabel = (c: { label: string; percentBp?: number | null | undefined }) => c.percentBp ? `${c.label} ${c.percentBp / 100}%` : c.label;
 export interface BillTotals {
   subtotalPaise: number; discountPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];

@@ -16,6 +16,8 @@ interface Preview {
   lines: Array<{ orderItemId: string; name: string; qty: number; totalPaise: number }>;
   taxes: Array<{ gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }>;
   totals: { taxablePaise: number; cgstPaise: number; sgstPaise: number; roundingPaise: number; totalPaise: number };
+  /** Service and packaging charges credited back, one line each. */
+  charges?: Array<{ kind: string; label: string; totalPaise: number }>;
   refundable: Refundable;
 }
 interface IssuedCredit { bill: Bill; creditNote: BillCreditNote; order: Order }
@@ -253,7 +255,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
       {loadingPreview && <p role="status">Working out the credit…</p>}
       {previewError && <p className="billing-error" role="alert">{previewError}</p>}
       {preview && preview.key === key && <>
-        <ul>{preview.lines.map((line) => <li key={line.orderItemId}><span>{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}</ul>
+        <ul>{preview.lines.map((line) => <li key={line.orderItemId}><span>{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}{(preview.charges ?? []).map((c) => <li key={c.kind}><span>{c.label}</span><span className="pos-money">{money(c.totalPaise)}</span></li>)}</ul>
         <dl className="pos-totals">
           {!billChargesGst(bill.receipt) ? <><dt>Item value</dt><dd>{money(preview.totals.taxablePaise)}</dd></> : <>
             <dt>Taxable value</dt><dd>{money(preview.totals.taxablePaise)}</dd>
