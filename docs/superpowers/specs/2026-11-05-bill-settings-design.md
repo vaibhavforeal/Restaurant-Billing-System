@@ -1,6 +1,6 @@
 # Bill settings — design
 
-Date: 2026-11-05 · Branch: `feat/bill-settings` · Status: approved in brainstorm; Phases 1–3 built
+Date: 2026-11-05 · Branch: `feat/bill-settings` · Status: approved in brainstorm; Phases 1–4 built
 
 ## Why
 
@@ -222,6 +222,9 @@ saved on the bill snapshot as `orderTypeKind`.
   sgst_paise)`.
 - Charges get their own report lines (no order item; marked as a charge) so day, sales, operational and GST reports
   include them; item-level reports (menu engineering, popular items, costing) exclude charge lines.
+  *Built differently (approved by the user 2026-11-06):* item tables require an order item, so charges are not item
+  lines. They live in `bill_charges`, `credit_note_charges` and `bills.charges_paise` (migration 59). Bill-level
+  reports read `bills`, `bill_taxes` and `credit_note_taxes`, which include charges; item-level reports never see them.
 - Charges are part of `totals`, so the bill-preview fingerprint (`apps/server/src/billing.ts`) covers them.
 - Receipt: one line per charge after the item subtotal/discount; under `exclusive` the charge's GST is included in the
   CGST/SGST lines.

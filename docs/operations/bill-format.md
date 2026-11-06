@@ -118,6 +118,43 @@ The item GST rate column or line appears only on bills that charge GST
 themselves: Prices include GST or GST added on the bill, and not a Zomato-paid order. No-GST bills, bills
 of supply and Zomato bills never show it, even when the option is on.
 
+## Service and packaging charges
+
+Choose **Settings > Bill settings > Charges**, then **Save**:
+
+- **Service charge (%)** - 0 to 20, in steps of 0.01. Leave it at 0 for no service charge. It is added to **dine-in**
+  bills only, on the subtotal after any discount.
+- **Packaging charge (₹)** - 0 to 1000. A flat amount added once to each **takeaway** or **delivery** bill. Leave it at
+  0 for none.
+- **Service charge label** and **Packaging label** - the words printed on the bill. A blank label saves as "Service
+  charge" or "Packaging".
+
+Zomato orders get neither charge. Both apply to new bills only; old bills and reprints keep what they were issued with.
+
+Each charge is taxed at the **Default GST rate** and follows the GST setting: with **Prices include GST** the charge
+already contains its GST, with **Prices exclude GST, added on the bill** the GST is added on top, and with **No GST
+charged** there is no tax. The GST on a charge is reported in the same rate group as the menu items, so GSTR-1 and
+GSTR-3B include it.
+
+Service charge is never compulsory. On a dine-in bill the cashier can untick **Service charge** in the billing panel.
+No reason or approval is needed. The bill records that it was removed.
+
+On the bill, each charge is one line after Discount, for example `Service charge 10%` and `Packaging`. Day-end and
+Sales reports show a **Charges** total.
+
+Refunds: a refund that returns every item on the bill also returns the charges, and the bill becomes **Refunded**. A
+part refund leaves the charges. Voiding a bill returns its charges too. Credit notes list each charge they return.
+
+Example, a ₹100 item at 5% with a 10% service charge:
+
+| | Prices include GST | GST added on the bill |
+| --- | --- | --- |
+| Subtotal | ₹100.00 | ₹100.00 |
+| Service charge 10% | ₹10.00 | ₹10.00 |
+| CGST 2.5% | (inside the price) ₹2.62 | ₹2.75 |
+| SGST 2.5% | (inside the price) ₹2.62 | ₹2.75 |
+| Total | ₹110.00 | ₹115.50 → ₹116.00 (round off +₹0.50) |
+
 ## Numbering and rounding
 
 Choose **Settings > Bill settings > Numbering & rounding**, then **Save**:

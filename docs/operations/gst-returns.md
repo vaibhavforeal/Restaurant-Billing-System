@@ -37,6 +37,14 @@ reverse charge and amendments are not covered: the POS does not record purchases
 Every supply is intra-state (CGST and SGST, never IGST), because restaurant service is supplied where the restaurant
 is (IGST Act section 12(4)). The place of supply on every bill is the restaurant's state.
 
+## Service and packaging charges
+
+A service charge or packaging charge on a bill is part of the restaurant's supply, so it is taxed like the food: at the
+**Default GST rate** in Bill settings. Its taxable value and tax are added to the same rate rows as the items, in
+GSTR-1 Tables 4A, 7 and 12 and GSTR-3B Table 3.1, and in the CMP-08 turnover when no GST is charged. Nothing extra
+is listed for charges. A refund or void that returns a charge lowers the same rows in its own period. Item-level
+reports (popular items, costing) leave charges out.
+
 ## Dates, voids and refunds
 
 - Bills count on the day they were issued; credit notes on the day they were issued.

@@ -96,11 +96,29 @@
   await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Tax invoice') && html.includes('CGST 2.5% on 105.00'); }, 'GST added receipt');
   check(!document.querySelector('iframe').contentDocument.body.innerText.includes('Includes GST'), 'GST added receipt has no Includes GST block');
   await api('/settings', 'PUT', savedSettings);
+  // Service and packaging charges: set through the API, bill through the API, then put the saved settings back.
+  const gstin = savedSettings.gstin ? {} : { gstin: '29ABCDE1234F1Z5', stateCode: '29' };
+  await api('/settings', 'PUT', { ...savedSettings, ...gstin, gstMode: 'included', serviceChargeBp: 1000, packagingChargePaise: 2000 });
+  const { product: hundred } = await api('/products', 'POST', { categoryId: category.id, name: `Charge meal ${suffix}`, pricePaise: 10000, gstRate: 5, kotStationId: null });
+  const issueFor = async (type, tableId, extra = {}) => {
+    const { order } = await api('/orders', 'POST', { clientRef: crypto.randomUUID(), type, tableId });
+    await api(`/orders/${order.id}/items`, 'POST', { items: [{ productId: hundred.id, qty: 1, clientRef: crypto.randomUUID() }] });
+    const { preview } = await api(`/orders/${order.id}/bill-preview`, 'POST', { discountPaise: 0, ...extra });
+    return (await api(`/orders/${order.id}/bill`, 'POST', { clientRef: crypto.randomUUID(), previewKey: preview.previewKey, ...extra })).bill;
+  };
+  const { table } = await api('/tables', 'POST', { name: `Charge T${suffix % 100000}` });
+  const dine = await issueFor('dine_in', table.id);
+  check(dine.totalPaise === 11000 && dine.charges.length === 1 && dine.charges[0].kind === 'service' && dine.charges[0].amountPaise === 1000, 'Dine-in bill: 10% service on ₹100 at 5% GST included totals ₹110');
+  const parcel = await issueFor('parcel', null);
+  check(parcel.totalPaise === 12000 && parcel.charges.length === 1 && parcel.charges[0].kind === 'packaging' && parcel.charges[0].amountPaise === 2000, 'Takeaway bill: ₹20 packaging added to ₹100');
+  const receiptHtml = await (await fetch(`/api/bills/${dine.id}/receipt`, { headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}` } })).text();
+  check(receiptHtml.includes('Service charge 10%'), 'Receipt shows the service charge line');
+  await api('/settings', 'PUT', savedSettings);
   await nav('tables'); await nav('Reports & Analytics'); await click('Day-end / GST');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');
   check(document.body.innerText.includes('105.00') || document.body.innerText.includes('110.00'), 'Day-end payment breakdown rendered');
   const report = (await api('/reports/day-end')).report;
-  check(report.sales.billCount >= 2 && report.payments.length === 3, 'Report matches saved cash, UPI and card collections');
-  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo, addedGstBill: added.billNo };
+  check(report.sales.billCount >= 2 && report.payments.length === 3 && report.sales.chargesPaise >= 3000, 'Report matches saved cash, UPI and card collections');
+  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo, addedGstBill: added.billNo, dineInChargeBill: dine.billNo, takeawayChargeBill: parcel.billNo };
   return window.__m4Report;
 })()
