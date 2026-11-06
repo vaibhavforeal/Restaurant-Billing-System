@@ -37,6 +37,7 @@ interface SettingsRow {
   packaging_charge_paise: number;
   service_charge_label: string;
   packaging_charge_label: string;
+  packaging_per_item: number;
 }
 
 const DEFAULT_SERVICE_LABEL = "Service charge";
@@ -48,7 +49,7 @@ const chargeLabel = (label: string | undefined, fallback: string) => (label === 
 
 export function readSettings(db: Database) {
   const r = db
-    .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, receipt_header, bill_show_fssai, bill_show_customer, bill_show_table, bill_show_served_by, bill_show_item_gst, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled, sac_code, zomato_gstin, invoice_prefix, round_off, service_charge_bp, packaging_charge_paise, service_charge_label, packaging_charge_label FROM settings WHERE id = 1")
+    .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, receipt_header, bill_show_fssai, bill_show_customer, bill_show_table, bill_show_served_by, bill_show_item_gst, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled, sac_code, zomato_gstin, invoice_prefix, round_off, service_charge_bp, packaging_charge_paise, service_charge_label, packaging_charge_label, packaging_per_item FROM settings WHERE id = 1")
     .get() as SettingsRow;
   return {
     gstMode: r.gst_mode,
@@ -84,6 +85,7 @@ export function readSettings(db: Database) {
     packagingChargePaise: r.packaging_charge_paise,
     serviceChargeLabel: r.service_charge_label,
     packagingChargeLabel: r.packaging_charge_label,
+    packagingPerItem: r.packaging_per_item === 1,
   };
 }
 
@@ -116,7 +118,7 @@ export function registerSettings(app: FastifyInstance): void {
     if (stateCode && !gstinMatchesState(body.gstin, stateCode)) return reply.status(400).send({ error: GSTIN_STATE_MESSAGE });
     if (stateCode && body.zomatoGstin && !gstinMatchesState(body.zomatoGstin, stateCode)) return reply.status(400).send({ error: "Use Zomato's GSTIN for your state" });
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin), invoice_prefix = COALESCE(?, invoice_prefix), round_off = COALESCE(?, round_off), service_charge_bp = COALESCE(?, service_charge_bp), packaging_charge_paise = COALESCE(?, packaging_charge_paise), service_charge_label = COALESCE(?, service_charge_label), packaging_charge_label = COALESCE(?, packaging_charge_label) WHERE id = 1")
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin), invoice_prefix = COALESCE(?, invoice_prefix), round_off = COALESCE(?, round_off), service_charge_bp = COALESCE(?, service_charge_bp), packaging_charge_paise = COALESCE(?, packaging_charge_paise), service_charge_label = COALESCE(?, service_charge_label), packaging_charge_label = COALESCE(?, packaging_charge_label), packaging_per_item = COALESCE(?, packaging_per_item) WHERE id = 1")
       .run(body.restaurantName, body.address, body.city ?? null, body.stateCode ?? null, body.pincode ?? null, body.phone ?? null, body.gstin, body.fssai, body.receiptFooter, body.receiptHeader,
         ...[body.billShowFssai, body.billShowCustomer, body.billShowTable, body.billShowServedBy, body.billShowItemGst].map((v) => (v === undefined ? null : v ? 1 : 0)),
         body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
@@ -127,7 +129,8 @@ export function registerSettings(app: FastifyInstance): void {
         body.customerUsualEnabled === undefined ? null : body.customerUsualEnabled ? 1 : 0,
         body.sacCode ?? null, body.zomatoGstin ?? null, body.invoicePrefix ?? null, body.roundOff ?? null,
         body.serviceChargeBp ?? null, body.packagingChargePaise ?? null,
-        chargeLabel(body.serviceChargeLabel, DEFAULT_SERVICE_LABEL), chargeLabel(body.packagingChargeLabel, DEFAULT_PACKAGING_LABEL));
+        chargeLabel(body.serviceChargeLabel, DEFAULT_SERVICE_LABEL), chargeLabel(body.packagingChargeLabel, DEFAULT_PACKAGING_LABEL),
+        body.packagingPerItem === undefined ? null : body.packagingPerItem ? 1 : 0);
     // Order screens and captain tablets show or hide Hold, the Popular badges and the ordered-together suggestions from these settings.
     app.broadcast("settings.changed", {});
     return { settings: readSettings(app.db) };

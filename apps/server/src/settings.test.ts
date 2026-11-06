@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { readBillingSettings } from "./gst-settings.js";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => {
@@ -15,7 +16,7 @@ describe("settings", () => {
     expect(before.statusCode).toBe(200);
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
-      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", receiptHeader: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "Service charge", packagingChargeLabel: "Packaging",
+      restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", receiptHeader: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "Service charge", packagingChargeLabel: "Packaging", packagingPerItem: false,
     });
 
     const put = await app.inject({
@@ -44,6 +45,19 @@ describe("settings", () => {
     expect((await save({ address: "New road" })).json().settings).toMatchObject(charges);
     expect((await save({ serviceChargeLabel: "  " })).json().settings).toMatchObject({ serviceChargeLabel: "Service charge", packagingChargeLabel: "Box", serviceChargeBp: 1000 });
     expect((await save({ serviceChargeBp: 2001 })).statusCode).toBe(400);
+  });
+
+  it("saves the per-item packaging toggle and keeps it on saves without it", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const save = (payload: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe Test", ...payload } });
+    expect((await save({ packagingPerItem: true })).statusCode).toBe(200);
+    const get = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
+    expect(get.json().settings.packagingPerItem).toBe(true);
+    expect(readBillingSettings(app.db).packagingPerItem).toBe(true);
+    expect((await save({ address: "New road" })).json().settings.packagingPerItem).toBe(true);
+    expect((await save({ packagingPerItem: false })).json().settings.packagingPerItem).toBe(false);
+    expect(readBillingSettings(app.db).packagingPerItem).toBe(false);
   });
 
   it("previews an unsaved bill", async () => {

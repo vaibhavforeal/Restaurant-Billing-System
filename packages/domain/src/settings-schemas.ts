@@ -41,6 +41,8 @@ export const SettingsUpdate = z.object({
   serviceChargeBp: z.number().int().min(0).max(2000).optional(),
   /** Flat packaging charge on takeaway and delivery bills, in paise; 0 is off. */
   packagingChargePaise: z.number().int().min(0).max(100000).optional(),
+  /** Adds each item's packaging amount (set in the menu) to the packaging charge. */
+  packagingPerItem: z.boolean().optional(),
   /** What each charge is called on the bill; blank saves the default name. */
   serviceChargeLabel: z.string().trim().max(24).optional(),
   packagingChargeLabel: z.string().trim().max(24).optional(),
