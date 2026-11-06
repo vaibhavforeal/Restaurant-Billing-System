@@ -14,6 +14,53 @@ const bill: Bill = {
   refundState: "none", creditNotes: [], refundedQty: {},
 };
 describe("receipts", () => {
+  describe("charge lines", () => {
+    const items = [{ pricePaise: 10000, qty: 1, gstRate: 5 }];
+    const withCharges = (mode: "exclusive" | "included" | "none") => {
+      const totals = calculateBill(items, 0, mode, "off", [
+        { kind: "service", label: "Service charge", gstRate: 18, bp: 1000 }, { kind: "packaging", label: "Packaging", gstRate: 18, amountPaise: 2000 }]);
+      return { ...bill, ...totals, receipt: { ...bill.receipt, gstMode: mode, items: [{ name: "Meal", pricePaise: 10000, qty: 1, gstRate: 5 }] } } as Bill;
+    };
+    const texts = (b: Bill) => [58, 80].map((w) => renderBytes(receiptSlip(b, w as 58 | 80)).replace(/<[0-9A-F]{2}>/g, ""));
+    it("prints each charge after Discount and before the added GST, which covers the charge's taxable value", () => {
+      const b = withCharges("exclusive");
+      expect(b.taxes.find((t) => t.gstRate === 18)!.taxablePaise).toBe(3000);
+      for (const text of texts(b)) {
+        expect(text).toContain("Service charge 10%"); expect(text).toContain("Packaging");
+        expect(text.indexOf("Service charge 10%")).toBeLessThan(text.indexOf("CGST 9%"));
+        expect(text).toContain("CGST 9% on 30.00");
+        expect(text).not.toContain("Packaging 0%");
+      }
+      const html = receiptHtml(b);
+      expect(html).toContain("<td>Service charge 10%</td><td class=\"amount\">₹10.00</td>");
+      expect(html).toContain("<td>Packaging</td><td class=\"amount\">₹20.00</td>");
+      expect(html.indexOf("Service charge 10%")).toBeLessThan(html.indexOf("CGST 9% on 30.00"));
+    });
+    it("prints the charge before Round off when GST is included, and its tax joins the Includes GST block", () => {
+      const b = withCharges("included");
+      for (const text of texts(b)) {
+        expect(text.indexOf("Service charge 10%")).toBeLessThan(text.indexOf("TOTAL"));
+        expect(text).toContain("Taxable @ 18%");
+      }
+      const html = receiptHtml(b);
+      expect(html.indexOf("Service charge 10%")).toBeLessThan(html.indexOf('class="grand-total"'));
+      expect(html.indexOf("Includes GST")).toBeGreaterThan(html.indexOf('class="grand-total"'));
+      expect(html).toContain("Taxable @ 18%");
+    });
+    it("prints a charge on a no-GST bill and shows no percentage when the charge has none", () => {
+      const html = receiptHtml(withCharges("none"));
+      expect(html).toContain("Service charge 10%"); expect(html).not.toContain("CGST");
+      expect(html).toContain("<td>Packaging</td>");
+    });
+    it("formats a fractional percentage", () => {
+      const b = { ...withCharges("exclusive"), charges: [{ kind: "service" as const, label: "Service", percentBp: 1250, gstRate: 18, amountPaise: 1250, taxablePaise: 1250, cgstPaise: 113, sgstPaise: 113 }] };
+      expect(receiptHtml(b)).toContain("Service 12.5%");
+    });
+    it("prints a bill without charges exactly as before", () => {
+      expect(receiptHtml({ ...bill, charges: [] })).toBe(receiptHtml(bill));
+      expect(receiptSlip({ ...bill, charges: [] }, 58)).toEqual(receiptSlip(bill, 58));
+    });
+  });
   it.each(RECEIPT_STYLES)("uses the saved %s style without changing bill content", (receiptStyle) => {
     const sample = { ...bill, receipt: { ...bill.receipt, receiptStyle } };
     expect(receiptHtml(sample)).toContain(`class="bill bill--${receiptStyle}"`);

@@ -414,6 +414,14 @@ describe("billing and day-end", () => {
       expect(delivery.charges!.map((c) => c.kind)).toEqual(["packaging"]);
       expect(delivery.receipt.orderTypeKind).toBe("delivery");
     });
+    it("totals the charges on the day-end report and prints them on the stored bill's receipt", async () => {
+      const dine = await issue(await dineIn()); const takeaway = await issue(await order());
+      const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+      expect(day.sales.chargesPaise).toBe(1050 + 2000);
+      expect(dine.charges![0]!.amountPaise + takeaway.charges![0]!.amountPaise).toBe(day.sales.chargesPaise);
+      const receipt = (await app.inject({ url: `/api/bills/${dine.id}/receipt`, headers: auth(token) })).body;
+      expect(receipt).toContain("Service charge 10%");
+    });
     it("lets the cashier remove the service charge, with a different preview key, and records it", async () => {
       const id = await dineIn();
       const kept = await previewOf(id), removed = await previewOf(id, { serviceCharge: false });

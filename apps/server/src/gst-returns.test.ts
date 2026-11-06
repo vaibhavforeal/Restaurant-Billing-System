@@ -65,6 +65,15 @@ describe("GST returns", () => {
     expect(table(r, "Table 3.1").rows[0]).toMatchObject({ taxable: 30000, cgst: 750, sgst: 750 });
   });
 
+  it("reports an 18% packaging charge on 5% items as its own 18% B2CS row", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 2000, gst_rate = 18 WHERE id = 1").run();
+    const b = await bill(1, JAN);
+    expect(b.charges).toMatchObject([{ kind: "packaging", gstRate: 18 }]);
+    const rows = table(await report("2026-01"), "Table 7").rows as Array<{ rate: string; taxable: number }>;
+    expect(rows.map((r) => r.rate)).toEqual(["5%", "18%"]);
+    expect(rows.find((r) => r.rate === "18%")!.taxable).toBe(b.charges![0]!.taxablePaise);
+  });
+
   it("reports a later void as a credit note in its own month, leaving the bill's month unchanged", async () => {
     const business = await bill(1, JAN, ACME);
     const before = await report("2026-01");

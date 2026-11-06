@@ -1,4 +1,4 @@
-import { DEFAULT_BILL_SHOW, calculateBill, financialYear, formatInvoiceNo, formatRestaurantAddress, type Bill, type BillShow, type SettingsUpdateInput } from "@masalapos/domain";
+import { DEFAULT_BILL_SHOW, calculateBill, financialYear, formatInvoiceNo, formatRestaurantAddress, type Bill, type BillShow, type ChargeInput, type SettingsUpdateInput } from "@masalapos/domain";
 
 type PreviewSettings = SettingsUpdateInput & { stateCode: string; city: string; pincode: string; phone: string };
 
@@ -15,9 +15,11 @@ export function sampleBill(s: PreviewSettings): Bill {
     table: s.billShowTable ?? DEFAULT_BILL_SHOW.table, servedBy: s.billShowServedBy ?? DEFAULT_BILL_SHOW.servedBy,
     itemGst: s.billShowItemGst ?? DEFAULT_BILL_SHOW.itemGst,
   };
+  // The sample is dine-in, so it shows the service charge and never the packaging one.
+  const charges: ChargeInput[] = s.serviceChargeBp ? [{ kind: "service", label: s.serviceChargeLabel || "Service charge", gstRate: s.gstRate ?? 5, bp: s.serviceChargeBp }] : [];
   const createdAt = new Date(2026, 3, 1, 13, 30).getTime();
   return {
-    ...calculateBill(ITEMS, 0, gstMode, s.roundOff ?? "rupee"),
+    ...calculateBill(ITEMS, 0, gstMode, s.roundOff ?? "rupee", charges),
     id: "preview", billNo: 1, invoiceNo: formatInvoiceNo(s.invoicePrefix ?? "", financialYear(createdAt).short, 1), orderId: "preview", status: "unpaid", discountNote: null,
     createdAt,
     receipt: {

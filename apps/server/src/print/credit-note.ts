@@ -41,6 +41,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
     pos.bold(true); line(`${index + 1}. ${item.name}`); pos.bold(false);
     pair(`Qty ${item.qty}`, money(item.totalPaise));
   });
+  for (const c of note.charges ?? []) { pos.bold(true); line(c.label); pos.bold(false); pair("Charge", money(c.totalPaise)); }
   pos.hr(width);
   // A bill that charged no GST (no-GST restaurant or Zomato) has a credit note with none either.
   if (billChargesGst(r)) for (const t of note.taxes) {
@@ -91,6 +92,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   ${r.buyer ? `<section class="buyer" aria-label="Issued to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <table class="items" aria-label="Credited items"><thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Amount ₹</th></tr></thead><tbody>
     ${note.lines.length ? note.lines.map((i, index) => `<tr><td>${index + 1}</td><td><span class="item-name">${e(i.name)}</span></td><td>${i.qty}</td><td class="amount"><strong>${money(i.totalPaise)}</strong></td></tr>`).join("") : `<tr><td></td><td><span class="item-name">All items on the bill</span></td><td></td><td class="amount"><strong>${money(note.totalPaise)}</strong></td></tr>`}
+    ${(note.charges ?? []).map((c) => `<tr><td></td><td><span class="item-name">${e(c.label)}</span></td><td></td><td class="amount"><strong>${money(c.totalPaise)}</strong></td></tr>`).join("")}
   </tbody></table><div class="item-count"><span>${note.lines.reduce((sum, l) => sum + l.qty, 0)} total quantity credited</span><span>All amounts in INR</span></div>
   <div class="summary">${supply ? `<section aria-label="GST"><p class="tax-note">No GST was charged on this bill.</p></section>` : `<section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
     <table class="taxes"><thead><tr><th scope="col">GST</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead><tbody>

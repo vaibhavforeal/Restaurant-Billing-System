@@ -63,6 +63,21 @@ describe("settings", () => {
     expect((await preview(cashier.token, { restaurantName: "Cafe", address: "FC Road" })).statusCode).toBe(403);
   });
 
+  it("previews the service charge from the form, falling back to the saved settings", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const base = { restaurantName: "Cafe Test", address: "12 MG Road" };
+    const preview = async (payload: object) => (await app.inject({ method: "POST", url: "/api/settings/bill-preview", headers: auth(admin.token), payload: { ...base, ...payload } })).json().html as string;
+    expect(await preview({})).not.toContain("Service charge");
+    expect(await preview({ serviceChargeBp: 1000 })).toContain("Service charge 10%");
+    expect(await preview({ serviceChargeBp: 1250, serviceChargeLabel: "Staff fee" })).toContain("Staff fee 12.5%");
+    const put = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { ...base, serviceChargeBp: 500, serviceChargeLabel: "Service" } });
+    expect(put.statusCode, put.body).toBe(200);
+    expect(await preview({})).toContain("Service 5%");
+    expect(await preview({ serviceChargeLabel: " " })).toContain("Service 5%");
+    expect(await preview({ serviceChargeBp: 0 })).not.toContain("Service 5%");
+  });
+
   it("previews the invoice number from the unsaved prefix", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

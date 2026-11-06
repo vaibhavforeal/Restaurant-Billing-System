@@ -98,7 +98,10 @@ export function registerSettings(app: FastifyInstance): void {
     return { html: receiptHtml(sampleBill({ ...body, city: body.city ?? saved.city, stateCode: body.stateCode ?? saved.stateCode, pincode: body.pincode ?? saved.pincode, phone: body.phone ?? saved.phone,
       billShowFssai: show(body.billShowFssai, saved.billShowFssai), billShowCustomer: show(body.billShowCustomer, saved.billShowCustomer), billShowTable: show(body.billShowTable, saved.billShowTable),
       billShowServedBy: show(body.billShowServedBy, saved.billShowServedBy), billShowItemGst: show(body.billShowItemGst, saved.billShowItemGst),
-      gstMode: body.gstMode ?? saved.gstMode, upiId: body.upiId ?? saved.upiId, receiptStyle: body.receiptStyle ?? saved.receiptStyle })) };
+      gstMode: body.gstMode ?? saved.gstMode,
+      gstRate: body.gstRate ?? (saved.gstRate as 5 | 12 | 18), serviceChargeBp: body.serviceChargeBp ?? saved.serviceChargeBp, packagingChargePaise: body.packagingChargePaise ?? saved.packagingChargePaise,
+      serviceChargeLabel: body.serviceChargeLabel?.trim() || saved.serviceChargeLabel, packagingChargeLabel: body.packagingChargeLabel?.trim() || saved.packagingChargeLabel,
+      upiId: body.upiId ?? saved.upiId, receiptStyle: body.receiptStyle ?? saved.receiptStyle })) };
   });
 
   app.put("/api/settings", { preHandler: manage }, async (req, reply) => {

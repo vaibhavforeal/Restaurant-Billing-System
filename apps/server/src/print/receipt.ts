@@ -55,6 +55,8 @@ function billHeading(r: Bill["receipt"]): { thermal: string; html: string; decla
   if (r.gstin.trim()) return { thermal: "BILL OF SUPPLY", html: "Bill of supply", declaration: compositionNote };
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
+/** A charge line's printed label: its name, plus the percentage when it is a percent of the subtotal. */
+export const chargeLabel = (c: { label: string; percentBp?: number | null }) => c.percentBp ? `${c.label} ${c.percentBp / 100}%` : c.label;
 /** The per-rate GST the prices already contain, shown after the total. */
 const includedGst = (bill: Bill) => billChargesGst(bill.receipt) && bill.receipt.gstMode === "included" ? bill.taxes : [];
 /** The per-rate GST added on top of the prices, shown as additions before round-off and the total. */
@@ -148,6 +150,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   rule();
   pair(`Subtotal (${quantity(bill)} qty)`, money(bill.subtotalPaise));
   if (bill.discountPaise) pair("Discount", `-${money(bill.discountPaise)}`);
+  for (const c of bill.charges ?? []) pair(clean(chargeLabel(c)), money(c.amountPaise));
   if (zomatoGst) line("GST paid by Zomato (section 9(5))");
   for (const t of addedGst(bill)) {
     pair(`CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}`, money(t.cgstPaise));
@@ -237,6 +240,7 @@ export function receiptHtml(bill: Bill): string {
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
     ${bill.discountPaise ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise)}</td></tr>` : ""}
+    ${(bill.charges ?? []).map((c) => `<tr><td>${e(chargeLabel(c))}</td><td class="amount">₹${money(c.amountPaise)}</td></tr>`).join("")}
     ${zomatoGst ? `<tr><td colspan="2" class="tax-note">GST paid by Zomato (section 9(5))</td></tr>` : ""}
     ${addedGst(bill).map((t) => `<tr class="tax"><td>CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.cgstPaise)}</td></tr>
     <tr class="tax"><td>SGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.sgstPaise)}</td></tr>`).join("")}

@@ -58,6 +58,20 @@ describe("credit note slip", () => {
     }
   });
 
+  it("lists a credited charge as a line after the items, on the slip and in the HTML", async () => {
+    const { bill } = await refunded();
+    const note: CreditNoteView = { ...view(bill.creditNotes[0]!), charges: [{ kind: "service", label: "Service charge", totalPaise: 350 }] };
+    const html = creditNoteHtml(note, bill);
+    expect(html.indexOf("Thali")).toBeLessThan(html.indexOf("Service charge"));
+    expect(html).toContain('<span class="item-name">Service charge</span>'); expect(html).toContain("<strong>3.50</strong>");
+    for (const width of [58, 80] as const) {
+      const rendered = renderBytes(creditNoteSlip(note, bill, width));
+      expect(rendered.indexOf("Thali")).toBeLessThan(rendered.indexOf("Service charge"));
+      expect(rendered).toContain("3.50");
+    }
+    expect(creditNoteHtml(view(bill.creditNotes[0]!), bill)).not.toContain("Service charge");
+  });
+
   it("prints no GST rows on a credit note against a bill that charged no GST", async () => {
     const { bill } = await refunded();
     const supply: Bill = { ...bill, receipt: { ...bill.receipt, gstMode: "none" as const } };
