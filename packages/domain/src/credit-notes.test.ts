@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  CreditPreview, RefundBill, VoidBill, creditFor, refundState, refundableByMode, voidRemainder,
-  type BillChargeCredit, type BillLine, type Credited,
+  CreditPreview, RefundBill, VoidBill, creditFor, packagingCredit, refundState, refundableByMode, voidRemainder,
+  type BillChargeCredit, type BillLine, type Credited, type CreditedCharges,
 } from "./credit-notes.js";
 
 type MoneyFields = Pick<BillLine, "taxablePaise" | "cgstPaise" | "sgstPaise" | "roundingPaise" | "totalPaise">;
 const FIELDS = ["taxablePaise", "cgstPaise", "sgstPaise", "roundingPaise", "totalPaise"] as const;
 
 const line = (over: Partial<BillLine> & { orderItemId: string }): BillLine => ({
-  qty: 1, name: "Dosa", categoryId: "cat", categoryName: "Mains", gstRate: 5,
+  qty: 1, name: "Dosa", categoryId: "cat", categoryName: "Mains", gstRate: 5, packagingPaise: 0,
   taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, ...over,
 });
 const money = (l: MoneyFields): MoneyFields =>
@@ -155,11 +155,23 @@ describe("credit schemas", () => {
   });
 });
 
+const addCharges = (creditedCharges: CreditedCharges, draft: ReturnType<typeof creditFor>) => {
+  for (const c of draft.charges) {
+    const was = creditedCharges[c.kind] ?? { amountPaise: 0, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0 };
+    creditedCharges[c.kind] = {
+      amountPaise: was.amountPaise + c.amountPaise, taxablePaise: was.taxablePaise + c.taxablePaise, cgstPaise: was.cgstPaise + c.cgstPaise,
+      sgstPaise: was.sgstPaise + c.sgstPaise, roundingPaise: was.roundingPaise + c.roundingPaise, totalPaise: was.totalPaise + c.totalPaise,
+    };
+  }
+};
+
 describe("credit math with charges", () => {
   const thali = line({ orderItemId: "i1", qty: 2, gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, totalPaise: 10500 });
-  const service: BillChargeCredit = { kind: "service", label: "Service charge", gstRate: 18, taxablePaise: 1000, cgstPaise: 90, sgstPaise: 90, roundingPaise: 0, totalPaise: 1180 };
-  const packaging: BillChargeCredit = { kind: "packaging", label: "Packaging", gstRate: 5, taxablePaise: 2000, cgstPaise: 50, sgstPaise: 50, roundingPaise: 0, totalPaise: 2100 };
+  const service: BillChargeCredit = { kind: "service", label: "Service charge", gstRate: 18, amountPaise: 1000, taxablePaise: 1000, cgstPaise: 90, sgstPaise: 90, roundingPaise: 0, totalPaise: 1180 };
+  const packaging: BillChargeCredit = { kind: "packaging", label: "Packaging", gstRate: 5, amountPaise: 2000, taxablePaise: 2000, cgstPaise: 50, sgstPaise: 50, roundingPaise: 0, totalPaise: 2100 };
   const charges = [service, packaging];
+  const serviceCredited: CreditedCharges = { service: { amountPaise: 1000, taxablePaise: 1000, cgstPaise: 90, sgstPaise: 90, roundingPaise: 0, totalPaise: 1180 } };
+  const bothCredited: CreditedCharges = { ...serviceCredited, packaging: { amountPaise: 2000, taxablePaise: 2000, cgstPaise: 50, sgstPaise: 50, roundingPaise: 0, totalPaise: 2100 } };
 
   it("leaves the charges on the bill for a partial refund", () => {
     const d = creditFor([thali], {}, [{ orderItemId: "i1", qty: 1 }], charges);
@@ -189,12 +201,83 @@ describe("credit math with charges", () => {
   });
 
   it("never credits a charge twice", () => {
-    const d = creditFor([thali], {}, [{ orderItemId: "i1", qty: 2 }], charges, ["service"]);
+    const d = creditFor([thali], {}, [{ orderItemId: "i1", qty: 2 }], charges, serviceCredited);
     expect(d.charges).toEqual([packaging]);
     expect(d.totals.totalPaise).toBe(10500 + 2100);
-    const done = voidRemainder([thali], { i1: { qty: 2, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 } }, charges, ["service"]);
+    const done = voidRemainder([thali], { i1: { qty: 2, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 } }, charges, serviceCredited);
     expect(done.lines).toEqual([]);
     expect(done.charges).toEqual([packaging]);
-    expect(() => voidRemainder([thali], { i1: { qty: 2, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 } }, charges, ["service", "packaging"])).toThrow("Nothing left to refund");
+    expect(() => voidRemainder([thali], { i1: { qty: 2, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250, roundingPaise: 0, totalPaise: 10500 } }, charges, bothCredited)).toThrow("Nothing left to refund");
+  });
+});
+
+describe("per-item packaging credits", () => {
+  // A: 2 units with 2000 packaging on the line; B: no packaging. Packaging charge 2500 = 2000 per-item + 500 flat.
+  const a = line({ orderItemId: "a", qty: 2, name: "Biryani", taxablePaise: 20000, cgstPaise: 500, sgstPaise: 500, totalPaise: 21000, packagingPaise: 2000 });
+  const b = line({ orderItemId: "b", qty: 1, name: "Raita", taxablePaise: 5000, cgstPaise: 125, sgstPaise: 125, totalPaise: 5250 });
+  const lines = [a, b];
+  const packaging: BillChargeCredit = { kind: "packaging", label: "Packaging", gstRate: 5, amountPaise: 2500, taxablePaise: 2500, cgstPaise: 63, sgstPaise: 62, roundingPaise: 0, totalPaise: 2625 };
+  const service: BillChargeCredit = { kind: "service", label: "Service charge", gstRate: 18, amountPaise: 1000, taxablePaise: 1000, cgstPaise: 90, sgstPaise: 90, roundingPaise: 0, totalPaise: 1180 };
+  const oneA = [{ orderItemId: "a", qty: 1 }];
+  const everything = [{ orderItemId: "a", qty: 2 }, { orderItemId: "b", qty: 1 }];
+
+  it("credits a refunded item's packaging", () => {
+    const d = creditFor(lines, {}, oneA, [packaging]);
+    expect(d.charges).toHaveLength(1);
+    expect(d.charges[0]).toMatchObject({ kind: "packaging", amountPaise: 1000, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25, roundingPaise: 0, totalPaise: 1050 });
+    expect(d.totals.totalPaise).toBe(10500 + 1050);
+  });
+
+  it("credits no packaging when unticked", () => {
+    const d = creditFor(lines, {}, oneA, [packaging], {}, { refundPackaging: false });
+    expect(d.charges).toEqual([]);
+    expect(d.totals.totalPaise).toBe(10500);
+  });
+
+  it("adds the flat part on a refund that clears the bill", () => {
+    const d = creditFor(lines, {}, everything, [packaging]);
+    expect(d.charges).toEqual([packaging]);
+  });
+
+  it("keeps partial credits and a void summing exactly to the bill", () => {
+    const odd: BillChargeCredit = { ...packaging, amountPaise: 2333, taxablePaise: 2333, cgstPaise: 58, sgstPaise: 58, roundingPaise: 1, totalPaise: 2450 };
+    const credited: Record<string, Credited> = {};
+    const creditedCharges: CreditedCharges = {};
+    const first = creditFor(lines, credited, oneA, [odd], creditedCharges);
+    expect(first.charges[0]!.amountPaise).toBe(1000);
+    addCredit(credited, first);
+    addCharges(creditedCharges, first);
+    const last = voidRemainder(lines, credited, [odd], creditedCharges);
+    expect(last.charges[0]!.amountPaise).toBe(1333);
+    addCharges(creditedCharges, last);
+    expect(creditedCharges.packaging).toEqual({ amountPaise: 2333, taxablePaise: 2333, cgstPaise: 58, sgstPaise: 58, roundingPaise: 1, totalPaise: 2450 });
+    for (const d of [first, last]) for (const c of d.charges) expect(c.totalPaise).toBe(c.taxablePaise + c.cgstPaise + c.sgstPaise + c.roundingPaise);
+  });
+
+  it("voids the packaging a refund kept", () => {
+    const credited: Record<string, Credited> = {};
+    const kept = creditFor(lines, credited, everything, [packaging], {}, { refundPackaging: false });
+    expect(kept.charges).toEqual([]);
+    addCredit(credited, kept);
+    const d = voidRemainder(lines, credited, [packaging], {});
+    expect(d.lines).toEqual([]);
+    expect(d.charges).toEqual([packaging]);
+    expect(() => creditFor(lines, credited, [], [packaging])).toThrow("Nothing left to refund on this bill");
+  });
+
+  it("leaves the service charge rules unchanged", () => {
+    expect(creditFor(lines, {}, oneA, [service, packaging]).charges.map((c) => c.kind)).toEqual(["packaging"]);
+    const clearing = creditFor(lines, {}, everything, [service, packaging], {}, { refundPackaging: false });
+    expect(clearing.charges).toEqual([service]);
+    expect(creditFor(lines, {}, everything, [service, packaging]).charges).toEqual([service, packaging]);
+  });
+
+  it("reports the packaging a refund would credit", () => {
+    expect(packagingCredit(lines, {}, oneA, [packaging], {})).toBe(1000);
+    expect(packagingCredit(lines, {}, [{ orderItemId: "b", qty: 1 }], [packaging], {})).toBe(0);
+    expect(packagingCredit(lines, {}, everything, [packaging], {})).toBe(2500);
+    const full: CreditedCharges = { packaging: { amountPaise: 2500, taxablePaise: 2500, cgstPaise: 63, sgstPaise: 62, roundingPaise: 0, totalPaise: 2625 } };
+    expect(packagingCredit(lines, {}, oneA, [packaging], full)).toBe(0);
+    expect(packagingCredit(lines, {}, oneA, [], {})).toBe(0);
   });
 });
