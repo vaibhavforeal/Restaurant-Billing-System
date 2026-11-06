@@ -17,7 +17,14 @@ Captured 2026-11-06 from the real app with the demo sample restaurant (admin / d
 - GST returns tab: empty in demo data ("Not registered for GST"). Needs a GSTIN set in the demo restaurant before it can be shot, and the tab strip must be cropped out.
 - Sales tab: six of seven days are zero rows in demo data.
 
-## Still to capture (pick up here)
+## Decision 2026-11-06: screenshots become reference only
+The owner found the raw shots unattractive (crowded, half empty, red on an orange page). Product visuals on the site will be **hand-built HTML/CSS screens in the orange theme** (not AI images: UI text and rupee figures come out wrong). Rules for building them:
+- Same layout, labels and features as the real screens listed above, so a buyer recognises them at the demo. No invented features.
+- Clean data that adds up (CGST + SGST match the GST, payments sum to the total). Do not use Zomato or Swiggy names.
+- Use the files above as layout references. Build them as real `data-ui` fragments (house style allows own borders and panels there) and render to images with Playwright only if needed.
+- The hero is the order screen with items and bill preview. It does not need to be screenshotted any more; build it from the real screen's structure.
+
+## Old list: still to capture (superseded by the decision above, kept as the screen list to rebuild)
 1. **Order screen with items and the bill preview** (the hero shot). Open T01 or T03 "View order", then Preview bill. This is the most important missing image.
 2. A printed or on-screen **receipt** (GST breakdown, UPI QR).
 3. **Guest QR menu** on a phone (`/menu/#<table-token>`; get the token from "Table QR codes").
