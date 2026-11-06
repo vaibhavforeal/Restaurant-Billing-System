@@ -11,7 +11,7 @@ import type { SettingsData } from "../types";
 import "../bill-settings.css";
 
 const LINES_HINT = "Up to 3 lines, 48 characters each";
-const CHARGES_HELP = "Service charge is added to dine-in bills only; staff can remove it on any bill. Packaging is added to takeaway and delivery bills. Both are taxed at your default GST rate and follow your GST setting. Zomato orders get neither.";
+const CHARGES_HELP = "Service charge is added to dine-in bills only; staff can remove it on any bill. Packaging is added to takeaway and delivery bills, plus each item's own packaging amount when per-item packaging is on. Both are taxed at your default GST rate and follow your GST setting. Zomato orders get neither.";
 const field = { display: "grid", gap: 4 } as const;
 const check = { display: "flex", alignItems: "center", gap: 8 } as const;
 
@@ -118,6 +118,11 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         <label style={field}>
           <span>Packaging label</span>
           <input value={form.packagingChargeLabel} maxLength={24} placeholder="Packaging" disabled={busy} onChange={(e) => update({ packagingChargeLabel: e.target.value })} />
+        </label>
+        <label style={check}>
+          <input type="checkbox" checked={form.packagingPerItem} disabled={busy} aria-describedby="packaging-per-item-hint"
+            onChange={(e) => update({ packagingPerItem: e.target.checked })} />
+          <span>Charge packaging per item <small id="packaging-per-item-hint">Adds each item's packaging amount (set in the menu) to the packaging charge above.</small></span>
         </label>
       </fieldset>
 

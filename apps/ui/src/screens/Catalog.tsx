@@ -30,6 +30,7 @@ export function Catalog() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [defaultGstRate, setDefaultGstRate] = useState(5);
+  const [packagingPerItem, setPackagingPerItem] = useState(false);
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [editing, setEditing] = useState<Product | "new" | "new-combo" | null>(null);
@@ -42,12 +43,13 @@ export function Catalog() {
   async function reload() {
     const [c, p, s] = await Promise.all([
       apiFetch<{ categories: Category[] }>("/api/categories"),
-      apiFetch<{ products: Product[]; defaultGstRate: number }>("/api/products"),
+      apiFetch<{ products: Product[]; defaultGstRate: number; packagingPerItem?: boolean }>("/api/products"),
       apiFetch<{ stations: StationInfo[] }>("/api/kot-stations"),
     ]);
     setCategories(c.categories);
     setProducts(p.products);
     setDefaultGstRate(p.defaultGstRate);
+    setPackagingPerItem(p.packagingPerItem === true);
     setStations(s.stations.filter((st) => st.isActive));
     setSelectedCat((cur) => cur ?? c.categories[0]?.id ?? null);
   }
@@ -113,6 +115,7 @@ export function Catalog() {
         defaultCategoryId={selectedCat}
         categories={categories}
         defaultGstRate={defaultGstRate}
+        packagingPerItem={packagingPerItem}
         stations={stations}
         onDone={() => {
           setEditing(null);

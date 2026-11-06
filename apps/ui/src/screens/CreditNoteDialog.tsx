@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain";
+import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain/billing";
 import { billChargesGst } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
-import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditReason, defaultRefundRows, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
+import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, OrderItem, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -19,6 +19,8 @@ interface Preview {
   /** Service and packaging charges credited back, one line each. */
   charges?: Array<{ kind: string; label: string; percentBp?: number; totalPaise: number }>;
   refundable: Refundable;
+  /** For a refund: the items' packaging that "Refund packaging" gives back; 0 when there is none. */
+  packagingPaise?: number;
 }
 interface IssuedCredit { bill: Bill; creditNote: BillCreditNote; order: Order }
 type RefundDraft = { id: string; mode: PayMode; amount: string };
@@ -131,6 +133,9 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const [tick, setTick] = useState(0);
+  const [refundPackaging, setRefundPackaging] = useState(true);
+  // The packaging on offer for these lines; it does not depend on the tickbox, so ticking keeps the box in place.
+  const [packagingOffer, setPackagingOffer] = useState<{ linesKey: string; paise: number } | null>(null);
   const [rows, setRows] = useState<RefundDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -140,8 +145,9 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const ids = { reason: useId(), pin: useId() };
 
   const lines = billable.map((item) => ({ orderItemId: item.id, qty: qty[item.id] ?? 0 })).filter((line) => line.qty > 0);
-  const key = JSON.stringify(lines);
+  const linesKey = JSON.stringify(lines);
   const needsItems = kind === "refund";
+  const key = JSON.stringify({ lines, refundPackaging });
 
   useEffect(() => {
     if (result) return;
@@ -149,8 +155,8 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     if (needsItems && !lines.length) { setLoadingPreview(false); return; }
     let active = true;
     setLoadingPreview(true);
-    apiFetch<{ preview: Preview }>(`/api/bills/${bill.id}/credit-preview`, { method: "POST", body: JSON.stringify(needsItems ? { kind, lines } : { kind }) })
-      .then((r) => { if (active) setPreview({ ...r.preview, key }); })
+    apiFetch<{ preview: Preview }>(`/api/bills/${bill.id}/credit-preview`, { method: "POST", body: JSON.stringify(creditPreviewBody(kind, lines, refundPackaging)) })
+      .then((r) => { if (active) { setPreview({ ...r.preview, key }); setPackagingOffer({ linesKey, paise: r.preview.packagingPaise ?? 0 }); } })
       .catch((e: unknown) => { if (active) setPreviewError(e instanceof Error ? e.message : "Could not work out the credit"); })
       .finally(() => { if (active) setLoadingPreview(false); });
     return () => { active = false; };
@@ -178,7 +184,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   async function submit() {
     if (lock.current || !ready || !preview) return;
     const refunds = unpaid ? [] : parsed.filter((row) => row.amountPaise).map((row) => ({ mode: row.mode, amountPaise: row.amountPaise! }));
-    const request = { reason, refunds, ...(needsItems ? { lines } : {}) };
+    const request = { reason, refunds, ...(needsItems ? { lines, refundPackaging } : {}) };
     // A retry of the same request replays; a changed request needs its own reference.
     const fingerprint = JSON.stringify({ kind, ...request });
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { clientRef: uuid(), fingerprint };
@@ -252,6 +258,10 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     <section className="credit-note-preview" aria-label="Credit preview" aria-live="polite">
       <h3>Credit note</h3>
       {needsItems && !lines.length && <p className="muted">Choose how many of each item to refund.</p>}
+      {needsItems && packagingOffer?.linesKey === linesKey && packagingOffer.paise > 0 && <label className="credit-note-packaging">
+        <input type="checkbox" checked={refundPackaging} disabled={busy} onChange={(e) => setRefundPackaging(e.target.checked)} />
+        <span>Refund packaging ({money(packagingOffer.paise)})</span>
+      </label>}
       {loadingPreview && <p role="status">Working out the credit…</p>}
       {previewError && <p className="billing-error" role="alert">{previewError}</p>}
       {preview && preview.key === key && <>

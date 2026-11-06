@@ -128,6 +128,10 @@ Choose **Settings > Bill settings > Charges**, then **Save**:
   0 for none.
 - **Service charge label** and **Packaging label** - the words printed on the bill. A blank label saves as "Service
   charge" or "Packaging".
+- **Charge packaging per item** - off by default. When on, each item's own packaging amount (set in **Catalog → Edit**
+  as **Packaging (₹)**, per unit) is added to the flat packaging charge. A variant's **Packaging (₹)** left blank
+  (**Same as item**) uses the item's amount; 0 means none. Combos use the combo's own amount. The bill still shows one
+  Packaging line with the combined amount. See [per-item packaging](per-item-packaging.md).
 
 Zomato orders get neither charge. Both apply to new bills only; old bills and reprints keep what they were issued with.
 
@@ -144,6 +148,22 @@ Sales reports show a **Charges** total.
 
 Refunds: a refund that returns every item on the bill also returns the charges, and the bill becomes **Refunded**. A
 part refund leaves the charges. Voiding a bill returns its charges too. Credit notes list each charge they return.
+
+With per-item packaging, the refund screen shows a **Refund packaging (₹X)** tickbox, ticked by default, once the
+chosen items carry packaging. Ticked, the refund gives back those items' packaging (and the flat amount when it
+clears the bill); unticked, the packaging is kept. Which to choose depends on when the order was cancelled:
+
+| Situation | What to do | Packaging |
+|---|---|---|
+| Customer cancels before preparation | Usually before billing: cancel the items on the open order. If already billed (prepaid): refund, box ticked | Not charged, or refunded |
+| Cancels after preparation, before packing | Refund, box ticked | Refunded |
+| Cancels after packing | Refund, box unticked | Kept |
+| Cancels after dispatch | Refund; tick or untick by the restaurant's terms | Cashier's choice |
+| Restaurant cancels | Void the bill, or refund with the box ticked | Refunded |
+| Zomato order | Zomato bills never carry packaging | — |
+
+A bill whose items are all refunded with packaging kept stays **Partly refunded**; only a void can credit the kept
+packaging after that.
 
 Example, a ₹100 item at 5% with a 10% service charge:
 

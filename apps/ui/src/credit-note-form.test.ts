@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditReason, defaultRefundRows, refundRowsError, refundableQty } from "./credit-note-form";
+import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, refundRowsError, refundableQty } from "./credit-note-form";
 
 describe("defaultRefundRows", () => {
   it("refunds a single payment method in full", () => {
@@ -87,4 +87,13 @@ describe("billStatusLabel", () => {
     expect(billStatusLabel({ status: "paid", refundState: "refunded" })).toBe("Refunded");
     expect(billStatusLabel({ status: "void", refundState: "refunded" })).toBe("VOID");
   });
+});
+
+describe("creditPreviewBody", () => {
+  const lines = [{ orderItemId: "a", qty: 1 }];
+  it("sends a refund's lines and its packaging choice", () => {
+    expect(creditPreviewBody("refund", lines, false)).toEqual({ kind: "refund", lines, refundPackaging: false });
+    expect(creditPreviewBody("refund", lines, true)).toEqual({ kind: "refund", lines, refundPackaging: true });
+  });
+  it("sends only the kind for a void", () => expect(creditPreviewBody("void", [], true)).toEqual({ kind: "void" }));
 });

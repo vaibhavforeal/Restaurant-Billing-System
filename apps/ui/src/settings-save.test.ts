@@ -15,4 +15,9 @@ describe("settingsForSave", () => {
     const { city: _city, ...rest } = FULL;
     expect(body).toEqual(rest);
   });
+
+  it("round-trips the per-item packaging toggle", () => {
+    expect(settingsForSave({ ...FULL, packagingPerItem: true }).packagingPerItem).toBe(true);
+    expect(settingsForSave({ ...FULL, packagingPerItem: false }).packagingPerItem).toBe(false);
+  });
 });

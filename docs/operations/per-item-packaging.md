@@ -3,15 +3,13 @@
 Takeaway and delivery bills can charge packaging per item, for example ₹10 for each biryani container and ₹5 for
 each curry box, on top of the flat packaging amount per bill. Restaurants that never turn it on see no change.
 
-> **Status (2026-11-06):** in progress on `feat/bill-settings`, not released. The billing side is built: the setting,
-> the menu amounts, CSV columns and the charge on bills. Still to build: the setting and menu fields on screen, and
-> the refund choice. Until those are built, refunds credit packaging only as a whole charge, as before. See
+> **Status (2026-11-06):** built on `feat/bill-settings`, not released. The whole-branch review is still to run. See
 > [What is left](#what-is-left).
 
 ## Turning it on
 
-**Settings → Bill settings → Service and packaging charges** gets a **Charge packaging per item** switch, under the
-flat **Packaging charge (₹)** field. It is off by default.
+**Settings → Bill settings → Charges** has a **Charge packaging per item** tickbox, under the flat **Packaging charge
+(₹)** and **Packaging label** fields. It is off by default.
 
 - **On:** a bill's packaging = the flat amount + the packaging of every item on the bill.
 - **Off:** item amounts stay saved in the menu but are ignored.
@@ -21,10 +19,11 @@ The flat amount, the **Packaging label** and the GST rate work as described in
 
 ## Setting the amounts
 
-In **Catalog → Edit**, each item has a **Packaging (₹)** amount per unit, from ₹0 to ₹1,000. These fields show only
-while the switch is on.
+In **Catalog → Edit**, each item has a **Packaging (₹)** amount per unit, from ₹0 to ₹1,000, next to its prices.
+Blank means none. These fields show only while the tickbox is on; turning it off keeps the saved amounts.
 
-- **Variants (portions)** can have their own amount. Leave it blank (**Same as item**) to use the item's amount. A
+- **Variants (portions)** can have their own amount, in the variant's **Packaging (₹)** field. Leave it blank
+  (**Same as item**) to use the item's amount. A
   variant set to 0 charges nothing, even if the item has an amount.
 - **Combos** use the combo's own amount. The items inside a combo add nothing.
 
@@ -65,10 +64,11 @@ The item CSV has two more columns at the end, in rupees:
 Amounts above 1000.00 are refused with a row error. Older CSV files without these columns import as before. See
 [item import and export](item-import-export.md).
 
-## Refunds and voids (not built yet)
+## Refunds and voids
 
-When refunding items from a takeaway or delivery bill, the refund screen will show a **Refund packaging (₹X)**
-tickbox, ticked by default. Whether the packaging goes back depends on when the order was cancelled:
+When refunding items from a takeaway or delivery bill, the refund screen shows a **Refund packaging (₹X)** tickbox,
+ticked by default, once the chosen items carry packaging. X is the packaging those items would give back. Unticking
+it updates the credit preview. Whether the packaging goes back depends on when the order was cancelled:
 
 | Situation | What to do | Packaging |
 |---|---|---|
@@ -116,9 +116,8 @@ Plan: [`docs/superpowers/plans/2026-11-06-per-item-packaging.md`](../superpowers
 | 1 | Migration 61 and the setting | Done, `6749339` |
 | 2 | Catalog amounts, CSV, transfer | Done, `57b2ea5` |
 | 3 | Per-item packaging on bills | Done, `95c3a81` |
-| 4 | Amount-based charge credits in `packages/domain/src/credit-notes.ts` | To do, together with 5 |
-| 5 | Refunds, voids and reports on the server (`refundPackaging`, `credit_note_charges.amount_paise`) | To do |
-| 6 | UI: Bill settings switch, product/variant fields, refund tickbox, `bill-format.md`, dev-app check | To do |
+| 4 | Amount-based charge credits in `packages/domain/src/credit-notes.ts` | Done, `79d0568` |
+| 5 | Refunds, voids and reports on the server (`refundPackaging`, `credit_note_charges.amount_paise`) | Done, `1d5bfea` |
+| 6 | UI: Bill settings tickbox, product/variant fields, refund tickbox, `bill-format.md`, dev-app check | Done |
 
-A whole-branch review runs after Task 6. Until Tasks 4 and 5 land, new credit notes write `amount_paise = 0` and
-refunds credit packaging only as a whole charge, so do not release the branch in between.
+Still to run: the whole-branch review.

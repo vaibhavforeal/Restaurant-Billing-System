@@ -34,6 +34,11 @@ export function refundRowsError(rows: RefundRow[], totalPaise: number, refundabl
   return null;
 }
 
+/** The credit-preview request: a void sends only its kind; a refund sends its lines and whether packaging is refunded. */
+export function creditPreviewBody(kind: "void" | "refund", lines: Array<{ orderItemId: string; qty: number }>, refundPackaging: boolean) {
+  return kind === "void" ? { kind } : { kind, lines, refundPackaging };
+}
+
 /** Units of a billed line that can still be refunded. */
 export function refundableQty(billed: number, refunded: number | undefined): number {
   return Math.max(0, billed - (refunded ?? 0));

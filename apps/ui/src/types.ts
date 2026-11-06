@@ -15,6 +15,8 @@ export interface Variant extends ItemPrices {
   name: string;
   pricePaise: number;
   isActive: boolean;
+  /** Packaging per unit in paise; null uses the product's, 0 is none. */
+  packagingPaise?: number | null;
 }
 
 export interface Product extends ItemPrices {
@@ -35,6 +37,8 @@ export interface Product extends ItemPrices {
   /** A combo is sold as one line holding items picked from its slots. */
   kind: "item" | "combo";
   combo?: ComboGroup[];
+  /** Packaging per unit in paise, added on takeaway and delivery bills when per-item packaging is on. */
+  packagingPaise?: number;
 }
 
 export interface Station {
@@ -141,6 +145,8 @@ export interface SettingsData {
   packagingChargePaise: number;
   serviceChargeLabel: string;
   packagingChargeLabel: string;
+  /** Add each item's packaging amount to the packaging charge. */
+  packagingPerItem: boolean;
 }
 
 export interface Customer {
