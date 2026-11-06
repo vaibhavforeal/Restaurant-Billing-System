@@ -8,8 +8,8 @@ export const config = {
   email: null as string | null,
   // The owner states there will be no per-captain or per-device fee, but the licensing
   // change has NOT shipped (the app today is Basic 2 / Pro 5 devices).
-  // Keep this false until it ships; the site then states the real device counts.
-  unlimitedDevices: false,
+  // Owner approved showing this on 2026-11-06. Set false to state the real device counts (Basic 2, Pro 5).
+  unlimitedDevices: true,
 };
 
 export const waLink = (text: string) =>
