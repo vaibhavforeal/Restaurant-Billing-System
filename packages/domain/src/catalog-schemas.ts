@@ -7,6 +7,8 @@ export const GST_RATES = [0, 5, 12, 18, 28] as const;
 const GstRate = z.number().refine((r) => (GST_RATES as readonly number[]).includes(r), "invalid GST rate");
 /** A bill cannot pass ₹1 crore (calculateBill), so neither can one unit of an item. */
 const Paise = z.number().int().min(0).max(1_000_000_000);
+/** Packaging per unit on takeaway and delivery bills: ₹0–₹1,000. */
+const Packaging = z.number().int().min(0).max(100_000);
 const Name = z.string().trim().min(1);
 const Photo = z.string().max(550_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/, "Choose a JPEG photo").nullable();
 
@@ -29,6 +31,8 @@ export const VariantCreate = z.object({
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
   zomatoPricePaise: Paise.nullable().optional(),
+  /** null uses the product's packaging; 0 is none. */
+  packagingPaise: Packaging.nullable().optional(),
 });
 export type VariantCreateInput = z.infer<typeof VariantCreate>;
 
@@ -38,6 +42,7 @@ export const VariantUpdate = z.object({
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
   zomatoPricePaise: Paise.nullable().optional(),
+  packagingPaise: Packaging.nullable().optional(),
   isActive: z.boolean().optional(),
 });
 export type VariantUpdateInput = z.infer<typeof VariantUpdate>;
@@ -49,6 +54,7 @@ export const ProductCreate = z.object({
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
   zomatoPricePaise: Paise.nullable().optional(),
+  packagingPaise: Packaging.default(0),
   /** null follows the restaurant default rate. */
   gstRate: GstRate.nullable().default(null),
   isVeg: z.boolean().default(true),
@@ -75,6 +81,7 @@ export const ProductUpdate = z.object({
   acPricePaise: Paise.nullable().optional(),
   takeawayPricePaise: Paise.nullable().optional(),
   zomatoPricePaise: Paise.nullable().optional(),
+  packagingPaise: Packaging.optional(),
   gstRate: GstRate.nullable().optional(),
   isVeg: z.boolean().optional(),
   kotStationId: z.string().min(1).nullable().optional(),
