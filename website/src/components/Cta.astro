@@ -1,0 +1,40 @@
+---
+import { config } from '../config';
+---
+
+<section id="demo" class="cta wrap" aria-labelledby="cta-title">
+  <form class="cta__form" id="demo-form" action="#" method="get">
+    <h2 id="cta-title" class="cta__sentence">
+      <span>My name is </span><label class="sr" for="demo-name">Your name</label><input id="demo-name" name="name" type="text" placeholder="your name" autocomplete="name" required /><span> and I want a </span><button type="submit" class="cta__go">demo</button>
+    </h2>
+    <p class="cta__note">Opens WhatsApp with your message ready to send.{config.email && <> Prefer email? Write to <a class="textlink" href={`mailto:${config.email}`}>{config.email}</a>.</>}</p>
+  </form>
+</section>
+
+<script define:vars={{ number: config.whatsapp }}>
+  const form = document.getElementById('demo-form');
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = form.querySelector('input').value.trim();
+    const text = `Hi, I'm ${name || 'a restaurant owner'} and I would like a demo of MasalaPOS.`;
+    window.location.href = `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  });
+</script>
+
+<style is:global>
+  .cta { padding-top: 96px; padding-bottom: 72px; }
+  .cta__sentence { font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; line-height: 1.12; font-size: clamp(2rem, 0.6rem + 5.4vw, 6rem); max-width: 14em; }
+  .cta__sentence input { font: inherit; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); background: var(--tile); border: 0; border-radius: 999px; height: 1.15em; width: 7em; max-width: 100%; padding: 0 0.4em; vertical-align: baseline; }
+  .cta__sentence input::placeholder { color: var(--muted); opacity: 1; }
+  .cta__sentence input:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .cta__go { font: inherit; letter-spacing: inherit; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 999px; height: 1.15em; padding: 0 0.5em; cursor: pointer; transition: transform 0.25s var(--ease), background-color 0.2s; }
+  .cta__go:hover { background: var(--turmeric); transform: translateY(-3px); }
+  .cta__go:active { transform: scale(0.97); }
+  .cta__note { margin-top: 28px; color: var(--muted); font-size: 1rem; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 800px) {
+    .cta__sentence { font-size: 10vw; }
+    .cta__sentence input { display: block; width: 100%; margin: 0.15em 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .cta__go, .cta__go:hover { transition: none; transform: none; } }
+</style>

@@ -1,0 +1,170 @@
+---
+// Hand-built product screens in the site's orange. Layouts follow the real app's screens
+// (see SHOTS.md). The figures are sample data and add up.
+interface Props { kind: string; }
+const { kind } = Astro.props;
+
+const tableList = [
+  { n: 'T1', s: 'Running', a: '₹1,240', c: 'Ravi', cls: 'run' },
+  { n: 'T2', s: 'Free', a: '', c: '', cls: 'free' },
+  { n: 'T3', s: 'Bill printed', a: '₹860', c: 'Asha', cls: 'bill' },
+  { n: 'T4', s: 'Running', a: '₹840', c: 'Ravi', cls: 'run' },
+  { n: 'T5', s: 'Reserved', a: '8:00 pm', c: '', cls: 'res' },
+  { n: 'T6', s: 'Free', a: '', c: '', cls: 'free' },
+  { n: 'T7', s: 'Running', a: '₹390', c: 'Asha', cls: 'run' },
+  { n: 'T8', s: 'Free', a: '', c: '', cls: 'free' },
+];
+const hours = [3, 5, 8, 14, 11, 6, 9, 16, 12];
+---
+
+{kind === 'bill' && (
+  <div data-ui class="scr scr--bill" role="img" aria-label="Order screen with items and the bill: four dishes, CGST and SGST, total ₹840">
+    <div class="bar"><span>Table T4 · Order</span><span>Captain Ravi</span></div>
+    <div class="body bill">
+      <div class="bill__items">
+        <div class="row"><span>Paneer Butter Masala</span><b>₹280</b></div>
+        <div class="row"><span>Butter Naan × 4</span><b>₹180</b></div>
+        <div class="row"><span>Jeera Rice</span><b>₹140</b></div>
+        <div class="row"><span>Sweet Lassi × 2</span><b>₹200</b></div>
+      </div>
+      <div class="bill__sum">
+        <div class="tot"><span>Subtotal</span><span>₹800.00</span></div>
+        <div class="tot"><span>CGST 2.5%</span><span>₹20.00</span></div>
+        <div class="tot"><span>SGST 2.5%</span><span>₹20.00</span></div>
+        <div class="tot tot--big"><span>Total</span><span>₹840.00</span></div>
+        <div class="pays"><span class="pill pill--sand">Cash</span><span class="pill">UPI</span><span class="pill pill--sand">Card</span></div>
+        <span class="btnui">Settle bill</span>
+      </div>
+    </div>
+  </div>
+)}
+
+{kind === 'tables' && (
+  <div data-ui class="scr" role="img" aria-label="Tables screen: eight tables with status, captain and running amount">
+    <div class="bar"><span>Tables</span><span>Ground floor · AC</span></div>
+    <div class="body tables">
+      {tableList.map((t) => (
+        <div class={`tb tb--${t.cls}`}>
+          <b>{t.n}</b>
+          <span>{t.s}</span>
+          {t.a && <span class="tb__amt">{t.a}</span>}
+          {t.c && <span class="muted">{t.c}</span>}
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{kind === 'captain' && (
+  <div data-ui class="scr scr--phone" role="img" aria-label="Captain app on a phone: table T4 with four items and a Send KOT button">
+    <div class="bar"><span>T4 · Review</span><span>4 items</span></div>
+    <div class="body">
+      <div class="row"><span>Paneer Butter Masala</span><span class="qty">− 1 +</span></div>
+      <div class="row"><span>Butter Naan</span><span class="qty">− 4 +</span></div>
+      <div class="row"><span>Jeera Rice</span><span class="qty">− 1 +</span></div>
+      <div class="row"><span>Sweet Lassi</span><span class="qty">− 2 +</span></div>
+      <div class="row"><span class="muted">Note: less spicy</span></div>
+      <span class="btnui">Send KOT</span>
+    </div>
+  </div>
+)}
+
+{kind === 'kitchen' && (
+  <div data-ui class="scr" role="img" aria-label="Kitchen display: three KOT tickets with items, notes and a Done button">
+    <div class="bar"><span>Kitchen</span><span>3 open</span></div>
+    <div class="body kds">
+      <div class="kot"><b>T4 <span class="muted">· 6 min</span></b><span>Paneer Butter Masala</span><span>Butter Naan × 4</span><span class="muted">Less spicy</span><span class="btnui">Done</span></div>
+      <div class="kot kot--late"><b>T1 <span>· 14 min</span></b><span>Dal Tadka × 2</span><span>Jeera Rice × 2</span><span class="btnui">Done</span></div>
+      <div class="kot"><b>Takeaway 12 <span class="muted">· 2 min</span></b><span>Veg Biryani</span><span>Raita</span><span class="btnui">Done</span></div>
+    </div>
+  </div>
+)}
+
+{kind === 'stock' && (
+  <div data-ui class="scr" role="img" aria-label="Inventory: five ingredients with balances and low-stock status">
+    <div class="bar"><span>Stock</span><span>5 items</span></div>
+    <div class="body">
+      <div class="row"><span>Paneer</span><span>4.2 kg</span><span class="pill pill--sand">OK</span></div>
+      <div class="row"><span>Basmati rice</span><span>18 kg</span><span class="pill pill--sand">OK</span></div>
+      <div class="row"><span>Cooking oil</span><span>3 L</span><span class="pill pill--deep">Low</span></div>
+      <div class="row"><span>Curd</span><span>6 kg</span><span class="pill pill--sand">OK</span></div>
+      <div class="row"><span>Wheat flour</span><span>12 kg</span><span class="pill pill--sand">OK</span></div>
+    </div>
+  </div>
+)}
+
+{kind === 'reports' && (
+  <div data-ui class="scr" role="img" aria-label="Day-end report: 64 bills, sales ₹38,400, CGST ₹960, SGST ₹960, total ₹40,320 split by cash, UPI and card">
+    <div class="bar"><span>Day end</span><span>64 bills</span></div>
+    <div class="body rep">
+      <div>
+        <div class="tot"><span>Net sales</span><span>₹38,400</span></div>
+        <div class="tot"><span>CGST</span><span>₹960</span></div>
+        <div class="tot"><span>SGST</span><span>₹960</span></div>
+        <div class="tot tot--big"><span>Total</span><span>₹40,320</span></div>
+        <div class="tot"><span>Cash</span><span>₹14,820</span></div>
+        <div class="tot"><span>UPI</span><span>₹20,100</span></div>
+        <div class="tot"><span>Card</span><span>₹5,400</span></div>
+      </div>
+      <div class="bars" aria-hidden="true">
+        {hours.map((h) => <i style={`height:${h * 6}%`}></i>)}
+      </div>
+    </div>
+  </div>
+)}
+
+{kind === 'orders' && (
+  <div data-ui class="scr" role="img" aria-label="Orders board: online and takeaway orders in New, Preparing and Ready columns">
+    <div class="bar"><span>Orders</span><span>5 open</span></div>
+    <div class="body cols">
+      <div>
+        <span class="pill pill--tawa">New</span>
+        <div class="row"><span>Online #1042</span><b>₹620</b></div>
+        <div class="row"><span>Takeaway 13</span><b>₹340</b></div>
+      </div>
+      <div>
+        <span class="pill">Preparing</span>
+        <div class="row"><span>Online #1041</span><b>₹780</b></div>
+        <div class="row"><span>Takeaway 12</span><b>₹450</b></div>
+      </div>
+      <div>
+        <span class="pill pill--sand">Ready</span>
+        <div class="row"><span>Online #1040</span><b>₹510</b></div>
+      </div>
+    </div>
+  </div>
+)}
+
+<style is:global>
+  .scr { width: 100%; }
+  .bill { display: grid; grid-template-columns: 1.15fr 1fr; gap: 1.2em; }
+  .bill__sum { background: #fff; border-radius: 1em; padding: 0.9em; align-self: start; }
+  .pays { display: flex; gap: 0.4em; margin-top: 0.7em; flex-wrap: wrap; }
+  .scr--phone { max-width: 260px; margin-inline: auto; }
+  .qty { color: var(--u-soft); font-weight: 600; white-space: nowrap; }
+  .tables { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5em; }
+  .tb { display: flex; flex-direction: column; gap: 0.15em; padding: 0.7em; border-radius: 1em; min-height: 6.2em; background: var(--u-panel); font-size: 0.92em; }
+  .tb b { font-size: 1.15em; }
+  .tb--run { background: var(--accent); }
+  .tb--bill { background: var(--turmeric); }
+  .tb--res { background: var(--tawa); color: #fff; }
+  .tb--res .muted { color: #ffc98a; }
+  .tb__amt { font-weight: 700; }
+  .kds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6em; }
+  .kot { background: var(--u-panel); border-radius: 1em; padding: 0.8em; display: flex; flex-direction: column; gap: 0.3em; font-size: 0.92em; }
+  .kot b { font-size: 1.05em; }
+  .kot--late { background: var(--turmeric); }
+  .kot .btnui { margin-top: auto; padding: 0.5em; }
+  .rep { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1em; }
+  .bars { display: flex; align-items: flex-end; gap: 0.3em; background: var(--u-panel); border-radius: 1em; padding: 0.8em; min-height: 9em; }
+  .bars i { flex: 1; background: var(--accent); border-radius: 0.4em 0.4em 0 0; }
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6em; }
+  .cols > div > .pill { margin-bottom: 0.5em; }
+  .cols .row { flex-direction: column; gap: 0.1em; }
+  @media (max-width: 520px) {
+    .bill { grid-template-columns: 1fr; }
+    .kds, .cols { grid-template-columns: 1fr; }
+    .tables { grid-template-columns: repeat(2, 1fr); }
+    .rep { grid-template-columns: 1fr; }
+  }
+</style>
