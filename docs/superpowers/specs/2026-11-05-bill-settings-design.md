@@ -250,7 +250,7 @@ saved on the bill snapshot as `orderTypeKind`.
 
 ## Out of scope
 
-- Per-item packaging charges, delivery charges, tips.
+- Per-item packaging charges (designed separately in `2026-11-06-per-item-packaging-design.md`), delivery charges, tips.
 - Multiple invoice series per order type or per counter.
 - Changing bill copies (stays per printer).
 - Logo images on the bill.
