@@ -51,9 +51,21 @@ export type BillSettleInput = z.infer<typeof BillSettle>;
 export type PaymentMode = "cash" | "upi" | "card" | "zomato";
 
 export interface TaxLine { gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }
+export type ChargeKind = "service" | "packaging";
+/** A charge to add to a bill; `gstRate` is the restaurant's default rate, which the caller passes in. */
+export type ChargeInput =
+  | { kind: "service"; label: string; gstRate: number; bp: number }
+  | { kind: "packaging"; label: string; gstRate: number; amountPaise: number };
+/** A charge as priced on a bill. `percentBp` is set for a service charge, for printing. */
+export interface ChargeLine {
+  kind: ChargeKind; label: string; percentBp?: number; gstRate: number;
+  amountPaise: number; taxablePaise: number; cgstPaise: number; sgstPaise: number;
+}
 export interface BillTotals {
   subtotalPaise: number; discountPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];
+  /** Always set by `calculateBill`; optional so older payloads and fixtures still type-check. */
+  charges?: ChargeLine[];
 }
 export interface ReceiptSnapshot {
   /** Missing on older bills, which continue to use the Classic layout. */
@@ -133,8 +145,25 @@ export interface Bill extends BillTotals {
   feedbackUrl?: string;
 }
 
+/** Splits one rate's gross amount into taxable value, CGST and SGST under the three GST modes. */
+function taxGroup(gross: number, rate: number, mode: GstMode): Omit<TaxLine, "gstRate"> {
+  if (mode === "none") return { taxablePaise: gross, cgstPaise: 0, sgstPaise: 0 };
+  // Exclusive: the amount is the taxable value; CGST and SGST are each half the rate on it, rounded half up, and added on top.
+  if (mode === "exclusive") {
+    const half = Number((BigInt(gross) * BigInt(rate) + 100n) / 200n);
+    return { taxablePaise: gross, cgstPaise: half, sgstPaise: half };
+  }
+  // Included: the gross already contains the GST, so split it out. CGST and SGST are each half the rate on the same
+  // taxable value, so they are always equal: when the rounded tax is odd, its odd paisa stays in the taxable value (each half
+  // is then still within a paisa of taxable × rate / 2), and taxable + CGST + SGST is still exactly the gross.
+  const divisor = BigInt(100 + rate);
+  const rounded = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
+  const half = Math.floor((gross - rounded) / 2);
+  return { taxablePaise: gross - 2 * half, cgstPaise: half, sgstPaise: half };
+}
+
 /** All financial arithmetic uses integer paise / BigInt. */
-export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee"): BillTotals {
+export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee", charges: ChargeInput[] = []): BillTotals {
   if (!items.length) throw new Error("Bill must contain at least one item");
   const groups = new Map<number, number>();
   let subtotalPaise = 0;
@@ -155,26 +184,32 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   let remaining = discountPaise - allocation.reduce((sum, row) => sum + row.discount, 0);
   const byRemainder = [...allocation].sort((a, b) => a.remainder === b.remainder ? a.rate - b.rate : a.remainder > b.remainder ? -1 : 1);
   for (const row of byRemainder) { if (remaining-- > 0) row.discount++; }
-  const taxes = allocation.map(({ rate, amount, discount }) => {
-    const gross = amount - discount;
-    if (mode === "none") return { gstRate: rate, taxablePaise: gross, cgstPaise: 0, sgstPaise: 0 };
-    // Exclusive: the discounted amount is the taxable value; CGST and SGST are each half the rate on it, rounded half up, and added on top.
-    if (mode === "exclusive") {
-      const half = Number((BigInt(gross) * BigInt(rate) + 100n) / 200n);
-      return { gstRate: rate, taxablePaise: gross, cgstPaise: half, sgstPaise: half };
+  const taxes: TaxLine[] = allocation.map(({ rate, amount, discount }) => ({ gstRate: rate, ...taxGroup(amount - discount, rate, mode) }));
+  // Each charge is taxed like a single-item group and its tax joins that rate's row (a new rate gets its own row).
+  const lines: ChargeLine[] = [];
+  for (const charge of charges) {
+    if (![0, 5, 12, 18, 28].includes(charge.gstRate)) throw new Error("Invalid charge");
+    let amountPaise: number;
+    if (charge.kind === "service") {
+      if (!Number.isSafeInteger(charge.bp) || charge.bp < 0 || charge.bp > 10_000) throw new Error("Invalid charge");
+      amountPaise = Number((BigInt(subtotalPaise - discountPaise) * BigInt(charge.bp) + 5_000n) / 10_000n);
+    } else {
+      if (!Number.isSafeInteger(charge.amountPaise) || charge.amountPaise < 0 || charge.amountPaise > 1_000_000_000) throw new Error("Invalid charge");
+      amountPaise = charge.amountPaise;
     }
-    // Included: the discounted gross already contains the GST, so split it out. CGST and SGST are each half the rate on the same
-    // taxable value, so they are always equal: when the rounded tax is odd, its odd paisa stays in the taxable value (each half
-    // is then still within a paisa of taxable × rate / 2), and taxable + CGST + SGST is still exactly the gross.
-    const divisor = BigInt(100 + rate);
-    const rounded = Number((BigInt(gross) * 200n + divisor) / (2n * divisor));
-    const half = Math.floor((gross - rounded) / 2);
-    return { gstRate: rate, taxablePaise: gross - 2 * half, cgstPaise: half, sgstPaise: half };
-  });
+    if (amountPaise === 0) continue;
+    const tax = taxGroup(amountPaise, charge.gstRate, mode);
+    lines.push({ kind: charge.kind, label: charge.label, ...(charge.kind === "service" ? { percentBp: charge.bp } : {}), gstRate: charge.gstRate, amountPaise, ...tax });
+    const row = taxes.find((t) => t.gstRate === charge.gstRate);
+    if (row) { row.taxablePaise += tax.taxablePaise; row.cgstPaise += tax.cgstPaise; row.sgstPaise += tax.sgstPaise; }
+    else taxes.push({ gstRate: charge.gstRate, ...tax });
+  }
+  taxes.sort((a, b) => a.gstRate - b.gstRate);
+  const chargesPaise = lines.reduce((sum, line) => sum + line.amountPaise, 0);
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
-  const unrounded = subtotalPaise - discountPaise + (mode === "exclusive" ? cgstPaise + sgstPaise : 0);
+  const unrounded = subtotalPaise - discountPaise + chargesPaise + (mode === "exclusive" ? cgstPaise + sgstPaise : 0);
   if (!Number.isSafeInteger(unrounded) || unrounded > 1_000_000_000) throw new Error("Bill exceeds supported amount");
   const totalPaise = roundTotal(unrounded, roundOff);
-  return { subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes };
+  return { subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes, charges: lines };
 }

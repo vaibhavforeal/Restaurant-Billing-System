@@ -150,3 +150,87 @@ describe("calculateBill exclusive", () => {
     expect(bill.totalPaise).toBe(15500);
   });
 });
+
+describe("calculateBill charges", () => {
+  const items = [{ pricePaise: 100000, qty: 1, gstRate: 5 }];
+  const service = { kind: "service" as const, label: "Service charge", gstRate: 5, bp: 1000 };
+  const sumTaxes = (taxes: Array<{ taxablePaise: number; cgstPaise: number; sgstPaise: number }>) =>
+    taxes.reduce((s, t) => s + t.taxablePaise + t.cgstPaise + t.sgstPaise, 0);
+
+  it("included: service on the discounted subtotal joins its rate group", () => {
+    const bill = calculateBill(items, 10000, "included", "rupee", [service]);
+    expect(bill.charges).toHaveLength(1);
+    expect(bill.charges![0]).toMatchObject({ kind: "service", label: "Service charge", percentBp: 1000, gstRate: 5, amountPaise: 9000 });
+    const c = bill.charges![0]!;
+    expect(c.taxablePaise + c.cgstPaise + c.sgstPaise).toBe(9000);
+    expect(bill.taxes).toHaveLength(1);
+    expect(sumTaxes(bill.taxes)).toBe(90000 + 9000);
+    expect(bill.subtotalPaise).toBe(100000);
+    expect(bill.totalPaise).toBe(99000);
+    expect(bill.cgstPaise).toBe(bill.taxes[0]!.cgstPaise);
+  });
+
+  it("exclusive: charge tax is added on top", () => {
+    const bill = calculateBill(items, 10000, "exclusive", "off", [service]);
+    expect(bill.charges![0]).toMatchObject({ amountPaise: 9000, taxablePaise: 9000, cgstPaise: 225, sgstPaise: 225 });
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 99000, cgstPaise: 2475, sgstPaise: 2475 }]);
+    expect(bill.cgstPaise).toBe(2475);
+    expect(bill.sgstPaise).toBe(2475);
+    expect(bill.totalPaise).toBe(90000 + 9000 + 2475 + 2475);
+    expect(bill.roundingPaise).toBe(0);
+  });
+
+  it("exclusive: rounds the total after charges", () => {
+    const bill = calculateBill(items, 10000, "exclusive", "rupee", [service]);
+    expect(bill.totalPaise - bill.roundingPaise).toBe(103950);
+    expect(bill.totalPaise).toBe(104000);
+  });
+
+  it("none: no tax anywhere", () => {
+    const bill = calculateBill(items, 10000, "none", "rupee", [service]);
+    expect(bill.totalPaise).toBe(99000);
+    expect(bill.cgstPaise + bill.sgstPaise).toBe(0);
+    expect(bill.charges![0]).toMatchObject({ amountPaise: 9000, taxablePaise: 9000, cgstPaise: 0, sgstPaise: 0 });
+    expect(bill.taxes.every((t) => t.cgstPaise === 0 && t.sgstPaise === 0)).toBe(true);
+  });
+
+  it("a charge at a new rate gets its own row, sorted by rate", () => {
+    const bill = calculateBill(items, 0, "exclusive", "off", [{ kind: "packaging", label: "Packaging", gstRate: 18, amountPaise: 2000 }]);
+    expect(bill.taxes.map((t) => t.gstRate)).toEqual([5, 18]);
+    expect(bill.taxes[1]).toEqual({ gstRate: 18, taxablePaise: 2000, cgstPaise: 180, sgstPaise: 180 });
+    expect(bill.charges![0]).toMatchObject({ kind: "packaging", amountPaise: 2000 });
+    expect(bill.charges![0]!.percentBp).toBeUndefined();
+    expect(bill.totalPaise).toBe(100000 + 2000 + 2500 + 2500 + 360);
+  });
+
+  it("a low-rate item group sorts after a charge-only lower rate", () => {
+    const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 18 }], 0, "exclusive", "off", [{ kind: "packaging", label: "Packaging", gstRate: 5, amountPaise: 2000 }]);
+    expect(bill.taxes.map((t) => t.gstRate)).toEqual([5, 18]);
+  });
+
+  it("rounds the service charge half up to the paisa", () => {
+    const bill = calculateBill([{ pricePaise: 1001, qty: 1, gstRate: 5 }], 0, "none", "off", [{ ...service, bp: 1250 }]);
+    expect(bill.charges![0]!.amountPaise).toBe(125);
+    expect(bill.totalPaise).toBe(1001 + 125);
+  });
+
+  it("leaves a zero charge off the bill", () => {
+    const full = calculateBill(items, 100000, "included", "rupee", [service, { kind: "packaging", label: "Packaging", gstRate: 5, amountPaise: 2000 }]);
+    expect(full.charges!.map((c) => c.kind)).toEqual(["packaging"]);
+    expect(full.totalPaise).toBe(2000);
+    expect(calculateBill(items, 0, "included", "rupee", [{ kind: "packaging", label: "Packaging", gstRate: 5, amountPaise: 0 }]).charges).toEqual([]);
+  });
+
+  it("has an empty charges list when none are passed", () => {
+    expect(calculateBill(items).charges).toEqual([]);
+  });
+
+  it("applies each round-off mode after the charges", () => {
+    const pack = { kind: "packaging" as const, label: "Packaging", gstRate: 0, amountPaise: 50 };
+    const cases: Array<[RoundOff, number, number]> = [["rupee", 10100, 50], ["half", 10050, 0], ["off", 10050, 0]];
+    for (const [mode, total, rounding] of cases) {
+      const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 0 }], 0, "none", mode, [pack]);
+      expect({ total: bill.totalPaise, rounding: bill.roundingPaise }, mode).toEqual({ total, rounding });
+    }
+  });
+});
