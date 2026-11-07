@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7 } from "@masalapos/domain";
+import { calculateBill, uuidv7, type Bill } from "@masalapos/domain";
+import { receiptSlip } from "./print/receipt.js";
+import { renderBytes } from "./print/render-bytes.js";
 import { auth, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 type Item = { id: string; productId: string; name: string; qty: number; pricePaise: number; gstRate: number; status: string; kotId: string | null;
@@ -263,6 +265,74 @@ describe("orders with add-ons", () => {
       const res = await post(`/api/order-items/${(await byName(id)).Cheese!.id}/edit-sent`, { clientRef: uuidv7(), note: "light" });
       expect(res.statusCode).toBe(409);
       expect(res.json().code).toBe("addon_line");
+    });
+  });
+
+  describe("bills, refunds and reports", () => {
+    async function issue(orderId: string, discount: { discountPaise: number; discountNote: string } | Record<string, never> = {}) {
+      const preview = await post(`/api/orders/${orderId}/bill-preview`, discount);
+      expect(preview.statusCode, preview.body).toBe(200);
+      const issued = await post(`/api/orders/${orderId}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey, ...discount });
+      expect(issued.statusCode, issued.body).toBe(201);
+      return issued.json().bill as Bill;
+    }
+    const pizzaOrder = async () => {
+      const id = await order();
+      expect((await add(id, margherita, [option(toppings, "Cheese"), option(toppings, "Coke"), option(base, "Thin")])).statusCode).toBe(200);
+      expect((await send(id)).statusCode).toBe(200);
+      return id;
+    };
+
+    it("bills add-ons as their own lines with their own GST", async () => {
+      const bill = await issue(await pizzaOrder(), { discountPaise: 2800, discountNote: "Staff" });
+      const expected = calculateBill([{ pricePaise: 25000, qty: 1, gstRate: 5 }, { pricePaise: 3000, qty: 1, gstRate: 5 }, { pricePaise: 5000, qty: 1, gstRate: 18 }, { pricePaise: 0, qty: 1, gstRate: 5 }], 2800);
+      expect(bill.subtotalPaise).toBe(33000);
+      expect(bill.taxes.map((t) => t.gstRate).sort()).toEqual([18, 5]);
+      expect(bill.taxes).toEqual(expected.taxes);
+      expect([bill.cgstPaise, bill.sgstPaise]).toEqual([expected.cgstPaise, expected.sgstPaise]);
+    });
+
+    it("receipt shows add-ons under their dish", async () => {
+      const bill = await issue(await pizzaOrder());
+      expect(bill.receipt.items.map((i) => [i.name, i.addon ?? false])).toEqual([["Margherita", false], ["Cheese", true], ["Coke", true], ["Thin", true]]);
+      const text = renderBytes(receiptSlip(bill, 80)).replace(/<[0-9A-F]{2}>/g, "");
+      expect(text).toContain("+ Cheese");
+      const html = (await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) })).body;
+      expect(html).toContain("+ Cheese");
+    });
+
+    it("per-item packaging skips add-ons", async () => {
+      await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", packagingPerItem: true } });
+      await patch(`/api/products/${margherita}`, { packagingPaise: 1000 });
+      await patch(`/api/products/${cheese}`, { packagingPaise: 500 });
+      const id = await order();
+      await add(id, margherita, [option(toppings, "Cheese"), option(base, "Thin")], { qty: 2 });
+      await send(id);
+      const bill = await issue(id);
+      expect(bill.charges!.find((c) => c.kind === "packaging")!.amountPaise).toBe(2000);
+    });
+
+    it("refunds just an add-on", async () => {
+      const bill = await issue(await pizzaOrder());
+      const paid = await post(`/api/bills/${bill.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: bill.totalPaise }] });
+      expect(paid.statusCode, paid.body).toBe(200);
+      const coke = (await items(bill.orderId)).find((l) => l.name === "Coke")!;
+      const preview = await post(`/api/bills/${bill.id}/credit-preview`, { kind: "refund", lines: [{ orderItemId: coke.id, qty: 1 }] });
+      expect(preview.statusCode, preview.body).toBe(200);
+      const total = preview.json().preview.totals.totalPaise as number;
+      const res = await post(`/api/bills/${bill.id}/refund`, { clientRef: uuidv7(), reason: "Flat", approverPin: "1234", lines: [{ orderItemId: coke.id, qty: 1 }], refunds: [{ mode: "cash", amountPaise: total }] });
+      expect(res.statusCode, res.body).toBe(201);
+      const { creditNote, bill: after } = res.json();
+      expect(creditNote.lines).toEqual([expect.objectContaining({ orderItemId: coke.id, name: "Coke", qty: 1 })]);
+      expect(after.refundState).toBe("partly_refunded");
+      expect(after.refundedQty).toEqual({ [coke.id]: 1 });
+    });
+
+    it("item sales count add-on revenue on its own line", async () => {
+      const bill = await issue(await pizzaOrder());
+      const rows = app.db.prepare("SELECT name, parent_order_item_id AS parent, total_paise FROM bill_report_lines WHERE bill_id = ? ORDER BY name").all(bill.id) as Array<{ name: string; parent: string | null; total_paise: number }>;
+      expect(rows.find((r) => r.name === "Coke")!.total_paise).toBe(5000);
+      expect(rows.map((r) => [r.name, r.parent])).toEqual([["Cheese", null], ["Coke", null], ["Margherita", null], ["Thin", null]]);
     });
   });
 });

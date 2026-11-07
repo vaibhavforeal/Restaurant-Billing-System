@@ -135,13 +135,15 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   row("Item", paperWidth === 80 ? ["Qty", "Rate", "Amount"] : ["Qty", "Amount"]);
   pos.bold(false); rule();
   r.items.forEach((item) => {
+    // An add-on is printed under the dish it was picked for.
+    const name = item.addon ? `+ ${item.name}` : item.name;
     const values = paperWidth === 80 ? [String(item.qty), money(item.pricePaise), money(item.pricePaise * item.qty)] :
       [String(item.qty), money(item.pricePaise * item.qty)];
     if (values.some((value, i) => value.length > numericWidths[i]!)) {
-      line(item.name);
+      line(name);
       pair(`${item.qty} x ${money(item.pricePaise)}`, money(item.pricePaise * item.qty));
     } else {
-      row(item.name, values);
+      row(name, values);
       if (paperWidth === 58) line(`  @ ${money(item.pricePaise)} each`);
     }
     if (itemGst) line(`  GST ${item.gstRate}%`);
@@ -235,7 +237,7 @@ export function receiptHtml(bill: Bill): string {
   ${r.buyer ? `<section class="buyer" aria-label="Billed to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <p class="currency-note">All amounts in INR (₹)</p>
   <table class="items${itemGst ? " items--gst" : ""}" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th>${itemGst ? `<th scope="col">GST</th>` : ""}<th scope="col">Amount</th></tr></thead><tbody>
-    ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td>${itemGst ? `<td>${i.gstRate}%</td>` : ""}<td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
+    ${r.items.map((i) => `<tr${i.addon ? ' class="addon-line"' : ""}><td>${i.addon ? "+ " : ""}${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td>${itemGst ? `<td>${i.gstRate}%</td>` : ""}<td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
   </tbody></table>
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
