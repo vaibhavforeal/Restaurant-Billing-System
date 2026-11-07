@@ -549,6 +549,21 @@ describe("billing and day-end", () => {
         expect(res.statusCode).toBe(409); expect(res.json().error).toBe("Order changed; review a fresh bill preview");
       });
     });
+    it("keeps item report lines non-negative when a near-total discount leaves less item value than the round-off", async () => {
+      await putSettings({ gstMode: "exclusive", gstRate: 5, serviceChargeBp: 0, packagingChargePaise: 2200 });
+      const id = await order();
+      // ₹105 item less ₹104.90 leaves 10 paise; packaging 2200 + 110 GST; 2320 rounds to 2300, so the round-off is -20.
+      const bill = (await post(id, await billRequest(id, { discountPaise: 10490, discountNote: "Comp" }))).json().bill as Bill;
+      expect(bill).toMatchObject({ roundingPaise: -20, totalPaise: 2300 });
+      const lines = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise AS value, rounding_paise AS rounding, total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ value: number; rounding: number; total: number }>;
+      expect(lines).toEqual([{ value: 10, rounding: -10, total: 0 }]);
+      const charge = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total, rounding_paise AS rounding FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number; rounding: number };
+      expect(charge).toEqual({ total: 2300, rounding: -10 });
+      const voided = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(token), payload: { clientRef: uuidv7(), reason: "Test", refunds: [] } });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect(app.db.prepare("SELECT SUM(total_paise) AS n FROM credit_notes WHERE bill_id = ?").get(bill.id)).toEqual({ n: bill.totalPaise });
+      expect(app.db.prepare("SELECT rounding_paise, total_paise FROM credit_note_charges").get()).toEqual({ rounding_paise: -10, total_paise: 2300 });
+    });
     it.each([[18, 3000, -40], [5, 2200, -10]])("keeps every report line non-negative when a takeaway's items are fully discounted (%i%% charge, %i paise packaging)", async (gstRate, packaging, rounding) => {
       await putSettings({ gstMode: "exclusive", gstRate, serviceChargeBp: 0, packagingChargePaise: packaging });
       const id = await order();

@@ -197,12 +197,15 @@ export function issueBill(db: Database, orderId: string, opts: {
   if (loyalty.customerId && loyalty.pointsRedeemed) ledger.run(uuidv7(), loyalty.customerId, "redeem", -loyalty.pointsRedeemed, id, now, opts.actorId, null);
   if (loyalty.customerId && loyalty.pointsEarned) ledger.run(uuidv7(), loyalty.customerId, "earn", loyalty.pointsEarned, id, now, opts.actorId, earnExpiry(settings, now));
   for (const tax of totals.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
-  // Charges carry no rounding, except when every item is worth 0 after discount: then the bill's round-off goes on the charges
-  // (by value) so no item report line is left with a negative total.
+  // The bill's round-off goes on the items, so charges usually carry none. The items take only what they can: all of it
+  // when they are worth 0 after discount, and no more than their value when it is negative. The rest goes on the charges
+  // (by value), so no item report line, and no charge, is left with a negative total.
   const charges = totals.charges ?? [];
   const chargeValues = charges.map((c) => c.taxablePaise + c.cgstPaise + c.sgstPaise);
   const itemValue = totals.totalPaise - totals.roundingPaise - chargeValues.reduce((sum, n) => sum + n, 0);
-  const chargeRounding = charges.length && itemValue === 0 && totals.roundingPaise !== 0 ? allocatePaise(totals.roundingPaise, chargeValues) : charges.map(() => 0);
+  const itemRounding = itemValue === 0 ? 0 : Math.max(totals.roundingPaise, -itemValue);
+  const chargeShare = charges.length ? totals.roundingPaise - itemRounding : 0;
+  const chargeRounding = chargeShare !== 0 ? allocatePaise(chargeShare, chargeValues) : charges.map(() => 0);
   charges.forEach((c, i) => db.prepare("INSERT INTO bill_charges (bill_id, kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, c.kind, c.label, c.percentBp ?? null, c.gstRate, c.amountPaise, c.taxablePaise, c.cgstPaise, c.sgstPaise, chargeRounding[i]!));
   saveReportLines(db, id);
   // All remaining pending items are stationless; deduct before changing status.
