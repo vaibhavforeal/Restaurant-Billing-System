@@ -54,6 +54,7 @@ describe("orders with add-ons", () => {
   }
   const add = (orderId: string, productId: string, addonPicks?: string[], extra: object = {}) =>
     post(`/api/orders/${orderId}/items`, { items: [{ clientRef: uuidv7(), productId, qty: 1, ...(addonPicks ? { addonPicks } : {}), ...extra }] });
+  const send = (orderId: string, payload?: object) => app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(token), ...(payload ? { payload } : {}) });
   const items = async (orderId: string) => (await app.inject({ url: `/api/orders/${orderId}`, headers: auth(token) })).json().order.items as Item[];
 
   describe("taking orders", () => {
@@ -113,6 +114,74 @@ describe("orders with add-ons", () => {
       const res = await add(id, margherita, []);
       expect(res.statusCode, res.body).toBe(200);
       expect(await items(id)).toHaveLength(1);
+    });
+  });
+
+  describe("changing, cancelling and moving a dish", () => {
+    const pizza = async (type: "parcel" | "dine_in" = "parcel", tableId?: string) => {
+      const id = await order(type, tableId);
+      expect((await add(id, margherita, [option(toppings, "Cheese"), option(base, "Pan")])).statusCode).toBe(200);
+      const [dish, cheeseLine, panLine] = await items(id);
+      return { id, dish: dish!, cheeseLine: cheeseLine!, panLine: panLine! };
+    };
+    const cancel = (itemId: string, reason?: string) => post(`/api/order-items/${itemId}/cancel`, reason ? { reason } : {});
+
+    it("changing the dish's qty changes its add-ons", async () => {
+      const { id, dish } = await pizza();
+      expect((await patch(`/api/order-items/${dish.id}`, { qty: 3 })).statusCode).toBe(200);
+      expect((await items(id)).map((l) => [l.name, l.qty])).toEqual([["Margherita", 3], ["Cheese", 3], ["Pan", 3]]);
+    });
+
+    it("a cancelled add-on keeps its qty", async () => {
+      const { id, dish, cheeseLine } = await pizza();
+      expect((await cancel(cheeseLine.id)).statusCode).toBe(200);
+      expect((await patch(`/api/order-items/${dish.id}`, { qty: 2 })).statusCode).toBe(200);
+      expect((await items(id)).map((l) => [l.name, l.qty, l.status])).toEqual([["Margherita", 2, "pending"], ["Cheese", 1, "cancelled"], ["Pan", 2, "pending"]]);
+    });
+
+    it("add-on lines refuse qty and hold but take a note", async () => {
+      const { cheeseLine } = await pizza();
+      const qty = await patch(`/api/order-items/${cheeseLine.id}`, { qty: 2 });
+      expect(qty.statusCode).toBe(409);
+      expect(qty.json()).toMatchObject({ code: "addon_line", error: "Change the dish, not its add-on" });
+      expect((await patch(`/api/order-items/${cheeseLine.id}`, { held: true })).json().code).toBe("addon_line");
+      expect((await patch(`/api/order-items/${cheeseLine.id}`, { note: "extra crispy" })).statusCode).toBe(200);
+    });
+
+    it("cancelling the dish cancels its add-ons", async () => {
+      const { id, dish } = await pizza();
+      expect((await cancel(dish.id, "Guest left")).statusCode).toBe(200);
+      expect((await items(id)).map((l) => [l.status, l.cancelReason])).toEqual([["cancelled", "Guest left"], ["cancelled", "Guest left"], ["cancelled", "Guest left"]]);
+    });
+
+    it("an add-on can be cancelled alone", async () => {
+      const { id, panLine } = await pizza();
+      expect((await cancel(panLine.id)).statusCode).toBe(200);
+      expect((await items(id)).map((l) => [l.name, l.status])).toEqual([["Margherita", "pending"], ["Cheese", "pending"], ["Pan", "cancelled"]]);
+    });
+
+    it("transfer carries add-ons, including a cancelled one", async () => {
+      const table = async (name: string) => (await post("/api/tables", { name })).json().table.id as string;
+      const { id, dish, cheeseLine, panLine } = await pizza("dine_in", await table("T1"));
+      const target = await order("dine_in", await table("T2"));
+      expect((await cancel(cheeseLine.id)).statusCode).toBe(200);
+      const alone = await post(`/api/orders/${id}/transfer-items`, { clientRef: uuidv7(), targetOrderId: target, items: [{ id: panLine.id, qty: 1 }] });
+      expect(alone.statusCode).toBe(409);
+      expect(alone.json().code).toBe("addon_line");
+      const moved = await post(`/api/orders/${id}/transfer-items`, { clientRef: uuidv7(), targetOrderId: target, items: [{ id: dish.id, qty: 1 }] });
+      expect(moved.statusCode, moved.body).toBe(200);
+      expect((await items(target)).map((l) => [l.name, l.status])).toEqual([["Margherita", "pending"], ["Cheese", "cancelled"], ["Pan", "pending"]]);
+      expect(await items(id)).toHaveLength(0);
+    });
+
+    it("a sent dish with add-ons cannot be edited", async () => {
+      const { id, dish } = await pizza();
+      expect((await send(id)).statusCode).toBe(200);
+      for (const itemId of [dish.id]) {
+        const res = await post(`/api/order-items/${itemId}/edit-sent`, { clientRef: uuidv7(), note: "less salt" });
+        expect(res.statusCode).toBe(409);
+        expect(res.json().code).toBe("addon_line");
+      }
     });
   });
 });

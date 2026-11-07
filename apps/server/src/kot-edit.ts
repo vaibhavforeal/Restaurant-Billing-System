@@ -51,6 +51,10 @@ export function registerKotEdits(app: FastifyInstance): void {
       if (item.parent_item_id || db.prepare("SELECT 1 FROM order_items WHERE parent_item_id = ? LIMIT 1").get(item.id)) {
         throw httpError(409, "A sent combo cannot be edited. Cancel it and add it again.", "combo_item");
       }
+      // A dish and its add-ons are billed together; change them by cancelling the dish and adding it again.
+      if (item.addon_of_item_id || db.prepare("SELECT 1 FROM order_items WHERE addon_of_item_id = ? LIMIT 1").get(item.id)) {
+        throw httpError(409, "A sent dish with add-ons cannot be edited. Cancel it and add it again.", "addon_line");
+      }
       const newQty = body.qty ?? item.qty;
       const newNote = body.note === undefined ? item.note : body.note || null;
       if (newQty > item.qty) throw httpError(400, "To add more, add the dish again and send it to the kitchen");
