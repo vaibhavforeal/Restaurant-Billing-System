@@ -1,0 +1,21 @@
+---
+import Base from '../layouts/Base.astro';
+import { config } from '../config';
+---
+
+<Base title="Privacy · MasalaPOS" description="What this website collects: nothing beyond what you choose to send us on WhatsApp.">
+  <section class="priv wrap">
+    <h1 class="display priv__title">Privacy</h1>
+    <div class="priv__body">
+      <p>This website does not use analytics, tracking cookies or a contact database.</p>
+      <p>When you use “Book a demo”, your browser opens WhatsApp with a message ready to send. Nothing is sent to us until you press send in WhatsApp, and then we see the number and name you message from.</p>
+      <p>We use what you send only to reply to you about MasalaPOS. To have it deleted, message us on WhatsApp at {config.whatsappDisplay}.</p>
+    </div>
+  </section>
+</Base>
+
+<style is:global>
+  .priv { padding-top: 160px; padding-bottom: var(--gap-section); }
+  .priv__title { font-size: var(--step-hero); text-transform: uppercase; }
+  .priv__body { margin-top: 40px; display: grid; gap: 20px; max-width: 36em; }
+</style>

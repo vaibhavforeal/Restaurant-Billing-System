@@ -1,0 +1,26 @@
+---
+import { offline } from '../data/content';
+---
+
+<section class="offline" aria-labelledby="offline-title">
+  <div class="offline__in wrap">
+    <h2 id="offline-title" class="display offline__title" data-reveal>{offline.heading}</h2>
+    <div class="offline__cols">
+      {offline.items.map((it, i) => (
+        <div class="offline__col" data-reveal style={`--i:${i + 1}`}>
+          <h3>{it.h}</h3>
+          <p>{it.p}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style is:global>
+  .offline { margin-top: var(--gap-section); background: var(--accent); color: var(--ink); padding-block: clamp(72px, 9vw, 140px); }
+  .offline__title { font-size: clamp(2.4rem, 1rem + 5.4vw, 6rem); max-width: 11em; text-transform: none; }
+  .offline__cols { margin-top: clamp(48px, 6vw, 88px); display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(24px, 4vw, 64px); }
+  .offline__col h3 { font-family: var(--display); font-weight: 700; font-size: 1.4rem; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 12px; }
+  .offline__col p { max-width: 28em; }
+  @media (max-width: 800px) { .offline__cols { grid-template-columns: 1fr; } }
+</style>
