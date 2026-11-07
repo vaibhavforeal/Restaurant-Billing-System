@@ -11,7 +11,7 @@ export * from "./custom-reports.js";
 export { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, type Reservation, type ReservationInput, type ReservationList } from "./reservations.js";
 export { CATALOG_CSV_LIMIT, CATALOG_CSV_COLUMNS, parseCatalogCsv, type CatalogImportPreview } from "./catalog-csv.js";
 export { csvField, parseCsv, toCsv, unescapeCsvField, type CsvCell } from "./csv.js";
-export { GuestSubmission, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "./guest-ordering.js";
+export { GuestSubmission, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type GuestAddonGroup, type QrTable, type GuestPreparation, type PreparationState } from "./guest-ordering.js";
 export { ServiceSubmission, type ServiceReceipt, type ServiceRequest } from "./guest-services.js";
 export { RecipeUpdate, type RecipeUpdateInput } from "./stock-schemas.js";
 export { PLANS, LicenseClaims, featuresFromModules, type Plan, type Feature, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "./licensing.js";
