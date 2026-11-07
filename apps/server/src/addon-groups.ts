@@ -77,24 +77,26 @@ function checkOptions(db: Database, options: AddonOptionInputValue[]): void {
 /** Replaces a group's options. Options sent back with their id keep it, so a cart picked before the edit still matches. */
 function saveOptions(db: Database, groupId: string, options: AddonOptionInputValue[]): void {
   const previous = new Set((db.prepare("SELECT id FROM addon_group_options WHERE group_id = ?").all(groupId) as Array<{ id: string }>).map((r) => r.id));
-  const kept = new Set(options.map((o) => o.id).filter((id): id is string => !!id && previous.has(id)));
-  for (const id of previous) if (!kept.has(id)) db.prepare("DELETE FROM addon_group_options WHERE id = ?").run(id);
+  // Order lines keep their own snapshots and never point at options, so the rows can be rewritten whole; doing so avoids
+  // a passing clash on the one-item-per-group index when two kept options swap items.
+  db.prepare("DELETE FROM addon_group_options WHERE group_id = ?").run(groupId);
   options.forEach((option, index) => {
-    if (option.id && kept.has(option.id)) {
-      db.prepare("UPDATE addon_group_options SET product_id = ?, variant_id = ?, sort_order = ? WHERE id = ?").run(option.productId, option.variantId, index, option.id);
-    } else {
-      db.prepare("INSERT INTO addon_group_options (id, group_id, product_id, variant_id, sort_order) VALUES (?, ?, ?, ?, ?)").run(uuidv7(), groupId, option.productId, option.variantId, index);
-    }
+    const id = option.id && previous.has(option.id) ? option.id : uuidv7();
+    db.prepare("INSERT INTO addon_group_options (id, group_id, product_id, variant_id, sort_order) VALUES (?, ?, ?, ?, ?)").run(id, groupId, option.productId, option.variantId, index);
   });
 }
 
-/** Replaces an item's attached groups, in the given order. Unknown or archived groups are a 400. Call inside a transaction. */
+/**
+ * Replaces an item's attached groups, in the given order. Unknown groups are a 400, and so is attaching an archived group
+ * the item does not already have (an editor may send back an archived group the item still has). Call inside a transaction.
+ */
 export function saveProductAddonGroups(db: Database, productId: string, groupIds: string[]): void {
   if (new Set(groupIds).size !== groupIds.length) throw httpError(400, "A group is attached twice");
+  const attached = new Set((db.prepare("SELECT group_id FROM product_addon_groups WHERE product_id = ?").all(productId) as Array<{ group_id: string }>).map((r) => r.group_id));
   for (const id of groupIds) {
     const group = db.prepare("SELECT name, is_active FROM addon_groups WHERE id = ?").get(id) as { name: string; is_active: number } | undefined;
     if (!group) throw httpError(400, "unknown add-on group");
-    if (group.is_active !== 1) throw httpError(400, `${group.name} is archived`);
+    if (group.is_active !== 1 && !attached.has(id)) throw httpError(400, `${group.name} is archived`);
   }
   db.prepare("DELETE FROM product_addon_groups WHERE product_id = ?").run(productId);
   groupIds.forEach((id, index) => db.prepare("INSERT INTO product_addon_groups (product_id, group_id, sort_order) VALUES (?, ?, ?)").run(productId, id, index));

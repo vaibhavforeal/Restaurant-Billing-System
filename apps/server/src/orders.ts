@@ -269,7 +269,7 @@ export function registerOrders(app: FastifyInstance): void {
         const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(kotId) as KotRow;
         const kotItems = app.db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(kotId) as OrderItemRow[];
         const kotOrder = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
-        return kotWithContextJson(kot, kotOrder, orderTableLabel(app.db, kotOrder.id), kotItems);
+        return kotWithContextJson(kot, kotOrder, orderTableLabel(app.db, kotOrder.id), kotItems, app.db);
       });
       return { ids, kots };
     })();

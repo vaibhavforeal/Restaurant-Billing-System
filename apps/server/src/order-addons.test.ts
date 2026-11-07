@@ -335,4 +335,32 @@ describe("orders with add-ons", () => {
       expect(rows.map((r) => [r.name, r.parent])).toEqual([["Cheese", null], ["Coke", null], ["Margherita", null], ["Thin", null]]);
     });
   });
+
+  describe("review fixes", () => {
+    it("refuses to transfer a cancelled dish", async () => {
+      const table = async (name: string) => (await post("/api/tables", { name })).json().table.id as string;
+      const id = await order("dine_in", await table("T1"));
+      const target = await order("dine_in", await table("T2"));
+      await add(id, farmhouse, []);
+      const dish = (await items(id))[0]!;
+      expect((await post(`/api/order-items/${dish.id}/cancel`, {})).statusCode).toBe(200);
+      const res = await post(`/api/orders/${id}/transfer-items`, { clientRef: uuidv7(), targetOrderId: target, items: [{ id: dish.id, qty: 1 }] });
+      expect(res.statusCode).toBe(409);
+      expect(await items(target)).toHaveLength(0);
+    });
+
+    it("keeps the dish name on a kitchen ticket re-sent after a cancel", async () => {
+      const id = await order();
+      await add(id, margherita, [option(toppings, "Coke"), option(base, "Thin")]);
+      await add(id, coke, []);
+      expect((await send(id)).statusCode).toBe(200);
+      const standalone = (await items(id)).find((l) => l.name === "Coke" && !l.addonOfItemId)!;
+      const sent: Array<{ kot: { items: Array<{ name: string; addonOfItemName: string | null }> } }> = [];
+      const original = app.broadcast.bind(app);
+      app.broadcast = ((type: string, payload: unknown) => { if (type === "kot.updated") sent.push(payload as never); return original(type as never, payload as never); }) as typeof app.broadcast;
+      expect((await post(`/api/order-items/${standalone.id}/cancel`, { reason: "Spilled" })).statusCode).toBe(200);
+      const barTicket = sent.find((p) => p.kot.items.some((i) => i.name === "Coke"))!;
+      expect(barTicket.kot.items.find((i) => i.addonOfItemName !== null)?.addonOfItemName).toBe("Margherita");
+    });
+  });
 });

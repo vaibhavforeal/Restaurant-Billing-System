@@ -24,7 +24,9 @@ export function registerItemTransfers(app: FastifyInstance) {
         if (!row || row.parent_item_id || row.qty !== chosen.qty) throw httpError(409, "Items changed. Reopen Transfer items and choose again.");
         // Combo items and add-ons move with their dish; a cancelled add-on goes too, so the dish's history stays together.
         const family = [row, ...app.db.prepare("SELECT * FROM order_items WHERE parent_item_id = ? OR addon_of_item_id = ?").all(row.id, row.id) as OrderItemRow[]];
-        if (family.some((i) => i.status !== "cancelled" && (i.status !== "pending" || i.kot_id))) throw httpError(409, "Only unsent items can transfer. Use Move table or Merge for kitchen orders.");
+        // Only an add-on cancelled before it reached the kitchen may ride along; the dish itself must still be unsent.
+        const cancelledUnsentAddon = (i: OrderItemRow) => i !== row && i.addon_of_item_id !== null && i.status === "cancelled" && !i.kot_id;
+        if (family.some((i) => !cancelledUnsentAddon(i) && (i.status !== "pending" || i.kot_id))) throw httpError(409, "Only unsent items can transfer. Use Move table or Merge for kitchen orders.");
         if (family.some((i) => i.client_ref?.startsWith("guest:"))) throw httpError(409, "Guest QR items must stay with their guest request. Move or merge the table instead.");
         moveIds.push(...family.map((i) => i.id));
       }

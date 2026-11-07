@@ -93,8 +93,8 @@ fails with `addon_picks`.
 
 ## API contract (for the backend and for Codex)
 
-All money is integer paise. Errors use the existing `httpError(status, message, code)` shape:
-`{ message, code }`.
+All money is integer paise. Errors use the existing `httpError(status, message, code)` shape. The response body is
+`{ error, code }`, where `error` is the message to show.
 
 ### Catalog
 
@@ -122,7 +122,9 @@ without a variant; an unknown variant or one belonging to another product.
 **Products:** the existing `POST /api/products` and `PATCH /api/products/:id` gain:
 - `addonOnly?: boolean` (default false). Rejected for combos.
 - `addonGroupIds?: string[]`, which replaces the item's attached groups in the given order. Rejected for
-  combos and add-on-only products. Unknown or archived group ids → 400.
+  combos and add-on-only products. Unknown group ids → 400. An archived group id → 400, unless the item already has
+  that group. Setting `addonOnly: true` on an item that has groups needs `addonGroupIds: []` in the same request.
+- Archived groups are skipped when taking orders: their add-ons can't be picked and their minimum doesn't apply.
 
 `GET /api/products` returns each product with `addonOnly: boolean` and `addonGroupIds: string[]`.
 
@@ -146,8 +148,9 @@ the lines whose `addonOfItemId` equals its id. They appear right after it in the
 they were picked.
 
 `PATCH /api/order-items/:id`:
-- On an item: `qty` changes rescale its pending add-ons to the same qty. `held` cascades. `note` stays on
-  the item only.
+- On an item: `qty` changes rescale its non-cancelled add-ons to the same qty. Once any of its add-ons has been sent,
+  the item's `qty` cannot change (409 `addon_line`). `held` is read through the item: add-on rows are saved with
+  `held = 0` and follow their item's hold. `note` stays on the item only.
 - On an add-on line: `qty` and `held` → 409 `addon_line` ("Change the dish, not its add-on"). `note` is
   allowed.
 
@@ -175,8 +178,10 @@ receipt and status show add-ons under their item.
 
 - The KOT station for an add-on line is the add-on product's own `kot_station_id`. If that is null, it uses
   the item's station.
-- Sending an item sends its pending add-ons with it, even when only the item's id is named. A held item holds
-  its add-ons.
+- Sending an item sends its pending add-ons with it, even when only the item's id is named. Naming an add-on sends
+  its whole item family. A held item holds its add-ons, and firing the item fires them.
+- KOT item JSON (`kot.created`, `kot.updated`, `GET /api/kots`) carries `addonOfItemId` and `addonOfItemName`, the
+  item's name even when the item is on another ticket.
 - The station slip prints add-ons under their item as `  + Extra cheese`. An add-on printed at a different
   station from its item shows `  (for Margherita)`.
 - Stock follows today's rule, using the add-on line's effective station: an add-on deducts from its own
@@ -189,7 +194,8 @@ receipt and status show add-ons under their item.
   money code changes are expected. Tests prove this.
 - **Per-item packaging** skips add-on lines (`addon_of_item_id IS NOT NULL`).
 - **Receipts and bill preview:** thermal and A4 print add-ons indented under their item
-  (`  + Extra cheese   30.00`), with their own amount. Bill-preview lines gain `addonOfItemId`.
+  (`  + Extra cheese   30.00`), with their own amount. Receipt and bill-preview items carry `addon: true` on add-on
+  lines (`receipt.items[]`). Order items carry `addonOfItemId`.
 - **Credit notes:** add-on lines are refundable and voidable like any line. Refunding an item does not
   force its add-ons. The form shows them so the cashier chooses.
 - **Reports:** item sales count the add-on product's revenue under its own name. The cancellation report

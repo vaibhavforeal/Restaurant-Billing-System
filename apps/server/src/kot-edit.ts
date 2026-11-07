@@ -83,7 +83,7 @@ export function registerKotEdits(app: FastifyInstance): void {
         const kotRow = db.prepare("SELECT * FROM kots WHERE id = ?").get(item.kot_id) as KotRow;
         const tableName = orderTableLabel(db, order.id);
         if (print) printed = printEditSlip(kotRow, order, tableName, { name: item.name_snapshot, oldQty: item.qty, newQty, oldNote: item.note, newNote, reason, atMs: now });
-        kot = kotWithContextJson(kotRow, order, tableName, db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(item.kot_id) as OrderItemRow[]);
+        kot = kotWithContextJson(kotRow, order, tableName, db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(item.kot_id) as OrderItemRow[], db);
       }
       db.prepare(`INSERT INTO kot_edits (id, order_item_id, order_id, kot_id, old_qty, new_qty, old_note, new_note, reason, cancelled_item_id,
         printed, created_at, created_by, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

@@ -106,4 +106,21 @@ describe("add-on groups", () => {
     await patch(`/api/addon-groups/${archived.id}`, { isActive: false });
     expect((await patch(`/api/products/${olives}`, { addonGroupIds: [archived.id] })).statusCode).toBe(400);
   });
+
+  it("lets a dish keep an archived group it already has", async () => {
+    const g = await group();
+    await patch(`/api/products/${margherita}`, { addonGroupIds: [g.id] });
+    await patch(`/api/addon-groups/${g.id}`, { isActive: false });
+    const res = await patch(`/api/products/${margherita}`, { pricePaise: 26000, addonGroupIds: [g.id] });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().product.addonGroupIds).toEqual([g.id]);
+  });
+
+  it("swaps the items of two kept options without an error", async () => {
+    const g = await group();
+    const [a, b] = g.options;
+    const res = await patch(`/api/addon-groups/${g.id}`, { options: [{ id: a!.id, productId: coke, variantId: cokeLarge }, { id: b!.id, productId: cheese }] });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().group.options.map((o: Option) => [o.id, o.name])).toEqual([[a!.id, "Coke (Large)"], [b!.id, "Cheese"]]);
+  });
 });
