@@ -53,21 +53,29 @@ export function registerKots(app: FastifyInstance): void {
       product_id: string;
       station_id: string | null;
       parent_item_id: string | null;
-      /** 1 when the item, or the combo it is in, is held back from the kitchen. */
+      addon_of_item_id: string | null;
+      /** 1 when the item, the combo it is in, or the dish it was picked under is held back from the kitchen. */
       held: number;
     }
     const allPending = app.db
       .prepare(
-        `SELECT oi.id, oi.product_id, p.kot_station_id AS station_id, oi.parent_item_id, MAX(oi.held, COALESCE(parent.held, 0)) AS held
+        // An add-on without a station of its own goes to its dish's station, on the dish's ticket.
+        `SELECT oi.id, oi.product_id, COALESCE(p.kot_station_id, dp.kot_station_id) AS station_id, oi.parent_item_id, oi.addon_of_item_id,
+           MAX(oi.held, COALESCE(parent.held, 0), COALESCE(dish.held, 0)) AS held
          FROM order_items oi
          JOIN products p ON p.id = oi.product_id
          LEFT JOIN order_items parent ON parent.id = oi.parent_item_id
+         LEFT JOIN order_items dish ON dish.id = oi.addon_of_item_id
+         LEFT JOIN products dp ON dp.id = dish.product_id
          WHERE oi.order_id = ? AND oi.status = 'pending'
          ORDER BY oi.id`,
       )
       .all(id) as PendingItem[];
-    // Naming a combo sends the items in it.
-    const namedItems = allPending.filter((item) => !body || body.itemIds.includes(item.id) || (item.parent_item_id !== null && body.itemIds.includes(item.parent_item_id)));
+    // Naming a combo sends the items in it; naming a dish or one of its add-ons sends the dish with all its add-ons.
+    const namedIds = new Set(body?.itemIds ?? []);
+    for (const item of allPending) if (item.addon_of_item_id && namedIds.has(item.id)) namedIds.add(item.addon_of_item_id);
+    const namedItems = allPending.filter((item) => !body || namedIds.has(item.id) || (item.parent_item_id !== null && namedIds.has(item.parent_item_id))
+      || (item.addon_of_item_id !== null && namedIds.has(item.addon_of_item_id)));
     if (body && new Set(body.itemIds).size !== allPending.filter((item) => body.itemIds.includes(item.id)).length) throw httpError(409, "Kitchen items changed; review the order before sending again");
     if (fire && allPending.some((item) => body!.itemIds.includes(item.id) && !item.held)) throw httpError(409, "Only held items can be fired");
     // A KOT leaves held dishes for later, even when a screen that has not seen the hold names them; Fire sends them.
@@ -109,7 +117,7 @@ export function registerKots(app: FastifyInstance): void {
       const combos = [...new Set(pendingItems.filter((item) => item.station_id && item.parent_item_id).map((item) => item.parent_item_id!))];
       changedStockIds.push(...consumeStock(app.db, combos, req.user.id));
       for (const comboId of combos) app.db.prepare("UPDATE order_items SET status = 'sent' WHERE id = ? AND status = 'pending'").run(comboId);
-      if (fire) for (const itemId of body!.itemIds) app.db.prepare("UPDATE order_items SET held = 0 WHERE id = ?").run(itemId);
+      if (fire) for (const itemId of namedIds) app.db.prepare("UPDATE order_items SET held = 0 WHERE id = ?").run(itemId);
       // A new Zomato order enters the kitchen; a Ready one goes back (new items to cook). Only when a KOT was created.
       if (createdKots.length > 0) {
         app.db.prepare("UPDATE orders SET zomato_status = 'preparing' WHERE id = ? AND type = 'zomato' AND (zomato_status IS NULL OR zomato_status = 'ready')").run(id);
@@ -129,7 +137,7 @@ export function registerKots(app: FastifyInstance): void {
       const kotsWithContext = createdKots.map((ck) => {
         const kotRow = allKots.find((k) => k.id === ck.id)!;
         const kotItems = allItems.filter((i) => i.kot_id === ck.id);
-        return kotWithContextJson(kotRow, orderResult, tableName, kotItems);
+        return kotWithContextJson(kotRow, orderResult, tableName, kotItems, app.db);
       });
 
       // Print each KOT
@@ -146,12 +154,17 @@ export function registerKots(app: FastifyInstance): void {
             zomatoOrderId: orderResult.zomato_order_id ?? null,
             tableName,
             splitLabel: orderResult.split_label,
-            items: kotItemsForPrint.map((i) => ({
-              qty: i.qty,
-              name: i.name_snapshot,
-              note: i.note,
-              cancelled: i.status === "cancelled",
-            })),
+            items: kotItemsForPrint.map((i) => {
+              // An add-on prints under its dish; on another station's ticket it names the dish it is for.
+              const dish = i.addon_of_item_id ? allItems.find((d) => d.id === i.addon_of_item_id) : undefined;
+              return {
+                qty: i.qty,
+                name: i.name_snapshot,
+                note: i.note,
+                cancelled: i.status === "cancelled",
+                ...(dish ? { addon: true, ...(dish.kot_id !== ck.id ? { forItem: dish.name_snapshot } : {}) } : {}),
+              };
+            }),
             atMs: kotRow.created_at,
           },
           target.paperWidth,
@@ -220,7 +233,7 @@ export function registerKots(app: FastifyInstance): void {
         const order = ordersById.get(kot.order_id)!;
         const tableName = orderTableLabel(app.db, order.id);
         const kotItems = itemsByKotId.get(kot.id) ?? [];
-        return kotWithContextJson(kot, order, tableName, kotItems);
+        return kotWithContextJson(kot, order, tableName, kotItems, app.db);
       }),
     };
   });
@@ -232,7 +245,7 @@ export function registerKots(app: FastifyInstance): void {
       .prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id")
       .all(updated.id) as OrderItemRow[];
 
-    app.broadcast("kot.updated", { kot: kotWithContextJson(updated, order, tableName, items) });
+    app.broadcast("kot.updated", { kot: kotWithContextJson(updated, order, tableName, items, app.db) });
   }
 
   app.post("/api/kots/:id/done", { preHandler: update }, async (req, reply) => {

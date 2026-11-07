@@ -100,7 +100,15 @@ export function kotWithContextJson(
   order: OrderRow,
   tableName: string | null,
   items: OrderItemRow[],
+  db?: Database,
 ) {
+  // An add-on names its dish, which may be on another station's ticket.
+  const dishName = (id: string | null) => {
+    if (!id) return null;
+    const local = items.find((i) => i.id === id);
+    if (local) return local.name_snapshot;
+    return (db?.prepare("SELECT name_snapshot FROM order_items WHERE id = ?").get(id) as { name_snapshot: string } | undefined)?.name_snapshot ?? null;
+  };
   return {
     ...kotJson(kot),
     orderType: order.type,
@@ -108,7 +116,8 @@ export function kotWithContextJson(
     zomatoOrderId: order.zomato_order_id ?? null,
     tableName,
     splitLabel: order.split_label,
-    items: items.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status })),
+    items: items.map((i) => ({ id: i.id, name: i.name_snapshot, qty: i.qty, note: i.note, status: i.status,
+      addonOfItemId: i.addon_of_item_id ?? null, addonOfItemName: dishName(i.addon_of_item_id ?? null) })),
   };
 }
 

@@ -206,6 +206,10 @@ export function registerOrders(app: FastifyInstance): void {
     if (item.status !== "pending") throw httpError(409, "item is not pending");
 
     const qty = body.qty ?? item.qty;
+    // An add-on already in the kitchen keeps its quantity; change the dish by cancelling it and adding it again.
+    if (qty !== item.qty && app.db.prepare("SELECT 1 FROM order_items WHERE addon_of_item_id = ? AND status = 'sent' LIMIT 1").get(id)) {
+      throw httpError(409, "Its add-ons are already in the kitchen. Cancel the dish and add it again.", "addon_line");
+    }
     const note = body.note === undefined ? item.note : body.note;
     // Un-holding always works, so dishes held before the setting was turned off are never stuck.
     if (body.held === true && item.held !== 1 && !holdOrdersEnabled(app.db)) throw httpError(409, HOLD_OFF);

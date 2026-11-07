@@ -137,4 +137,18 @@ describe("templates", () => {
       expect(cancel).toContain("ZOMATO #5821\n");
     });
   });
+
+  it("prints add-ons under their dish, and names the dish when it is on another ticket", () => {
+    const base = { kotNo: 7, stationName: "Kitchen", orderType: "parcel" as const, tableName: null, splitLabel: null, atMs: Date.UTC(2026, 10, 7, 9, 0) };
+    const same = renderBytes(kotSlip({ ...base, items: [
+      { qty: 2, name: "Margherita", note: null, cancelled: false },
+      { qty: 2, name: "Cheese", note: null, cancelled: false, addon: true },
+    ] }, 80));
+    expect(same).toContain("2 x Margherita");
+    expect(same).toContain("+ Cheese");
+    expect(same).not.toContain("2 x Cheese");
+    const other = renderBytes(kotSlip({ ...base, stationName: "Bar", items: [{ qty: 2, name: "Coke", note: null, cancelled: false, addon: true, forItem: "Margherita" }] }, 80));
+    expect(other).toContain("+ 2 x Coke");
+    expect(other).toContain("(for Margherita)");
+  });
 });

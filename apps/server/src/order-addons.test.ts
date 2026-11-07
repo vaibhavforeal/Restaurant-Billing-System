@@ -184,4 +184,85 @@ describe("orders with add-ons", () => {
       }
     });
   });
+
+  describe("kitchen", () => {
+    type Kot = { id: string; stationId: string; items: Array<{ id: string; name: string; addonOfItemId: string | null; addonOfItemName: string | null }> };
+    const stationOf = (kotId: string | null) => kotId ? (app.db.prepare("SELECT station_id FROM kots WHERE id = ?").get(kotId) as { station_id: string }).station_id : null;
+    const byName = async (orderId: string) => Object.fromEntries((await items(orderId)).map((l) => [l.name, l]));
+
+    it("stationless add-ons ride with their dish; others go to their own station", async () => {
+      const id = await order();
+      expect((await add(id, margherita, [option(toppings, "Cheese"), option(toppings, "Coke"), option(base, "Thin")])).statusCode).toBe(200);
+      const res = await send(id);
+      expect(res.statusCode, res.body).toBe(200);
+      const lines = await byName(id);
+      expect([lines.Margherita, lines.Cheese, lines.Coke, lines.Thin].map((l) => l!.status)).toEqual(["sent", "sent", "sent", "sent"]);
+      expect(stationOf(lines.Cheese!.kotId)).toBe(kitchen);
+      expect(lines.Cheese!.kotId).toBe(lines.Margherita!.kotId);
+      expect(lines.Thin!.kotId).toBe(lines.Margherita!.kotId);
+      expect(stationOf(lines.Coke!.kotId)).toBe(bar);
+      const barKot = (res.json().kots as Kot[]).find((k) => k.stationId === bar)!;
+      expect(barKot.items).toEqual([expect.objectContaining({ name: "Coke", addonOfItemId: lines.Margherita!.id, addonOfItemName: "Margherita" })]);
+    });
+
+    it("naming the dish sends its add-ons", async () => {
+      const id = await order();
+      await add(id, margherita, [option(toppings, "Coke"), option(base, "Thin")]);
+      await add(id, farmhouse, []);
+      const dish = (await byName(id)).Margherita!;
+      expect((await send(id, { clientRef: uuidv7(), itemIds: [dish.id] })).statusCode).toBe(200);
+      const lines = await byName(id);
+      expect([lines.Margherita, lines.Coke, lines.Thin, lines.Farmhouse].map((l) => l!.status)).toEqual(["sent", "sent", "sent", "pending"]);
+    });
+
+    it("a held dish holds its add-ons until it is fired", async () => {
+      await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", holdOrdersEnabled: true } });
+      const id = await order();
+      expect((await add(id, margherita, [option(toppings, "Coke"), option(base, "Thin")], { held: true })).statusCode).toBe(200);
+      expect((await send(id)).statusCode).toBe(409);
+      expect((await items(id)).map((l) => l.status)).toEqual(["pending", "pending", "pending"]);
+      const dish = (await byName(id)).Margherita!;
+      expect((await send(id, { clientRef: uuidv7(), itemIds: [dish.id], fire: true })).statusCode).toBe(200);
+      expect((await items(id)).map((l) => [l.name, l.status])).toEqual([["Margherita", "sent"], ["Coke", "sent"], ["Thin", "sent"]]);
+    });
+
+    it("stock comes from the add-on's recipe", async () => {
+      const stock = (await post("/api/stock-items", { clientRef: uuidv7(), name: "Mozzarella", unit: "kg", openingQty: 10, lowStockThreshold: null })).json().item.id as string;
+      expect((await app.inject({ method: "PUT", url: `/api/products/${cheese}/stock-links`, headers: auth(token), payload: { expectedVersion: 0, stockItemId: stock, qtyPerSale: 0.05 } })).statusCode).toBe(200);
+      const id = await order();
+      await add(id, margherita, [option(toppings, "Cheese"), option(base, "Thin")], { qty: 2 });
+      expect((await send(id)).statusCode).toBe(200);
+      expect((app.db.prepare("SELECT qty FROM stock_items WHERE id = ?").get(stock) as { qty: number }).qty).toBeCloseTo(9.9);
+    });
+
+    it("naming only an add-on sends its whole dish", async () => {
+      const id = await order();
+      await add(id, margherita, [option(toppings, "Coke"), option(base, "Thin")]);
+      expect((await send(id, { clientRef: uuidv7(), itemIds: [(await byName(id)).Coke!.id] })).statusCode).toBe(200);
+      expect((await items(id)).map((l) => [l.name, l.status])).toEqual([["Margherita", "sent"], ["Coke", "sent"], ["Thin", "sent"]]);
+    });
+
+    it("a dish cannot change quantity once one of its add-ons is in the kitchen", async () => {
+      const counter = await product("Counter pizza", 20000, 5, null);
+      await patch(`/api/products/${counter}`, { addonGroupIds: [toppings.id] });
+      const id = await order();
+      await add(id, counter, [option(toppings, "Coke")]);
+      expect((await send(id)).statusCode).toBe(200);
+      const lines = await byName(id);
+      expect([lines["Counter pizza"]!.status, lines.Coke!.status]).toEqual(["pending", "sent"]);
+      const res = await patch(`/api/order-items/${lines["Counter pizza"]!.id}`, { qty: 3 });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().code).toBe("addon_line");
+      expect((await byName(id)).Coke!.qty).toBe(1);
+    });
+
+    it("a sent add-on cannot be edited", async () => {
+      const id = await order();
+      await add(id, margherita, [option(toppings, "Cheese"), option(base, "Thin")]);
+      expect((await send(id)).statusCode).toBe(200);
+      const res = await post(`/api/order-items/${(await byName(id)).Cheese!.id}/edit-sent`, { clientRef: uuidv7(), note: "light" });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().code).toBe("addon_line");
+    });
+  });
 });
