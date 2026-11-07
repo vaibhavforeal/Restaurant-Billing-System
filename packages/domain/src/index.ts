@@ -5,6 +5,7 @@ export { INTEGRATIONS, IntegrationToggle, isIntegrationId, type IntegrationId, t
 export { saveReportLines, allocatePaise } from "./report-lines.js";
 export { orderItemPackaging } from "./packaging.js";
 export * from "./combos.js";
+export * from "./addons.js";
 export { OPERATIONAL_REPORTS, type OperationalReportKind, type OperationalReport, type ReportTable, type ReportColumn, type ReportCell } from "./operational-reports.js";
 export * from "./custom-reports.js";
 export { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, type Reservation, type ReservationInput, type ReservationList } from "./reservations.js";
