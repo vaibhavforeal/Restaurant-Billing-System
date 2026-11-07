@@ -152,7 +152,7 @@ describe("item CSV transfer", () => {
     await apply(token, csv(["A", "Tea", "10", "0"], ["A", "Coffee", "20", "0"]));
     const [coffee, tea] = await products(token);
     const variant = (await app.inject({ method: "POST", url: `/api/products/${tea.id}/variants`, headers: auth(token), payload: { name: "Large", pricePaise: 2000 } })).json().variant;
-    const wrongOwner = toCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", "", "", ""]]);
+    const wrongOwner = toCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", "", "", "", ""]]);
     expect((await preview(token, wrongOwner)).json().error).toContain("belongs to another item");
     await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { categoryId: tea.categoryId, name: "Tea", pricePaise: 500, gstRate: 0 } });
     expect((await preview(token, csv(["A", "Tea", "10", "0"]))).json().error).toContain("ambiguous item name");
@@ -260,5 +260,30 @@ describe("packaging CSV columns", () => {
     expect(after.variants.find((v: { name: string }) => v.name === "Full").packagingPaise).toBeNull();
 
     expect((await preview(token, toCsv([["category", "name", "price", "packaging"], ["Mains", "Dal", "200", "1000.01"]]))).statusCode).toBe(400);
+  });
+
+  it("imports and exports the addon_only flag", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    const source = toCsv([["category", "name", "price", "addon_only"], ["Extras", "Cheese", "30", "yes"], ["Pizza", "Margherita", "250", ""]]);
+    expect((await apply(token, source)).statusCode).toBe(200);
+    const listed = await products(token) as Array<{ name: string; addonOnly: boolean }>;
+    expect(listed.map((p) => [p.name, p.addonOnly])).toEqual([["Cheese", true], ["Margherita", false]]);
+    const exported = (await app.inject({ method: "GET", url: "/api/catalog/export", headers: auth(token) })).json().csv as string;
+    const rows = parseCatalogCsv(exported);
+    expect(rows.map((r) => [r.values.name, r.values.addon_only])).toEqual([["Cheese", "true"], ["Margherita", "false"]]);
+    const bad = await preview(token, toCsv([["category", "name", "price", "addon_only"], ["Extras", "Olives", "20", "maybe"]]));
+    expect(bad.statusCode).toBe(400);
+    expect(bad.body).toContain("addon_only must be true or false.");
+  });
+
+  it("refuses to make a dish with add-on groups add-on only", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    expect((await apply(token, csv(["Pizza", "Margherita", "250", "5"], ["Extras", "Cheese", "30", "5"]))).statusCode).toBe(200);
+    const ids = Object.fromEntries((await products(token) as Array<{ name: string; id: string }>).map((p) => [p.name, p.id]));
+    const group = await app.inject({ method: "POST", url: "/api/addon-groups", headers: auth(token), payload: { name: "Toppings", minPicks: 0, maxPicks: 1, options: [{ productId: ids.Cheese }] } });
+    await app.inject({ method: "PATCH", url: `/api/products/${ids.Margherita}`, headers: auth(token), payload: { addonGroupIds: [group.json().group.id] } });
+    const res = await preview(token, toCsv([["item_id", "category", "name", "price", "addon_only"], [ids.Margherita!, "Pizza", "Margherita", "250", "true"]]));
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain("has add-on groups");
   });
 });

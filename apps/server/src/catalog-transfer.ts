@@ -9,12 +9,12 @@ interface Station { id: string; name: string; is_active: number }
 interface Item {
   ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; packaging_paise: number;
   id: string; category_id: string; name: string; price_paise: number; gst_rate: number | null;
-  is_veg: number; is_active: number; is_sold_out: number; description: string; kot_station_id: string | null;
+  is_veg: number; is_active: number; is_sold_out: number; description: string; kot_station_id: string | null; addon_only: number;
 }
 interface Variant { ac_price_paise: number | null; takeaway_price_paise: number | null; zomato_price_paise: number | null; packaging_paise: number | null; id: string; product_id: string; name: string; price_paise: number; is_active: number }
 const normalized = (s: string) => s.trim().toLowerCase();
 const rupees = (paise: number) => (paise / 100).toFixed(2);
-const itemColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise, id, category_id, name, price_paise, gst_rate, is_veg, is_active, is_sold_out, description, kot_station_id";
+const itemColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise, id, category_id, name, price_paise, gst_rate, is_veg, is_active, is_sold_out, description, kot_station_id, addon_only";
 
 export function registerCatalogTransfer(app: FastifyInstance): void {
   const manage = app.requirePermission("catalog.manage");
@@ -40,8 +40,8 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
         p.kot_station_id ? stations.get(p.kot_station_id)! : ""];
       const optional = (paise: number | null) => paise === null ? "" : rupees(paise);
       const service = [optional(p.ac_price_paise), optional(p.takeaway_price_paise)];
-      rows.push([...base, "", "", "", "", ...service, "", "", optional(p.zomato_price_paise), "", rupees(p.packaging_paise), ""]);
-      for (const v of variants.get(p.id) ?? []) rows.push([...base, v.id, v.name, rupees(v.price_paise), String(!!v.is_active), ...service, optional(v.ac_price_paise), optional(v.takeaway_price_paise), optional(p.zomato_price_paise), optional(v.zomato_price_paise), rupees(p.packaging_paise), optional(v.packaging_paise)]);
+      rows.push([...base, "", "", "", "", ...service, "", "", optional(p.zomato_price_paise), "", rupees(p.packaging_paise), "", String(!!p.addon_only)]);
+      for (const v of variants.get(p.id) ?? []) rows.push([...base, v.id, v.name, rupees(v.price_paise), String(!!v.is_active), ...service, optional(v.ac_price_paise), optional(v.takeaway_price_paise), optional(p.zomato_price_paise), optional(v.zomato_price_paise), rupees(p.packaging_paise), optional(v.packaging_paise), String(!!p.addon_only)]);
     }
     reply.header("Cache-Control", "no-store");
     return { filename: `masalapos-items-${new Date().toISOString().slice(0, 10)}.csv`, csv: toCsv(rows) };
@@ -139,7 +139,12 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
         zomato_price_paise: optionalMoney(v.zomato_price, "zomato_price", existing?.zomato_price_paise),
         // A blank cell keeps the item's amount (0 for a new item).
         packaging_paise: packaging(v.packaging?.trim() ? money(v.packaging, "packaging") : existing?.packaging_paise ?? 0, "packaging")!,
+        addon_only: bool(v.addon_only, "addon_only", existing?.addon_only ?? 0),
       };
+      // An add-on is picked under a dish, so a dish that offers add-ons cannot become one.
+      if (value.addon_only && existing && app.db.prepare("SELECT 1 FROM product_addon_groups WHERE product_id = ? LIMIT 1").get(existing.id)) {
+        return fail(`addon_only: ${itemName} has add-on groups. Remove them in the catalog first.`);
+      }
       const hasVariant = !!v.variant_name?.trim();
       const previous = items.get(resolvedId);
       if (previous && JSON.stringify(previous.value) !== JSON.stringify(value)) return fail("repeated item rows must have identical item details.");
@@ -187,9 +192,9 @@ export function registerCatalogTransfer(app: FastifyInstance): void {
       if (p.summary.revision !== body.revision) throw httpError(409, "The catalog changed after preview. Preview the file again before importing.");
       const addCategory = app.db.prepare("INSERT INTO categories (id, name, sort_order, is_active) VALUES (@id, @name, @sort_order, @is_active)");
       for (const c of p.newCategories) addCategory.run(c);
-      const addItem = app.db.prepare(`INSERT INTO products (${itemColumns}, created_at) VALUES (@ac_price_paise, @takeaway_price_paise, @zomato_price_paise, @packaging_paise, @id, @category_id, @name, @price_paise, @gst_rate, @is_veg, @is_active, @is_sold_out, @description, @kot_station_id, @created_at)`);
+      const addItem = app.db.prepare(`INSERT INTO products (${itemColumns}, created_at) VALUES (@ac_price_paise, @takeaway_price_paise, @zomato_price_paise, @packaging_paise, @id, @category_id, @name, @price_paise, @gst_rate, @is_veg, @is_active, @is_sold_out, @description, @kot_station_id, @addon_only, @created_at)`);
       const updateItem = app.db.prepare(`UPDATE products SET ac_price_paise=@ac_price_paise, takeaway_price_paise=@takeaway_price_paise, zomato_price_paise=@zomato_price_paise, packaging_paise=@packaging_paise, category_id=@category_id, name=@name, price_paise=@price_paise, gst_rate=@gst_rate,
-        is_veg=@is_veg, is_active=@is_active, is_sold_out=@is_sold_out, description=@description, kot_station_id=@kot_station_id WHERE id=@id`);
+        is_veg=@is_veg, is_active=@is_active, is_sold_out=@is_sold_out, description=@description, kot_station_id=@kot_station_id, addon_only=@addon_only WHERE id=@id`);
       for (const item of p.items.values()) {
         if (item.isNew) addItem.run({ ...item.value, created_at: Date.now() });
         else updateItem.run(item.value);
