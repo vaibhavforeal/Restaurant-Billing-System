@@ -10,6 +10,21 @@ export function rupeesToChargePaise(value: string | number): number {
   return Number.isFinite(paise) ? Math.min(100000, Math.max(0, paise)) : 0;
 }
 
+/** The note under a charge box when the typed value is out of range and will be saved as the nearest limit. */
+export function chargeInputNote(text: string, max: number, unit: "%" | "₹"): string | null {
+  const value = Number(text);
+  if (text.trim() === "" || !Number.isFinite(value)) return null;
+  const amount = (n: number) => unit === "%" ? `${n}%` : `₹${n}`;
+  if (value > max) return `The most is ${amount(max)}; ${amount(max)} will be saved.`;
+  if (value < 0) return "Can't be below 0; 0 will be saved.";
+  return null;
+}
+
+/** Whether a charge box keeps what was typed ("", "2.") because it still converts to the saved value. */
+export function keepChargeDraft(text: string, saved: number, convert: (text: string) => number): boolean {
+  return convert(text) === saved;
+}
+
 /** The billing panel's "Service charge" box: dine-in orders still open, once a preview showed a service charge or while it is unticked. */
 export function showServiceChargeBox(o: { billed: boolean; open: boolean; orderType: string; serviceDue: boolean; serviceCharge: boolean }): boolean {
   return !o.billed && o.open && o.orderType === "dine_in" && (o.serviceDue || !o.serviceCharge);

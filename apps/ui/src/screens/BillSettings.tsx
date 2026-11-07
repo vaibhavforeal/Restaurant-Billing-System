@@ -4,7 +4,7 @@ import { financialYear, formatInvoiceNo } from "@masalapos/domain/invoice-number
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch } from "../api";
 import { InfoTip } from "../InfoTip";
-import { percentToBp, rupeesToChargePaise } from "../charges-form";
+import { chargeInputNote, keepChargeDraft, percentToBp, rupeesToChargePaise } from "../charges-form";
 import { settingsForSave } from "../settings-save";
 import { SaveStatus, useSettingsForm } from "../use-settings-form";
 import type { SettingsData } from "../types";
@@ -38,6 +38,24 @@ function useBillPreview(form: SettingsData | null) {
     return () => { current = false; clearTimeout(timer); };
   }, [form]);
   return { html, error };
+}
+
+/**
+ * A service % or packaging ₹ box. It keeps what was typed ("" or "2.") while that still means the saved value, so the
+ * box can be cleared and retyped, and says when a value out of range will be saved as the nearest limit.
+ */
+function ChargeInput({ saved, max, unit, convert, disabled, noteId, helpId, onChange }: {
+  saved: number; max: number; unit: "%" | "₹"; convert: (text: string) => number; disabled: boolean; noteId: string; helpId?: string; onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(saved / 100));
+  const text = keepChargeDraft(draft, saved, convert) ? draft : String(saved / 100);
+  const note = chargeInputNote(text, max, unit);
+  return <>
+    <input type="number" min={0} max={max} step={0.01} inputMode="decimal" value={text} disabled={disabled}
+      aria-describedby={[helpId, note ? noteId : undefined].filter(Boolean).join(" ") || undefined}
+      onChange={(e) => { setDraft(e.target.value); onChange(convert(e.target.value)); }} />
+    {note && <small id={noteId} role="status">{note}</small>}
+  </>;
 }
 
 const GST_MODE_LABELS: Record<GstMode, string> = { included: "Prices include GST", exclusive: "Prices exclude GST, added on the bill", none: "No GST charged" };
@@ -103,21 +121,22 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         <legend>Charges</legend>
         <label style={field}>
           <span>Service charge (%) <InfoTip id="service-charge-help">{CHARGES_HELP}</InfoTip></span>
-          <input type="number" min={0} max={20} step={0.01} inputMode="decimal" value={form.serviceChargeBp / 100} disabled={busy} aria-describedby="service-charge-help"
-            onChange={(e) => update({ serviceChargeBp: percentToBp(e.target.value) })} />
+          <ChargeInput saved={form.serviceChargeBp} max={20} unit="%" convert={percentToBp} disabled={busy} helpId="service-charge-help" noteId="service-charge-note"
+            onChange={(serviceChargeBp) => update({ serviceChargeBp })} />
         </label>
         <label style={field}>
           <span>Service charge label</span>
-          <input value={form.serviceChargeLabel} maxLength={24} placeholder="Service charge" disabled={busy} onChange={(e) => update({ serviceChargeLabel: e.target.value })} />
+          <input value={form.serviceChargeLabel} maxLength={24} placeholder="Service charge" disabled={busy} aria-describedby="charge-label-hint" onChange={(e) => update({ serviceChargeLabel: e.target.value })} />
         </label>
         <label style={field}>
           <span>Packaging charge (₹)</span>
-          <input type="number" min={0} max={1000} step={0.01} inputMode="decimal" value={form.packagingChargePaise / 100} disabled={busy}
-            onChange={(e) => update({ packagingChargePaise: rupeesToChargePaise(e.target.value) })} />
+          <ChargeInput saved={form.packagingChargePaise} max={1000} unit="₹" convert={rupeesToChargePaise} disabled={busy} helpId="service-charge-help" noteId="packaging-charge-note"
+            onChange={(packagingChargePaise) => update({ packagingChargePaise })} />
         </label>
         <label style={field}>
           <span>Packaging label</span>
-          <input value={form.packagingChargeLabel} maxLength={24} placeholder="Packaging" disabled={busy} onChange={(e) => update({ packagingChargeLabel: e.target.value })} />
+          <input value={form.packagingChargeLabel} maxLength={24} placeholder="Packaging" disabled={busy} aria-describedby="charge-label-hint" onChange={(e) => update({ packagingChargeLabel: e.target.value })} />
+          <small id="charge-label-hint">Labels print on the bill, up to 24 characters. Leave blank for the default.</small>
         </label>
         <label style={check}>
           <input type="checkbox" checked={form.packagingPerItem} disabled={busy} aria-describedby="packaging-per-item-hint"

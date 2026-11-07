@@ -70,7 +70,7 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
         <dt>Number of bills</dt><dd>{report.sales.billCount}</dd>
         <dt>Sales including GST and rounding</dt><dd>{money(report.sales.totalPaise)}</dd>
         <dt>Discounts</dt><dd>{money(report.sales.discountPaise)}</dd>
-        <dt>Service and packaging charges</dt><dd>{money(report.sales.chargesPaise)}</dd>
+        {report.sales.chargesPaise !== 0 && <><dt>Service and packaging charges</dt><dd>{money(report.sales.chargesPaise)}</dd></>}
         <dt>CGST</dt><dd>{money(report.sales.cgstPaise)}</dd><dt>SGST</dt><dd>{money(report.sales.sgstPaise)}</dd>
         <dt>Round off</dt><dd>{money(report.sales.roundingPaise)}</dd>
         <dt>Still unpaid (current)</dt><dd>{money(report.sales.outstandingPaise)}</dd>

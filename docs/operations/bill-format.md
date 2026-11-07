@@ -79,9 +79,11 @@ Example, a ₹100 thali at 5% with a ₹10 discount and rounding to the nearest 
 | --- | --- | --- |
 | Subtotal | ₹100.00 | ₹100.00 |
 | Discount | -₹10.00 | -₹10.00 |
-| CGST 2.5% | (inside the price) ₹2.14 | ₹2.25 |
-| SGST 2.5% | (inside the price) ₹2.14 | ₹2.25 |
+| CGST 2.5% | ₹2.14 included | ₹2.25 |
+| SGST 2.5% | ₹2.14 included | ₹2.25 |
 | Total | ₹90.00 | ₹94.50 → ₹95.00 (round off +₹0.50) |
+
+"Included" means the GST is already part of the total, not added to it.
 
 Zomato orders never charge GST on the bill, whichever mode is chosen: Zomato
 pays it under section 9(5). Dish costing compares recipe cost with the price
@@ -125,8 +127,8 @@ Choose **Settings > Bill settings > Charges**, then **Save**:
 - **Service charge (%)** - 0 to 20, in steps of 0.01. Leave it at 0 for no service charge. It is added to **dine-in**
   bills only, on the subtotal after any discount.
 - **Packaging charge (₹)** - 0 to 1000. A flat amount added once to each **takeaway** or **delivery** bill. Leave it at
-  0 for none.
-- **Service charge label** and **Packaging label** - the words printed on the bill. A blank label saves as "Service
+  0 for none. A value above the limit (or below 0) shows a note under the box and saves as the nearest limit.
+- **Service charge label** and **Packaging label** - the words printed on the bill, up to 24 characters. A blank label saves as "Service
   charge" or "Packaging".
 - **Charge packaging per item** - off by default. When on, each item's own packaging amount (set in **Catalog → Edit**
   as **Packaging (₹)**, per unit) is added to the flat packaging charge. A variant's **Packaging (₹)** left blank
@@ -173,8 +175,8 @@ Example, a ₹100 item at 5% with a 10% service charge:
 | --- | --- | --- |
 | Subtotal | ₹100.00 | ₹100.00 |
 | Service charge 10% | ₹10.00 | ₹10.00 |
-| CGST 2.5% | (inside the price) ₹2.62 | ₹2.75 |
-| SGST 2.5% | (inside the price) ₹2.62 | ₹2.75 |
+| CGST 2.5% | ₹2.62 included | ₹2.75 |
+| SGST 2.5% | ₹2.62 included | ₹2.75 |
 | Total | ₹110.00 | ₹115.50 → ₹116.00 (round off +₹0.50) |
 
 ## Numbering and rounding
