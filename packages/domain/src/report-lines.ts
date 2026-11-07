@@ -42,10 +42,12 @@ export function saveReportLines(db: Database, billId: string) {
     gst_rate: number; taxable_paise: number; cgst_paise: number; sgst_paise: number;
   }>;
   // Charges carry their own tax (and round-off only when no item has value): take it out of the rate's row so only the items' share is spread over item lines.
-  const charges = db.prepare("SELECT gst_rate, taxable_paise, cgst_paise, sgst_paise, rounding_paise FROM bill_charges WHERE bill_id = ?").all(billId) as Array<(typeof taxes)[number] & { rounding_paise: number }>;
+  const charges = db.prepare("SELECT kind, gst_rate, taxable_paise, cgst_paise, sgst_paise, rounding_paise FROM bill_charges WHERE bill_id = ?").all(billId) as Array<(typeof taxes)[number] & { kind: string; rounding_paise: number }>;
   for (const charge of charges) {
+    // A charge's tax is always part of its rate's row; without one the lines could not add up to the bill, so stop.
     const row = taxes.find((tax) => tax.gst_rate === charge.gst_rate);
-    if (row) { row.taxable_paise -= charge.taxable_paise; row.cgst_paise -= charge.cgst_paise; row.sgst_paise -= charge.sgst_paise; }
+    if (!row) throw new Error(`The ${charge.kind} charge at ${charge.gst_rate}% has no tax row on this bill`);
+    row.taxable_paise -= charge.taxable_paise; row.cgst_paise -= charge.cgst_paise; row.sgst_paise -= charge.sgst_paise;
   }
   for (const tax of taxes) {
     const group = lines.filter((line) => line.rate === tax.gst_rate);

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill } from "@masalapos/domain";
+import { saveReportLines, uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 import { billUpiPayment } from "./print/upi.js";
 
@@ -514,6 +514,15 @@ describe("billing and day-end", () => {
         const lines = app.db.prepare("SELECT total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ total: number }>;
         const stored = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number };
         expect(lines.reduce((sum, l) => sum + l.total, 0) + stored.total).toBe(bill.totalPaise);
+      });
+      it("refuses to save report lines for a charge whose GST rate has no tax row", async () => {
+        // A bill row written by hand for an open order, with a packaging charge and no bill_taxes rows at all.
+        const orderId = await withTwo(await order(undefined, true)), id = uuidv7();
+        const admin = (app.db.prepare("SELECT id FROM users LIMIT 1").get() as { id: string }).id;
+        app.db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, status, created_at, created_by, receipt_json)
+          VALUES (?, 900, ?, 21000, 0, 0, 0, 0, 25000, 'unpaid', ?, ?, NULL)`).run(id, orderId, Date.now(), admin);
+        app.db.prepare("INSERT INTO bill_charges (bill_id, kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise) VALUES (?, 'packaging', 'Packaging', NULL, 5, 4000, 3810, 95, 95, 0)").run(id);
+        expect(() => saveReportLines(app.db, id)).toThrow("The packaging charge at 5% has no tax row on this bill");
       });
       it("charges only the flat amount with the toggle off", async () => {
         await putSettings({ packagingPerItem: false });

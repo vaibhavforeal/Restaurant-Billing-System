@@ -42,9 +42,9 @@ interface SettingsRow {
 
 const DEFAULT_SERVICE_LABEL = "Service charge";
 const DEFAULT_PACKAGING_LABEL = "Packaging";
-/** Not sent keeps the saved label; blank saves the default name. */
 /** The label the preview shows, by the same rule as saving: omitted keeps the saved label, blank becomes the default. */
 const previewLabel = (label: string | undefined, saved: string, fallback: string) => (label === undefined ? saved : label.trim() || fallback);
+/** The label to save: not sent (null) keeps the saved label; blank saves the default name. */
 const chargeLabel = (label: string | undefined, fallback: string) => (label === undefined ? null : label === "" ? fallback : label);
 
 export function readSettings(db: Database) {
