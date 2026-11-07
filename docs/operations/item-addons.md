@@ -54,4 +54,6 @@ longer applies. Changing a group affects new orders only. Lines already on an or
 
 Guests see a dish's add-on groups with prices for their table and pick the same way staff do. The request and the
 guest's receipt list the add-ons under the dish, and the subtotal includes them. When staff accept, the add-ons become
-lines under the dish, exactly as if staff had added them.
+lines under the dish, exactly as if staff had added them. The guest's order status follows the dish and its add-ons
+together: a dish is preparing while any of its add-ons is still being made, and an add-on cancelled by staff shows as
+a change. Combos have no add-ons, so a request that sends add-ons with a combo is refused and the guest reviews the menu.

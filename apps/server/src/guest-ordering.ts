@@ -41,6 +41,9 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
   // A combo is as far along as the items in it.
   const inCombos = db.prepare(`${select} WHERE i.parent_item_id IN (SELECT id FROM order_items WHERE guest_request_id = ? AND order_id = ?) ORDER BY i.id`)
     .all(request.id, request.order_id) as Row[];
+  // A dish is as far along as itself and its add-ons together; a drink add-on still at the bar keeps it preparing.
+  const addons = db.prepare(`${select.replace("i.parent_item_id,", "i.parent_item_id, i.addon_of_item_id,")} WHERE i.addon_of_item_id IN (SELECT id FROM order_items WHERE guest_request_id = ? AND order_id = ?) ORDER BY i.id`)
+    .all(request.id, request.order_id) as Array<Row & { addon_of_item_id: string }>;
   const rowState = (row: Row): PreparationState => row.status === "cancelled" || row.order_status === "cancelled" ? "cancelled"
     : row.kot_id ? row.done_at !== null ? "ready" : "preparing"
     : row.kot_station_id ? "queued" : "with_staff";
@@ -51,7 +54,11 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
     const before = original[index];
     if (!before || before.qty !== row.qty || before.name !== row.name_snapshot || before.note !== (row.note ?? "")) hasChanges = true;
     const held = inCombos.filter((item) => item.parent_item_id === row.id);
-    const state = held.length && rowState(row) !== "cancelled" ? overallState(held.map(rowState)) : rowState(row);
+    const picked = addons.filter((item) => item.addon_of_item_id === row.id);
+    // Staff cancelling an add-on the guest picked is a change to what they asked for.
+    if (picked.some((item) => item.status === "cancelled")) hasChanges = true;
+    const own = held.length && rowState(row) !== "cancelled" ? overallState(held.map(rowState)) : rowState(row);
+    const state = picked.length && own !== "cancelled" ? overallState([own, ...picked.map(rowState)]) : own;
     if (state === "cancelled") hasChanges = true;
     return { name: row.name_snapshot, qty: row.qty, state };
   });
@@ -152,7 +159,8 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     return items.map((item) => {
       const product = current.products.find((p) => p.id === item.productId);
       const variant = item.variantId ? product?.variants.find((v) => v.id === item.variantId) : undefined;
-      if (!product || product.isSoldOut || (item.variantId && !variant) || (!item.variantId && product.variants.length) || (!product.combo && item.comboPicks)) {
+      if (!product || product.isSoldOut || (item.variantId && !variant) || (!item.variantId && product.variants.length) || (!product.combo && item.comboPicks)
+        || (product.combo && item.addonPicks?.length)) {
         throw httpError(409, "An item or option is no longer available. Review the menu and submit again.", "menu_changed");
       }
       if (product.combo) {
