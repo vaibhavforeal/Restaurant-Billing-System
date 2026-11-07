@@ -45,6 +45,10 @@ describe("settings", () => {
     expect((await save({ address: "New road" })).json().settings).toMatchObject(charges);
     expect((await save({ serviceChargeLabel: "  " })).json().settings).toMatchObject({ serviceChargeLabel: "Service charge", packagingChargeLabel: "Box", serviceChargeBp: 1000 });
     expect((await save({ serviceChargeBp: 2001 })).statusCode).toBe(400);
+    expect((await save({ packagingChargeLabel: "" })).json().settings).toMatchObject({ packagingChargeLabel: "Packaging", serviceChargeLabel: "Service charge" });
+    for (const packagingChargePaise of [-1, 100001, 12.5]) expect((await save({ packagingChargePaise })).statusCode, String(packagingChargePaise)).toBe(400);
+    expect((await save({ packagingChargeLabel: "x".repeat(25) })).statusCode).toBe(400);
+    expect((await save({ packagingChargePaise: 100000 })).json().settings.packagingChargePaise).toBe(100000);
   });
 
   it("saves the per-item packaging toggle and keeps it on saves without it", async () => {

@@ -832,6 +832,23 @@ describe("credit preview, approval and bill credit data", () => {
       expect(after.creditNotes.reduce((s, n) => s + n.totalPaise, 0)).toBe(b.totalPaise);
     });
 
+    it("replays a refund that credited the charge, and refuses a refund or void once everything is credited", async () => {
+      const b = await chargedBill();
+      const item = orderItemOf(b.id);
+      const payload = { clientRef: uuidv7(), lines: [{ orderItemId: item, qty: 2 }], refunds: [{ mode: "cash", amountPaise: b.totalPaise }] };
+      const first = await post(b.id, "refund", payload);
+      expect(first.statusCode, first.body).toBe(201);
+      expect(first.json().creditNote.charges.map((c: { kind: string }) => c.kind)).toEqual(["service"]);
+      const again = await post(b.id, "refund", payload);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(again.json().creditNote).toEqual(first.json().creditNote);
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM credit_note_charges").get()).toEqual({ n: 1 });
+      const refund = await post(b.id, "refund", { lines: [{ orderItemId: item, qty: 1 }], refunds: [] });
+      expect(refund.statusCode).toBe(409); expect(refund.json().error).toBe("Nothing left to refund on this bill");
+      const voided = await post(b.id, "void", { refunds: [] });
+      expect(voided.statusCode).toBe(409); expect(voided.json().error).toBe("Nothing left to refund on this bill");
+    });
+
     it("carries the service charge percentage on the credit preview", async () => {
       const b = await chargedBill();
       const prev = (await preview(b.id, { kind: "void" }, admin.token)).json().preview;

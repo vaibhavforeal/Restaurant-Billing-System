@@ -21,9 +21,14 @@ describe("migration 59: bill charges", () => {
     const db = openDb(":memory:");
     migrate(db, MIGRATIONS.filter((m) => m.version <= 58));
     db.prepare("UPDATE settings SET restaurant_name = 'Spice', gst_mode = 'exclusive' WHERE id = 1").run();
+    const columns = () => db.prepare("PRAGMA table_info(settings)").all();
+    const before = columns();
     migrate(db, MIGRATIONS);
+    // Every earlier column keeps its name, type, NOT NULL and default; the new ones only come after them.
+    expect(columns().slice(0, before.length)).toEqual(before);
     expect(db.prepare("SELECT restaurant_name, gst_mode FROM settings WHERE id = 1").get()).toEqual({ restaurant_name: "Spice", gst_mode: "exclusive" });
-    expect(() => db.prepare("UPDATE settings SET gst_mode = 'bogus' WHERE id = 1").run()).toThrow();
+    for (const mode of ["included", "exclusive", "none"]) expect(() => db.prepare("UPDATE settings SET gst_mode = ? WHERE id = 1").run(mode), mode).not.toThrow();
+    expect(() => db.prepare("UPDATE settings SET gst_mode = 'bogus' WHERE id = 1").run()).toThrow(/CHECK constraint/);
     db.close();
   });
 

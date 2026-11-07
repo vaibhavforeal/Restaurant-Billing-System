@@ -45,7 +45,32 @@ describe("receipts", () => {
       const html = receiptHtml(b);
       expect(html.indexOf("Service charge 10%")).toBeLessThan(html.indexOf('class="grand-total"'));
       expect(html.indexOf("Includes GST")).toBeGreaterThan(html.indexOf('class="grand-total"'));
-      expect(html).toContain("Taxable @ 18%");
+      // The 18% row is the charges alone (₹30 with GST inside). Each charge is taxed on its own, so the row is
+      // 2544 + 228 + 228 = 3000, a paisa off taxing the ₹30 together (2542 + 229 + 229).
+      expect(b.taxes.find((t) => t.gstRate === 18)).toEqual({ gstRate: 18, taxablePaise: 2544, cgstPaise: 228, sgstPaise: 228 });
+      expect(html).toContain("<td>Taxable @ 18%</td><td class=\"amount\">₹25.44</td>");
+      expect(html).toContain("<td>CGST 9%</td><td class=\"amount\">₹2.28</td>");
+      expect(b.totalPaise).toBe(13000);
+    });
+    it("prints the charges before an actual Round off line, and a 24-character label fits a 58mm slip", () => {
+      const label = "Table service charge fee";
+      expect(label).toHaveLength(24);
+      const totals = calculateBill(items, 0, "exclusive", "rupee", [
+        { kind: "service", label, gstRate: 18, bp: 1000 }, { kind: "packaging", label: "Packaging", gstRate: 18, amountPaise: 2000 }]);
+      // 10000 + 1000 + 2000, plus 500 + 540 GST = 14040, rounded to 14000.
+      expect(totals).toMatchObject({ roundingPaise: -40, totalPaise: 14000 });
+      const b = { ...bill, ...totals, receipt: { ...bill.receipt, gstMode: "exclusive", items: [{ name: "Meal", pricePaise: 10000, qty: 1, gstRate: 5 }] } } as Bill;
+      const html = receiptHtml(b);
+      for (const line of [`${label} 10%`, "<td>Packaging</td>"]) expect(html.indexOf(line), line).toBeLessThan(html.indexOf("Round off</td>"));
+      expect(html.indexOf("Round off</td>")).toBeLessThan(html.indexOf("TOTAL</td>"));
+      for (const width of [58, 80] as const) {
+        const slip = thermal(b, width);
+        expect(slip, String(width)).toContain(label);
+        expect(slip.indexOf(label)).toBeLessThan(slip.indexOf("Round off"));
+        expect(slip.indexOf("Packaging")).toBeLessThan(slip.indexOf("Round off"));
+        expect(slip.indexOf("Round off")).toBeLessThan(slip.indexOf("TOTAL Rs."));
+        expect(fits(slip, width), String(width)).toBe(true);
+      }
     });
     it("prints a charge on a no-GST bill and shows no percentage when the charge has none", () => {
       const html = receiptHtml(withCharges("none"));

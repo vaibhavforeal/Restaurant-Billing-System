@@ -203,7 +203,7 @@ describe("calculateBill charges", () => {
     expect(bill.totalPaise).toBe(100000 + 2000 + 2500 + 2500 + 360);
   });
 
-  it("a low-rate item group sorts after a charge-only lower rate", () => {
+  it("a charge's own 5% row sorts before the 18% items' row", () => {
     const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 18 }], 0, "exclusive", "off", [{ kind: "packaging", label: "Packaging", gstRate: 5, amountPaise: 2000 }]);
     expect(bill.taxes.map((t) => t.gstRate)).toEqual([5, 18]);
   });

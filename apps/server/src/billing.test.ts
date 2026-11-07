@@ -404,7 +404,7 @@ describe("billing and day-end", () => {
 
     it("charges service on dine-in and packaging on takeaway and delivery parcels, and records the order kind", async () => {
       const dine = await issue(await dineIn());
-      expect(dine.charges).toEqual([{ kind: "service", label: "Service charge", percentBp: 1000, gstRate: 5, amountPaise: 1050, taxablePaise: expect.any(Number), cgstPaise: expect.any(Number), sgstPaise: expect.any(Number) }]);
+      expect(dine.charges).toEqual([{ kind: "service", label: "Service charge", percentBp: 1000, gstRate: 5, amountPaise: 1050, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25 }]);
       expect(dine.receipt.orderTypeKind).toBe("dine_in");
       expect(app.db.prepare("SELECT charges_paise FROM bills WHERE id = ?").get(dine.id)).toEqual({ charges_paise: 1050 });
       const takeaway = await issue(await order());
