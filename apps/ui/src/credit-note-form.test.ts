@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, itemsLeftToRefund, refundRowsError, refundableQty } from "./credit-note-form";
+import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, previewPending, itemsLeftToRefund, refundRowsError, refundableQty } from "./credit-note-form";
 
 describe("defaultRefundRows", () => {
   it("refunds a single payment method in full", () => {
@@ -121,5 +121,22 @@ describe("packagingTickbox", () => {
     expect(packagingTickbox({ linesKey: "a", paise: 0 }, "a", false)).toBeNull();
     expect(packagingTickbox({ linesKey: "a", paise: 0 }, "b", true)).toBeNull();
     expect(packagingTickbox(null, "a", true)).toBeNull();
+  });
+});
+
+describe("previewPending", () => {
+  it("is pending as soon as the lines change, before the request has started", () => {
+    expect(previewPending(1, "b", "a")).toBe(true);
+    expect(previewPending(1, "b", null)).toBe(true);
+  });
+  it("is settled once a preview for these lines has finished, even with an error", () => {
+    expect(previewPending(1, "a", "a")).toBe(false);
+  });
+  it("is never pending with no lines, since no preview is asked for", () => {
+    expect(previewPending(0, "[]", "a")).toBe(false);
+  });
+  it("keeps the tickbox up through the render where the lines changed but loading has not started", () => {
+    const offer = { linesKey: "a", paise: 2500 };
+    expect(packagingTickbox(offer, "b", previewPending(1, "b", "a"))).toEqual({ amountPaise: null });
   });
 });

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain/billing";
 import { billChargesGst } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
-import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
+import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, previewPending, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, OrderItem, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -136,6 +136,8 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const [refundPackaging, setRefundPackaging] = useState(true);
   // The packaging on offer for these lines; it does not depend on the tickbox, so ticking keeps the box in place.
   const [packagingOffer, setPackagingOffer] = useState<{ linesKey: string; paise: number } | null>(null);
+  // The lines the last preview finished for, with or without an error.
+  const [settledLinesKey, setSettledLinesKey] = useState<string | null>(null);
   const [rows, setRows] = useState<RefundDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -148,7 +150,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const linesKey = JSON.stringify(lines);
   const needsItems = kind === "refund";
   const key = JSON.stringify({ lines, refundPackaging });
-  const tickbox = packagingTickbox(packagingOffer, linesKey, loadingPreview);
+  const tickbox = packagingTickbox(packagingOffer, linesKey, previewPending(lines.length, linesKey, settledLinesKey));
 
   useEffect(() => {
     if (result) return;
@@ -159,7 +161,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     apiFetch<{ preview: Preview }>(`/api/bills/${bill.id}/credit-preview`, { method: "POST", body: JSON.stringify(creditPreviewBody(kind, lines, refundPackaging)) })
       .then((r) => { if (active) { setPreview({ ...r.preview, key }); setPackagingOffer({ linesKey, paise: r.preview.packagingPaise ?? 0 }); } })
       .catch((e: unknown) => { if (active) setPreviewError(e instanceof Error ? e.message : "Could not work out the credit"); })
-      .finally(() => { if (active) setLoadingPreview(false); });
+      .finally(() => { if (active) { setLoadingPreview(false); setSettledLinesKey(linesKey); } });
     return () => { active = false; };
   }, [kind, key, tick, bill.id, result]);
 

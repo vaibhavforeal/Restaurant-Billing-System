@@ -49,6 +49,15 @@ export function packagingTickbox(offer: { linesKey: string; paise: number } | nu
   return loading ? { amountPaise: null } : null;
 }
 
+/**
+ * Whether a credit preview for these lines is still to come. Pending from the render where the lines change, before
+ * the request starts, so the tickbox does not drop out for that one render; settled once a preview for the lines has
+ * finished, with or without an error. No lines means no preview is asked for.
+ */
+export function previewPending(lineCount: number, linesKey: string, settledLinesKey: string | null): boolean {
+  return lineCount > 0 && linesKey !== settledLinesKey;
+}
+
 /** Units of a billed line that can still be refunded. */
 export function refundableQty(billed: number, refunded: number | undefined): number {
   return Math.max(0, billed - (refunded ?? 0));
