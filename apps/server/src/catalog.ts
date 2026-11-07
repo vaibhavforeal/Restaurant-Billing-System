@@ -12,6 +12,7 @@ import { menuPhotoUrl, validateMenuPhoto } from "./menu-photo.js";
 import { z } from "zod";
 import { registerCatalogTransfer } from "./catalog-transfer.js";
 import { comboGroups, comboGroupsByCombo, saveComboGroups } from "./combos.js";
+import { saveProductAddonGroups } from "./addon-groups.js";
 
 interface CategoryRow {
   id: string;
@@ -37,6 +38,7 @@ interface ProductRow {
   is_sold_out: number;
   photo_hash: string | null;
   kind: "item" | "combo";
+  addon_only: number;
 }
 
 interface VariantRow {
@@ -69,7 +71,7 @@ const toVariant = (r: VariantRow) => ({
   isActive: r.is_active === 1,
 });
 
-const toProduct = (r: ProductRow, variants: VariantRow[], combo: ComboGroup[] = []) => ({
+const toProduct = (r: ProductRow, variants: VariantRow[], combo: ComboGroup[] = [], addonGroupIds: string[] = []) => ({
   id: r.id,
   kind: r.kind,
   ...(r.kind === "combo" ? { combo } : {}),
@@ -89,6 +91,8 @@ const toProduct = (r: ProductRow, variants: VariantRow[], combo: ComboGroup[] = 
   isSoldOut: r.is_sold_out === 1,
   photoVersion: r.photo_hash,
   photoUrl: menuPhotoUrl(r.id, r.photo_hash),
+  addonOnly: r.addon_only === 1,
+  addonGroupIds,
 });
 
 export function registerCatalog(app: FastifyInstance): void {
@@ -125,11 +129,14 @@ export function registerCatalog(app: FastifyInstance): void {
     return { category: toCategory(getCategory(id)!) };
   });
 
-  const productColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash, kind";
+  const productColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash, kind, addon_only";
   const getProduct = (id: string) =>
     app.db.prepare(`SELECT ${productColumns} FROM products WHERE id = ?`).get(id) as ProductRow | undefined;
   const getVariant = (id: string) =>
     app.db.prepare("SELECT * FROM variants WHERE id = ?").get(id) as VariantRow | undefined;
+  const groupIdsFor = (productId: string) =>
+    (app.db.prepare("SELECT group_id FROM product_addon_groups WHERE product_id = ? ORDER BY sort_order").all(productId) as Array<{ group_id: string }>).map((r) => r.group_id);
+  const productJson = (id: string) => toProduct(getProduct(id)!, variantsFor(id), comboGroups(app.db, id), groupIdsFor(id));
   const variantsFor = (productId: string) =>
     app.db.prepare("SELECT * FROM variants WHERE product_id = ? ORDER BY name").all(productId) as VariantRow[];
 
@@ -152,7 +159,10 @@ export function registerCatalog(app: FastifyInstance): void {
     }
     const combos = comboGroupsByCombo(app.db);
     const settings = app.db.prepare("SELECT gst_rate, packaging_per_item FROM settings WHERE id = 1").get() as { gst_rate: number; packaging_per_item: number };
-    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [], combos.get(p.id))), defaultGstRate: settings.gst_rate, packagingPerItem: settings.packaging_per_item === 1 };
+    const links = app.db.prepare("SELECT product_id, group_id FROM product_addon_groups ORDER BY product_id, sort_order").all() as Array<{ product_id: string; group_id: string }>;
+    const groupIds = new Map<string, string[]>();
+    for (const link of links) groupIds.set(link.product_id, [...groupIds.get(link.product_id) ?? [], link.group_id]);
+    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [], combos.get(p.id), groupIds.get(p.id))), defaultGstRate: settings.gst_rate, packagingPerItem: settings.packaging_per_item === 1 };
   });
 
   app.post("/api/products", { preHandler: manage }, async (req, reply) => {
@@ -163,10 +173,11 @@ export function registerCatalog(app: FastifyInstance): void {
     const write = app.db.transaction(() => {
       app.db
         .prepare(
-          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise, zomato_price_paise, kind, packaging_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise, zomato_price_paise, kind, packaging_paise, addon_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null, body.kind, body.packagingPaise);
+        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null, body.kind, body.packagingPaise, body.addonOnly ? 1 : 0);
       if (body.combo) saveComboGroups(app.db, id, body.combo);
+      if (body.addonGroupIds.length) saveProductAddonGroups(app.db, id, body.addonGroupIds);
       for (const v of body.variants) {
         app.db
           .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
@@ -175,7 +186,7 @@ export function registerCatalog(app: FastifyInstance): void {
     });
     write();
     changed();
-    return reply.status(201).send({ product: toProduct(getProduct(id)!, variantsFor(id), comboGroups(app.db, id)) });
+    return reply.status(201).send({ product: productJson(id) });
   });
 
   app.patch("/api/products/:id", { preHandler: manage }, async (req) => {
@@ -187,10 +198,16 @@ export function registerCatalog(app: FastifyInstance): void {
     checkRefs(body.categoryId, body.kotStationId);
     if (row.kind === "combo" && body.kotStationId) throw httpError(400, "A combo's items go to their own kitchen stations");
     if (row.kind === "item" && body.combo) throw httpError(400, "Only a combo has slots");
+    if (row.kind === "combo" && body.addonOnly) throw httpError(400, "A combo cannot be an add-on");
+    if (row.kind === "combo" && body.addonGroupIds?.length) throw httpError(400, "A combo has no add-ons");
+    const addonOnly = body.addonOnly ?? row.addon_only === 1;
+    if (addonOnly && (body.addonGroupIds ?? groupIdsFor(id)).length) throw httpError(400, "An add-on has no add-ons of its own");
     // undefined = unchanged, null = clear the station
     const station = body.kotStationId === undefined ? row.kot_station_id : body.kotStationId;
     app.db.transaction(() => {
       if (body.combo) saveComboGroups(app.db, id, body.combo);
+      if (body.addonGroupIds) saveProductAddonGroups(app.db, id, body.addonGroupIds);
+      app.db.prepare("UPDATE products SET addon_only = ? WHERE id = ?").run(addonOnly ? 1 : 0, id);
       app.db
         .prepare(
           `UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ?,
@@ -217,7 +234,7 @@ export function registerCatalog(app: FastifyInstance): void {
         );
     })();
     changed();
-    return { product: toProduct(getProduct(id)!, variantsFor(id), comboGroups(app.db, id)) };
+    return { product: productJson(id) };
   });
 
   app.get("/api/products/:id/photo", { preHandler: read }, async (req, reply) => {

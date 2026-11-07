@@ -66,7 +66,14 @@ export const ProductCreate = z.object({
   /** A combo is sold as one line and holds the items in its slots; it has no variants or kitchen station of its own. */
   kind: z.enum(["item", "combo"]).default("item"),
   combo: ComboDefinition.optional(),
+  /** Hidden from the menu; picked only under a dish. */
+  addonOnly: z.boolean().default(false),
+  /** The add-on groups offered with this dish, in order. */
+  addonGroupIds: z.array(z.string().min(1)).max(20).default([]),
 }).superRefine((p, ctx) => {
+  if (p.kind === "combo" && p.addonOnly) ctx.addIssue({ code: "custom", path: ["addonOnly"], message: "A combo cannot be an add-on" });
+  if (p.kind === "combo" && p.addonGroupIds.length) ctx.addIssue({ code: "custom", path: ["addonGroupIds"], message: "A combo has no add-ons" });
+  if (p.addonOnly && p.addonGroupIds.length) ctx.addIssue({ code: "custom", path: ["addonGroupIds"], message: "An add-on has no add-ons of its own" });
   if (p.kind === "combo" && !p.combo) ctx.addIssue({ code: "custom", path: ["combo"], message: "Add at least one slot to the combo" });
   if (p.kind === "combo" && p.variants.length) ctx.addIssue({ code: "custom", path: ["variants"], message: "A combo has no variants" });
   if (p.kind === "combo" && p.kotStationId) ctx.addIssue({ code: "custom", path: ["kotStationId"], message: "A combo's items go to their own kitchen stations" });
@@ -91,5 +98,8 @@ export const ProductUpdate = z.object({
   photo: Photo.optional(),
   /** Replaces a combo's slots. */
   combo: ComboDefinition.optional(),
+  addonOnly: z.boolean().optional(),
+  /** Replaces the dish's add-on groups, in order. */
+  addonGroupIds: z.array(z.string().min(1)).max(20).optional(),
 });
 export type ProductUpdateInput = z.infer<typeof ProductUpdate>;

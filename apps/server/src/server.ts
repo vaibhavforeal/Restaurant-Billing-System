@@ -16,6 +16,7 @@ import { registerKotEdits } from "./kot-edit.js";
 import { registerOrderTypes } from "./order-types.js";
 import { registerOrderSummary } from "./order-summary.js";
 import { registerItemTransfers } from "./item-transfers.js";
+import { registerAddonGroups } from "./addon-groups.js";
 import { registerShifts } from "./shifts.js";
 import { registerCustomers } from "./customers.js";
 import { registerLoyaltyTiers } from "./loyalty.js";
@@ -151,6 +152,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerOrderTypes(app);
   registerOrderSummary(app);
   registerItemTransfers(app);
+  registerAddonGroups(app);
   registerShifts(app);
   registerCustomers(app);
   registerLoyaltyTiers(app);
