@@ -48,7 +48,7 @@ The app's version follows `package.json`: version code = major × 1,000,000 + mi
 
 ## Connectivity and offline behavior
 
-**Hold & return to tables** (in **More**) saves the order's cart to the POS, so a counter or another tablet can carry on. A dish's **Hold** button keeps it out of **Send to kitchen**; send it later with **Fire** or **Fire all held**. Both follow **Settings → Restaurant profile → Hold orders**.
+**Hold & return to tables** (in **More**) saves the order's cart to the POS, so a counter or another tablet can carry on. A dish's **Hold** button keeps it out of **Send to kitchen**; send it later with **Fire** or **Fire all held**. Both follow **Settings → Bill settings → Hold orders**.
 
 Internet is not needed. Keep the POS PC running and connect tablets to the same restaurant network. HTTPS adds encryption to this local connection, not a cloud round trip.
 

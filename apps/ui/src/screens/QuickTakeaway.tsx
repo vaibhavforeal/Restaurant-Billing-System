@@ -27,7 +27,7 @@ function readSaved(key: string): SavedTakeaway | null {
       (saved.orderId !== null && (typeof saved.orderId !== "string" || !saved.orderId))) throw new Error();
     return saved as SavedTakeaway;
   } catch {
-    throw new TakeawayRecoveryError("The saved takeaway could not be read. Review Open takeaways in Tables & orders before clearing browser data.");
+    throw new TakeawayRecoveryError("The saved takeaway could not be read. Review takeaway orders in My Orders before clearing browser data.");
   }
 }
 
@@ -51,7 +51,7 @@ function checkCurrent(key: string, expected: SavedTakeaway) {
 function checkOrder(order: Order, saved: SavedTakeaway) {
   if (!order || order.type !== "parcel" || order.clientRef !== saved.clientRef || !order.id ||
     (saved.orderId !== null && order.id !== saved.orderId)) {
-    throw new TakeawayRecoveryError("The server returned a different order. Review Open takeaways in Tables & orders before continuing.");
+    throw new TakeawayRecoveryError("The server returned a different order. Review takeaway orders in My Orders before continuing.");
   }
 }
 
@@ -74,7 +74,7 @@ export function QuickTakeaway({ user, onBack, onOpenOrder }: {
 }) {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   if (!userCan(user, "bills.settle")) {
-    return <section className="screen"><h2>Takeaway</h2><p role="alert">Quick billing is available to cashiers and administrators.</p><button onClick={onBack}>Back to tables</button></section>;
+    return <section className="screen"><h2>Takeaway</h2><p role="alert">Quick billing is available to cashiers and administrators.</p><button onClick={onBack}>Back to orders</button></section>;
   }
   // The loading component owns its navigation guard only while OrderScreen is
   // unmounted, so it cannot replace the cart/payment guard on the order screen.
@@ -155,7 +155,7 @@ function TakeawayStart({ user, onBack, onReady }: { user: User; onBack: () => vo
     } catch (e) {
       if (mounted.current) {
         setError(e instanceof TakeawayRecoveryError ? e.message : e instanceof ApiError
-          ? e.status === 404 ? "The saved takeaway is unavailable. Review Open takeaways in Tables & orders before starting another." : `${e.message}. Retry to recover the same takeaway.`
+          ? e.status === 404 ? "The saved takeaway is unavailable. Review takeaway orders in My Orders before starting another." : `${e.message}. Retry to recover the same takeaway.`
           : "Could not open the takeaway. Check the server connection, then retry to recover the same order.");
       }
     } finally {
@@ -171,7 +171,7 @@ function TakeawayStart({ user, onBack, onReady }: { user: User; onBack: () => vo
   }, [user.id]);
 
   return <section className="screen">
-    <div className="page-header"><h2>Takeaway</h2><button disabled={pending} onClick={() => { if (canLeave()) onBack(); }}>Back to tables</button></div>
+    <div className="page-header"><h2>Takeaway</h2><button disabled={pending} onClick={() => { if (canLeave()) onBack(); }}>Back to orders</button></div>
     {pending ? <p className="loading-state" role="status">Opening your takeaway…</p> : <div className="panel">
       <p className="error-message" role="alert">{error}</p>
       <p className="muted">Your saved takeaway will be recovered before a new one is started.</p>

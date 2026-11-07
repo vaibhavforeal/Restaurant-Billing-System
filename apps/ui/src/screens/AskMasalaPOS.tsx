@@ -70,8 +70,7 @@ export function AskMasalaPOS({ setup = false }: { setup?: boolean }) {
 }
 
 /**
- * Reports: a slim "Ask AI" tab on the right edge that slides Ask MasalaPOS in as a side panel over the open report, so questions can be
- * asked while looking at the figures. Closing only hides it: the conversation stays until Reports is left.
+ * The Reports header opens the assistant panel. Closing keeps the conversation until Reports is left.
  */
 export function AskSidePanel({ setup }: { setup: boolean }) {
   const [open, setOpen] = useState(false);
@@ -84,7 +83,7 @@ export function AskSidePanel({ setup }: { setup: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
   return <>
-    <button type="button" className="ask-side-tab" aria-expanded={open} aria-controls="ask-panel" onClick={() => setOpen(true)} title="Ask MasalaPOS about these figures">
+    <button type="button" className="ask-side-tab" aria-expanded={open} aria-controls="ask-panel" onClick={() => setOpen(!open)} title="Ask MasalaPOS about these figures">
       <Icon name="sparkle" size={16} /><span>Ask AI</span>
     </button>
     <aside id="ask-panel" ref={panel} className="ask-panel" hidden={!open} aria-label="Ask MasalaPOS panel">

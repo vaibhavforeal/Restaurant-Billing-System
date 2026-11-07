@@ -34,9 +34,44 @@ export function refundRowsError(rows: RefundRow[], totalPaise: number, refundabl
   return null;
 }
 
+/** The credit-preview request: a void sends only its kind; a refund sends its lines and whether packaging is refunded. */
+export function creditPreviewBody(kind: "void" | "refund", lines: Array<{ orderItemId: string; qty: number }>, refundPackaging: boolean) {
+  return kind === "void" ? { kind } : { kind, lines, refundPackaging };
+}
+
+/**
+ * The "Refund packaging" tickbox: null hides it. While the preview for changed lines loads, the box stays up without
+ * an amount, so it does not flicker; once the new preview arrives it shows that amount, or hides if there is none.
+ */
+export function packagingTickbox(offer: { linesKey: string; paise: number } | null, linesKey: string, loading: boolean): { amountPaise: number | null } | null {
+  if (!offer || offer.paise <= 0) return null;
+  if (offer.linesKey === linesKey) return { amountPaise: offer.paise };
+  return loading ? { amountPaise: null } : null;
+}
+
+/**
+ * Whether a credit preview for these lines is still to come. Pending from the render where the lines change, before
+ * the request starts, so the tickbox does not drop out for that one render; settled once a preview for the lines has
+ * finished, with or without an error. No lines means no preview is asked for.
+ */
+export function previewPending(lineCount: number, linesKey: string, settledLinesKey: string | null): boolean {
+  return lineCount > 0 && linesKey !== settledLinesKey;
+}
+
 /** Units of a billed line that can still be refunded. */
 export function refundableQty(billed: number, refunded: number | undefined): number {
   return Math.max(0, billed - (refunded ?? 0));
+}
+
+/**
+ * Whether any billed line still has units to refund. A bill whose items were all refunded with the
+ * packaging kept stays partly refunded, but only a void can return what is left.
+ */
+export function itemsLeftToRefund(
+  items: Array<{ id: string; qty: number; status: string; parentItemId?: string | null }>,
+  refundedQty: Record<string, number>,
+): boolean {
+  return items.some((item) => item.status !== "cancelled" && !item.parentItemId && refundableQty(item.qty, refundedQty[item.id]) > 0);
 }
 
 /** A typed quantity as a whole number between 0 and what is left to refund. */

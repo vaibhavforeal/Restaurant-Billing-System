@@ -6,6 +6,7 @@ import { operationalCsv } from "../operational-report";
 import { withTimeout } from "../abort-signal";
 import { defaultGstMonth, gstr1JsonName, gstReturnsCsvName, localToday } from "../gst-returns";
 import { ReportTables } from "./ReportTables";
+import { GstAuditorDialog } from "./GstAuditorDialog";
 
 const REGIME_LABEL: Record<GstReturnsReport["regime"], string> = {
   regular: "Regular GST: GSTR-1 and GSTR-3B",
@@ -25,10 +26,14 @@ export function GstReturns() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [revision, setRevision] = useState(0);
+  const [auditorReport, setAuditorReport] = useState<GstReturnsReport | null>(null);
   const query = new URLSearchParams({ period: month, span }).toString();
 
   useEffect(() => {
-    if (!/^\d{4}-\d{2}$/.test(month)) return;
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      setReport(null); setLoading(false); setMessage(""); setError("Choose a month to load GST returns.");
+      return;
+    }
     let active = true;
     const controller = new AbortController();
     setLoading(true); setReport(null); setError(""); setMessage("");
@@ -56,8 +61,10 @@ export function GstReturns() {
   }
 
   return <div className="operational-report gst-returns">
+    {auditorReport && <GstAuditorDialog report={auditorReport} onClose={() => setAuditorReport(null)} />}
     <div className="page-header"><h3>GST returns</h3>
       <div className="gst-returns-actions">
+        <button className="primary" disabled={!report || loading || report.regime === "unregistered"} onClick={() => setAuditorReport(report)} aria-haspopup="dialog">Send to auditor</button>
         <button disabled={!report || loading} onClick={exportCsv}>Export CSV</button>
         {report?.regime === "regular" && <button disabled={loading || !report.gstr1Available} onClick={() => void downloadGstr1()}
           title={report.gstr1Available ? undefined : "Fix the restaurant's GSTIN in Settings first"}>Download GSTR-1 JSON</button>}

@@ -41,6 +41,14 @@ describe("custom reports", () => {
     expect(t.totals).toEqual({ billNo: "Total", total: Number(t.rows[0]!.total) + Number(t.rows[1]!.total) });
   });
 
+  it("reports the service and packaging charges on a bill", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 2000").run();
+    await bill(27, 13, 1);
+    const t = await table({ source: "bills", columns: [{ field: "charges" }, { field: "total" }] });
+    expect(t.columns.map((c) => [c.key, c.format])).toEqual([["charges", "money"], ["total", "money"]]);
+    expect(t.rows.map((r) => r.charges)).toEqual([2000]);
+  });
+
   it("groups by a dimension, summing measures, and keeps the date range per source", async () => {
     await bill(27, 13, 1); await bill(27, 14, 1); await bill(28, 20, 2); await bill(1, 12, 5);
     const t = await table({ source: "bills", columns: [{ field: "date" }, { field: "bills" }, { field: "subtotal" }, { field: "averageBill" }], groupBy: ["date"] });

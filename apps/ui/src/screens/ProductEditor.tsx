@@ -13,14 +13,15 @@ import { describeRequest } from "../ai-buttons";
 import { aiErrorText, aiRequestInit } from "../ask-chat";
 
 const optionalPrice = (value: number | null | undefined) => value == null ? "" : paiseToRupees(value);
-const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zomatoPrice: "" };
+const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zomatoPrice: "", packaging: "" };
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
-export function ProductEditor({ product, kind = "item", products = [], defaultCategoryId, categories, stations, defaultGstRate, onDone }: {
+export function ProductEditor({ product, kind = "item", products = [], defaultCategoryId, categories, stations, defaultGstRate, packagingPerItem, onDone }: {
   product: Product | null; /** What a new product is; a saved one keeps its own kind. */ kind?: "item" | "combo";
   /** The catalog, for choosing what goes in a combo. */ products?: Product[]; defaultCategoryId: string | null; categories: Category[];
-  stations: Station[]; /** The restaurant's default GST rate, which an item without its own rate uses. */ defaultGstRate: number; onDone: () => void;
+  stations: Station[]; /** The restaurant's default GST rate, which an item without its own rate uses. */ defaultGstRate: number;
+  /** Per-item packaging is on in Bill settings, so the packaging amounts are shown. */ packagingPerItem: boolean; onDone: () => void;
 }) {
   const isCombo = (product?.kind ?? kind) === "combo";
   const noun = isCombo ? "combo" : "product";
@@ -30,7 +31,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     categoryId: product?.categoryId ?? defaultCategoryId ?? "", price: product ? paiseToRupees(product.pricePaise) : "",
     acPrice: optionalPrice(product?.acPricePaise), takeawayPrice: optionalPrice(product?.takeawayPricePaise), zomatoPrice: optionalPrice(product?.zomatoPricePaise),
     gstRate: product?.gstRate == null ? "" : String(product.gstRate), isVeg: product?.isVeg ?? true, stationId: product?.kotStationId ?? "",
-    isActive: product?.isActive ?? true, isSoldOut: product?.isSoldOut ?? false }).current;
+    isActive: product?.isActive ?? true, isSoldOut: product?.isSoldOut ?? false, packaging: product?.packagingPaise ? paiseToRupees(product.packagingPaise) : "" }).current;
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const ai = useAiStatus();
@@ -41,6 +42,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
   const [acPrice, setAcPrice] = useState(initial.acPrice);
   const [takeawayPrice, setTakeawayPrice] = useState(initial.takeawayPrice);
   const [zomatoPrice, setZomatoPrice] = useState(initial.zomatoPrice);
+  const [packaging, setPackaging] = useState(initial.packaging);
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
   const [gstRate, setGstRate] = useState(initial.gstRate);
   const [isVeg, setIsVeg] = useState(initial.isVeg);
@@ -63,8 +65,8 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
   const preview = photoChange === undefined ? currentPhoto : photoChange;
   const dirty = name !== initial.name || description !== initial.description || categoryId !== initial.categoryId ||
     acPrice !== initial.acPrice || takeawayPrice !== initial.takeawayPrice || zomatoPrice !== initial.zomatoPrice || price !== initial.price || gstRate !== initial.gstRate || isVeg !== initial.isVeg || stationId !== initial.stationId ||
-    isActive !== initial.isActive || isSoldOut !== initial.isSoldOut || photoChange !== undefined || slotsChanged ||
-    (!product && variants.length > 0) || newVariant.name !== "" || newVariant.price !== "" || newVariant.acPrice !== "" || newVariant.takeawayPrice !== "" || newVariant.zomatoPrice !== "";
+    isActive !== initial.isActive || isSoldOut !== initial.isSoldOut || packaging !== initial.packaging || photoChange !== undefined || slotsChanged ||
+    (!product && variants.length > 0) || Object.values(newVariant).some((value) => value !== "");
 
   function canLeave() {
     if (lock.current) { window.alert(`Wait for the photo or ${noun} changes to finish saving before leaving.`); return false; }
@@ -105,18 +107,30 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     return { acPricePaise, takeawayPricePaise, zomatoPricePaise };
   }
 
+  /** Packaging typed for a variant: blank uses the item's (null); sent only while per-item packaging is on. */
+  function variantPackaging(value: string): { packagingPaise?: number | null } {
+    if (!packagingPerItem) return {};
+    if (!value.trim()) return { packagingPaise: null };
+    const paise = rupeesToPaise(value);
+    if (paise === null) throw new Error("Packaging must be a valid amount or blank.");
+    return { packagingPaise: paise };
+  }
+
   function save() {
     const pricePaise = rupeesToPaise(price);
     if (!name.trim() || pricePaise === null || !categoryId) { setError("Name, category, and a valid price are required."); return; }
-    if (editingVariantId || newVariant.name.trim() || newVariant.price.trim() || newVariant.acPrice.trim() || newVariant.takeawayPrice.trim() || newVariant.zomatoPrice.trim()) { setError("Add the draft variant or clear its name and price before saving the product."); return; }
+    if (editingVariantId || Object.values(newVariant).some((value) => value.trim())) { setError("Add the draft variant or clear its name and price before saving the product."); return; }
     const combo = isCombo ? slotsToGroups(slots) : null;
     if (combo && "error" in combo) { setError(combo.error); return; }
+    // A blank product packaging is none; it is sent only while per-item packaging is on.
+    const packagingPaise = packaging.trim() ? rupeesToPaise(packaging) : 0;
+    if (packagingPaise === null) { setError("Packaging must be a valid amount or blank."); return; }
     void run("product", async () => {
       const base = { ...servicePrices(acPrice, takeawayPrice, zomatoPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate: gstRate === "" ? null : Number(gstRate), isVeg,
-        kotStationId: isCombo ? null : stationId || null, isSoldOut, ...(photoChange === undefined ? {} : { photo: photoChange }), ...(combo ? { combo: combo.groups } : {}) };
+        kotStationId: isCombo ? null : stationId || null, isSoldOut, ...(packagingPerItem ? { packagingPaise } : {}), ...(photoChange === undefined ? {} : { photo: photoChange }), ...(combo ? { combo: combo.groups } : {}) };
       if (product) await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ ...base, isActive }) });
       else if (isCombo) await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, kind: "combo" }) });
-      else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise, zomatoPricePaise: variant.zomatoPricePaise ?? null })) }) });
+      else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise, zomatoPricePaise: variant.zomatoPricePaise ?? null, ...(packagingPerItem ? { packagingPaise: variant.packagingPaise ?? null } : {}) })) }) });
       lock.current = false; onDone();
     });
   }
@@ -125,7 +139,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     const vPrice = rupeesToPaise(newVariant.price), vName = newVariant.name.trim();
     if (!vName || vPrice === null) { setError("Variant needs a name and a valid price."); return; }
     void run("variant", async () => {
-      const prices = servicePrices(newVariant.acPrice, newVariant.takeawayPrice, newVariant.zomatoPrice);
+      const prices = { ...servicePrices(newVariant.acPrice, newVariant.takeawayPrice, newVariant.zomatoPrice), ...variantPackaging(newVariant.packaging) };
       if (editingVariantId) {
         const value = { name: vName, pricePaise: vPrice, ...prices };
         const variant = product ? (await apiFetch<{ variant: Variant }>(`/api/variants/${editingVariantId}`, { method: "PATCH", body: JSON.stringify(value) })).variant : { ...variants.find((v) => v.id === editingVariantId)!, ...value };
@@ -166,7 +180,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     finally { setDrafting(false); }
   }
 
-  return <section className="product-editor panel" aria-label="Product editor">
+  return <section className={`product-editor panel${isCombo ? " combo-product-editor" : ""}`} aria-label="Product editor">
     <div className="product-editor-heading"><h2>{product ? `Edit: ${product.name}` : isCombo ? "New combo" : "New product"}</h2><span role="status">{dirty ? "Unsaved changes" : ""}</span></div>
     <form onSubmit={(event) => { event.preventDefault(); save(); }}>
       <div className="product-editor-layout"><div className="product-editor-fields">
@@ -186,6 +200,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
           <label><span>AC price (₹) <InfoTip>Leave AC or takeaway blank to use the Non-AC price; a blank Zomato price uses the Takeaway price. Portion prices are set separately below.</InfoTip></span><input inputMode="decimal" value={acPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setAcPrice(event.target.value)} /></label>
           <label>Takeaway price (₹)<input inputMode="decimal" value={takeawayPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setTakeawayPrice(event.target.value)} /></label>
           <label>Zomato price (₹)<input inputMode="decimal" value={zomatoPrice} placeholder="Use Takeaway" disabled={busy !== null} onChange={(event) => setZomatoPrice(event.target.value)} /></label>
+          {packagingPerItem && <label><span>Packaging (₹) <InfoTip>Added to the packaging charge on takeaway and delivery bills, per unit. Leave blank for none.</InfoTip></span><input inputMode="decimal" value={packaging} placeholder="0.00" disabled={busy !== null} onChange={(event) => setPackaging(event.target.value)} /></label>}
         </div>
         <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" checked={isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(event.target.checked)} /> <span>Sold out <InfoTip>Sold-out items stay visible but cannot be added to new orders. Existing order items stay unchanged. Deactivating hides the product from the menu.</InfoTip></span></label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
 
@@ -203,13 +218,14 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
       {isCombo ? <ComboSlotsEditor slots={slots} products={products.filter((value) => value.id !== product?.id)} disabled={busy !== null} onChange={(next) => { setSlots(next); setSlotsChanged(true); }} />
       : <details className="product-variants" aria-label="Product variants"><summary>Variants (portions) <InfoTip>{product ? "Changes to variants are saved immediately. Other product details use Save product below." : "Variants will be saved with the new product."}</InfoTip></summary><div className="pos-section-body">
 
-        {variants.map((variant) => <div className="product-variant-row" key={variant.id}><span>{variant.name} · Non-AC ₹{paiseToRupees(variant.pricePaise)} · AC ₹{paiseToRupees(variant.acPricePaise ?? variant.pricePaise)} · Takeaway ₹{paiseToRupees(variant.takeawayPricePaise ?? variant.pricePaise)} · Zomato ₹{paiseToRupees(variant.zomatoPricePaise ?? variant.takeawayPricePaise ?? variant.pricePaise)}{!variant.isActive && <small>Inactive</small>}</span><button type="button" disabled={busy !== null || editingVariantId !== null || Object.values(newVariant).some(Boolean)} onClick={() => { setEditingVariantId(variant.id); setNewVariant({ name: variant.name, price: paiseToRupees(variant.pricePaise), acPrice: optionalPrice(variant.acPricePaise), takeawayPrice: optionalPrice(variant.takeawayPricePaise), zomatoPrice: optionalPrice(variant.zomatoPricePaise) }); }}>Edit prices</button><button type="button" disabled={busy !== null || editingVariantId === variant.id} onClick={() => toggleVariant(variant)}>{product ? variant.isActive ? "Deactivate" : "Activate" : "Remove"}</button></div>)}
+        {variants.map((variant) => <div className="product-variant-row" key={variant.id}><span>{variant.name} · Non-AC ₹{paiseToRupees(variant.pricePaise)} · AC ₹{paiseToRupees(variant.acPricePaise ?? variant.pricePaise)} · Takeaway ₹{paiseToRupees(variant.takeawayPricePaise ?? variant.pricePaise)} · Zomato ₹{paiseToRupees(variant.zomatoPricePaise ?? variant.takeawayPricePaise ?? variant.pricePaise)}{packagingPerItem && variant.packagingPaise != null && ` · Packaging ₹${paiseToRupees(variant.packagingPaise)}`}{!variant.isActive && <small>Inactive</small>}</span><button type="button" disabled={busy !== null || editingVariantId !== null || Object.values(newVariant).some(Boolean)} onClick={() => { setEditingVariantId(variant.id); setNewVariant({ name: variant.name, price: paiseToRupees(variant.pricePaise), acPrice: optionalPrice(variant.acPricePaise), takeawayPrice: optionalPrice(variant.takeawayPricePaise), zomatoPrice: optionalPrice(variant.zomatoPricePaise), packaging: optionalPrice(variant.packagingPaise) }); }}>Edit prices</button><button type="button" disabled={busy !== null || editingVariantId === variant.id} onClick={() => toggleVariant(variant)}>{product ? variant.isActive ? "Deactivate" : "Activate" : "Remove"}</button></div>)}
         <div className="product-variant-inputs">
           <label className="product-variant-name">Variant name<input value={newVariant.name} disabled={busy !== null} placeholder="e.g. Half" onChange={(event) => setNewVariant({ ...newVariant, name: event.target.value })} /></label>
           <label>Non-AC (₹)<input aria-label="Variant Non-AC price (₹)" value={newVariant.price} disabled={busy !== null} inputMode="decimal" onChange={(event) => setNewVariant({ ...newVariant, price: event.target.value })} /></label>
           <label>AC (₹)<input aria-label="Variant AC price (₹)" inputMode="decimal" value={newVariant.acPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, acPrice: event.target.value })} /></label>
           <label>Takeaway (₹)<input aria-label="Variant takeaway price (₹)" inputMode="decimal" value={newVariant.takeawayPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, takeawayPrice: event.target.value })} /></label>
           <label><span>Zomato (₹) <InfoTip>Leave blank to use the variant's Takeaway price. Blank AC and Takeaway prices use its Non-AC price.</InfoTip></span><input aria-label="Variant Zomato price (₹)" inputMode="decimal" value={newVariant.zomatoPrice} placeholder="Use Takeaway" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, zomatoPrice: event.target.value })} /></label>
+          {packagingPerItem && <label>Packaging (₹)<input aria-label="Variant packaging (₹)" inputMode="decimal" value={newVariant.packaging} placeholder="Same as item" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, packaging: event.target.value })} /></label>}
           <div className="product-variant-actions"><button type="button" disabled={busy !== null} onClick={addVariant}>{editingVariantId ? "Save variant" : "Add variant"}</button>{editingVariantId && <button type="button" disabled={busy !== null} onClick={() => { setEditingVariantId(null); setNewVariant(emptyVariant); }}>Cancel variant edit</button>}</div>
         </div>
       </div></details>}

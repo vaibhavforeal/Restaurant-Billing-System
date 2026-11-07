@@ -25,7 +25,7 @@
   };
   const openSettings = async () => {
     await nav('settings');
-    await click(() => buttons().find((b) => b.textContent.trim().startsWith('Restaurant profile')), 'Restaurant profile');
+    await click(() => buttons().find((b) => b.textContent.trim().startsWith('AI suggestions')), 'AI suggestions');
     return (await wait(() => [...document.querySelectorAll('legend')].find((l) => l.textContent.startsWith('AI assistant')), 'AI assistant settings')).closest('fieldset');
   };
   const moreReports = () => document.querySelector('select[aria-label="More reports"]');

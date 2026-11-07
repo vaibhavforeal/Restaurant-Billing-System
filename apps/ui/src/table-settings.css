@@ -1,0 +1,8 @@
+.table-settings > .tabs { margin-bottom: 12px; }
+.table-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.table-settings-heading p { margin: 0; color: var(--muted); }
+.table-settings .table-add-form { grid-template-columns: minmax(120px, 1fr) minmax(100px, 1fr) minmax(120px, 1fr) auto; }
+.table-settings .table-manager-list .actions { flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .table-settings .table-add-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}

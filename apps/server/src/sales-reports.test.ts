@@ -46,6 +46,16 @@ describe("sales and collection reports", () => {
     expect(result.sales.totalPaise).toBe(result.daily.reduce((sum: number, d: any) => sum + d.sales.totalPaise, 0));
     expect(app.db.prepare("SELECT * FROM bills ORDER BY id").all()).toEqual(before);
   });
+  it("totals the charges on each day and the range", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 2000 WHERE id = 1").run();
+    const first = await issue(27), second = await issue(29);
+    const result = await report();
+    expect(first.charges).toHaveLength(1); expect(second.charges).toHaveLength(1);
+    expect(result.daily.map((d: any) => d.sales.chargesPaise)).toEqual([2000, 0, 2000]);
+    expect(result.sales.chargesPaise).toBe(4000);
+    const existing = (await app.inject({ url: "/api/reports/day-end?date=2026-09-27", headers: auth(token) })).json().report;
+    expect(existing.sales.chargesPaise).toBe(2000);
+  });
   it("separates older-bill receipts from issued sales, counts split payments once, keeps void bills on their dates", async () => {
     const older = await issue(26); await pay(older, 27, true);
     const unpaid = await issue(27); const voided = await issue(28); await pay(voided, 28);

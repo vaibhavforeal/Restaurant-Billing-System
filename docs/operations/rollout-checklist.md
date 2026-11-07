@@ -49,7 +49,8 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 
 ## 2. Basic setup for testing
 
-- [ ] **Settings → Restaurant profile:** GST number, address, receipt footer, **GST** (Prices include GST with the default rate, or No GST charged), UPI ID (if used). Save.
+- [ ] **Settings → Restaurant profile:** GST number and address. Save.
+- [ ] **Settings → Bill settings:** receipt footer, **GST** (Prices include GST or Prices exclude GST, added on the bill, with the default rate; or No GST charged), UPI ID (if used). Save.
 - [ ] **Kitchen screen:** decide with the owner. If the kitchen will use a Kitchen screen (Pro plan), turn on **Kitchen Display (KDS)** in the Marketplace; if it only gets printed KOTs, leave it off.
 - [ ] Add staff: at least one cashier, one captain/waiter and one kitchen user, each with their own PIN.
 - [ ] Add 3–5 test menu items across two kitchen stations (for example Kitchen and Bar), and tables T1–T6, including at least one AC table if the restaurant uses AC pricing.
@@ -139,7 +140,7 @@ Run a short mock service with real staff roles and printers. Check each **Expect
 - [ ] **Quick takeaway:** a parcel order billed and paid with the cash-change helper.
 - [ ] **Discount:** cashier applies a discount within 10%; over 10% is refused for the cashier.
 - [ ] **Cancel:** cancel a sent item with a reason; check it appears in the cancellations report.
-- [ ] **Refund:** on a paid bill, as a cashier choose **Refund items**, refund one item with the manager's PIN under **Admin approval**. **Expect:** a wrong PIN is refused; the right one issues CN-n and the credit note prints; the bill shows **Partly refunded**; Reports → Day-end / GST shows the credit-notes block and net figures.
+- [ ] **Refund:** on a paid bill, as a cashier choose **Refund items**, refund one item with the manager's PIN under **Admin approval**. **Expect:** a wrong PIN is refused; the right one issues a credit note number such as CN/26-27/001 and the credit note prints; the bill shows **Partly refunded**; Reports → Day-end / GST shows the credit-notes block and net figures.
 - [ ] **Void:** void an unpaid table bill and a paid bill. **Expect:** the unpaid void frees the table; the paid void refunds the money by the method you choose; both appear in Reports → Detailed reports → Credit notes.
 - [ ] **Guest QR (Pro):** print a table QR, order from a phone, accept the request on the POS.
 - [ ] **Inventory (if used):** receive stock with an amount paid, check the stock decreases after a sale; on Pro, check Dish costing and the Food cost & profit report.

@@ -9,7 +9,7 @@ FSSAI: 12345678901234
 <1B><45><01>TAX INVOICE
 
 <1B><45><00><1B><61><00>Date: 28 Sept 2026, 13:30
-Bill #42                    PAID
+Bill 42                     PAID
 DINE-IN: T1 / B
 Payment mode: CASH + UPI
 All amounts in Rs.
@@ -45,7 +45,7 @@ FSSAI: 12345678901234
 <1B><45><01>TAX INVOICE
 
 <1B><45><00><1B><61><00>Date: 28 Sept 2026, 13:30
-Bill #42                                    PAID
+Bill 42                                     PAID
 DINE-IN: T1 / B
 Payment mode: CASH + UPI
 All amounts in Rs.

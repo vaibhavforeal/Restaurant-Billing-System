@@ -35,12 +35,12 @@ export function gstr1Json(s: Gstr1Summary, h: Gstr1JsonHeader): Record<string, u
   const out: Record<string, unknown> = { gstin: h.gstin, fp: h.fp };
   if (s.b2b.length) out.b2b = s.b2b.map((g) => ({
     ctin: g.ctin,
-    inv: g.invoices.map((i) => ({ inum: String(i.billNo), idt: gstDate(i.dateKey), val: rupees(i.valuePaise), pos, rchrg: "N", inv_typ: "R", itms: items(i.items) })),
+    inv: g.invoices.map((i) => ({ inum: i.invoiceNo, idt: gstDate(i.dateKey), val: rupees(i.valuePaise), pos, rchrg: "N", inv_typ: "R", itms: items(i.items) })),
   }));
   if (s.b2cs.length) out.b2cs = s.b2cs.map((l) => ({ sply_ty: "INTRA", pos, typ: "OE", rt: l.gstRate, txval: rupees(l.taxablePaise), iamt: 0, camt: rupees(l.cgstPaise), samt: rupees(l.sgstPaise), csamt: 0 }));
   if (s.cdnr.length) out.cdnr = s.cdnr.map((g) => ({
     ctin: g.ctin,
-    nt: g.notes.map((n) => ({ ntty: "C", nt_num: `CN-${n.cnNo}`, nt_dt: gstDate(n.dateKey), val: rupees(n.valuePaise), pos, rchrg: "N", inv_typ: "R", itms: items(n.items) })),
+    nt: g.notes.map((n) => ({ ntty: "C", nt_num: n.creditNoteRef, nt_dt: gstDate(n.dateKey), val: rupees(n.valuePaise), pos, rchrg: "N", inv_typ: "R", itms: items(n.items) })),
   }));
   const nil = [
     ...(s.nil.b2bPaise ? [{ sply_ty: "INTRAB2B", nil_amt: rupees(s.nil.b2bPaise), expt_amt: 0, ngsup_amt: 0 }] : []),
@@ -48,9 +48,10 @@ export function gstr1Json(s: Gstr1Summary, h: Gstr1JsonHeader): Record<string, u
   ];
   if (nil.length) out.nil = { inv: nil };
   if (s.hsn.b2b.length || s.hsn.b2c.length) out.hsn = { ...(s.hsn.b2b.length ? { hsn_b2b: hsn(s.hsn.b2b) } : {}), ...(s.hsn.b2c.length ? { hsn_b2c: hsn(s.hsn.b2c) } : {}) };
+  const docRows = (ranges: Gstr1Summary["docs"]["invoices"]) => ranges.map((r, i) => ({ num: i + 1, from: r.from, to: r.to, totnum: r.total, cancel: r.cancelled, net_issue: r.total - r.cancelled }));
   const docs = [
-    ...(s.docs.invoices ? [{ doc_num: 1, docs: [{ num: 1, from: String(s.docs.invoices.from), to: String(s.docs.invoices.to), totnum: s.docs.invoices.total, cancel: s.docs.invoices.cancelled, net_issue: s.docs.invoices.total - s.docs.invoices.cancelled }] }] : []),
-    ...(s.docs.creditNotes ? [{ doc_num: 5, docs: [{ num: 1, from: `CN-${s.docs.creditNotes.from}`, to: `CN-${s.docs.creditNotes.to}`, totnum: s.docs.creditNotes.total, cancel: 0, net_issue: s.docs.creditNotes.total }] }] : []),
+    ...(s.docs.invoices.length ? [{ doc_num: 1, docs: docRows(s.docs.invoices) }] : []),
+    ...(s.docs.creditNotes.length ? [{ doc_num: 5, docs: docRows(s.docs.creditNotes) }] : []),
   ];
   if (docs.length) out.doc_issue = { doc_det: docs };
   if (h.ecoGstin && s.eco95.valuePaise) {

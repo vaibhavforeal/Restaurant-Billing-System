@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditReason, defaultRefundRows, refundRowsError, refundableQty } from "./credit-note-form";
+import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, previewPending, itemsLeftToRefund, refundRowsError, refundableQty } from "./credit-note-form";
 
 describe("defaultRefundRows", () => {
   it("refunds a single payment method in full", () => {
@@ -53,6 +53,15 @@ describe("REFUND_REASONS", () => {
 });
 
 describe("refund quantities", () => {
+  it("knows when every billed line has been refunded", () => {
+    const line = (id: string, qty: number, extra: Partial<{ status: "pending" | "sent" | "cancelled"; parentItemId: string | null }> = {}) =>
+      ({ id, qty, status: "sent" as const, parentItemId: null, ...extra });
+    const items = [line("a", 2), line("b", 1), line("c", 3, { status: "cancelled" }), line("d", 1, { parentItemId: "b" })];
+    expect(itemsLeftToRefund(items, {})).toBe(true);
+    expect(itemsLeftToRefund(items, { a: 2 })).toBe(true);
+    // Cancelled lines and items inside a combo are never refunded on their own.
+    expect(itemsLeftToRefund(items, { a: 2, b: 1 })).toBe(false);
+  });
   it("bounds a line by billed minus already refunded", () => {
     expect(refundableQty(5, undefined)).toBe(5);
     expect(refundableQty(5, 2)).toBe(3);
@@ -86,5 +95,48 @@ describe("billStatusLabel", () => {
     expect(billStatusLabel({ status: "paid", refundState: "partly_refunded" })).toBe("Partly refunded");
     expect(billStatusLabel({ status: "paid", refundState: "refunded" })).toBe("Refunded");
     expect(billStatusLabel({ status: "void", refundState: "refunded" })).toBe("VOID");
+  });
+});
+
+describe("creditPreviewBody", () => {
+  const lines = [{ orderItemId: "a", qty: 1 }];
+  it("sends a refund's lines and its packaging choice", () => {
+    expect(creditPreviewBody("refund", lines, false)).toEqual({ kind: "refund", lines, refundPackaging: false });
+    expect(creditPreviewBody("refund", lines, true)).toEqual({ kind: "refund", lines, refundPackaging: true });
+  });
+  it("sends only the kind for a void", () => expect(creditPreviewBody("void", [], true)).toEqual({ kind: "void" }));
+});
+
+describe("packagingTickbox", () => {
+  const offer = { linesKey: "a", paise: 2500 };
+  it("shows the offer's amount for the lines it was worked out for", () => {
+    expect(packagingTickbox(offer, "a", false)).toEqual({ amountPaise: 2500 });
+    expect(packagingTickbox(offer, "a", true)).toEqual({ amountPaise: 2500 });
+  });
+  it("keeps the box, without the old amount, while the preview for new lines loads", () => {
+    expect(packagingTickbox(offer, "b", true)).toEqual({ amountPaise: null });
+  });
+  it("hides the box once the new lines are known to have no offer, or when there is none", () => {
+    expect(packagingTickbox(offer, "b", false)).toBeNull();
+    expect(packagingTickbox({ linesKey: "a", paise: 0 }, "a", false)).toBeNull();
+    expect(packagingTickbox({ linesKey: "a", paise: 0 }, "b", true)).toBeNull();
+    expect(packagingTickbox(null, "a", true)).toBeNull();
+  });
+});
+
+describe("previewPending", () => {
+  it("is pending as soon as the lines change, before the request has started", () => {
+    expect(previewPending(1, "b", "a")).toBe(true);
+    expect(previewPending(1, "b", null)).toBe(true);
+  });
+  it("is settled once a preview for these lines has finished, even with an error", () => {
+    expect(previewPending(1, "a", "a")).toBe(false);
+  });
+  it("is never pending with no lines, since no preview is asked for", () => {
+    expect(previewPending(0, "[]", "a")).toBe(false);
+  });
+  it("keeps the tickbox up through the render where the lines changed but loading has not started", () => {
+    const offer = { linesKey: "a", paise: 2500 };
+    expect(packagingTickbox(offer, "b", previewPending(1, "b", "a"))).toEqual({ amountPaise: null });
   });
 });

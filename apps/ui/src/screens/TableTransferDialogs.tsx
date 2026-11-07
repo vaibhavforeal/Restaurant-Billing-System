@@ -19,7 +19,7 @@ interface DialogProps {
   onClose: () => void;
 }
 
-export const orderLabel = (order: Order) => order.tableLabel ?? order.tableName ?? "Table";
+export const orderLabel = (order: Order) => order.tableLabel ?? order.tableName ?? order.orderTypeName ?? (order.type === "parcel" ? "Takeaway" : order.type === "zomato" ? "Zomato" : "Table");
 
 export function MoveTableDialog({ open, order, busy, error, refreshSignal, onClose, onConfirm }: DialogProps & { onConfirm: (table: TableInfo) => void }) {
   return <WorkspaceDialog open={open} title="Move table" className="order-captain-dialog table-transfer-dialog" busy={busy} onClose={onClose}>

@@ -1,9 +1,10 @@
+import { invoiceSeries } from "../invoice-numbers.js";
 import { addRates, byRate, cancelledInPeriod, type GstBillFact, type GstCreditNoteFact, type RateLine } from "./facts.js";
 
-export interface B2bInvoice { billNo: number; dateKey: string; valuePaise: number; items: RateLine[] }
-export interface CreditNoteEntry { cnNo: number; billNo: number; dateKey: string; valuePaise: number; items: RateLine[] }
+export interface B2bInvoice { billNo: number; invoiceNo: string; dateKey: string; valuePaise: number; items: RateLine[] }
+export interface CreditNoteEntry { cnNo: number; creditNoteRef: string; billNo: number; invoiceNo: string; dateKey: string; valuePaise: number; items: RateLine[] }
 export interface HsnLine extends RateLine { sac: string }
-export interface DocRange { from: number; to: number; total: number; cancelled: number }
+export interface DocRange { from: string; to: string; total: number; cancelled: number }
 export interface Gstr1Summary {
   /** Table 4A: tax invoices to registered buyers, per buyer. */
   b2b: Array<{ ctin: string; buyerName: string; invoices: B2bInvoice[] }>;
@@ -15,8 +16,8 @@ export interface Gstr1Summary {
   nil: { b2bPaise: number; b2cPaise: number };
   /** Table 12: per SAC and rate, net of credit notes, split by B2B and B2C. */
   hsn: { b2b: HsnLine[]; b2c: HsnLine[] };
-  /** Table 13: invoice and credit-note number ranges. */
-  docs: { invoices: DocRange | null; creditNotes: DocRange | null };
+  /** Table 13: invoice and credit-note number ranges, one per series (restaurant prefix and financial year), sorted by `from`. */
+  docs: { invoices: DocRange[]; creditNotes: DocRange[] };
   /** Table 14: supplies through Zomato, where Zomato pays the GST (section 9(5)). */
   eco95: { valuePaise: number; billCount: number };
   warnings: string[];
@@ -27,10 +28,21 @@ const taxed = (lines: RateLine[]) => lines.filter((l) => l.gstRate > 0 && hasVal
 const nilOf = (lines: RateLine[]) => lines.filter((l) => l.gstRate === 0).reduce((sum, l) => sum + l.taxablePaise, 0);
 const rupees = (paise: number) => `₹${(paise / 100).toFixed(2)}`;
 
-function range(numbers: number[], cancelled: number): DocRange | null {
-  if (!numbers.length) return null;
-  return { from: Math.min(...numbers), to: Math.max(...numbers), total: numbers.length, cancelled };
+interface Doc { no: string; seq: number; cancelled: boolean }
+/** Ranges per series. A legacy number without a counter ("CN-5") is placed by `seq`, the integer number it was issued with. */
+function ranges(docs: Doc[]): Array<DocRange & { min: number; max: number }> {
+  const bySeries = new Map<string, Array<Doc & { n: number }>>();
+  for (const d of docs) {
+    const { series, n } = invoiceSeries(d.no);
+    bySeries.set(series, [...(bySeries.get(series) ?? []), { ...d, n: Number.isNaN(n) ? d.seq : n }]);
+  }
+  return [...bySeries.values()].map((list) => {
+    const first = list.reduce((a, b) => (b.n < a.n ? b : a));
+    const last = list.reduce((a, b) => (b.n > a.n ? b : a));
+    return { from: first.no, to: last.no, total: list.length, cancelled: list.filter((d) => d.cancelled).length, min: first.n, max: last.n };
+  }).sort((a, b) => a.from.localeCompare(b.from));
 }
+const stripCounters = ({ min: _min, max: _max, ...r }: DocRange & { min: number; max: number }): DocRange => r;
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   const map = new Map<string, T[]>();
@@ -55,11 +67,11 @@ export function buildGstr1(input: { sacCode: string; bills: GstBillFact[]; credi
 
   const b2b = [...groupBy(b2bBills.filter((b) => taxed(b.taxes).length), (b) => b.buyerGstin!)].map(([ctin, list]) => ({
     ctin, buyerName: list[0]!.buyerName ?? "",
-    invoices: list.sort((a, b) => a.billNo - b.billNo).map((b) => ({ billNo: b.billNo, dateKey: b.dateKey, valuePaise: b.totalPaise, items: taxed(b.taxes) })),
+    invoices: list.sort((a, b) => a.billNo - b.billNo).map((b) => ({ billNo: b.billNo, invoiceNo: b.invoiceNo, dateKey: b.dateKey, valuePaise: b.totalPaise, items: taxed(b.taxes) })),
   })).sort((a, b) => a.ctin.localeCompare(b.ctin));
   const cdnr = [...groupBy(b2bNotes.filter((n) => taxed(n.taxes).length), (n) => n.buyerGstin!)].map(([ctin, list]) => ({
     ctin, buyerName: list[0]!.buyerName ?? "",
-    notes: list.sort((a, b) => a.cnNo - b.cnNo).map((n) => ({ cnNo: n.cnNo, billNo: n.billNo, dateKey: n.dateKey, valuePaise: n.totalPaise, items: taxed(n.taxes) })),
+    notes: list.sort((a, b) => a.cnNo - b.cnNo).map((n) => ({ cnNo: n.cnNo, creditNoteRef: n.creditNoteRef, billNo: n.billNo, invoiceNo: n.invoiceNo, dateKey: n.dateKey, valuePaise: n.totalPaise, items: taxed(n.taxes) })),
   })).sort((a, b) => a.ctin.localeCompare(b.ctin));
 
   const b2cRates = new Map<number, RateLine>();
@@ -80,12 +92,25 @@ export function buildGstr1(input: { sacCode: string; bills: GstBillFact[]; credi
     b2cPaise: b2cBills.reduce((s, b) => s + nilOf(b.taxes), 0) - b2cNotes.reduce((s, n) => s + nilOf(n.taxes), 0),
   };
 
-  // Every bill and credit note issued in the period is a document, whatever its supply: bills share one numbering series.
-  const invoices = range(input.bills.map((b) => b.billNo), cancelled.size);
-  if (invoices && invoices.to - invoices.from + 1 !== invoices.total) {
-    warnings.push(`${invoices.to - invoices.from + 1 - invoices.total} bill number(s) between ${invoices.from} and ${invoices.to} are not in this period. Check the computer's date was right when they were issued.`);
+  // Every bill and credit note issued in the period is a document, whatever its supply. Table 13 ranges are per series, but the
+  // counter is shared by every prefix in a financial year (MP, then X1, then MP again), so a gap is checked per year.
+  const invoiceRanges = ranges(input.bills.map((b) => ({ no: b.invoiceNo, seq: b.billNo, cancelled: cancelled.has(b.billId) })));
+  const byYear = new Map<string, Array<{ no: string; n: number }>>();
+  for (const b of input.bills) {
+    const { series, n } = invoiceSeries(b.invoiceNo);
+    const year = series.slice(series.lastIndexOf("/") + 1); // "MP/26-27" gives "26-27"; a legacy number has no year
+    byYear.set(year, [...(byYear.get(year) ?? []), { no: b.invoiceNo, n: Number.isNaN(n) ? b.billNo : n }]);
   }
-  const creditNotes = range(input.creditNotes.map((n) => n.cnNo), 0);
+  for (const list of byYear.values()) {
+    const first = list.reduce((x, y) => (y.n < x.n ? y : x));
+    const last = list.reduce((x, y) => (y.n > x.n ? y : x));
+    const missing = last.n - first.n + 1 - list.length;
+    if (missing > 0) {
+      warnings.push(`${missing} bill number(s) between ${first.no} and ${last.no} are not in this period. Check the computer's date was right when they were issued.`);
+    }
+  }
+  const invoices = invoiceRanges.map(stripCounters);
+  const creditNotes = ranges(input.creditNotes.map((n) => ({ no: n.creditNoteRef, seq: n.cnNo, cancelled: false }))).map(stripCounters);
 
   const ecoBills = input.bills.filter((b) => b.supply === "eco95");
   const eco95 = { valuePaise: ecoBills.reduce((s, b) => s + b.taxes.reduce((t, l) => t + l.taxablePaise, 0), 0), billCount: ecoBills.length };

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill } from "@masalapos/domain";
+import { financialYear, uuidv7, type Bill } from "@masalapos/domain";
 import type { GstReturnsReport } from "@masalapos/domain/gst-returns";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
@@ -65,17 +65,71 @@ describe("GST returns", () => {
     expect(table(r, "Table 3.1").rows[0]).toMatchObject({ taxable: 30000, cgst: 750, sgst: 750 });
   });
 
+  it("reports an 18% packaging charge on 5% items as its own 18% B2CS row", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 2000, gst_rate = 18 WHERE id = 1").run();
+    const b = await bill(1, JAN);
+    expect(b.charges).toMatchObject([{ kind: "packaging", gstRate: 18 }]);
+    const rows = table(await report("2026-01"), "Table 7").rows as Array<{ rate: string; taxable: number }>;
+    expect(rows.map((r) => r.rate)).toEqual(["5%", "18%"]);
+    expect(rows.find((r) => r.rate === "18%")!.taxable).toBe(b.charges![0]!.taxablePaise);
+  });
+
+  it("nets a partial packaging credit out of the GSTR-1 totals", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 500, packaging_per_item = 1, gst_rate = 18 WHERE id = 1").run();
+    expect((await app.inject({ method: "PATCH", url: `/api/products/${productId}`, headers: auth(token), payload: { packagingPaise: 1000 } })).statusCode).toBe(200);
+    const b = await bill(2, JAN);
+    expect(b.charges).toMatchObject([{ kind: "packaging", amountPaise: 2500, gstRate: 18 }]);
+    const pay = await app.inject({ method: "POST", url: `/api/bills/${b.id}/settle`, headers: auth(token), payload: { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: b.totalPaise }] } });
+    expect(pay.statusCode, pay.body).toBe(200);
+    const orderItemId = (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(b.id) as { id: string }).id;
+    const lines = [{ orderItemId, qty: 1 }];
+    const preview = (await app.inject({ method: "POST", url: `/api/bills/${b.id}/credit-preview`, headers: auth(token), payload: { kind: "refund", lines } })).json().preview;
+    expect(preview.charges).toMatchObject([{ kind: "packaging", amountPaise: 1000 }]);
+    const res = await app.inject({ method: "POST", url: `/api/bills/${b.id}/refund`, headers: auth(token),
+      payload: { clientRef: uuidv7(), reason: "Cancelled", lines, refunds: [{ mode: "cash", amountPaise: preview.totals.totalPaise }] } });
+    expect(res.statusCode, res.body).toBe(201);
+    app.db.exec("DROP TRIGGER IF EXISTS credit_notes_no_update");
+    app.db.prepare("UPDATE credit_notes SET created_at = ? WHERE bill_id = ?").run(JAN, b.id);
+    const sum = (sql: string) => (app.db.prepare(sql).get(b.id) as { v: number }).v;
+    const net = (col: string) => sum(`SELECT SUM(${col}) AS v FROM bill_taxes WHERE bill_id = ?`)
+      - sum(`SELECT SUM(${col}) AS v FROM credit_note_taxes WHERE credit_note_id IN (SELECT id FROM credit_notes WHERE bill_id = ?)`);
+    const rows = table(await report("2026-01"), "Table 7").rows as Array<{ rate: string; taxable: number; cgst: number; sgst: number }>;
+    expect(rows.reduce((s, r) => s + r.taxable, 0)).toBe(net("taxable_paise"));
+    expect(rows.reduce((s, r) => s + r.cgst, 0)).toBe(net("cgst_paise"));
+    expect(rows.reduce((s, r) => s + r.sgst, 0)).toBe(net("sgst_paise"));
+    expect(rows.find((r) => r.rate === "18%")!.taxable).toBe(b.charges![0]!.taxablePaise - preview.charges[0].taxablePaise);
+  });
+
   it("reports a later void as a credit note in its own month, leaving the bill's month unchanged", async () => {
     const business = await bill(1, JAN, ACME);
     const before = await report("2026-01");
     await voidBill(business.id, FEB);
     expect((await report("2026-01")).tables).toEqual(before.tables);
     const feb = await report("2026-02");
-    expect(table(feb, "Table 9B").rows).toMatchObject([{ ctin: ACME.gstin, bill: String(business.billNo), taxable: 10000 }]);
+    expect(table(feb, "Table 9B").rows).toMatchObject([{ ctin: ACME.gstin, bill: business.invoiceNo, taxable: 10000 }]);
     expect(table(feb, "Table 3.1").rows[0]).toMatchObject({ taxable: -10000 });
     const quarter = await report("2026-02", "quarter");
     expect(quarter.period).toMatchObject({ from: "2026-01-01", to: "2026-03-31" });
     expect(table(quarter, "Table 13").rows[0]).toMatchObject({ total: 1, cancelled: 1 });
+  });
+
+  it("reports stored invoice numbers, one range per prefix, and credit note references", async () => {
+    const setPrefix = (invoicePrefix: string) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", gstin: OWN, invoicePrefix } });
+    const fy = financialYear(Date.now()).short;
+    expect((await setPrefix("MP")).statusCode).toBe(200);
+    await bill(1, JAN);
+    const second = await bill(1, JAN, ACME);
+    expect((await setPrefix("X1")).statusCode).toBe(200);
+    const third = await bill(1, JAN);
+    await voidBill(third.id, JAN);
+    const r = await report("2026-01");
+    expect(table(r, "Table 13").rows).toEqual([
+      { document: "Invoices for outward supply", from: `MP/${fy}/0001`, to: `MP/${fy}/0002`, total: 2, cancelled: 0, net: 2 },
+      { document: "Invoices for outward supply", from: `X1/${fy}/0003`, to: `X1/${fy}/0003`, total: 1, cancelled: 1, net: 0 },
+      { document: "Credit notes", from: `CN/${fy}/001`, to: `CN/${fy}/001`, total: 1, cancelled: 0, net: 1 },
+    ]);
+    expect(second.invoiceNo).toBe(`MP/${fy}/0002`);
+    expect(table(r, "Table 4A").rows).toMatchObject([{ invoice: `MP/${fy}/0002` }]);
   });
 
   it("downloads the GSTR-1 JSON with the GSTIN and period in its name", async () => {
@@ -85,6 +139,17 @@ describe("GST returns", () => {
     expect(res.headers["content-type"]).toMatch(/application\/json/);
     expect(res.headers["content-disposition"]).toBe(`attachment; filename="GSTR1_${OWN}_012026.json"`);
     expect(res.json()).toMatchObject({ gstin: OWN, fp: "012026", b2b: [{ ctin: ACME.gstin }] });
+  });
+
+  it("reports a bill with GST added on top as a regular taxable supply", async () => {
+    app.db.prepare("UPDATE settings SET gst_mode = 'exclusive' WHERE id = 1").run();
+    await bill(2, JAN);
+    const r = await report("2026-01");
+    expect(r.regime).toBe("regular");
+    // 2 x ₹105 before GST: CGST = SGST = round-half-up(525.0) = 525.
+    expect(table(r, "Table 7").rows).toEqual([{ pos: "29-Karnataka", type: "OE", rate: "5%", taxable: 21000, cgst: 525, sgst: 525 }]);
+    expect(table(r, "Table 3.1").rows[0]).toMatchObject({ taxable: 21000, cgst: 525, sgst: 525 });
+    expect(r.tables.some((t) => t.title.includes("CMP-08"))).toBe(false);
   });
 
   it("shows CMP-08 to a composition restaurant and refuses it the GSTR-1 file", async () => {

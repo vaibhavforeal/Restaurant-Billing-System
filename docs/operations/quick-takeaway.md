@@ -66,7 +66,7 @@ starting another.
 A dish can also be held back from the kitchen with its **Hold** button: checkout
 asks "Send 1 held item to the kitchen and continue?" and fires it first, or leaves
 the order untouched if you answer No. Hold and the dish Hold buttons appear only
-while **Settings → Restaurant profile → Hold orders** is on (it is on by default).
+while **Settings → Bill settings → Hold orders** is on (it is on by default).
 
 Waiters use the same **Takeaway** button with their ordinary order-entry and
 kitchen-send permissions; they cannot issue or settle bills. Dine-in orders

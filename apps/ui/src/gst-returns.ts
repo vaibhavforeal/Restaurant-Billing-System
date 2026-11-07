@@ -1,4 +1,22 @@
 import type { GstReturnsReport } from "@masalapos/domain/gst-returns";
+import { operationalCsv } from "./operational-report";
+
+export interface GstAuditorFile { name: string; content: string; type: string }
+
+export function gstAuditorCsv(report: GstReturnsReport): GstAuditorFile {
+  return { name: gstReturnsCsvName(report), type: "text/csv;charset=utf-8", content: operationalCsv({
+    ...report, notes: [`GSTIN: ${report.gstin}`, `GST regime: ${report.regime}`, ...report.notes, ...report.warnings.map(w => `Warning: ${w}`)],
+  }) };
+}
+
+export function gstAuditorEmail(report: GstReturnsReport, files: GstAuditorFile[]) {
+  return {
+    subject: `GST reports — ${report.period.label} — ${report.gstin}`,
+    body: [`Hello,`, ``, `Please review the GST reports for ${report.period.label} (${report.from} to ${report.to}).`,
+      `GSTIN: ${report.gstin}`, ``, `Files to attach:`, ...files.map(file => file.name),
+      ...(report.warnings.length ? ["", "Report warnings:", ...report.warnings] : []), "", "Please verify the figures before filing.", "", "Thank you."].join("\n"),
+  };
+}
 
 /** The month GST returns open on: last month, the one a restaurant files for. `today` is YYYY-MM-DD. */
 export function defaultGstMonth(today: string): string {

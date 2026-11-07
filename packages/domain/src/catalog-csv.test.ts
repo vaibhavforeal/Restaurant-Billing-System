@@ -46,3 +46,19 @@ describe("catalog schemas Zomato price", () => {
     expect(() => ProductUpdate.parse({ zomatoPricePaise: -1 })).toThrow();
   });
 });
+
+describe("catalog packaging", () => {
+  it("has packaging and variant_packaging as the last CSV columns", () => {
+    expect(CATALOG_CSV_COLUMNS.slice(-2)).toEqual(["packaging", "variant_packaging"]);
+  });
+  it("accepts packaging up to 100000 paise, with nullable variant packaging", () => {
+    expect(ProductCreate.parse({ categoryId: "c1", name: "Dal", pricePaise: 25000, packagingPaise: 100000 }).packagingPaise).toBe(100000);
+    expect(ProductCreate.parse({ categoryId: "c1", name: "Dal", pricePaise: 25000 }).packagingPaise).toBe(0);
+    expect(() => ProductCreate.parse({ categoryId: "c1", name: "Dal", pricePaise: 25000, packagingPaise: 100001 })).toThrow();
+    expect(ProductUpdate.parse({}).packagingPaise).toBeUndefined();
+    expect(() => ProductUpdate.parse({ packagingPaise: null })).toThrow();
+    expect(VariantCreate.parse({ name: "Large", pricePaise: 30000, packagingPaise: null }).packagingPaise).toBeNull();
+    expect(VariantUpdate.parse({ packagingPaise: 0 }).packagingPaise).toBe(0);
+    expect(() => VariantUpdate.parse({ packagingPaise: 100001 })).toThrow();
+  });
+});

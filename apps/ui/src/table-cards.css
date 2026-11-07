@@ -1,0 +1,40 @@
+html[data-theme] .tables-screen.table-overview {
+  .table-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
+  .table-card {
+    min-height: 104px; padding: 9px 10px; gap: 7px; border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--table-color) 35%, var(--line));
+    background: color-mix(in srgb, var(--table-color) 5%, var(--surface));
+  }
+  .table-card.reserved {
+    border-color: color-mix(in srgb, var(--table-color) 35%, var(--line));
+    background: color-mix(in srgb, var(--table-color) 5%, var(--surface));
+  }
+  .table-card:hover:not(:disabled) {
+    border-color: var(--table-color);
+    background: color-mix(in srgb, var(--table-color) 10%, var(--surface));
+    box-shadow: none;
+  }
+  .table-card.selected { outline: 2px solid var(--table-color); outline-offset: 1px; }
+  .table-card:focus-visible { outline: 3px solid var(--pos-accent); outline-offset: 2px; }
+  .table-card-heading { align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+  .table-card-heading strong { font-size: 20px; line-height: 1.2; letter-spacing: -.3px; }
+  .table-state {
+    flex: none; width: fit-content; padding: 3px 5px; border-radius: 4px;
+    background: color-mix(in srgb, var(--table-color) 12%, var(--surface));
+    font-size: 10px; line-height: 1.2;
+  }
+  .table-card-detail { justify-content: center; gap: 3px; }
+  .table-card-detail .saved-actions { align-self: flex-start; }
+  .table-amount-row > .pos-money { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .table-card-footer { padding-top: 6px; border-color: color-mix(in srgb, var(--table-color) 20%, var(--line)); }
+  .table-price-tier { padding: 0; background: transparent; font-size: 10px; }
+  .table-card-footer > .table-card-action { justify-content: flex-end; gap: 4px; text-align: right; color: var(--ink); }
+
+  @media (max-width: 480px) {
+    .table-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .table-card { padding: 8px; }
+    .table-card-heading strong { font-size: 18px; }
+  }
+}
+
+html[data-theme="dark"] .tables-screen.table-overview { --table-reserved: #8daff1; }

@@ -85,6 +85,7 @@ html:has(.billing-dialog[open]), body:has(.billing-dialog[open]) { overflow: hid
 .credit-note-head .pos-money { margin-left: auto; }
 .credit-note-kind { text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
 .bill-item-lines li, .credit-note-preview li { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.credit-note-packaging { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .credit-note-actions { display: grid; gap: 6px; }
 .credit-note-buttons { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
 .credit-note-buttons label { display: grid; gap: 3px; font-size: 12px; }

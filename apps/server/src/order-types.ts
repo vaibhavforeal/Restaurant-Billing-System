@@ -59,7 +59,7 @@ export function registerOrderTypes(app: FastifyInstance): void {
       if (order.status !== "open") throw httpError(409, "order is not open");
       if (order.type !== "parcel") throw httpError(409, "Only takeaway orders can change order type");
       const chosen = takeawayOrderType(db, body.orderTypeId);
-      db.prepare("UPDATE orders SET order_type_id = ?, order_type_name = ? WHERE id = ?").run(chosen?.id ?? null, chosen?.name ?? null, id);
+      db.prepare("UPDATE orders SET order_type_id = ?, order_type_name = ?, summary_revision = summary_revision + 1 WHERE id = ?").run(chosen?.id ?? null, chosen?.name ?? null, id);
     })();
     const order = loadOrderJson(db, id)!;
     app.broadcast("order.updated", { order });

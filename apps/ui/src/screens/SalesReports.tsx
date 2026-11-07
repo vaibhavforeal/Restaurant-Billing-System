@@ -77,7 +77,10 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
   const presets: Array<{ id: "bills" | "sales" | "collections" | "day-end" | "gst" | "zomato"; title: string }> = [{ id: "sales", title: "Sales" }, { id: "collections", title: "Collections" }, { id: "bills", title: "Bills" }, { id: "day-end", title: "Day-end / GST" }, { id: "gst", title: "GST returns" }, ...(canSeeZomato ? [{ id: "zomato" as const, title: "Zomato reconciliation" }] : [])];
   return <section className="sales-reports">
     <div className="page-header"><h2>Reports &amp; Analytics</h2>
-      {view === "reports" && (tab === "sales" || tab === "collections") && <OverflowMenu label="Export"><button disabled={!report || loading} onClick={exportReport}>Export {tab === "sales" ? "sales" : "collections"} CSV</button></OverflowMenu>}
+      <div className="report-heading-actions">
+        {view === "reports" && (tab === "sales" || tab === "collections") && <OverflowMenu label="Export"><button disabled={!report || loading} onClick={exportReport}>Export {tab === "sales" ? "sales" : "collections"} CSV</button></OverflowMenu>}
+        {canAsk && <AskSidePanel setup={askMode === "setup"} />}
+      </div>
     </div>
     <div className="report-navigation" aria-label="Report type">
       <div className="report-tabs">{presets.map(({ id, title }) => <button key={id} aria-pressed={view === "reports" && tab === id} onClick={() => { setView("reports"); if (id === "day-end") setDay(report?.to ?? period?.to); setTab(id); setMessage(""); setExportError(""); }}>{title}</button>)}</div>
@@ -104,9 +107,9 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
         <div className="sales-report-table" role="region" aria-label={`${tab === "sales" ? "Sales" : "Collections"} daily data`} tabIndex={0}>
           <table><caption>{tab === "sales" ? "Issued bills by bill date, including void bills. Sales include GST and rounding; credit notes (voids and refunds) are taken off on the day they are issued; unpaid shows the current balance of those bills." : "Receipts by payment date, including older bills, after refunds paid out that day (per method). Totals count distinct bills with payments; complimentary bills have no payment rows."}</caption>
             {tab === "sales" ? <>
-              <thead><tr><th scope="col">Bill date</th><th scope="col">Bills</th><th scope="col">Subtotal</th><th scope="col">Discount</th><th scope="col">GST</th><th scope="col">Round off</th><th scope="col">Sales</th><th scope="col">Credit notes</th><th scope="col">Net sales</th><th scope="col">Unpaid now</th></tr></thead>
-              <tbody>{report.daily.map(({ date, sales, creditNotePaise, netTotalPaise }) => <tr key={date}><th scope="row"><button className="sales-date-button" title={`Open day-end report for ${date}`} onClick={() => { setDay(date); setTab("day-end"); }}>{date}</button></th><td>{sales.billCount}</td><td>{reportMoney(sales.subtotalPaise)}</td><td>{reportMoney(sales.discountPaise)}</td><td>{reportMoney(sales.cgstPaise + sales.sgstPaise)}</td><td>{reportMoney(sales.roundingPaise)}</td><td>{reportMoney(sales.totalPaise)}</td><td>{reportMoney(creditNotePaise)}</td><td>{reportMoney(netTotalPaise)}</td><td>{reportMoney(sales.outstandingPaise)}</td></tr>)}</tbody>
-              <tfoot><tr><th scope="row">Total</th><td>{report.sales.billCount}</td><td>{reportMoney(report.sales.subtotalPaise)}</td><td>{reportMoney(report.sales.discountPaise)}</td><td>{reportMoney(report.sales.cgstPaise + report.sales.sgstPaise)}</td><td>{reportMoney(report.sales.roundingPaise)}</td><td>{reportMoney(report.sales.totalPaise)}</td><td>{reportMoney(report.creditNotePaise)}</td><td>{reportMoney(report.netTotalPaise)}</td><td>{reportMoney(report.sales.outstandingPaise)}</td></tr></tfoot>
+              <thead><tr><th scope="col">Bill date</th><th scope="col">Bills</th><th scope="col">Subtotal</th><th scope="col">Discount</th><th scope="col">Charges</th><th scope="col">GST</th><th scope="col">Round off</th><th scope="col">Sales</th><th scope="col">Credit notes</th><th scope="col">Net sales</th><th scope="col">Unpaid now</th></tr></thead>
+              <tbody>{report.daily.map(({ date, sales, creditNotePaise, netTotalPaise }) => <tr key={date}><th scope="row"><button className="sales-date-button" title={`Open day-end report for ${date}`} onClick={() => { setDay(date); setTab("day-end"); }}>{date}</button></th><td>{sales.billCount}</td><td>{reportMoney(sales.subtotalPaise)}</td><td>{reportMoney(sales.discountPaise)}</td><td>{reportMoney(sales.chargesPaise)}</td><td>{reportMoney(sales.cgstPaise + sales.sgstPaise)}</td><td>{reportMoney(sales.roundingPaise)}</td><td>{reportMoney(sales.totalPaise)}</td><td>{reportMoney(creditNotePaise)}</td><td>{reportMoney(netTotalPaise)}</td><td>{reportMoney(sales.outstandingPaise)}</td></tr>)}</tbody>
+              <tfoot><tr><th scope="row">Total</th><td>{report.sales.billCount}</td><td>{reportMoney(report.sales.subtotalPaise)}</td><td>{reportMoney(report.sales.discountPaise)}</td><td>{reportMoney(report.sales.chargesPaise)}</td><td>{reportMoney(report.sales.cgstPaise + report.sales.sgstPaise)}</td><td>{reportMoney(report.sales.roundingPaise)}</td><td>{reportMoney(report.sales.totalPaise)}</td><td>{reportMoney(report.creditNotePaise)}</td><td>{reportMoney(report.netTotalPaise)}</td><td>{reportMoney(report.sales.outstandingPaise)}</td></tr></tfoot>
             </> : <>
               <thead><tr><th scope="col">Payment date</th><th scope="col">Cash (net)</th><th scope="col">UPI (net)</th><th scope="col">Card (net)</th><th scope="col">Refunds</th><th scope="col">Received (net)</th><th scope="col">Bills with payments</th></tr></thead>
               <tbody>{report.daily.map(({ date, collections }) => <tr key={date}><th scope="row">{date}</th><td>{reportMoney(collections.cashPaise)}</td><td>{reportMoney(collections.upiPaise)}</td><td>{reportMoney(collections.cardPaise)}</td><td>{reportMoney(collections.refundPaise)}</td><td>{reportMoney(collections.totalPaise)}</td><td>{collections.billCount}</td></tr>)}</tbody>
@@ -116,6 +119,5 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
         </div>
       </>}
     </>}
-    {canAsk && <AskSidePanel setup={askMode === "setup"} />}
   </section>;
 }

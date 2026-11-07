@@ -28,6 +28,7 @@ interface ProductRow {
   ac_price_paise: number | null;
   takeaway_price_paise: number | null;
   zomato_price_paise: number | null;
+  packaging_paise: number;
   gst_rate: number | null;
   is_veg: number;
   kot_station_id: string | null;
@@ -46,6 +47,7 @@ interface VariantRow {
   ac_price_paise: number | null;
   takeaway_price_paise: number | null;
   zomato_price_paise: number | null;
+  packaging_paise: number | null;
   is_active: number;
 }
 
@@ -63,6 +65,7 @@ const toVariant = (r: VariantRow) => ({
   acPricePaise: r.ac_price_paise,
   takeawayPricePaise: r.takeaway_price_paise,
   zomatoPricePaise: r.zomato_price_paise,
+  packagingPaise: r.packaging_paise,
   isActive: r.is_active === 1,
 });
 
@@ -76,6 +79,7 @@ const toProduct = (r: ProductRow, variants: VariantRow[], combo: ComboGroup[] = 
   acPricePaise: r.ac_price_paise,
   takeawayPricePaise: r.takeaway_price_paise,
   zomatoPricePaise: r.zomato_price_paise,
+  packagingPaise: r.packaging_paise,
   gstRate: r.gst_rate,
   isVeg: r.is_veg === 1,
   kotStationId: r.kot_station_id,
@@ -121,7 +125,7 @@ export function registerCatalog(app: FastifyInstance): void {
     return { category: toCategory(getCategory(id)!) };
   });
 
-  const productColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash, kind";
+  const productColumns = "ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise, id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, is_active, description, is_sold_out, photo_hash, kind";
   const getProduct = (id: string) =>
     app.db.prepare(`SELECT ${productColumns} FROM products WHERE id = ?`).get(id) as ProductRow | undefined;
   const getVariant = (id: string) =>
@@ -147,8 +151,8 @@ export function registerCatalog(app: FastifyInstance): void {
       byProduct.set(v.product_id, list);
     }
     const combos = comboGroupsByCombo(app.db);
-    const { gst_rate: defaultGstRate } = app.db.prepare("SELECT gst_rate FROM settings WHERE id = 1").get() as { gst_rate: number };
-    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [], combos.get(p.id))), defaultGstRate };
+    const settings = app.db.prepare("SELECT gst_rate, packaging_per_item FROM settings WHERE id = 1").get() as { gst_rate: number; packaging_per_item: number };
+    return { products: products.map((p) => toProduct(p, byProduct.get(p.id) ?? [], combos.get(p.id))), defaultGstRate: settings.gst_rate, packagingPerItem: settings.packaging_per_item === 1 };
   });
 
   app.post("/api/products", { preHandler: manage }, async (req, reply) => {
@@ -159,14 +163,14 @@ export function registerCatalog(app: FastifyInstance): void {
     const write = app.db.transaction(() => {
       app.db
         .prepare(
-          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise, zomato_price_paise, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO products (id, category_id, name, price_paise, gst_rate, is_veg, kot_station_id, created_at, description, is_sold_out, photo_data, photo_hash, ac_price_paise, takeaway_price_paise, zomato_price_paise, kind, packaging_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null, body.kind);
+        .run(id, body.categoryId, body.name, body.pricePaise, body.gstRate, body.isVeg ? 1 : 0, body.kotStationId, Date.now(), body.description, body.isSoldOut ? 1 : 0, photo?.data ?? null, photo?.hash ?? null, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null, body.kind, body.packagingPaise);
       if (body.combo) saveComboGroups(app.db, id, body.combo);
       for (const v of body.variants) {
         app.db
-          .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .run(uuidv7(), id, v.name, v.pricePaise, v.acPricePaise ?? null, v.takeawayPricePaise ?? null, v.zomatoPricePaise ?? null);
+          .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .run(uuidv7(), id, v.name, v.pricePaise, v.acPricePaise ?? null, v.takeawayPricePaise ?? null, v.zomatoPricePaise ?? null, v.packagingPaise ?? null);
       }
     });
     write();
@@ -191,7 +195,7 @@ export function registerCatalog(app: FastifyInstance): void {
         .prepare(
           `UPDATE products SET category_id = ?, name = ?, price_paise = ?, gst_rate = ?, is_veg = ?, kot_station_id = ?, is_active = ?,
             description = ?, is_sold_out = ?, photo_data = CASE WHEN ? THEN ? ELSE photo_data END,
-            photo_hash = CASE WHEN ? THEN ? ELSE photo_hash END, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ? WHERE id = ?`,
+            photo_hash = CASE WHEN ? THEN ? ELSE photo_hash END, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ?, packaging_paise = ? WHERE id = ?`,
         )
         .run(
           body.categoryId ?? row.category_id,
@@ -208,6 +212,7 @@ export function registerCatalog(app: FastifyInstance): void {
           body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise,
           body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise,
           body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise,
+          body.packagingPaise ?? row.packaging_paise,
           id,
         );
     })();
@@ -244,8 +249,8 @@ export function registerCatalog(app: FastifyInstance): void {
     const body = VariantCreate.parse(req.body);
     const vid = uuidv7();
     app.db
-      .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(vid, id, body.name, body.pricePaise, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null);
+      .prepare("INSERT INTO variants (id, product_id, name, price_paise, ac_price_paise, takeaway_price_paise, zomato_price_paise, packaging_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(vid, id, body.name, body.pricePaise, body.acPricePaise ?? null, body.takeawayPricePaise ?? null, body.zomatoPricePaise ?? null, body.packagingPaise ?? null);
     changed();
     return reply.status(201).send({ variant: toVariant(getVariant(vid)!) });
   });
@@ -256,8 +261,8 @@ export function registerCatalog(app: FastifyInstance): void {
     const row = getVariant(id);
     if (!row) throw httpError(404, "variant not found");
     app.db
-      .prepare("UPDATE variants SET name = ?, price_paise = ?, is_active = ?, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ? WHERE id = ?")
-      .run(body.name ?? row.name, body.pricePaise ?? row.price_paise, (body.isActive ?? row.is_active === 1) ? 1 : 0, body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise, body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise, body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise, id);
+      .prepare("UPDATE variants SET name = ?, price_paise = ?, is_active = ?, ac_price_paise = ?, takeaway_price_paise = ?, zomato_price_paise = ?, packaging_paise = ? WHERE id = ?")
+      .run(body.name ?? row.name, body.pricePaise ?? row.price_paise, (body.isActive ?? row.is_active === 1) ? 1 : 0, body.acPricePaise === undefined ? row.ac_price_paise : body.acPricePaise, body.takeawayPricePaise === undefined ? row.takeaway_price_paise : body.takeawayPricePaise, body.zomatoPricePaise === undefined ? row.zomato_price_paise : body.zomatoPricePaise, body.packagingPaise === undefined ? row.packaging_paise : body.packagingPaise, id);
     changed();
     return { variant: toVariant(getVariant(id)!) };
   });

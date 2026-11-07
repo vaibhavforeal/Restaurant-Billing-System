@@ -6,11 +6,16 @@ with GST. It is always available, even without the Reports & analytics module, t
 Choose the **Month**, and **Quarter** if the restaurant files quarterly (QRMP). Quarters follow the financial year:
 Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar. The screen opens on last month.
 
-What the screen shows depends on **Settings > Restaurant profile**:
+Use **Send to auditor** to review and share the selected period's CSV and, when available, GSTR-1 JSON. The CSV includes
+the GSTIN and report warnings. **Share reports** opens the device's sharing menu where file sharing is supported.
+Otherwise download each file, enter the auditor's email, and choose **Open email draft**. Attach the downloaded files
+in the email app before sending; browser email links cannot add attachments automatically. No email is sent by the POS.
+
+What the screen shows depends on **Settings > Restaurant profile** (GSTIN) and **Bill settings** (GST):
 
 | Restaurant | Shown | Download |
 | --- | --- | --- |
-| GSTIN saved, **Prices include GST** | GSTR-3B Table 3.1 and the GSTR-1 tables | CSV and **GSTR-1 JSON** |
+| GSTIN saved, **Prices include GST** or **Prices exclude GST, added on the bill** | GSTR-3B Table 3.1 and the GSTR-1 tables | CSV and **GSTR-1 JSON** |
 | GSTIN saved, **No GST charged** (composition) | CMP-08: turnover, credit notes and 2.5% CGST + 2.5% SGST, by month | CSV |
 | No GSTIN | A note that no GST returns apply | None |
 
@@ -21,7 +26,7 @@ What the screen shows depends on **Settings > Restaurant profile**:
 - **Table 8, nil rated**: items at 0%, split by registered and unregistered buyers.
 - **Table 9B, credit notes to registered buyers**: voids and refunds of B2B bills.
 - **Table 12, HSN/SAC summary**: per rate, split B2B and B2C, under the SAC code in Settings (996331, restaurant service).
-- **Table 13, documents issued**: the bill-number range, how many were cancelled, and the credit-note range.
+- **Table 13, documents issued**: the invoice-number range for each series (prefix and financial year), how many were cancelled, and the credit-note range.
 - **Table 14, supplies through Zomato**: Zomato orders, where Zomato pays the GST under section 9(5). Add **Zomato's
   GSTIN** in Settings (it is on Zomato's monthly statement); without it the table shows on screen but is left out of
   the JSON, with a warning.
@@ -31,6 +36,14 @@ reverse charge and amendments are not covered: the POS does not record purchases
 
 Every supply is intra-state (CGST and SGST, never IGST), because restaurant service is supplied where the restaurant
 is (IGST Act section 12(4)). The place of supply on every bill is the restaurant's state.
+
+## Service and packaging charges
+
+A service charge or packaging charge on a bill is part of the restaurant's supply, so it is taxed like the food: at the
+**Default GST rate** in Bill settings. Its taxable value and tax are added to the same rate rows as the items, in
+GSTR-1 Tables 4A, 7 and 12 and GSTR-3B Table 3.1, and in the CMP-08 turnover when no GST is charged. Nothing extra
+is listed for charges. A refund or void that returns a charge lowers the same rows in its own period. Item-level
+reports (popular items, costing) leave charges out.
 
 ## Dates, voids and refunds
 
@@ -42,7 +55,7 @@ is (IGST Act section 12(4)). The place of supply on every bill is the restaurant
 - If a period's walk-in credit notes are more than its sales at a rate, the Table 7 row is negative and the screen
   warns: ask the accountant to report it as an amendment (B2CSA).
 
-Warnings also appear for bills issued without GST in a GST period, gaps in the bill numbers, and a restaurant GSTIN
+Warnings also appear for bills issued without GST in a GST period, gaps in the invoice numbers (checked per financial year, since all prefixes share one counter), and a restaurant GSTIN
 that fails the GSTIN check character. The GSTR-1 JSON can't be downloaded until the GSTIN is fixed in Settings.
 
 ## GST invoices to a business

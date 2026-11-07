@@ -1,11 +1,13 @@
 import { ActivityAlertSettings } from "./ActivityAlertSettings";
-import { AiAssistantSettings } from "./AiAssistantSettings";
+import { AiSuggestionSettings } from "./AiSuggestionSettings";
+import { BillSettings } from "./BillSettings";
+import { TableSettings } from "./TableSettings";
+import { useCan } from "../permissions";
+import { settingsForSave } from "../settings-save";
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { DEFAULT_GST_RATES } from "@masalapos/domain/gst";
 import { GST_STATES } from "@masalapos/domain/restaurant-profile";
-import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
 import { apiFetch, session } from "../api";
 import { connectWs } from "../ws";
 import { SystemSettings } from "./SystemSettings";
@@ -21,9 +23,9 @@ import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptFooter: "", upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "" };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptHeader: "", receiptFooter: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "", packagingChargeLabel: "", packagingPerItem: false };
 
-const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "receiptStyle" | "gstMode" | "gstRate" | "kotEditPrint" | "holdOrdersEnabled" | "popularItemsEnabled" | "popularByTimeEnabled" | "orderedTogetherEnabled" | "customerUsualEnabled" | "stateCode" | "sacCode" | "zomatoGstin">; label: string; inputMode?: "numeric" | "tel" }> = [
+const SETTINGS_FIELDS: Array<{ key: "restaurantName" | "address" | "city" | "pincode" | "phone" | "gstin" | "fssai"; label: string; inputMode?: "numeric" | "tel" }> = [
   { key: "restaurantName", label: "Restaurant name" },
   { key: "address", label: "Street address" },
   { key: "city", label: "City" },
@@ -31,23 +33,19 @@ const SETTINGS_FIELDS: Array<{ key: Exclude<keyof SettingsData, "upiId" | "recei
   { key: "phone", label: "Phone", inputMode: "tel" },
   { key: "gstin", label: "GSTIN" },
   { key: "fssai", label: "FSSAI licence no." },
-  { key: "receiptFooter", label: "Receipt footer" },
 ];
 
-const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.localeCompare(b));
+const PROFILE_KEYS = ["restaurantName", "address", "city", "stateCode", "pincode", "phone", "gstin", "fssai"] as const;
 
-/** City, state, PIN code and phone are required once set, so blanks are left out and the saved values stay. */
-function profileForSave(form: SettingsData) {
-  const body: Partial<SettingsData> = { ...form };
-  for (const key of ["city", "stateCode", "pincode", "phone"] as const) if (!form[key].trim()) delete body[key];
-  return body;
-}
+const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.localeCompare(b));
 
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
 
 /** Opens on a grid of section cards; `section: "plan"` opens Plan & devices directly, e.g. from a Marketplace card that needs a different plan. */
 export function Settings({ section }: { section?: "plan" | undefined } = {}) {
+  const can = useCan();
+  const [tableBusy, setTableBusy] = useState(false);
   const [active, setActive] = useState<SettingsSectionId | null>(() => initialSettingsSection(section));
   const sectionHeading = useRef<HTMLHeadingElement>(null);
   const returnToCard = useRef<SettingsSectionId | null>(null);
@@ -57,7 +55,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   const [profileError, setProfileError] = useState("");
 
   // Printers section
-  const [printerSection, setPrinterSection] = useState<"devices" | "stations">("devices");
+  const [printerSection, setPrinterSection] = useState<"devices" | "stations" | "jobs">("devices");
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
   const [editPrinter, setEditPrinter] = useState<Partial<PrinterInfo>>({});
@@ -78,6 +76,15 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
     if (!loaded) return; // the sections render only after the settings load
     if (active) sectionHeading.current?.focus();
     else if (returnToCard.current) document.querySelector<HTMLElement>(`[data-section="${returnToCard.current}"]`)?.focus();
+  }, [active, loaded]);
+
+  // The Bill settings and AI suggestions cards save their own fields, so the profile card re-reads the settings whenever it opens.
+  useEffect(() => {
+    if (active !== "profile" || !loaded) return;
+    apiFetch<{ settings: SettingsData }>("/api/settings")
+      // Keep what is already typed in the profile fields; everything else is refreshed.
+      .then((r) => setForm((previous) => ({ ...r.settings, ...Object.fromEntries(PROFILE_KEYS.map((key) => [key, previous[key]])) })))
+      .catch(() => { setProfileError("Could not refresh the settings"); setProfileStatus("error"); });
   }, [active, loaded]);
 
   // Load all data on mount
@@ -146,7 +153,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
     setProfileStatus("");
     void run(async () => {
       try {
-        const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", { method: "PUT", body: JSON.stringify(profileForSave(form)) });
+        const { settings } = await apiFetch<{ settings: SettingsData }>("/api/settings", { method: "PUT", body: JSON.stringify(settingsForSave(form)) });
         setForm(settings);
         setProfileStatus("saved");
       } catch (e) {
@@ -249,7 +256,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       <div className="page-header"><div><h2>Settings</h2></div></div>
       {active === null ? (
         <ul className="settings-cards">
-          {SETTINGS_SECTIONS.map(({ id, title, blurb, icon }) => (
+          {SETTINGS_SECTIONS.filter(item => item.id !== "tables" || can("tables.manage")).map(({ id, title, blurb, icon }) => (
             <li key={id}>
               <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setActive(id); }}>
                 <span className="settings-card-icon"><Icon name={icon} size={22} /></span>
@@ -261,14 +268,17 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
         </ul>
       ) : <>
       <div className="settings-detail-head">
-        <button type="button" onClick={() => setActive(null)}>← Settings</button>
-        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title} {active === "jobs" && <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip>}</h3>
+        <button type="button" disabled={tableBusy} onClick={() => setActive(null)}>← Settings</button>
+        <h3 ref={sectionHeading} tabIndex={-1}>{SETTINGS_SECTIONS.find((item) => item.id === active)?.title}</h3>
       </div>
       <div className="pos-section settings-detail">
       {active === "shortcuts" && <KeyboardSettings />}
       {active === "order-types" && <OrderTypes />}
+      {active === "tables" && <TableSettings onBusyChange={setTableBusy} />}
       {active === "updates" && <UpdateSettings />}
       {active === "support" && <SupportSettings />}
+      {active === "bill" && <BillSettings onOpenPrinters={() => setActive("printers")} />}
+      {active === "ai-suggestions" && <AiSuggestionSettings />}
       {/* Profile section */}
       {active === "profile" && <div className="panel">
 
@@ -286,85 +296,6 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
               </select>
             </label>}
           </Fragment>)}
-          <label style={{ display: "grid", gap: 4 }}>
-            <span>Bill style <InfoTip id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</InfoTip></span>
-            <select value={form.receiptStyle ?? "classic"} onChange={(e) => { setForm({ ...form, receiptStyle: resolveReceiptStyle(e.target.value) }); setProfileStatus(""); }} disabled={busy} aria-describedby="bill-style-help">
-              <option value="classic">Classic - Receipt mono</option>
-              <option value="modern">Modern - Bold sans serif</option>
-              <option value="heritage">Heritage - Traditional serif</option>
-              <option value="compact">Compact - Space-saving sans serif</option>
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 4 }}>
-            <span>GST <InfoTip id="gst-settings-help">Applies to new bills. With GST included, the tax is part of your menu prices and is shown as an Includes GST block on the bill; items without their own rate use the default rate. With No GST charged, bills show no tax. Existing bills keep their original tax calculation.</InfoTip></span>
-            <select value={form.gstMode} disabled={busy} aria-describedby="gst-settings-help"
-              onChange={(e) => { setForm({ ...form, gstMode: e.target.value === "none" ? "none" : "included" }); setProfileStatus(""); }}>
-              <option value="included">Prices include GST</option>
-              <option value="none">No GST charged</option>
-            </select>
-          </label>
-          {form.gstMode === "included" && <label style={{ display: "grid", gap: 4 }}>
-            Default GST rate
-            <select value={form.gstRate} disabled={busy} aria-describedby="gst-settings-help"
-              onChange={(e) => { setForm({ ...form, gstRate: Number(e.target.value) as SettingsData["gstRate"] }); setProfileStatus(""); }}>
-              {DEFAULT_GST_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
-            </select>
-          </label>}
-          {form.gstin.trim() !== "" && <>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span>SAC code <InfoTip id="sac-settings-help">Printed on tax invoices and used in the GSTR-1 HSN/SAC summary. 996331 is restaurant service; change it only if your accountant asks.</InfoTip></span>
-              <input value={form.sacCode} inputMode="numeric" maxLength={8} disabled={busy} aria-describedby="sac-settings-help"
-                onChange={(e) => { setForm({ ...form, sacCode: e.target.value.replace(/\D/g, "") }); setProfileStatus(""); }} />
-            </label>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span>Zomato's GSTIN <InfoTip id="zomato-gstin-help">Zomato pays the GST on its orders (section 9(5)); GSTR-1 Table 14 reports those sales against Zomato's GSTIN for your state. Find it on Zomato's monthly statement. Leave blank if you don't sell on Zomato.</InfoTip></span>
-              <input value={form.zomatoGstin} maxLength={15} autoCapitalize="characters" spellCheck={false} disabled={busy} aria-describedby="zomato-gstin-help"
-                onChange={(e) => { setForm({ ...form, zomatoGstin: e.target.value.toUpperCase() }); setProfileStatus(""); }} />
-            </label>
-          </>}
-
-          <label style={{ display: "grid", gap: 4 }}>
-            <span>UPI ID for bill payments <InfoTip id="upi-settings-help">Save your restaurant’s UPI ID once to print a payment QR on new unpaid bills, with the bill amount filled in. Leave blank to disable for new bills. Existing bills keep their saved UPI ID.</InfoTip></span>
-            <input value={form.upiId} placeholder="restaurant@bank" maxLength={255}
-              autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={busy}
-              aria-describedby="upi-settings-help"
-              onChange={(e) => { setForm({ ...form, upiId: e.target.value }); setProfileStatus(""); }} />
-          </label>
-          <label style={{ display: "grid", gap: 4 }}>
-            <span>Kitchen slip when a sent item is changed <InfoTip id="kot-edit-help">When staff change the quantity or note of an item already sent to the kitchen, a CHANGED slip can print at that kitchen station. The kitchen screen updates either way.</InfoTip></span>
-            <select value={form.kotEditPrint} disabled={busy} aria-describedby="kot-edit-help"
-              onChange={(e) => { setForm({ ...form, kotEditPrint: e.target.value as SettingsData["kotEditPrint"] }); setProfileStatus(""); }}>
-              <option value="ask">Ask each time</option>
-              <option value="always">Always print</option>
-              <option value="never">Never print</option>
-            </select>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={form.holdOrdersEnabled} disabled={busy} aria-describedby="hold-orders-help"
-              onChange={(e) => { setForm({ ...form, holdOrdersEnabled: e.target.checked }); setProfileStatus(""); }} />
-            <span>Hold orders <InfoTip id="hold-orders-help">Staff can hold an order to finish later on any device, and hold dishes back from the kitchen until they fire them.</InfoTip></span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={form.popularItemsEnabled} disabled={busy} aria-describedby="popular-items-help"
-              onChange={(e) => { setForm({ ...form, popularItemsEnabled: e.target.checked }); setProfileStatus(""); }} />
-            <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip></span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 24 }}>
-            <input type="checkbox" checked={form.popularByTimeEnabled} disabled={busy || !form.popularItemsEnabled} aria-describedby="popular-by-time-help"
-              onChange={(e) => { setForm({ ...form, popularByTimeEnabled: e.target.checked }); setProfileStatus(""); }} />
-            <span>Match the time of day <InfoTip id="popular-by-time-help">Popular follows the clock: each category's best-seller from 2 hours either side of now over the last 30 days, or its all-day best-seller when there were too few sales at this hour.</InfoTip></span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={form.orderedTogetherEnabled} disabled={busy} aria-describedby="ordered-together-help"
-              onChange={(e) => { setForm({ ...form, orderedTogetherEnabled: e.target.checked }); setProfileStatus(""); }} />
-            <span>Suggest dishes ordered together <InfoTip id="ordered-together-help">Shows up to 3 dishes from other categories that often share a bill with what is already in the cart, over the last 30 days, on staff order screens and the QR table menu.</InfoTip></span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={form.customerUsualEnabled} disabled={busy} aria-describedby="customer-usual-help"
-              onChange={(e) => { setForm({ ...form, customerUsualEnabled: e.target.checked }); setProfileStatus(""); }} />
-            <span>Suggest a customer's usual <InfoTip id="customer-usual-help">When a saved customer is added to an order, shows the dishes on at least 2 of their bills in the last 6 months, and a button to repeat their last order. Needs CRM &amp; Loyalty.</InfoTip></span>
-          </label>
 
 
           <button
@@ -380,7 +311,6 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
           </div>
         </div>
         <ActivityAlertSettings />
-        <AiAssistantSettings />
       </div>}
 
       {/* Printers section */}
@@ -388,6 +318,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
         <div className="tabs" role="group" aria-label="Printer settings sections">
           <button type="button" className={printerSection === "devices" ? "selected" : ""} aria-pressed={printerSection === "devices"} onClick={() => setPrinterSection("devices")}>Printers</button>
           <button type="button" className={printerSection === "stations" ? "selected" : ""} aria-pressed={printerSection === "stations"} onClick={() => setPrinterSection("stations")}>KOT stations</button>
+          <button type="button" className={printerSection === "jobs" ? "selected" : ""} aria-pressed={printerSection === "jobs"} onClick={() => setPrinterSection("jobs")}>Print jobs</button>
         </div>
         {error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>}
       </>}
@@ -580,7 +511,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       </div>}
 
       {/* Print jobs section */}
-      {active === "jobs" && <div className="panel">
+      {active === "printers" && printerSection === "jobs" && <div className="panel" role="region" aria-label="Print jobs">
+        <h3>Print jobs <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip></h3>
 
         {error && <p role="alert">{error}</p>}
 

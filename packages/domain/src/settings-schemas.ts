@@ -3,6 +3,9 @@ import { RECEIPT_STYLES } from "./receipt-styles.js";
 import { DEFAULT_GST_RATES, GST_MODES } from "./gst.js";
 import { GSTIN_STATE_MESSAGE, gstinMatchesState } from "./restaurant-profile.js";
 import { OptionalGstin } from "./gstin-schema.js";
+import { billTextLinesSchema } from "./bill-print.js";
+import { InvoicePrefix } from "./invoice-numbers.js";
+import { ROUND_OFF_MODES } from "./round-off.js";
 import { Fssai, Gstin, Phone, Pincode, StateCode } from "./restaurant-profile-schema.js";
 
 /** Empty disables QR payments. Validate syntax only; bank ownership is not verified. */
@@ -27,7 +30,28 @@ export const SettingsUpdate = z.object({
   phone: Phone.optional(),
   gstin: Gstin.default(""),
   fssai: Fssai.default(""),
-  receiptFooter: z.string().trim().max(500).default(""),
+  /** Up to 3 lines under the restaurant name on every bill. */
+  receiptHeader: billTextLinesSchema("Header lines").default(""),
+  receiptFooter: billTextLinesSchema("Footer lines").default(""),
+  /** Printed before the financial year in invoice numbers; empty for none. */
+  invoicePrefix: InvoicePrefix.optional(),
+  /** How a bill total is rounded: to the rupee, to 50 paise, or not at all. */
+  roundOff: z.enum(ROUND_OFF_MODES).optional(),
+  /** Service charge on dine-in bills, in basis points (1000 = 10%); 0 is off. */
+  serviceChargeBp: z.number().int().min(0).max(2000).optional(),
+  /** Flat packaging charge on takeaway and delivery bills, in paise; 0 is off. */
+  packagingChargePaise: z.number().int().min(0).max(100000).optional(),
+  /** Adds each item's packaging amount (set in the menu) to the packaging charge. */
+  packagingPerItem: z.boolean().optional(),
+  /** What each charge is called on the bill; blank saves the default name. */
+  serviceChargeLabel: z.string().trim().max(24).optional(),
+  packagingChargeLabel: z.string().trim().max(24).optional(),
+  /** Optional bill lines; GSTIN is never hideable. */
+  billShowFssai: z.boolean().optional(),
+  billShowCustomer: z.boolean().optional(),
+  billShowTable: z.boolean().optional(),
+  billShowServedBy: z.boolean().optional(),
+  billShowItemGst: z.boolean().optional(),
   /** Whether a KOT edit prints a slip to the kitchen: staff choose ('ask'), or always / never. */
   kotEditPrint: z.enum(["ask", "always", "never"]).optional(),
   /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */

@@ -8,11 +8,11 @@ const five = (n = 1): RateLine => ({ gstRate: 5, taxablePaise: 10000 * n, cgstPa
 const total = (taxes: RateLine[]) => taxes.reduce((s, t) => s + t.taxablePaise + t.cgstPaise + t.sgstPaise, 0);
 const bill = (billNo: number, over: Partial<GstBillFact> = {}): GstBillFact => {
   const taxes = over.taxes ?? [five()];
-  return { billId: `b${billNo}`, billNo, dateKey: "2026-10-05", status: "paid", supply: "regular", buyerGstin: null, buyerName: null, totalPaise: total(taxes), ...over, taxes };
+  return { billId: `b${billNo}`, billNo, invoiceNo: String(billNo), dateKey: "2026-10-05", status: "paid", supply: "regular", buyerGstin: null, buyerName: null, totalPaise: total(taxes), ...over, taxes };
 };
 const note = (cnNo: number, of: GstBillFact, over: Partial<GstCreditNoteFact> = {}): GstCreditNoteFact => {
   const taxes = over.taxes ?? of.taxes;
-  return { cnNo, billId: of.billId, billNo: of.billNo, kind: "refund", dateKey: "2026-10-20", supply: of.supply, buyerGstin: of.buyerGstin,
+  return { cnNo, creditNoteRef: `CN-${cnNo}`, billId: of.billId, billNo: of.billNo, invoiceNo: of.invoiceNo, kind: "refund", dateKey: "2026-10-20", supply: of.supply, buyerGstin: of.buyerGstin,
     buyerName: of.buyerName, totalPaise: total(taxes), ...over, taxes };
 };
 

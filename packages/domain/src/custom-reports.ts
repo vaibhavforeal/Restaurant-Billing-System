@@ -33,7 +33,7 @@ export const CUSTOM_REPORT_SOURCES: CustomReportSource[] = [
     fields: [
       ...billWhen, dim("billNo", "Bill no.", "number"), ...billWho, dim("status", "Status"), dim("paymentModes", "Payment modes"),
       sum("bills", "Bills", "quantity"), sum("subtotal", "Subtotal"), sum("discount", "Discount"), sum("customerDiscount", "Customer discount"), sum("pointsValue", "Loyalty points value"),
-      sum("taxable", "Taxable value"), sum("cgst", "CGST"), sum("sgst", "SGST"), sum("gst", "GST"), sum("rounding", "Round off"), sum("total", "Total"), stat("averageBill", "Average bill", "money", "avg"),
+      sum("taxable", "Taxable value"), sum("cgst", "CGST"), sum("sgst", "SGST"), sum("gst", "GST"), sum("charges", "Service and packaging"), sum("rounding", "Round off"), sum("total", "Total"), stat("averageBill", "Average bill", "money", "avg"),
     ],
   },
   {

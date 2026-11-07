@@ -15,7 +15,7 @@ import { Icon } from "../Icon";
 import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
-import { savePreference, useShortcutLabels } from "../pos-shortcuts";
+import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
 import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, subscribeQueue, type QueueRequest } from "../retry-queue";
 import { isUnreachable, placeholderOrder, readCatalogCopy, readOrderCopy, readMenuInsightsCopy, readOrderSettingsCopy, saveCatalogCopy, saveMenuInsightsCopy, saveOrderCopy, saveOrderSettingsCopy, type CatalogCache, type MenuInsights } from "../offline-cache";
 import { withPopularFirst } from "../popular-items";
@@ -28,6 +28,10 @@ import { useIntegrations } from "../integrations";
 import "../product-editor.css";
 import "../order-screen.css";
 import { userCan } from "../permissions";
+import { TableSummaryControls } from "./TableSummaryControls";
+import "../table-summary-controls.css";
+import "../order-summary-cart.css";
+import "../order-menu-views.css";
 
 // A status line to show on the next order screen: a merge switches screens, which would otherwise drop it.
 let carriedStatus: { orderId: string; text: string; at: number } | null = null;
@@ -87,12 +91,16 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const reloadRevision = useRef(0);
   const [billingBusy, setBillingBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [menuView, setMenuView] = useState<"grid" | "list" | "tile">(() => {
+    const saved = readPreference("masalapos.menu-view", "grid");
+    return saved === "list" || saved === "tile" ? saved : "grid";
+  });
   const [mobilePane, setMobilePane] = useState<"menu" | "cart">("menu");
   const cartItems = useRef<HTMLDivElement>(null);
   const menuSearch = useRef<HTMLInputElement>(null);
   const menuResults = useRef<HTMLDivElement>(null);
   const [removed, setRemoved] = useState<DraftItem | null>(null);
-  const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string } | null>(null);
+  const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string; savedItemId?: string } | null>(null);
   /** The combo whose slots staff are choosing before it goes in the cart. */
   const [comboPicking, setComboPicking] = useState<{ product: Product; picks: string[] } | null>(null);
   const [message, setMessage] = useState(() => carriedStatusFor(orderId));
@@ -659,16 +667,19 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   }
 
   function addNote(clientRef: string) {
-    if (captain) {
-      const row = readDraft().find((item) => item.clientRef === clientRef);
-      if (row) setNoteEditor({ clientRef, name: row.name, note: row.note });
-      return;
-    }
-    const note = window.prompt("Add note (e.g. less spicy):") ?? "";
-    updateDraft(clientRef, { note });
+    const row = readDraft().find((item) => item.clientRef === clientRef);
+    if (row) setNoteEditor({ clientRef, name: row.name, note: row.note });
+  }
+
+  async function updatePendingItem(itemId: string, update: { qty?: number; note?: string | null }) {
+    if (!order) return;
+    const result = await queued<{ order: Order }>({ method: "PATCH", path: `/api/order-items/${itemId}`, body: update, lane: orderId, label: "Update order item" });
+    if (result) keepLocally(result.order);
+    else setMessage(`Item change saved · ${WHEN_BACK}`);
   }
 
   if (!order) return <p className="loading-state" role="status">Loading order…</p>;
+  const useOrderControls = !captain && order.type !== "zomato";
   const query = search.toLocaleLowerCase().trim();
   // The items inside a combo show under its line, not as lines of their own.
   const lines = order.items.filter((item) => !item.parentItemId);
@@ -710,12 +721,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     return (cooked.length ? cooked.every(kotDone) : kotDone(item)) ? "ready" : item.status;
   };
 
-  return <section className="screen order-screen">
-    <div className="page-header order-header">
+  const compactDineIn = useOrderControls && order.type === "dine_in";
+  const headerInMenu = (isQuick || compactDineIn) && order.status === "open" && lane.entries.length === 0;
+  const orderHeader = <div className="page-header order-header">
       {captain && <button className="captain-back" {...shortcutProps("tables")} title={shortcut("tables", "Return to tables")} aria-label="Return to tables" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>←</button>}
       <div><h2>{order.type === "dine_in" ? `${orderLabel(order)} · ${order.splitLabel ?? "A"}` : order.type === "zomato" ? zomatoLabel(order.zomatoOrderId) : order.orderTypeName ?? "Takeaway"}<span className={`status ${order.status}`}>{order.status}</span>{lane.entries.length > 0 && <span className={`status saved-actions${lane.needsReview ? " attention" : ""}`} title="Saved on this device, waiting to reach the hub">{lane.needsReview ? "Needs review" : `${lane.entries.length} saved`}</span>}</h2>
         {/* Captains serve their own tables; reassigning is a counter decision. */}
-        {user.role === "waiter" && order.type === "dine_in" && order.status === "open" && !order.captainName ? <div className="order-captain-picker">
+        {!useOrderControls && (user.role === "waiter" && order.type === "dine_in" && order.status === "open" && !order.captainName ? <div className="order-captain-picker">
           <span>Captain</span>
           <button type="button" disabled={locked} onClick={() => chooseCaptain(user.id)}>Assign to me</button>
         </div> : user.role !== "waiter" && order.type === "dine_in" && order.status === "open" ? <div className="order-captain-picker">
@@ -724,13 +736,13 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
             onClick={() => { setCaptainError(""); setCaptainPickerOpen(true); }}>
             <span>{order.captainName || "Select captain"}</span><span aria-hidden="true">⌄</span>
           </button>
-        </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>}
-        {!captain && crm && <OrderCustomer order={order} canAdd={userCan(user, "customers.manage")} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
+        </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>)}
+        {!captain && !useOrderControls && crm && <OrderCustomer order={order} canAdd={userCan(user, "customers.manage")} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
         {!captain && crm && order.status === "open" && order.customer && userCan(user, "customers.read") && <CustomerUsual customer={order.customer} products={products} disabled={locked}
           onOrder={new Set([...lines.filter((item) => item.status !== "cancelled").map((item) => item.productId), ...draft.map((item) => item.productId)])}
           onAdd={(product, variant) => product.kind === "combo" ? chooseCombo(product) : addToDraft(product.id, variant?.id ?? null, variant ? `${product.name} (${variant.name})` : product.name, variant ? variant.pricePaise : product.pricePaise)}
           onRepeat={repeatLastOrder} />}
-        {order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
+        {!useOrderControls && order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
           {takeawayTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select></label>}
         {isQuick && order.status === "open" && <p className="muted">Select items, then checkout. Kitchen items are sent automatically.</p>}</div>
@@ -742,15 +754,22 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {order.type === "dine_in" && order.status === "open" && <button disabled={locked} onClick={() => openTransfer("merge")}>Merge…</button>}
         {canCancelOrder && <button disabled={locked} onClick={cancelOrder}>Cancel order</button>}
       </OverflowMenu> : <div className="actions">
-      <TerminalClock />
-      <span className="pos-order-meta">{PRICE_TIER_LABELS[order.priceTier]} · {user.name}</span>
-      {order.status === "open" && showHold && <button {...shortcutProps("hold")} title={shortcut("hold", isQuick ? "Keep this order in Open takeaways and free Takeaway for the next customer" : "Save this order for any device and return to tables")} disabled={locked} onClick={() => void holdOrder()}>{shortcut("hold", "Hold")}</button>}
-      {order.type === "dine_in" && order.status === "open" && <button onClick={() => void newSplit()} disabled={locked}>+ Split</button>}
-      {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("move")} disabled={locked}>Move table…</button>}
-      {order.type === "dine_in" && order.status === "open" && <button onClick={() => openTransfer("merge")} disabled={locked}>Merge…</button>}
-      <button {...shortcutProps("tables")} title={shortcut("tables", "Return to tables / choose another table")} disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>← Tables</button>
+      {!isQuick && !compactDineIn && <>
+        <TerminalClock />
+        <span className="pos-order-meta">{PRICE_TIER_LABELS[order.priceTier]} · {user.name}</span>
+      </>}
+      {!useOrderControls && order.status === "open" && showHold && <button {...shortcutProps("hold")} title={shortcut("hold", isQuick ? "Keep this order in My Orders and start a takeaway for the next customer" : "Save this order for any device and return to tables")} disabled={locked} onClick={() => void holdOrder()}>{shortcut("hold", "Hold")}</button>}
+      {order.type === "dine_in" && order.status === "open" && <OverflowMenu label="Table actions">
+        <button onClick={() => void newSplit()} disabled={locked}>+ Split</button>
+        <button onClick={() => openTransfer("move")} disabled={locked}>Move table…</button>
+        <button onClick={() => openTransfer("merge")} disabled={locked}>Merge…</button>
+      </OverflowMenu>}
+      {!isQuick && !compactDineIn && <button title="Return to the previous screen" disabled={locked} onClick={() => { if (canLeave()) onBack(); }}>← Back</button>}
       </div>}
-    </div>
+    </div>;
+
+  return <section className={`screen order-screen${useOrderControls ? " order-with-summary" : ""}${headerInMenu ? " order-header-in-menu" : ""}`}>
+    {!headerInMenu && orderHeader}
     <WorkspaceDialog open={captainPickerOpen} title="Choose captain" className="order-captain-dialog" busy={locked}
       onClose={() => { if (!actionLock.current && !billingLock.current) setCaptainPickerOpen(false); }}>
       <p>Captain for {orderLabel(order)} · {order.splitLabel ?? "A"}</p>
@@ -783,15 +802,20 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       <button aria-pressed={mobilePane === "cart"} aria-controls="order-cart" onClick={() => setMobilePane("cart")}>Order · {itemCount}</button>
     </div>}
     <div className={`order-layout ${order.status === "open" ? `show-${mobilePane}` : "closed-order"}`}>
-      {order.status === "open" && <section className="menu-browser" id="order-menu" aria-label="Menu">
+      {order.status === "open" && <section className={`menu-browser menu-view-${menuView}`} id="order-menu" aria-label="Menu">
         <div className="menu-toolbar">
+          {headerInMenu && orderHeader}
           <div className="menu-heading"><h3>Menu</h3><span>{PRICE_TIER_LABELS[order.priceTier]} prices · {activeProducts.length} dishes</span></div>
           <div className="search-field"><Icon name="search" size={16} /><input ref={menuSearch} autoFocus={!captain} aria-label="Search menu" placeholder={captain ? "Search dishes or variants" : "Search items · Enter to add"} value={search} onChange={(e) => { setSearch(e.target.value); if (e.target.value) setSelectedCat("all"); }} onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) return;
             if (event.key === "Enter") { event.preventDefault(); menuResults.current?.querySelector<HTMLButtonElement>("button.menu-card:not(:disabled)")?.click(); }
             if (event.key === "Escape") { event.preventDefault(); setSearch(""); }
           }} /></div>
-          <span className="pos-search-hint">Enter adds first match</span>
+          <div className="menu-view-controls" role="group" aria-label="Menu view">
+            {(["grid", "list", "tile"] as const).map((view) => <button type="button" key={view} aria-pressed={menuView === view} aria-label={`${view[0]!.toUpperCase()}${view.slice(1)} view`} onClick={() => { setMenuView(view); savePreference("masalapos.menu-view", view); }}>
+              <Icon name={view} size={18} /><span>{view[0]!.toUpperCase()}{view.slice(1)}</span>
+            </button>)}
+          </div>
         </div>
         <div className="category-rail" role="group" aria-label="Menu categories">
           <button aria-pressed={selectedCat === "all"} onClick={() => setSelectedCat("all")}>All items</button>
@@ -807,17 +831,25 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3><p>Try another name or category.</p></div>}</div>
       </section>}
       <aside className="order-cart" id="order-cart" aria-label="Current order">
-        <div className="cart-heading"><h3>Current order <span>{itemCount} items</span></h3><Icon name={order.type === "dine_in" ? "tables" : "bag"} size={17} /></div>
+        <div className="cart-heading"><h3>Current order <span>{itemCount} {itemCount === 1 ? "item" : "items"}</span></h3><Icon name={order.type === "dine_in" ? "tables" : "bag"} size={17} /></div>
+        {useOrderControls && <TableSummaryControls key={order.id} user={user} order={order} disabled={locked}
+          onHoldOrder={() => void holdOrder()}
+          onBusyChange={(value) => { actionLock.current = value; setPending(value); }}
+          onSaved={async (saved) => { keepLocally(saved); if (saved.type !== order.type || saved.priceTier !== order.priceTier) await reload(); }}
+          onRefresh={reload} onClose={() => { if (canLeave()) onBack(); }}
+          onDeleteOrder={async (reason) => { await queued({ path: `/api/orders/${orderId}/cancel`, body: { reason }, label: "Cancel order" }); if (!saveDraft([])) throw new Error("Order cancelled, but the local cart could not be cleared."); }} />}
         <div className="cart-items" ref={cartItems} role="region" tabIndex={0} aria-label="Order items">
+        {useOrderControls && order.notes && <p className="table-order-note"><strong>Order notes</strong>{order.notes}</p>}
         {order.status === "open" && (draft.length > 0 || order.items.length === 0) && <div className="cart-section">
           <h3>{captain ? "Not sent" : "Cart"} ({draft.length} items)</h3>
           {!draft.length && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>Select a dish.</p>}
           {pricedDraft.map((d) => <div className="cart-row draft-row" key={d.clientRef}>
-            <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong>{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : captain && <small>Add cooking note</small>}</button>
+            <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong>{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : <small>Add notes</small>}</button>
             <QtyStepper name={d.name} value={d.qty} disabled={locked || queuedRefs.has(d.clientRef)} onChange={(qty) => updateDraft(d.clientRef, { qty })} />
-            <span className="pos-money">₹{paiseToRupees(d.pricePaise * d.qty)}</span>
-            {showHold && cartRowForKitchen(d, products) && <button className="cart-hold" aria-pressed={!!d.held} title={d.held ? `Release ${d.name} for the next KOT` : `Hold ${d.name} back from the kitchen`} aria-label={`${d.held ? "Release" : "Hold"} ${d.name}`} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => updateDraft(d.clientRef, { held: !d.held })}>{d.held ? "Held" : "Hold"}</button>}
+            <span className="pos-money">₹{paiseToRupees(d.pricePaise * d.qty)}{useOrderControls && <small>₹{paiseToRupees(d.pricePaise)} each</small>}</span>
+            {showHold && cartRowForKitchen(d, products) && !(useOrderControls && d.held) && <button className="cart-hold" aria-pressed={!!d.held} title={d.held ? `Release ${d.name} for the next KOT` : `Hold ${d.name} back from the kitchen`} aria-label={`${d.held ? "Release" : "Hold"} ${d.name}`} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => updateDraft(d.clientRef, { held: !d.held })}>{d.held ? "Held" : "Hold"}</button>}
             <button className="cart-remove" title={"Remove " + d.name} aria-label={"Remove " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => removeDraft(d.clientRef)}>×</button>
+            {useOrderControls && d.held && <button className="order-held-banner" aria-label={`Release ${d.name}`} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => updateDraft(d.clientRef, { held: false })}><Icon name="pause" size={16} />Item on hold. Tap here to release</button>}
             {queuedRefs.has(d.clientRef) && <small className="cart-row-notice">{lane.kitchenRefs.has(d.clientRef) ? "Saved · goes to the kitchen when back online" : "Saved to send"}</small>}
           </div>)}
         </div>}
@@ -825,11 +857,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           <h3>{captain ? "Saved items" : "Punched items"}</h3>
           {lines.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
             <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong>{isComboLine(order.items, item) && <small className="cart-combo-contents">{comboContents(order.items, item).join(", ")}</small>}<span className={`status ${item.held && item.status === "pending" ? "held" : itemStatus(item)}`}>{item.held && item.status === "pending" ? "held" : itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
-            <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</span>
+            {useOrderControls && order.status === "open" && item.status === "pending" && <QtyStepper name={item.name} value={item.qty} disabled={locked || lane.itemActions.has(item.id)} onChange={(qty) => { if (qty !== item.qty) void run(() => updatePendingItem(item.id, { qty })); }} />}
+            <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}{useOrderControls && <small>₹{paiseToRupees(item.pricePaise)} each</small>}</span>
+            {useOrderControls && order.status === "open" && item.status === "pending" && <button className="saved-item-note" aria-label={`Note for ${item.name}`} disabled={locked || lane.itemActions.has(item.id)} onClick={() => setNoteEditor({ clientRef: item.id, savedItemId: item.id, name: item.name, note: item.note ?? "" })}><Icon name="note" size={14} />{item.note ? "Edit notes" : "Add notes"}</button>}
             {order.status === "open" && item.status === "pending" && item.held && <button className="saved-item-fire" title={`Send ${item.name} to the kitchen now`} aria-label={`Fire ${item.name}`} disabled={locked} onClick={() => fireItem(item)}>Fire</button>}
-            {order.status === "open" && item.status === "pending" && showHold && (item.held || kitchenLineIds.has(item.id)) && <button className="cart-hold" aria-pressed={!!item.held} title={item.held ? `Release ${item.name} for the next KOT` : `Hold ${item.name} back from the kitchen`} aria-label={`${item.held ? "Release" : "Hold"} ${item.name}`} disabled={locked} onClick={() => toggleHeld(item)}>{item.held ? "Held" : "Hold"}</button>}
+            {order.status === "open" && item.status === "pending" && showHold && (item.held || kitchenLineIds.has(item.id)) && !(useOrderControls && item.held) && <button className="cart-hold" aria-pressed={!!item.held} title={item.held ? `Release ${item.name} for the next KOT` : `Hold ${item.name} back from the kitchen`} aria-label={`${item.held ? "Release" : "Hold"} ${item.name}`} disabled={locked} onClick={() => toggleHeld(item)}>{item.held ? "Held" : "Hold"}</button>}
             {order.status === "open" && item.status === "sent" && !isComboLine(order.items, item) && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
             {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || userCan(user, "orders.cancel_sent")) && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
+            {useOrderControls && order.status === "open" && item.status === "pending" && item.held && <button className="order-held-banner" aria-label={`Release ${item.name}`} disabled={locked || lane.itemActions.has(item.id)} onClick={() => toggleHeld(item)}><Icon name="pause" size={16} />Item on hold. Tap here to release</button>}
           </div>)}
         </div>}
         </div>
@@ -839,9 +874,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </div>}
         {message && <p className="captain-message" role="status"><Icon name="check" size={16} />{message}</p>}
         {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
-        <div className="cart-total"><div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
-        {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">{!isQuick && draft.length > 0 && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked}>{shortcut("save_items", "Punch")}</button>}{!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}{canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}</div>)}
-        {!captain && userCan(user, "bills.create") && <BillingPanel role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} heldCount={held.count} onFireHeld={async () => { if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED); await reload(); }} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
+        <div className="cart-total">{useOrderControls && <p className="order-total-count">Total number of items <strong>{itemCount}</strong></p>}<div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
+        {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">
+          {(useOrderControls || (!isQuick && draft.length > 0)) && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked || !draft.length}>{shortcut("save_items", useOrderControls ? "Save order" : "Punch")}</button>}
+          {!isQuick && <button className="primary soft button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={15} />{shortcut("send_kitchen", "KOT")}</button>}
+          {showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}
+          {!useOrderControls && canCancelOrder && <button className="text-button" onClick={cancelOrder} disabled={locked}>Cancel order</button>}
+        </div>)}
+        {!captain && userCan(user, "bills.create") && <BillingPanel checkoutLabel={useOrderControls ? "Checkout" : undefined} role={user.role} order={order} hasDraft={draft.length > 0} onChanged={reload} onPrepare={isQuick ? prepareCheckout : undefined} heldCount={held.count} onFireHeld={async () => { if ((await fireHeld()).saved) throw new Error(SAVED_NOT_BILLED); await reload(); }} disabled={pending} onGoToTables={order.type === "dine_in" ? () => { if (canLeave()) onBack(); } : undefined} onClosed={() => { if (canLeave()) onBack(); }} onBusyChange={(value) => { billingLock.current = value; setBillingBusy(value); }} />}
         {isQuick && order.status === "settled" && onNextTakeaway && <button className="primary next-takeaway" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Next takeaway")} disabled={locked} onClick={() => { if (canLeave()) onNextTakeaway(); }}>Next takeaway</button>}
         </div>
       </aside>
@@ -859,12 +899,15 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </form>;
       })()}
     </WorkspaceDialog>
-    {captain && <WorkspaceDialog open={noteEditor !== null} title={`Cooking note${noteEditor ? ` · ${noteEditor.name}` : ""}`} onClose={() => setNoteEditor(null)} busy={locked} className="captain-dialog captain-note-dialog">
-      {noteEditor && <form onSubmit={(event) => { event.preventDefault(); if (locked || queuedRefs.has(noteEditor.clientRef)) return; updateDraft(noteEditor.clientRef, { note: noteEditor.note.trim() }); setNoteEditor(null); }}>
+    <WorkspaceDialog open={noteEditor !== null} title={`Cooking note${noteEditor ? ` · ${noteEditor.name}` : ""}`} onClose={() => setNoteEditor(null)} busy={locked} className="captain-dialog captain-note-dialog">
+      {noteEditor && <form onSubmit={(event) => { event.preventDefault(); if (locked || queuedRefs.has(noteEditor.clientRef)) return;
+        if (noteEditor.savedItemId) { const { savedItemId, note } = noteEditor; void run(async () => { await updatePendingItem(savedItemId, { note: note.trim() || null }); setNoteEditor(null); }); }
+        else { updateDraft(noteEditor.clientRef, { note: noteEditor.note.trim() }); setNoteEditor(null); }
+      }}>
         <label>Instructions for the kitchen<textarea aria-label="Cooking instructions" maxLength={200} rows={3} disabled={locked} value={noteEditor.note} onChange={(event) => setNoteEditor({ ...noteEditor, note: event.target.value })} /></label>
         <div className="captain-note-chips">{["Less spicy", "No onion", "No garlic"].map((note) => <button type="button" key={note} disabled={locked} onClick={() => setNoteEditor({ ...noteEditor, note: [noteEditor.note, note].filter(Boolean).join(", ").slice(0, 200) })}>{note}</button>)}</div>
         <small>{noteEditor.note.length}/200</small><div className="captain-note-actions"><button type="button" onClick={() => setNoteEditor(null)}>Cancel</button><button className="primary" disabled={locked}>Save note</button></div>
       </form>}
-    </WorkspaceDialog>}
+    </WorkspaceDialog>
   </section>;
 }

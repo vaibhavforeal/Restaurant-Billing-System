@@ -12,18 +12,18 @@ export type BillSupply = "regular" | "composition" | "eco95" | "unregistered";
 export function billSupply(r: { gstMode: GstMode; gstPaidBy?: "zomato"; gstin: string }): BillSupply {
   if (r.gstPaidBy === "zomato") return "eco95";
   if (!r.gstin.trim()) return "unregistered";
-  return r.gstMode === "included" ? "regular" : "composition";
+  return r.gstMode === "none" ? "composition" : "regular";
 }
 
 export interface RateLine { gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }
 /** A bill issued in the period. */
 export interface GstBillFact {
-  billId: string; billNo: number; dateKey: string; status: "unpaid" | "paid" | "void"; supply: BillSupply;
+  billId: string; billNo: number; invoiceNo: string; dateKey: string; status: "unpaid" | "paid" | "void"; supply: BillSupply;
   buyerGstin: string | null; buyerName: string | null; totalPaise: number; taxes: RateLine[];
 }
 /** A credit note (void or refund) issued in the period, with the bill it credits. */
 export interface GstCreditNoteFact {
-  cnNo: number; billId: string; billNo: number; kind: "void" | "refund"; dateKey: string; supply: BillSupply;
+  cnNo: number; creditNoteRef: string; billId: string; billNo: number; invoiceNo: string; kind: "void" | "refund"; dateKey: string; supply: BillSupply;
   buyerGstin: string | null; buyerName: string | null; totalPaise: number; taxes: RateLine[];
 }
 

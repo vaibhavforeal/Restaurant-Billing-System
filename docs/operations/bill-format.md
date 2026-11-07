@@ -1,6 +1,6 @@
 # Bill formats
 
-Choose **Settings > Restaurant profile > Bill style**, then **Save**:
+Choose **Settings > Bill settings > Bill style**, then **Save**:
 
 | Style | Preview / PDF | Thermal receipt |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ The 80 mm thermal receipt uses Item / Qty / Rate / Amount columns. On 58 mm
 paper it uses Item / Qty / Amount, with the unit rate below each item. Long names
 wrap within their column; unusually large numeric values use separate lines
 without truncation. All thermal text remains within 32/48 characters respectively.
-Zero rounding is omitted. Dine-in bills identify the table and group; takeaway
+Zero rounding is omitted (see Numbering and rounding below). Dine-in bills identify the table and group; takeaway
 bills show Parcel. Zomato bills identify the platform order and display the
 platform-paid GST note. Paid, unpaid and void bills have distinct wording.
 
@@ -40,24 +40,55 @@ centered 110 mm-wide bill on A4. Long item lists continue onto additional pages
 with repeating column headings. Printed page footers include the bill number
 and page count. Credit-note layouts keep their existing A4 format.
 
-Set **Restaurant name**, **Address**, **GSTIN**, **FSSAI licence no.**, and
-**Receipt footer** in Settings. These details are saved when a bill is issued;
-reprints retain that saved information. When the saved footer is blank, the
+Set **Restaurant name**, **Address**, **GSTIN** and **FSSAI licence no.** in
+**Settings > Restaurant profile**, and the header and footer lines in
+**Settings > Bill settings > Printed bill**. These details are saved when a bill
+is issued; reprints retain that saved information. When the saved footer is blank, the
 design displays a short thank-you message.
 
 ## GST settings and item rates
 
-Choose **Settings > Restaurant profile > GST**, then **Save**:
+Choose **Settings > Bill settings > GST**, then **Save**:
 
 - **Prices include GST** - menu prices already contain the tax. Pick the
   **Default GST rate** (5%, 12% or 18%); items without a rate of their own use it.
+- **Prices exclude GST, added on the bill** - menu prices are before tax. CGST
+  and SGST are worked out on each rate's item value after any discount and added
+  to the bill, so the customer pays the menu price plus GST. Pick the **Default
+  GST rate** as above. This needs the restaurant's **GSTIN**; the setting cannot
+  be saved without it.
 - **No GST charged** - bills show no tax at all (for example a composition
   restaurant, or one that is not registered for GST).
 
 The setting applies to new bills only. Each bill keeps the mode it was issued
 under, including on reprints and credit notes, so changing the setting never
-alters an old bill. Menu prices are never increased by GST: the tax shown is the
-part of the price that is GST.
+alters an old bill.
+
+How the tax appears on the bill:
+
+- **Prices include GST**: the total is the menu prices less any discount. An
+  **Includes GST** block after the total shows the taxable value, CGST and SGST
+  for each rate: the part of the price that is GST.
+- **GST added on the bill**: lines such as `CGST 2.5% on 90.00` and
+  `SGST 2.5% on 90.00` (the rate, and the taxable value it is charged on) are
+  added after the discount and before **Round off** and the **TOTAL**.
+
+Example, a ₹100 thali at 5% with a ₹10 discount and rounding to the nearest ₹1:
+
+| | Prices include GST | GST added on the bill |
+| --- | --- | --- |
+| Subtotal | ₹100.00 | ₹100.00 |
+| Discount | -₹10.00 | -₹10.00 |
+| CGST 2.5% | ₹2.14 included | ₹2.25 |
+| SGST 2.5% | ₹2.14 included | ₹2.25 |
+| Total | ₹90.00 | ₹94.50 → ₹95.00 (round off +₹0.50) |
+
+"Included" means the GST is already part of the total, not added to it.
+
+Zomato orders never charge GST on the bill, whichever mode is chosen: Zomato
+pays it under section 9(5). Dish costing compares recipe cost with the price
+before GST: under **Prices include GST** the GST is taken out of the menu price;
+under the other two modes the menu price is used as it is.
 
 An item can override the default in **Catalog > Edit > GST rate**. Leave it on
 **Restaurant default** to follow the setting (changing the default later changes
@@ -65,6 +96,121 @@ future bills for those items), or choose 0%, 5%, 12%, 18% or 28% for that item.
 The rate is recorded when the item is punched, so items already on an open order
 keep their rate when the default changes. In the item CSV, a blank `gst_rate`
 means "restaurant default" and exports and imports back unchanged.
+
+## Bill settings
+
+**Settings > Bill settings** holds the tax and printed-bill options, with a live
+preview beside the form. Printed bill options:
+
+- **Header lines** - up to 3 lines, 48 characters each, printed under the
+  restaurant name. Blank lines are dropped.
+- **Footer lines** - up to 3 lines, 48 characters each, replacing the default
+  thank-you message when any are set.
+- **Show FSSAI number** (on by default), **Show customer name and phone** (on),
+  **Show table** (on), **Show 'Served by'** (off) and **Show each item's GST
+  rate** (off). The GSTIN is always shown.
+- **Bill copies** stay on each printer's bill profile (Settings > Printers); Bill
+  settings only links there.
+
+These options are saved on each bill when it is issued, so they apply to **new
+bills only**. Reprints and older bills keep the layout they were issued with;
+bills issued before these options existed print exactly as they did.
+
+The item GST rate column or line appears only on bills that charge GST
+themselves: Prices include GST or GST added on the bill, and not a Zomato-paid order. No-GST bills, bills
+of supply and Zomato bills never show it, even when the option is on.
+
+## Service and packaging charges
+
+Choose **Settings > Bill settings > Charges**, then **Save**:
+
+- **Service charge (%)** - 0 to 20, in steps of 0.01. Leave it at 0 for no service charge. It is added to **dine-in**
+  bills only, on the subtotal after any discount.
+- **Packaging charge (₹)** - 0 to 1000. A flat amount added once to each **takeaway** or **delivery** bill. Leave it at
+  0 for none. A value above the limit (or below 0) shows a note under the box and saves as the nearest limit.
+- **Service charge label** and **Packaging label** - the words printed on the bill, up to 24 characters. A blank label saves as "Service
+  charge" or "Packaging".
+- **Charge packaging per item** - off by default. When on, each item's own packaging amount (set in **Catalog → Edit**
+  as **Packaging (₹)**, per unit) is added to the flat packaging charge. A variant's **Packaging (₹)** left blank
+  (**Same as item**) uses the item's amount; 0 means none. Combos use the combo's own amount. The bill still shows one
+  Packaging line with the combined amount. See [per-item packaging](per-item-packaging.md).
+
+Zomato orders get neither charge. Both apply to new bills only; old bills and reprints keep what they were issued with.
+
+Each charge is taxed at the **Default GST rate** and follows the GST setting: with **Prices include GST** the charge
+already contains its GST, with **Prices exclude GST, added on the bill** the GST is added on top, and with **No GST
+charged** there is no tax. The GST on a charge is reported in the same rate group as the menu items, so GSTR-1 and
+GSTR-3B include it.
+
+Service charge is never compulsory. On a dine-in bill the cashier can untick **Service charge** in the billing panel.
+No reason or approval is needed. The bill records that it was removed.
+
+On the bill, each charge is one line after Discount, for example `Service charge 10%` and `Packaging`. Day-end and
+Sales reports show a **Charges** total.
+
+Refunds: a refund that returns every item left on the bill also returns the service charge, and the bill becomes
+**Refunded** unless the packaging is kept (below). A part refund leaves the service charge. Voiding a bill returns all
+its charges. Credit notes list each charge they return.
+
+The refund screen shows a **Refund packaging (₹X)** tickbox, ticked by default, whenever the refund would give back
+packaging: the chosen items' per-item packaging, or the flat amount when the refund returns every item left. This
+also applies to restaurants that use only the flat amount. Ticked, the refund gives back that packaging; unticked,
+the packaging is kept. Which to choose depends on when the order was cancelled:
+
+| Situation | What to do | Packaging |
+|---|---|---|
+| Customer cancels before preparation | Usually before billing: cancel the items on the open order. If already billed (prepaid): refund, box ticked | Not charged, or refunded |
+| Cancels after preparation, before packing | Refund, box ticked | Refunded |
+| Cancels after packing | Refund, box unticked | Kept |
+| Cancels after dispatch | Refund; tick or untick by the restaurant's terms | Cashier's choice |
+| Restaurant cancels | Void the bill, or refund with the box ticked | Refunded |
+| Zomato order | Zomato bills never carry packaging | — |
+
+A bill whose items are all refunded with packaging kept stays **Partly refunded**; only a void can credit the kept
+packaging after that. The bill then hides **Refund items** and says to void the bill to return the packaging.
+
+Example, a ₹100 item at 5% with a 10% service charge:
+
+| | Prices include GST | GST added on the bill |
+| --- | --- | --- |
+| Subtotal | ₹100.00 | ₹100.00 |
+| Service charge 10% | ₹10.00 | ₹10.00 |
+| CGST 2.5% | ₹2.62 included | ₹2.75 |
+| SGST 2.5% | ₹2.62 included | ₹2.75 |
+| Total | ₹110.00 | ₹115.50 → ₹116.00 (round off +₹0.50) |
+
+## Numbering and rounding
+
+Choose **Settings > Bill settings > Numbering & rounding**, then **Save**:
+
+- **Invoice prefix** - optional, up to 4 letters or digits, saved in capitals.
+  "CN" is not allowed because credit notes use it.
+- **Round off total** - **To the nearest ₹1** (default), **To the nearest 50
+  paise**, or **No rounding (exact paise)**.
+
+Both apply to new bills only. Refunds and credit notes use the rounding each bill
+was issued with.
+
+Bills are numbered `PREFIX/YY-YY/NNNN`, or `YY-YY/NNNN` with no prefix, for example
+`MP/25-26/0001`. The financial year runs 1 April to 31 March (local time). The
+counter restarts at 0001 for the first bill on or after 1 April and grows to 5
+digits after 9999. Changing the prefix mid-year continues the same counter. A
+number is at most 16 characters, the GST limit.
+
+Credit notes are `CN/YY-YY/NNN`, for example `CN/25-26/001`, with their own yearly
+counter. They carry no restaurant prefix: a 4-letter prefix would make the number
+17 characters, and GST allows 16.
+
+Bills and credit notes issued before this change keep their old numbers (the plain
+number, and `CN-<n>`).
+
+The number shows on thermal and A4 receipts, the digital bill and its file name
+(`Bill-MP-25-26-0001.html`), the UPI payment note, credit-note prints, the Bills
+list, the billing panel, customer profiles and feedback. GSTR-1 uses it for the
+invoice and credit-note numbers, and Table 13 lists one range per series, so a
+prefix change mid-year shows as two ranges. Print-job labels, custom-report
+"Bill no." columns, staff-activity references and a customer's usual stay on the
+internal bill number.
 
 ## The four bill types
 

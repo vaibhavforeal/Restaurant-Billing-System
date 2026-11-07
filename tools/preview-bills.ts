@@ -18,7 +18,7 @@ const items = [
 ];
 const totals = calculateBill(items, 5000);
 const bill: Bill = {
-  ...totals, id: "preview-bill", billNo: 1042, orderId: "preview-order", status: "paid",
+  ...totals, id: "preview-bill", billNo: 1042, invoiceNo: "MP/26-27/1042", orderId: "preview-order", status: "paid",
   createdAt: new Date(2026, 9, 9, 13, 42).getTime(), discountNote: "Loyalty discount",
   refundState: "none", creditNotes: [], refundedQty: {},
   receipt: { restaurantName: "MasalaPOS Kitchen", address: "12 Market Road, Indiranagar\nBengaluru, Karnataka 560038",

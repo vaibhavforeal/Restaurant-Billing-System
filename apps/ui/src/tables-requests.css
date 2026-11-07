@@ -5,6 +5,23 @@
 .tables-request-summary > button { flex: 0 0 auto; min-height: 34px; padding: 6px 10px; font-size: 11px; }
 .tables-request-attention { display: inline-block; margin-top: 3px; color: #a82130; font-size: 10px; font-weight: 600; }
 
+html[data-theme] .tables-screen.table-overview .table-request-icon { flex: none; }
+html[data-theme] .tables-screen.table-overview .table-request-button {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 58px; min-height: 36px; padding: 5px 8px; color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+}
+html[data-theme] .tables-screen.table-overview .table-request-button:hover:not(:disabled) { background: var(--pos-accent-soft); }
+html[data-theme] .table-request-button .qr-pending-count { min-width: 18px; padding: 1px 4px; font-size: 10px; line-height: 1.4; background: var(--pos-accent-soft); color: var(--pos-accent); }
+html[data-theme] .table-request-error { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--pos-warning-bg); color: var(--pos-warning); font-size: 10px; font-weight: 700; }
+@media (max-width: 700px) {
+  html[data-theme] .tables-screen.table-overview .tables-header { flex-direction: row; align-items: center; }
+  html[data-theme] .tables-screen.table-overview .tables-heading { min-width: 0; flex: 1; }
+  html[data-theme] .tables-screen.table-overview .tables-header .actions { flex: none; }
+}
+@media (pointer: coarse) {
+  html[data-theme] .tables-screen.table-overview .table-request-button { min-height: 44px; }
+}
+
 .tables-requests-dialog { width: min(1000px, calc(100vw - 28px)); }
 .tables-requests-dialog .qr-inbox-toolbar { margin: 0 0 12px; gap: 10px; }
 .tables-requests-dialog .qr-inbox-toolbar .tabs { gap: 3px; }

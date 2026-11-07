@@ -172,6 +172,35 @@ describe("products and variants", () => {
     expect((await list()).json().defaultGstRate).toBe(18);
   });
 
+  it("stores packaging on products and variants, blank variant packaging following the product", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const { category } = await addCategory(admin.token, "Mains");
+    const created = await app.inject({
+      method: "POST", url: "/api/products", headers: auth(admin.token),
+      payload: { categoryId: category.id, name: "Biryani", pricePaise: 20000, packagingPaise: 1000, variants: [{ name: "Full", pricePaise: 30000, packagingPaise: 500 }, { name: "Half", pricePaise: 15000 }] },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const product = created.json().product;
+    expect(product.packagingPaise).toBe(1000);
+    const variant = (name: string) => product.variants.find((v: { name: string }) => v.name === name);
+    expect(variant("Full").packagingPaise).toBe(500);
+    expect(variant("Half").packagingPaise).toBeNull();
+    const list = (await app.inject({ method: "GET", url: "/api/products", headers: auth(admin.token) })).json();
+    expect(list.packagingPerItem).toBe(false);
+    expect(list.products[0].packagingPaise).toBe(1000);
+    const patchProduct = (payload: object) => app.inject({ method: "PATCH", url: `/api/products/${product.id}`, headers: auth(admin.token), payload });
+    expect((await patchProduct({ packagingPaise: 100001 })).statusCode).toBe(400);
+    expect((await patchProduct({ name: "Dum Biryani" })).json().product.packagingPaise).toBe(1000);
+    expect((await patchProduct({ packagingPaise: 0 })).json().product.packagingPaise).toBe(0);
+    const patchVariant = (payload: object) => app.inject({ method: "PATCH", url: `/api/variants/${variant("Full").id}`, headers: auth(admin.token), payload });
+    expect((await patchVariant({ name: "Large" })).json().variant.packagingPaise).toBe(500);
+    expect((await patchVariant({ packagingPaise: null })).json().variant.packagingPaise).toBeNull();
+    expect((await patchVariant({ packagingPaise: 100001 })).statusCode).toBe(400);
+    const added = await app.inject({ method: "POST", url: `/api/products/${product.id}/variants`, headers: auth(admin.token), payload: { name: "Mini", pricePaise: 9000, packagingPaise: 0 } });
+    expect(added.json().variant.packagingPaise).toBe(0);
+  });
+
   it("updates product fields and 404s on unknown ids", async () => {
     app = freshApp();
     const admin = await setupAdmin(app);

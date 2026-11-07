@@ -1,0 +1,21 @@
+html[data-theme] .order-screen {
+  .menu-browser:is(.menu-view-grid, .menu-view-list, .menu-view-tile) { grid-template-rows: auto minmax(0, 1fr); }
+  .menu-view-controls { display: flex; flex: none; gap: 2px; }
+  .menu-view-controls > button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 42px; min-height: 44px; padding: 3px 6px; border-color: transparent; background: transparent; color: var(--muted); }
+  .menu-view-controls > button > span { font-size: 10px; line-height: 1.2; }
+  .menu-view-controls > button[aria-pressed="true"] { color: var(--pos-accent); background: var(--pos-accent-soft); border-color: var(--pos-accent); }
+  .menu-view-tile .menu-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+  .menu-view-tile .menu-card { min-height: 64px; padding: 8px; }
+  .menu-view-tile .menu-card-name { font-size: 11px; }
+  .menu-view-list .menu-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .menu-view-list .menu-card { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 48px; padding: 6px 8px; text-align: left; }
+  .menu-view-list .menu-card-top { position: static; flex: none; }
+  .menu-view-list .menu-card-name { flex: 1; min-width: 0; padding: 0; margin: 0; }
+  .menu-view-list .menu-card-bottom { flex: none; width: auto; margin: 0; gap: 10px; }
+  .menu-view-list .menu-card-portion { margin-top: 2px; }
+  @media (max-width: 700px) {
+    .menu-browser .menu-toolbar { flex-wrap: wrap; }
+    .menu-view-controls { flex-basis: 100%; justify-content: flex-end; }
+    .menu-view-tile .menu-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  }
+}

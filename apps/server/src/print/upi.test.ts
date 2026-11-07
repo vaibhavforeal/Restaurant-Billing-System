@@ -9,7 +9,7 @@ const decodeQr = createRequire(import.meta.url)("jsqr") as typeof import("jsqr")
 
 const items = [{ name: "Lunch", pricePaise: 12345, qty: 2, gstRate: 5 }];
 const bill: Bill = {
-  ...calculateBill(items, 1234), id: "01900000-1234-7123-8123-123456789abc", billNo: 42,
+  ...calculateBill(items, 1234), id: "01900000-1234-7123-8123-123456789abc", billNo: 42, invoiceNo: "42",
   orderId: "order", status: "unpaid", discountNote: "Offer", createdAt: 1, payments: [], refundState: "none", creditNotes: [], refundedQty: {},
   receipt: { restaurantName: "Cafe & Co / भोजन", address: "", gstin: "", fssai: "", receiptFooter: "", gstMode: "included",
     upiId: "cafe.123@bank", orderType: "parcel", tableName: null, splitLabel: null, items },
@@ -21,7 +21,7 @@ describe("bill UPI QR", () => {
     const url = new URL(payment.uri);
     expect(url.protocol).toBe("upi:"); expect(url.host).toBe("pay");
     expect(Object.fromEntries(url.searchParams)).toEqual({ pa: "cafe.123@bank", pn: "Cafe & Co / भोजन",
-      am: "235.00", cu: "INR", tr: "01900000123471238123123456789abc", tn: "Bill #42" });
+      am: "235.00", cu: "INR", tr: "01900000123471238123123456789abc", tn: "Bill 42" });
     expect(payment.amountPaise).toBe(bill.totalPaise);
     expect(billUpiPayment({ ...bill, ...calculateBill(items, 1234, "none") })!.amountPaise).toBe(23500);
   });

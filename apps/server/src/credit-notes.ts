@@ -1,7 +1,7 @@
 import { verifyPassword } from "@masalapos/core";
 import { reverseLoyalty } from "./customers.js";
-import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextSequence, refundState, refundableByMode, uuidv7, voidRemainder,
-  type Bill, type BillCreditNote, type BillLine, type CreditDraft, type Credited, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@masalapos/domain";
+import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextCreditNoteNo, nextSequence, packagingCredit, refundState, refundableByMode, uuidv7, voidRemainder,
+  type Bill, type BillChargeCredit, type BillCreditNote, type BillLine, type ChargeKind, type CreditDraft, type Credited, type CreditedCharges, type Database, type Money, type PayMode, type RefundBillInput, type VoidBillInput } from "@masalapos/domain";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";
@@ -16,6 +16,10 @@ export interface BillCredit {
   lines: BillLine[];
   /** Units and money already taken off each order item by earlier credit notes. */
   credited: Record<string, Credited>;
+  /** The charges billed (service, packaging), each with its billed amount. */
+  charges: BillChargeCredit[];
+  /** What earlier credit notes already took off each charge kind. */
+  creditedCharges: CreditedCharges;
   paid: Array<{ mode: PayMode; amountPaise: number }>;
   refunded: Array<{ mode: PayMode; amountPaise: number }>;
   creditedTotalPaise: number;
@@ -24,12 +28,12 @@ export interface BillCredit {
 /** Everything the credit math needs for one bill, read from the stored (immutable) lines and credit notes. */
 export function loadBillCredit(db: Database, billId: string): BillCredit {
   const lines = (db.prepare(`SELECT l.order_item_id, l.qty, l.name, l.category_id, l.category_name, oi.gst_rate_snapshot AS gst_rate,
-      l.taxable_paise, l.cgst_paise, l.sgst_paise, l.rounding_paise, l.total_paise
+      l.taxable_paise, l.cgst_paise, l.sgst_paise, l.rounding_paise, l.total_paise, l.packaging_paise
     FROM bill_report_lines l JOIN order_items oi ON oi.id = l.order_item_id
     WHERE l.bill_id = ? AND l.parent_order_item_id IS NULL ORDER BY l.order_item_id`).all(billId) as Array<MoneyRow & {
-      order_item_id: string; qty: number; name: string; category_id: string | null; category_name: string; gst_rate: number;
+      order_item_id: string; qty: number; name: string; category_id: string | null; category_name: string; gst_rate: number; packaging_paise: number;
     }>).map((r): BillLine => ({ orderItemId: r.order_item_id, qty: r.qty, name: r.name, categoryId: r.category_id,
-      categoryName: r.category_name, gstRate: r.gst_rate, ...money(r) }));
+      categoryName: r.category_name, gstRate: r.gst_rate, packagingPaise: r.packaging_paise, ...money(r) }));
 
   const credited: Record<string, Credited> = {};
   const creditedRows = db.prepare(`SELECT cl.order_item_id, SUM(cl.qty) AS qty, SUM(cl.taxable_paise) AS taxable_paise, SUM(cl.cgst_paise) AS cgst_paise,
@@ -38,26 +42,39 @@ export function loadBillCredit(db: Database, billId: string): BillCredit {
     WHERE c.bill_id = ? GROUP BY cl.order_item_id`).all(billId) as Array<MoneyRow & { order_item_id: string; qty: number }>;
   for (const r of creditedRows) credited[r.order_item_id] = { qty: r.qty, ...money(r) };
 
+  const charges = (db.prepare(`SELECT kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise FROM bill_charges WHERE bill_id = ? ORDER BY kind`).all(billId) as Array<
+    { kind: ChargeKind; label: string; percent_bp: number | null; gst_rate: number; amount_paise: number; taxable_paise: number; cgst_paise: number; sgst_paise: number; rounding_paise: number }>)
+    .map((r): BillChargeCredit => ({ kind: r.kind, label: r.label, gstRate: r.gst_rate, amountPaise: r.amount_paise, taxablePaise: r.taxable_paise, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
+      ...(r.percent_bp !== null ? { percentBp: r.percent_bp } : {}), roundingPaise: r.rounding_paise, totalPaise: r.taxable_paise + r.cgst_paise + r.sgst_paise + r.rounding_paise }));
+  const creditedCharges: CreditedCharges = {};
+  const creditedChargeRows = db.prepare(`SELECT cc.kind, SUM(cc.amount_paise) AS amount_paise, SUM(cc.taxable_paise) AS taxable_paise, SUM(cc.cgst_paise) AS cgst_paise,
+      SUM(cc.sgst_paise) AS sgst_paise, SUM(cc.rounding_paise) AS rounding_paise, SUM(cc.total_paise) AS total_paise
+    FROM credit_note_charges cc JOIN credit_notes c ON c.id = cc.credit_note_id WHERE c.bill_id = ? GROUP BY cc.kind`).all(billId) as Array<MoneyRow & { kind: ChargeKind; amount_paise: number }>;
+  for (const r of creditedChargeRows) creditedCharges[r.kind] = { amountPaise: r.amount_paise, ...money(r) };
+
   const paid = db.prepare("SELECT mode, amount_paise AS amountPaise FROM payments WHERE bill_id = ? ORDER BY id").all(billId) as BillCredit["paid"];
   const refunded = db.prepare(`SELECT rp.mode, rp.amount_paise AS amountPaise FROM refund_payments rp
     JOIN credit_notes c ON c.id = rp.credit_note_id WHERE c.bill_id = ? ORDER BY rp.id`).all(billId) as BillCredit["refunded"];
   const { total } = db.prepare("SELECT COALESCE(SUM(total_paise), 0) AS total FROM credit_notes WHERE bill_id = ?").get(billId) as { total: number };
-  return { lines, credited, paid, refunded, creditedTotalPaise: total };
+  return { lines, credited, charges, creditedCharges, paid, refunded, creditedTotalPaise: total };
 }
 
 /** The credit-note part of a bill's JSON: its notes, the derived refund state and the units credited per item. */
 export function loadBillCreditNotes(db: Database, billId: string, billTotalPaise: number): {
   refundState: ReturnType<typeof refundState>; creditNotes: BillCreditNote[]; refundedQty: Record<string, number>;
 } {
-  const notes = db.prepare(`SELECT c.id, c.cn_no AS cnNo, c.kind, c.reason, c.created_at AS createdAt, c.total_paise AS totalPaise,
+  const notes = db.prepare(`SELECT c.id, c.cn_no AS cnNo, COALESCE(c.credit_note_ref, 'CN-' || c.cn_no) AS creditNoteRef, c.kind, c.reason, c.created_at AS createdAt, c.total_paise AS totalPaise,
       c.taxable_paise AS taxablePaise, c.cgst_paise AS cgstPaise, c.sgst_paise AS sgstPaise,
       rb.name AS requestedByName, ab.name AS approvedByName
     FROM credit_notes c JOIN users rb ON rb.id = c.requested_by JOIN users ab ON ab.id = c.approved_by
-    WHERE c.bill_id = ? ORDER BY c.cn_no`).all(billId) as Array<Omit<BillCreditNote, "refunds" | "lines">>;
+    WHERE c.bill_id = ? ORDER BY c.cn_no`).all(billId) as Array<Omit<BillCreditNote, "refunds" | "lines" | "charges">>;
   const refunds = db.prepare(`SELECT rp.credit_note_id AS noteId, rp.mode, rp.amount_paise AS amountPaise, rp.ref_note AS refNote
     FROM refund_payments rp JOIN credit_notes c ON c.id = rp.credit_note_id WHERE c.bill_id = ? ORDER BY rp.id`).all(billId) as Array<BillCreditNote["refunds"][number] & { noteId: string }>;
   const lines = db.prepare(`SELECT cl.credit_note_id AS noteId, cl.order_item_id AS orderItemId, cl.name, cl.qty, cl.total_paise AS totalPaise
     FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id WHERE c.bill_id = ? ORDER BY cl.rowid`).all(billId) as Array<BillCreditNote["lines"][number] & { noteId: string }>;
+
+  const charges = db.prepare(`SELECT cc.credit_note_id AS noteId, cc.kind, cc.label, cc.total_paise AS totalPaise
+    FROM credit_note_charges cc JOIN credit_notes c ON c.id = cc.credit_note_id WHERE c.bill_id = ? ORDER BY cc.rowid`).all(billId) as Array<BillCreditNote["charges"][number] & { noteId: string }>;
 
   const refundedQty: Record<string, number> = {};
   for (const l of lines) refundedQty[l.orderItemId] = (refundedQty[l.orderItemId] ?? 0) + l.qty;
@@ -65,6 +82,7 @@ export function loadBillCreditNotes(db: Database, billId: string, billTotalPaise
     ...n,
     refunds: refunds.filter((r) => r.noteId === n.id).map(({ mode, amountPaise, refNote }) => ({ mode, amountPaise, refNote })),
     lines: lines.filter((l) => l.noteId === n.id).map(({ orderItemId, name, qty, totalPaise }) => ({ orderItemId, name, qty, totalPaise })),
+    charges: charges.filter((c) => c.noteId === n.id).map(({ kind, label, totalPaise }) => ({ kind, label, totalPaise })),
   }));
   return { refundState: refundState(billTotalPaise, creditNotes.reduce((sum, n) => sum + n.totalPaise, 0)), creditNotes, refundedQty };
 }
@@ -87,7 +105,7 @@ interface CreditBillRow { id: string; order_id: string; status: "unpaid" | "paid
  * The credit a void or refund of this bill would issue, or the HTTP error that stops it. Shared by the preview and the
  * writes so both apply identical rules. A bill with no stored lines can only be voided: its credit is the bill totals.
  */
-function draftCredit(db: Database, billId: string, kind: "void" | "refund", requested: Array<{ orderItemId: string; qty: number }> = []): { bill: CreditBillRow; credit: BillCredit; draft: CreditDraft } {
+function draftCredit(db: Database, billId: string, kind: "void" | "refund", requested: Array<{ orderItemId: string; qty: number }> = [], refundPackaging = true): { bill: CreditBillRow; credit: BillCredit; draft: CreditDraft } {
   const bill = db.prepare("SELECT id, order_id, status, total_paise FROM bills WHERE id = ?").get(billId) as CreditBillRow | undefined;
   if (!bill) throw httpError(404, "bill not found");
   refuseZomatoBill(db, billId);
@@ -96,6 +114,7 @@ function draftCredit(db: Database, billId: string, kind: "void" | "refund", requ
   if (kind === "refund") {
     if (bill.status !== "paid") throw httpError(409, "Only paid bills can be refunded");
     if (credit.lines.length === 0) throw httpError(409, "This older bill can only be voided");
+    // A refund always credits items: packaging kept by earlier refunds is only taken back by a void.
     if (credit.lines.every((l) => (credit.credited[l.orderItemId]?.qty ?? 0) >= l.qty)) throw httpError(409, "Nothing left to refund on this bill");
     if (requested.length === 0) throw httpError(400, "Choose the items to refund");
   }
@@ -106,10 +125,10 @@ function draftCredit(db: Database, billId: string, kind: "void" | "refund", requ
     const sum = (f: "taxablePaise" | "cgstPaise" | "sgstPaise") => taxes.reduce((s, t) => s + t[f], 0);
     const taxablePaise = sum("taxablePaise"), cgstPaise = sum("cgstPaise"), sgstPaise = sum("sgstPaise");
     const totals: Money = { taxablePaise, cgstPaise, sgstPaise, roundingPaise: bill.total_paise - taxablePaise - cgstPaise - sgstPaise, totalPaise: bill.total_paise };
-    return { bill, credit, draft: { lines: [], taxes, totals } };
+    return { bill, credit, draft: { lines: [], charges: [], taxes, totals } };
   }
   try {
-    return { bill, credit, draft: kind === "void" ? voidRemainder(credit.lines, credit.credited) : creditFor(credit.lines, credit.credited, requested) };
+    return { bill, credit, draft: kind === "void" ? voidRemainder(credit.lines, credit.credited, credit.charges, credit.creditedCharges) : creditFor(credit.lines, credit.credited, requested, credit.charges, credit.creditedCharges, { refundPackaging }) };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid credit";
     throw httpError(message === "Nothing left to refund on this bill" ? 409 : 400, message);
@@ -176,15 +195,17 @@ function writeCreditNote(db: Database, note: {
 }): string {
   const id = uuidv7();
   const t = note.draft.totals;
-  db.prepare(`INSERT INTO credit_notes (id, cn_no, bill_id, kind, reason, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise,
-      requested_by, approved_by, created_at, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, nextSequence(db, "credit_note_no"), note.billId, note.kind, note.reason, t.taxablePaise, t.cgstPaise, t.sgstPaise, t.roundingPaise, t.totalPaise,
+  db.prepare(`INSERT INTO credit_notes (id, cn_no, credit_note_ref, bill_id, kind, reason, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise,
+      requested_by, approved_by, created_at, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, nextSequence(db, "credit_note_no"), nextCreditNoteNo(db, note.now), note.billId, note.kind, note.reason, t.taxablePaise, t.cgstPaise, t.sgstPaise, t.roundingPaise, t.totalPaise,
       note.requestedBy, note.approvedBy, note.now, note.clientRef, note.requestJson);
   const line = db.prepare(`INSERT INTO credit_note_lines (credit_note_id, order_item_id, name, category_id, category_name, gst_rate, qty,
       taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const l of note.draft.lines) {
     line.run(id, l.orderItemId, l.name, l.categoryId, l.categoryName, l.gstRate, l.qty, l.taxablePaise, l.cgstPaise, l.sgstPaise, l.roundingPaise, l.totalPaise);
   }
+  const charge = db.prepare("INSERT INTO credit_note_charges (credit_note_id, kind, label, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise, total_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  for (const c of note.draft.charges) charge.run(id, c.kind, c.label, c.gstRate, c.amountPaise, c.taxablePaise, c.cgstPaise, c.sgstPaise, c.roundingPaise, c.totalPaise);
   const tax = db.prepare("INSERT INTO credit_note_taxes (credit_note_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?)");
   for (const x of note.draft.taxes) tax.run(id, x.gstRate, x.taxablePaise, x.cgstPaise, x.sgstPaise);
   const refund = db.prepare("INSERT INTO refund_payments (id, credit_note_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)");
@@ -209,7 +230,8 @@ function billWithNote(db: Database, billId: string, noteId: string): { bill: Bil
 interface IssueCredit {
   kind: "void" | "refund";
   billId: string;
-  request: { clientRef: string; reason: string; refunds: RefundInput };
+  /** The retry fingerprint is built from this, so a refund's refundPackaging is part of it. */
+  request: { clientRef: string; reason: string; refunds: RefundInput; refundPackaging?: boolean };
   approverPin?: string | undefined;
   /** Items asked for (refund only). */
   lines?: RefundBillInput["lines"];
@@ -236,7 +258,7 @@ async function issueCredit(app: FastifyInstance, req: FastifyRequest, reply: Fas
     // Another request may have written this reference, voided or refunded the bill while the PIN was checked.
     const replay = replayedCreditNote(db, request.clientRef, requestJson);
     if (replay) return { created: false, ...billWithNote(db, replay.billId, replay.id), tables: [] as string[] };
-    const { bill, credit, draft } = draftForWrite(db, id, kind, input.lines);
+    const { bill, credit, draft } = draftForWrite(db, id, kind, input.lines, request.refundPackaging);
     if (kind === "void") checkVoidRefunds(bill, credit, draft, request.refunds);
     else checkRefundAmounts(credit, draft, request.refunds);
     // Read before the order closes: cancelling deactivates its table links.
@@ -270,9 +292,9 @@ async function issueCredit(app: FastifyInstance, req: FastifyRequest, reply: Fas
  * draftCredit for a write. The counter reviewed an earlier preview, so a refund quantity that no longer fits an item on the
  * bill means the bill changed since (409); items that were never on the bill stay a bad request.
  */
-function draftForWrite(db: Database, billId: string, kind: "void" | "refund", lines?: RefundBillInput["lines"]): ReturnType<typeof draftCredit> {
+function draftForWrite(db: Database, billId: string, kind: "void" | "refund", lines?: RefundBillInput["lines"], refundPackaging = true): ReturnType<typeof draftCredit> {
   try {
-    return draftCredit(db, billId, kind, lines);
+    return draftCredit(db, billId, kind, lines, refundPackaging);
   } catch (err) {
     if ((err as { statusCode?: number }).statusCode !== 400 || !lines) throw err;
     const credit = loadBillCredit(db, billId);
@@ -318,8 +340,11 @@ export function registerCreditNotes(app: FastifyInstance): void {
   app.post("/api/bills/:id/credit-preview", { preHandler: refundPermission }, async (req) => {
     const { id } = req.params as { id: string };
     const body = CreditPreview.parse(req.body ?? {});
-    const { credit, draft } = draftCredit(db, id, body.kind, body.lines ?? []);
-    return { preview: { lines: draft.lines, taxes: draft.taxes, totals: draft.totals, refundable: refundableOf(credit) } };
+    const requested = body.lines ?? [];
+    const { credit, draft } = draftCredit(db, id, body.kind, requested, body.refundPackaging);
+    // What ticking "Refund packaging" credits for these items, whether or not it is ticked; the counter shows the tickbox from it.
+    const packagingPaise = body.kind === "refund" ? packagingCredit(credit.lines, credit.credited, requested, credit.charges, credit.creditedCharges) : 0;
+    return { preview: { lines: draft.lines, charges: draft.charges, taxes: draft.taxes, totals: draft.totals, refundable: refundableOf(credit), packagingPaise } };
   });
 
   app.post("/api/bills/:id/void", { preHandler: refundPermission }, async (req, reply) => {

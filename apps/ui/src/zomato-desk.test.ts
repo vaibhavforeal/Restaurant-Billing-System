@@ -155,6 +155,10 @@ describe("gstNote", () => {
     expect(gstNote({ gstMode: "included" })).toBe("Includes GST");
   });
 
+  it("says GST is added when the bill adds it on top of the prices", () => {
+    expect(gstNote({ gstMode: "exclusive" })).toBe("GST added on the bill");
+  });
+
 });
 
 describe("billPaymentLabel", () => {
@@ -184,6 +188,7 @@ describe("billTaxRates", () => {
   it("lists the per-rate GST rows on the restaurant's own bills", () => {
     expect(billTaxRates({ taxes }, undefined)).toBe(taxes);
     expect(billTaxRates({ taxes }, { gstMode: "included" })).toBe(taxes);
+    expect(billTaxRates({ taxes }, { gstMode: "exclusive" })).toBe(taxes);
   });
 });
 

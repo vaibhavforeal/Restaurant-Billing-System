@@ -181,7 +181,7 @@ describe("stock costing", () => {
       expect(res.statusCode).toBe(200);
     }
     type Dish = { productId: string; variantId: string | null; name: string; categoryName: string; costPaise: number | null; status: string; missing: string[]; prices: Array<{ tier: string; pricePaise: number; preGstPaise: number; costPercent: number | null; marginPaise: number | null }> };
-    const dishes = async (as = token) => (await request("GET", "/api/costing/dishes", undefined, as)).json() as { dishes: Dish[]; gstMode: "included" | "none" };
+    const dishes = async (as = token) => (await request("GET", "/api/costing/dishes", undefined, as)).json() as { dishes: Dish[]; gstMode: "included" | "exclusive" | "none" };
 
     it("values stock on hand", async () => {
       const paneer = await costed("Paneer", 10, 32_000_000);
@@ -267,6 +267,17 @@ describe("stock costing", () => {
       expect(body.gstMode).toBe("none");
       expect(body.dishes).toHaveLength(2);
       expect(body.dishes.every((d) => d.prices.every((x) => x.preGstPaise === x.pricePaise))).toBe(true);
+    });
+
+    it("takes the menu price as the selling price when GST is added on the bill", async () => {
+      const paneer = await costed("Paneer", 10, 32_000_000);
+      const cat = await category();
+      const p = await product(cat, {});
+      await recipe(p.id, [{ stockItemId: paneer.id, qtyPerSale: 0.15 }]);
+      expect((await request("PUT", "/api/settings", { restaurantName: "Cafe", gstin: "29ABCDE1234F1Z5", gstMode: "exclusive" })).statusCode).toBe(200);
+      const body = await dishes();
+      expect(body.gstMode).toBe("exclusive");
+      expect(body.dishes[0]!.prices.every((x) => x.preGstPaise === x.pricePaise)).toBe(true);
     });
 
     it("prices a blank Zomato tier at Takeaway and a Zomato price of zero at zero", async () => {

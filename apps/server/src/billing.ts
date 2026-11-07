@@ -1,16 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  localDateKey, pointsEarned, GST_STATES, type BuyerDetailsInput, type Bill, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
+  localDateKey, pointsEarned, nextInvoiceNo, GST_STATES, type BillShow, type BuyerDetailsInput, type Bill, type ChargeInput, type ChargeLine, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
-import { readGstSettings } from "./gst-settings.js";
+import { readBillingSettings } from "./gst-settings.js";
 import { loadOrderJson } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
 import { receiptSlip, receiptHtml } from "./print/receipt.js";
 import { billUpiPayment, upiQrSvg } from "./print/upi.js";
-import { consumeStock, formatRestaurantAddress, saveReportLines } from "@masalapos/domain";
+import { allocatePaise, consumeStock, formatRestaurantAddress, orderItemPackaging, saveReportLines } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
 import { readProfile } from "./print/profile.js";
 import { bestEffortPrint } from "./print/best-effort.js";
@@ -23,7 +23,7 @@ import { crmEnabled } from "./integrations.js";
 import { pointsBalance } from "./mappers.js";
 
 interface BillRow {
-  id: string; bill_no: number; order_id: string; status: Bill["status"];
+  id: string; bill_no: number; invoice_no: string | null; order_id: string; status: Bill["status"];
   subtotal_paise: number; discount_paise: number; discount_note: string | null;
   cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number;
   created_at: number; client_ref: string | null; request_json: string | null; receipt_json: string | null;
@@ -38,12 +38,14 @@ export function loadBill(db: Database, id: string): Bill {
   if (!r) throw httpError(404, "bill not found");
   if (!r.receipt_json) throw httpError(409, "This legacy bill has no saved receipt");
   const taxes = db.prepare("SELECT gst_rate AS gstRate, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM bill_taxes WHERE bill_id = ? ORDER BY gst_rate").all(id) as TaxLine[];
+  const charges = (db.prepare("SELECT kind, label, percent_bp AS percentBp, gst_rate AS gstRate, amount_paise AS amountPaise, taxable_paise AS taxablePaise, cgst_paise AS cgstPaise, sgst_paise AS sgstPaise FROM bill_charges WHERE bill_id = ? ORDER BY CASE kind WHEN 'service' THEN 0 ELSE 1 END").all(id) as Array<Omit<ChargeLine, "percentBp"> & { percentBp: number | null }>)
+    .map(({ percentBp, ...rest }): ChargeLine => ({ ...rest, ...(percentBp !== null ? { percentBp } : {}) }));
   const payments = db.prepare("SELECT mode, amount_paise AS amountPaise, ref_note AS refNote, created_at AS createdAt FROM payments WHERE bill_id = ? ORDER BY id").all(id) as Bill["payments"];
   const receipt = JSON.parse(r.receipt_json) as ReceiptSnapshot;
-  return { id, billNo: r.bill_no, orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
+  return { id, billNo: r.bill_no, invoiceNo: r.invoice_no ?? String(r.bill_no), orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
     discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
     roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
-    receipt, taxes, payments, ...loadBillCreditNotes(db, id, r.total_paise), ...feedbackOf(db, id) };
+    receipt, taxes, charges, payments, ...loadBillCreditNotes(db, id, r.total_paise), ...feedbackOf(db, id) };
 }
 
 type IssueRole = Parameters<typeof roleFor>[0];
@@ -54,7 +56,7 @@ interface BillDiscount { manualPaise: number; redeemPoints?: number }
 const isDiscountCapError = (err: unknown) => typeof err === "object" && err !== null && "code" in err && err.code === "discount_cap";
 
 /** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
-function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>, buyer: BuyerDetailsInput | null = null) {
+function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>, buyer: BuyerDetailsInput | null = null, serviceCharge = true) {
   const order = loadOrderJson(db, orderId);
   if (!order) throw httpError(404, "order not found");
   if (order.status !== "open") throw httpError(409, "order is not open");
@@ -68,22 +70,36 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   if (unsent) throw httpError(409, "Send kitchen items before billing");
   let totals;
   // The restaurant's setting, unless the caller overrides it (Zomato bills charge no GST).
-  const mode = gstMode ?? readGstSettings(db).gstMode;
+  const settings = readBillingSettings(db);
+  const mode = gstMode ?? settings.gstMode;
   // With CRM & Loyalty off in the Marketplace a customer left on the order gives no discount, points or receipt line.
   const customer = crmEnabled(db) ? order.customer : null;
   const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0), discount);
-  try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode); }
+  // Service applies to dine-in; packaging to takeaway and delivery parcels. Zomato orders get neither.
+  const { type: orderType, kind: orderTypeKind } = db.prepare("SELECT o.type, t.kind FROM orders o LEFT JOIN order_types t ON t.id = COALESCE(o.order_type_id, o.type) WHERE o.id = ?").get(orderId) as { type: string; kind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null };
+  const serviceDue = orderType === "dine_in" && settings.serviceChargeBp > 0;
+  const charges: ChargeInput[] = [];
+  if (serviceDue && serviceCharge) charges.push({ kind: "service", label: settings.serviceChargeLabel, gstRate: settings.gstRate, bp: settings.serviceChargeBp });
+  if (orderType === "parcel" && (orderTypeKind === "takeaway" || orderTypeKind === "delivery")) {
+    // The flat amount per bill plus, with "Charge packaging per item" on, each line's packaging; one charge line either way.
+    const perItem = [...orderItemPackaging(db, orderId).values()].reduce((sum, paise) => sum + paise, 0);
+    charges.push({ kind: "packaging", label: settings.packagingChargeLabel, gstRate: settings.gstRate, amountPaise: settings.packagingChargePaise + perItem });
+  }
+  try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff, charges); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message.replace("Discount exceeds subtotal", "The discounts are more than the bill") : "Invalid bill"); }
   // The limit is on what staff choose to give; slab discounts are set by an admin and points were earned.
   const limit = effectiveDiscountCap(db, actor);
   if (limit !== null && !actor.approvedBy && discount.manualPaise * 100 > totals.subtotalPaise * limit) throw httpError(403, `Your discount limit is ${limit}%; an admin PIN is needed for more`, "discount_cap");
   const earned = customer && loyalty.enabled ? pointsEarned(totals.totalPaise, loyalty.pointsPer100, customer.tier?.earnMultiplier ?? 1) : 0;
-  const { city, stateCode, pincode, ...profile } = db.prepare("SELECT restaurant_name AS restaurantName, address, city, state_code AS stateCode, pincode, phone, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle FROM settings WHERE id = 1").get() as
-    Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle"> & { phone: string; city: string; stateCode: string; pincode: string };
+  const { city, stateCode, pincode, showFssai, showCustomer, showTable, showServedBy, showItemGst, ...profile } = db.prepare("SELECT restaurant_name AS restaurantName, address, city, state_code AS stateCode, pincode, phone, gstin, fssai, receipt_footer AS receiptFooter, upi_id AS upiId, receipt_style AS receiptStyle, receipt_header AS receiptHeader, bill_show_fssai AS showFssai, bill_show_customer AS showCustomer, bill_show_table AS showTable, bill_show_served_by AS showServedBy, bill_show_item_gst AS showItemGst FROM settings WHERE id = 1").get() as
+    Pick<ReceiptSnapshot, "restaurantName" | "address" | "gstin" | "fssai" | "receiptFooter" | "upiId" | "receiptStyle"> & { receiptHeader: string; phone: string; city: string; stateCode: string; pincode: string;
+      showFssai: number; showCustomer: number; showTable: number; showServedBy: number; showItemGst: number };
+  // Print choices are frozen with the bill like the rest of the profile, so changing them later never alters an issued bill.
+  const billShow: BillShow = { fssai: !!showFssai, customer: !!showCustomer, table: !!showTable, servedBy: !!showServedBy, itemGst: !!showItemGst };
   // The bill keeps the address as one printed line, so later changes to the restaurant's details never alter an issued bill.
   profile.address = formatRestaurantAddress({ address: profile.address, city, stateCode, pincode });
   const gst = gstInvoiceDetails(db, profile.gstin, mode, stateCode, buyer);
-  const receipt: ReceiptSnapshot = { ...profile, ...gst, gstMode: mode, orderType: order.type, tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
+  const receipt: ReceiptSnapshot = { ...profile, ...gst, gstMode: mode, billShow, ...(order.soldByName ? { servedBy: order.soldByName } : {}), orderType: order.type, ...(orderTypeKind ? { orderTypeKind } : {}), ...(serviceDue && !serviceCharge ? { serviceChargeRemoved: true as const } : {}), tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     ...(order.orderTypeName ? { orderTypeName: order.orderTypeName } : {}),
     ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),
     items: items.map((item) => {
@@ -103,7 +119,7 @@ function gstInvoiceDetails(db: Database, ownGstin: string, mode: GstMode, stateC
   if (buyer && buyer.gstin === ownGstin.trim().toUpperCase()) throw httpError(400, "That is your own GSTIN; enter the buyer's GSTIN");
   const { sac_code: sacCode } = db.prepare("SELECT sac_code FROM settings WHERE id = 1").get() as { sac_code: string };
   return {
-    ...(registered && mode === "included" ? { sacCode } : {}),
+    ...(registered && mode !== "none" ? { sacCode } : {}),
     ...(buyer ? { buyer: { gstin: buyer.gstin, name: buyer.name, address: buyer.address, stateCode, stateName: GST_STATES[stateCode] ?? "" } } : {}),
   };
 }
@@ -156,22 +172,23 @@ function discountNote(manual: string | null, loyalty: ReturnType<typeof priceOrd
  */
 export function issueBill(db: Database, orderId: string, opts: {
   discountPaise: number; discountNote: string | null; redeemPoints?: number; clientRef: string; requestJson: string; actorId: string; role: IssueRole; approvedBy?: string | null;
-  gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>; buyer?: BuyerDetailsInput | null;
+  gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>; buyer?: BuyerDetailsInput | null; serviceCharge?: boolean;
 }): { billId: string; changedStockIds: string[] } {
-  const { totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0 }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null);
+  const { totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0 }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true);
   const id = uuidv7();
-  const billNo = nextSequence(db, "bill_no");
   const now = Date.now();
+  const billNo = nextSequence(db, "bill_no");
+  const invoiceNo = nextInvoiceNo(db, readBillingSettings(db).invoicePrefix, now);
   const settings = loyaltySettings(db);
   // A random, unguessable link for the receipt's feedback QR; Zomato's customers are not ours to ask.
   const isZomato = (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string }).type === "zomato";
   const feedbackToken = settings.feedbackEnabled && !isZomato && crmEnabled(db) ? randomBytes(24).toString("base64url") : null;
-  db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, discount_note,
-    cgst_paise, sgst_paise, rounding_paise, total_paise, created_at, created_by, client_ref, request_json, receipt_json, discount_approved_by,
+  db.prepare(`INSERT INTO bills (id, bill_no, invoice_no, order_id, subtotal_paise, discount_paise, discount_note,
+    cgst_paise, sgst_paise, rounding_paise, total_paise, charges_paise, created_at, created_by, client_ref, request_json, receipt_json, discount_approved_by,
     customer_id, customer_discount_paise, points_redeemed, points_value_paise, feedback_token, buyer_gstin, buyer_name, buyer_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, orderId, totals.subtotalPaise,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, invoiceNo, orderId, totals.subtotalPaise,
       totals.discountPaise, discountNote(opts.discountNote, loyalty), totals.cgstPaise, totals.sgstPaise, totals.roundingPaise,
-      totals.totalPaise, now, opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt), opts.discountPaise > 0 ? opts.approvedBy ?? null : null,
+      totals.totalPaise, (totals.charges ?? []).reduce((sum, c) => sum + c.amountPaise, 0), now, opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt), opts.discountPaise > 0 ? opts.approvedBy ?? null : null,
       loyalty.customerId, loyalty.customerDiscountPaise, loyalty.pointsRedeemed, loyalty.pointsValuePaise, feedbackToken,
       receipt.buyer?.gstin ?? null, receipt.buyer?.name ?? null, receipt.buyer ? receipt.buyer.address || null : null);
   // Record any expired points first so this bill's redemption comes out of points that are still good.
@@ -180,6 +197,16 @@ export function issueBill(db: Database, orderId: string, opts: {
   if (loyalty.customerId && loyalty.pointsRedeemed) ledger.run(uuidv7(), loyalty.customerId, "redeem", -loyalty.pointsRedeemed, id, now, opts.actorId, null);
   if (loyalty.customerId && loyalty.pointsEarned) ledger.run(uuidv7(), loyalty.customerId, "earn", loyalty.pointsEarned, id, now, opts.actorId, earnExpiry(settings, now));
   for (const tax of totals.taxes) db.prepare("INSERT INTO bill_taxes (id, bill_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), id, tax.gstRate, tax.taxablePaise, tax.cgstPaise, tax.sgstPaise);
+  // The bill's round-off goes on the items, so charges usually carry none. The items take only what they can: all of it
+  // when they are worth 0 after discount, and no more than their value when it is negative. The rest goes on the charges
+  // (by value), so no item report line, and no charge, is left with a negative total.
+  const charges = totals.charges ?? [];
+  const chargeValues = charges.map((c) => c.taxablePaise + c.cgstPaise + c.sgstPaise);
+  const itemValue = totals.totalPaise - totals.roundingPaise - chargeValues.reduce((sum, n) => sum + n, 0);
+  const itemRounding = itemValue === 0 ? 0 : Math.max(totals.roundingPaise, -itemValue);
+  const chargeShare = charges.length ? totals.roundingPaise - itemRounding : 0;
+  const chargeRounding = chargeShare !== 0 ? allocatePaise(chargeShare, chargeValues) : charges.map(() => 0);
+  charges.forEach((c, i) => db.prepare("INSERT INTO bill_charges (bill_id, kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, c.kind, c.label, c.percentBp ?? null, c.gstRate, c.amountPaise, c.taxablePaise, c.cgstPaise, c.sgstPaise, chargeRounding[i]!));
   saveReportLines(db, id);
   // All remaining pending items are stationless; deduct before changing status.
   const pending = db.prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'pending'").all(orderId) as { id: string }[];
@@ -251,8 +278,8 @@ export function registerBilling(app: FastifyInstance): void {
   const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
   function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor) {
     refuseZomato(orderType(orderId));
-    const { items, totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, actor, undefined, undefined, body.buyer);
-    const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote })).digest("hex");
+    const { items, totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, actor, undefined, undefined, body.buyer, body.serviceCharge);
+    const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote, serviceCharge: body.serviceCharge })).digest("hex");
     return { ...totals, receipt, previewKey, maxRedeemPoints: loyalty.maxRedeemPoints };
   }
 
@@ -261,7 +288,7 @@ export function registerBilling(app: FastifyInstance): void {
    * discount is within the limit. Runs before the write transaction because checking a PIN is asynchronous.
    */
   async function discountApproval(req: FastifyRequest, orderId: string, body: z.infer<typeof BillPreview>): Promise<string | null> {
-    try { priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, { id: req.user.id, role: req.user.role }, undefined, undefined, body.buyer); return null; }
+    try { priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, { id: req.user.id, role: req.user.role }, undefined, undefined, body.buyer, body.serviceCharge); return null; }
     catch (err) {
       if (!isDiscountCapError(err) || !body.approverPin) throw err;
       return (await resolveApprover(app, req, body.approverPin)).id;
@@ -300,7 +327,7 @@ export function registerBilling(app: FastifyInstance): void {
       const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy });
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
       const target = body.printerId ? printer(body.printerId) : null;
-      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer });
+      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
       changedStockIds.push(...issued.changedStockIds);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
       return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };
@@ -339,7 +366,7 @@ export function registerBilling(app: FastifyInstance): void {
     const bill = getBill((req.params as { id: string }).id);
     const payment = billUpiPayment(bill);
     return { payment: payment ? {
-      billId: bill.id, billNo: bill.billNo, restaurantName: bill.receipt.restaurantName,
+      billId: bill.id, billNo: bill.billNo, invoiceNo: bill.invoiceNo, restaurantName: bill.receipt.restaurantName,
       upiId: payment.upiId, amountPaise: payment.amountPaise,
       qrDataUrl: `data:image/svg+xml;base64,${Buffer.from(upiQrSvg(payment.uri)).toString("base64")}`,
     } : null };

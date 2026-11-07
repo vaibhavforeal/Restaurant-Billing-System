@@ -91,7 +91,7 @@ describe("Zomato in reports", () => {
     expect(table).toBeDefined();
     expect(table.columns.map((c: { label: string }) => c.label)).toEqual(["Bill no.", "Zomato order", "Date", "Value"]);
     expect(table.rows).toHaveLength(1);
-    expect(table.rows[0]).toMatchObject({ billNo: zomatoBill.billNo, zomatoOrderId: "5821", value: 58000 });
+    expect(table.rows[0]).toMatchObject({ billNo: zomatoBill.invoiceNo, zomatoOrderId: "5821", value: 58000 });
     expect(table.totals).toMatchObject({ value: 58000 });
     const itemSales = report.tables.find((t: { title: string }) => t.title === "Item sales");
     expect(itemSales.totals.gst).toBe(takeaway.cgstPaise + takeaway.sgstPaise);

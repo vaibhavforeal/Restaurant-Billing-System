@@ -1,6 +1,6 @@
 {
   "name": "masalapos",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Local Windows restaurant POS with SQLite, GST billing, kitchen orders and inventory.",

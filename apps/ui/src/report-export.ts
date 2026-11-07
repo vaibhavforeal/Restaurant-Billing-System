@@ -12,7 +12,7 @@ export interface DayEndReport {
   date: string;
   timezone: string;
   sales: {
-    billCount: number; subtotalPaise: number; discountPaise: number; cgstPaise: number;
+    billCount: number; subtotalPaise: number; discountPaise: number; chargesPaise: number; cgstPaise: number;
     sgstPaise: number; roundingPaise: number; totalPaise: number; outstandingPaise: number;
   };
   taxes: TaxLine[];
@@ -56,6 +56,7 @@ export function dayEndCsv(report: DayEndReport): string {
   row(sales, "Number of bills", report.sales.billCount, "count");
   amount(sales, "Subtotal before discount", report.sales.subtotalPaise);
   amount(sales, "Discounts", report.sales.discountPaise);
+  amount(sales, "Service and packaging charges", report.sales.chargesPaise);
   amount(sales, "CGST", report.sales.cgstPaise);
   amount(sales, "SGST", report.sales.sgstPaise);
   amount(sales, "Round off", report.sales.roundingPaise);

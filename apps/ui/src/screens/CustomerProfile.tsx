@@ -7,14 +7,14 @@ import type { Customer } from "../types";
 import { useRun, type CustomerType } from "./customer-shared";
 
 type LedgerKind = "earn" | "redeem" | "reverse" | "adjust" | "expire";
-interface Bill { id: string; billNo: number; createdAt: number; totalPaise: number; status: string }
-interface Feedback { id: string; overall: number; food: number | null; service: number | null; ambience: number | null; comment: string | null; source: "qr" | "staff"; createdAt: number; billNo: number }
+interface Bill { id: string; billNo: number; invoiceNo: string; createdAt: number; totalPaise: number; status: string }
+interface Feedback { id: string; overall: number; food: number | null; service: number | null; ambience: number | null; comment: string | null; source: "qr" | "staff"; createdAt: number; billNo: number; invoiceNo: string }
 export interface CustomerDetail {
   customer: Customer;
   stats: { visits: number; firstVisitAt: number | null; lastVisitAt: number | null; spendPaise: number; averageBillPaise: number; favourites: Array<{ name: string; qty: number }> };
   tier: { name: string; earnMultiplier: number; windowSpendPaise: number; next: { name: string; minSpendPaise: number } | null } | null;
   expiringSoon: { points: number; firstAt: number | null };
-  ledger: Array<{ id: string; kind: LedgerKind; points: number; note: string | null; createdAt: number; expiresAt: number | null; billNo: number | null; createdByName: string }>;
+  ledger: Array<{ id: string; kind: LedgerKind; points: number; note: string | null; createdAt: number; expiresAt: number | null; invoiceNo: string | null; createdByName: string }>;
   bills: Bill[];
   moreBills: boolean;
   feedback: Feedback[];
@@ -71,7 +71,7 @@ export function CustomerProfile({ detail, types, isAdmin, onChanged }: { detail:
 
     {section === "Bills" && <>
       <table className="customer-ledger"><thead><tr><th scope="col">Bill</th><th scope="col">Date</th><th scope="col" className="pos-money">Amount</th><th scope="col">Status</th></tr></thead><tbody>{bills.list.map((b) => <tr key={b.id}>
-        <td>#{b.billNo}</td><td>{day(b.createdAt)}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td>{b.status}</td>
+        <td>{b.invoiceNo}</td><td>{day(b.createdAt)}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td>{b.status}</td>
       </tr>)}{!bills.list.length && <tr><td colSpan={4} className="muted">No bills yet.</td></tr>}</tbody></table>
       {bills.more && <button type="button" disabled={busy} onClick={() => void loadMore()}>Load older bills</button>}
     </>}
@@ -80,14 +80,14 @@ export function CustomerProfile({ detail, types, isAdmin, onChanged }: { detail:
       {isAdmin && <AdjustPoints customerId={c.id} onChanged={onChanged} />}
       <table className="customer-ledger"><thead><tr><th scope="col">Date</th><th scope="col">Activity</th><th scope="col" className="pos-money">Points</th><th scope="col">Details</th></tr></thead><tbody>{detail.ledger.map((l) => <tr key={l.id}>
         <td>{day(l.createdAt)}</td><td>{KIND[l.kind]}</td><td className="pos-money">{l.points > 0 ? `+${l.points}` : l.points}</td>
-        <td>{l.billNo ? `Bill #${l.billNo}` : ""}{l.note ? ` ${l.note}` : ""}{l.expiresAt ? <small className="muted"> · expires {day(l.expiresAt)}</small> : null}</td>
+        <td>{l.invoiceNo ? `Bill ${l.invoiceNo}` : ""}{l.note ? ` ${l.note}` : ""}{l.expiresAt ? <small className="muted"> · expires {day(l.expiresAt)}</small> : null}</td>
       </tr>)}{!detail.ledger.length && <tr><td colSpan={4} className="muted">No points yet.</td></tr>}</tbody></table>
     </>}
 
     {section === "Feedback" && <>
       <RecordFeedback bills={bills.list.filter((b) => b.status !== "void" && !detail.feedback.some((f) => f.billNo === b.billNo))} onChanged={onChanged} />
       <ul className="crm-feedback-list">{detail.feedback.map((f) => <li key={f.id} className={f.overall <= 2 ? "crm-low" : ""}>
-        <span className="crm-stars" aria-label={`${f.overall} out of 5`}>{stars(f.overall)}</span> Bill #{f.billNo} · {day(f.createdAt)} · {f.source === "qr" ? "QR" : "Staff"}
+        <span className="crm-stars" aria-label={`${f.overall} out of 5`}>{stars(f.overall)}</span> Bill {f.invoiceNo} · {day(f.createdAt)} · {f.source === "qr" ? "QR" : "Staff"}
         {f.comment && <p>{f.comment}</p>}
       </li>)}{!detail.feedback.length && <li className="muted">No feedback yet.</li>}</ul>
     </>}
@@ -168,7 +168,7 @@ function RecordFeedback({ bills, onChanged }: { bills: Bill[]; onChanged: () => 
   if (!bills.length) return null;
   return <fieldset disabled={busy} className="cash-drawer-form">
     <legend>Record a rating</legend>
-    <label>Bill <select value={form.billId} onChange={(e) => setForm({ ...form, billId: e.target.value })}><option value="">Choose…</option>{bills.map((b) => <option key={b.id} value={b.id}>#{b.billNo} · {day(b.createdAt)}</option>)}</select></label>
+    <label>Bill <select value={form.billId} onChange={(e) => setForm({ ...form, billId: e.target.value })}><option value="">Choose…</option>{bills.map((b) => <option key={b.id} value={b.id}>{b.invoiceNo} · {day(b.createdAt)}</option>)}</select></label>
     <label>Rating <select value={form.overall} onChange={(e) => setForm({ ...form, overall: e.target.value })}>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{stars(n)}</option>)}</select></label>
     <label>Comment <input maxLength={1000} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} /></label>
     <button disabled={!form.billId} onClick={() => void run(async () => {

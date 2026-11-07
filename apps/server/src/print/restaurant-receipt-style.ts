@@ -12,7 +12,7 @@ export const RESTAURANT_RECEIPT_CSS = `
   p,h1,h2,dl,dd{margin:0}
   .bill-header{text-align:center;overflow-wrap:anywhere}
   h1{font-size:20px;line-height:1.15;text-transform:uppercase;letter-spacing:.2px;margin-bottom:5px}
-  .address{white-space:pre-wrap}.phone{margin:2px 0 0}
+  .address,.header-line{white-space:pre-wrap}.header-line{margin:2px 0 0}.phone{margin:2px 0 0}
   .registration span{display:block}
   .bill-header h2{margin:20px 0 24px;font-size:15px;letter-spacing:.4px}
   .supply-note{display:block;margin-top:5px;font-size:10px;font-weight:400;line-height:1.35;font-style:normal;letter-spacing:0;text-transform:none}
@@ -31,6 +31,11 @@ export const RESTAURANT_RECEIPT_CSS = `
   .items th:nth-child(2),.items td:nth-child(2){width:9%}
   .items th:nth-child(3),.items td:nth-child(3){width:22%;padding-inline:5px}
   .items th:last-child,.items td:last-child{width:24%}
+  .items--gst th:first-child,.items--gst td:first-child{width:36%}
+  .items--gst th:nth-child(2),.items--gst td:nth-child(2){width:8%}
+  .items--gst th:nth-child(3),.items--gst td:nth-child(3){width:20%}
+  .items--gst th:nth-child(4),.items--gst td:nth-child(4){width:10%;padding-inline:5px}
+  .items--gst th:last-child,.items--gst td:last-child{width:26%}
   .items tbody tr:last-child td{padding-bottom:10px}
   .totals td{padding:3px 0}.totals td:first-child{width:60%;text-align:left;padding-right:10px}
   .totals .subtotal td{border-top:1px dotted #555;padding-top:7px;padding-bottom:7px;font-weight:700}
@@ -54,7 +59,7 @@ export const RESTAURANT_RECEIPT_CSS = `
   .bill--modern{font-family:Arial,Helvetica,sans-serif;line-height:1.45}
   .bill--modern .bill-header{text-align:left;border-top:5px solid #111;padding-top:14px}
   .bill--modern h1{font-size:27px;letter-spacing:-.8px;text-transform:none;line-height:1.05;margin-bottom:10px}
-  .bill--modern .address,.bill--modern .phone,.bill--modern .registration{font-size:12px}
+  .bill--modern .address,.bill--modern .header-line,.bill--modern .phone,.bill--modern .registration{font-size:12px}
   .bill--modern .bill-header h2{font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:18px 0 16px;padding-top:12px;border-top:1px solid #111}
   .bill--modern .bill-meta{font-size:12px}.bill--modern .bill-meta .date{margin-bottom:6px}
   .bill--modern .bill-meta dt{width:92px;font-weight:700}.bill--modern .bill-meta dt::after{content:""}
@@ -69,7 +74,7 @@ export const RESTAURANT_RECEIPT_CSS = `
   .bill--heritage{font-family:Georgia,"Times New Roman",serif;font-size:15px;line-height:1.4}
   .bill--heritage .bill-header{border-top:4px double #111;padding-top:16px}
   .bill--heritage h1{font-size:28px;text-transform:none;font-weight:400;letter-spacing:-.5px;line-height:1.1;margin-bottom:9px}
-  .bill--heritage .address,.bill--heritage .phone{font-size:13px}.bill--heritage .registration{font:10px/1.6 Arial,sans-serif;margin-top:6px;letter-spacing:.3px}
+  .bill--heritage .address,.bill--heritage .header-line,.bill--heritage .phone{font-size:13px}.bill--heritage .registration{font:10px/1.6 Arial,sans-serif;margin-top:6px;letter-spacing:.3px}
   .bill--heritage .bill-header h2{font-size:14px;font-style:italic;font-weight:400;letter-spacing:1px;border-block:4px double #111;margin:17px 0;padding:7px 0}
   .bill--heritage .bill-meta{font-size:13px}.bill--heritage .bill-meta .date{margin-bottom:6px}
   .bill--heritage .bill-meta dt{font-style:italic}.bill--heritage .status{font:700 10px/1.8 Arial,sans-serif}
@@ -87,7 +92,7 @@ export const RESTAURANT_RECEIPT_CSS = `
   .bill--compact{font-family:Tahoma,Verdana,Arial,sans-serif;font-size:12px;line-height:1.3}
   .bill--compact .bill-header{text-align:left}
   .bill--compact h1{font-size:19px;letter-spacing:-.4px;margin-bottom:5px}
-  .bill--compact .address,.bill--compact .phone,.bill--compact .registration{font-size:11px}
+  .bill--compact .address,.bill--compact .header-line,.bill--compact .phone,.bill--compact .registration{font-size:11px}
   .bill--compact .bill-header h2{font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:9px 0;padding:6px 0;border-block:1px solid #111}
   .bill--compact .bill-meta{font-size:11px}.bill--compact .bill-meta .date{margin-bottom:2px}
   .bill--compact .bill-meta dt{font-weight:700}.bill--compact .status{font-size:9px}
@@ -109,6 +114,9 @@ export const RESTAURANT_RECEIPT_CSS = `
     body{font-size:12px}.items th,.items td{font-size:12px}.items th:first-child,.items td:first-child{width:32%;padding-right:6px}
     .items th:nth-child(2),.items td:nth-child(2){width:10%}
     .items th:nth-child(3),.items td:nth-child(3){width:28%;padding-inline:3px}.items th:last-child,.items td:last-child{width:30%}
+    .items--gst th:first-child,.items--gst td:first-child{width:28%}.items--gst th:nth-child(2),.items--gst td:nth-child(2){width:9%}
+    .items--gst th:nth-child(3),.items--gst td:nth-child(3){width:22%}.items--gst th:nth-child(4),.items--gst td:nth-child(4){width:12%;padding-inline:3px}
+    .items--gst th:last-child,.items--gst td:last-child{width:29%}
     .totals .grand-total td{font-size:16px}
   }
   @media print{
