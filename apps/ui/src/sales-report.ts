@@ -2,7 +2,7 @@ import { toCsv } from "@masalapos/domain/csv";
 import { paiseToRupees } from "./money";
 
 export interface SalesTotals {
-  billCount: number; subtotalPaise: number; discountPaise: number; cgstPaise: number;
+  billCount: number; subtotalPaise: number; discountPaise: number; chargesPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; outstandingPaise: number;
 }
 /** Collections are already net of refunds paid out (per method and in total); `refundPaise` is what was refunded. */
@@ -42,10 +42,10 @@ export function salesMetrics(report: SalesReport): SalesMetric[] {
 /** Export the displayed report snapshot; money cells are decimal rupees. */
 export function salesReportCsv(report: SalesReport, kind: SalesReportKind): string {
   const headings = kind === "sales"
-    ? ["Bill date", "Bills issued", "Subtotal INR", "Discount INR", "CGST INR", "SGST INR", "Rounding INR", "Sales incl GST and rounding INR", "Credit notes INR", "Net sales INR", "Unpaid current INR"]
+    ? ["Bill date", "Bills issued", "Subtotal INR", "Discount INR", "Service and packaging charges INR", "CGST INR", "SGST INR", "Rounding INR", "Sales incl GST and rounding INR", "Credit notes INR", "Net sales INR", "Unpaid current INR"]
     : ["Payment date", "Bills with payments", "Cash (net) INR", "UPI (net) INR", "Card (net) INR", "Refunds INR", "Net received INR"];
   const values = (day: Pick<SalesDay, "sales" | "collections" | "creditNotePaise" | "netTotalPaise">) => kind === "sales"
-    ? [day.sales.billCount, ...[day.sales.subtotalPaise, day.sales.discountPaise, day.sales.cgstPaise, day.sales.sgstPaise, day.sales.roundingPaise, day.sales.totalPaise, day.creditNotePaise, day.netTotalPaise, day.sales.outstandingPaise].map(paiseToRupees)]
+    ? [day.sales.billCount, ...[day.sales.subtotalPaise, day.sales.discountPaise, day.sales.chargesPaise, day.sales.cgstPaise, day.sales.sgstPaise, day.sales.roundingPaise, day.sales.totalPaise, day.creditNotePaise, day.netTotalPaise, day.sales.outstandingPaise].map(paiseToRupees)]
     : [day.collections.billCount, ...[day.collections.cashPaise, day.collections.upiPaise, day.collections.cardPaise, day.collections.refundPaise, day.collections.totalPaise].map(paiseToRupees)];
   const rows = [["From", "To", "Server timezone", ...headings],
     ...report.daily.map((day) => [report.from, report.to, report.timezone, day.date, ...values(day)]),

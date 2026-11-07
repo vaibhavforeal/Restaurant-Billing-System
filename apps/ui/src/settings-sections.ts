@@ -1,12 +1,14 @@
 import type { IconName } from "./Icon";
 
-export type SettingsSectionId = "profile" | "order-types" | "printers" | "jobs" | "backups" | "plan" | "updates" | "shortcuts" | "support";
+export type SettingsSectionId = "profile" | "bill" | "tables" | "ai-suggestions" | "order-types" | "printers" | "backups" | "plan" | "updates" | "shortcuts" | "support";
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: string; blurb: string; icon: IconName }> = [
-  { id: "profile", title: "Restaurant profile", blurb: "Name, GST, bill style and UPI", icon: "marketplace" },
+  { id: "profile", title: "Restaurant profile", blurb: "Name, address, GSTIN and FSSAI", icon: "marketplace" },
+  { id: "bill", title: "Bill settings", blurb: "Tax, printed bill and order handling", icon: "note" },
+  { id: "tables", title: "Table Settings", blurb: "Manage tables and table QR codes", icon: "tables" },
+  { id: "ai-suggestions", title: "AI suggestions", blurb: "Popular items, pairings and the AI assistant", icon: "reports" },
   { id: "order-types", title: "Order types", blurb: "Takeaway and delivery types", icon: "bag" },
-  { id: "printers", title: "Printers", blurb: "Printers, print profiles and KOT stations", icon: "printer" },
-  { id: "jobs", title: "Print jobs", blurb: "Check, retry or confirm printed copies", icon: "bills" },
+  { id: "printers", title: "Printers", blurb: "Printers, KOT stations and print jobs", icon: "printer" },
   { id: "backups", title: "Backups & connections", blurb: "Backups, devices and cloud", icon: "cloud" },
   { id: "plan", title: "Plan & devices", blurb: "Licence, plan and registered devices", icon: "badge" },
   { id: "updates", title: "Updates", blurb: "Version, update channel and installing", icon: "refresh" },

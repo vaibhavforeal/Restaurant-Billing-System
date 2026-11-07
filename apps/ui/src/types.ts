@@ -1,6 +1,7 @@
 import type { ItemPrices, PriceTier } from "@masalapos/domain/pricing";
 import type { DefaultGstRate, GstMode } from "@masalapos/domain/gst";
 import type { ReceiptStyle } from "@masalapos/domain/receipt-styles";
+import type { RoundOff } from "@masalapos/domain/round-off";
 import type { ComboGroup } from "@masalapos/domain/combos";
 export interface Category {
   id: string;
@@ -14,6 +15,8 @@ export interface Variant extends ItemPrices {
   name: string;
   pricePaise: number;
   isActive: boolean;
+  /** Packaging per unit in paise; null uses the product's, 0 is none. */
+  packagingPaise?: number | null;
 }
 
 export interface Product extends ItemPrices {
@@ -34,6 +37,8 @@ export interface Product extends ItemPrices {
   /** A combo is sold as one line holding items picked from its slots. */
   kind: "item" | "combo";
   combo?: ComboGroup[];
+  /** Packaging per unit in paise, added on takeaway and delivery bills when per-item packaging is on. */
+  packagingPaise?: number;
 }
 
 export interface Station {
@@ -91,7 +96,7 @@ export interface AdminUser {
 
 export interface SettingsData {
   gstMode: GstMode;
-  /** The restaurant's default GST rate, used by items without their own rate. Only meaningful when `gstMode` is "included". */
+  /** The restaurant's default GST rate, used by items without their own rate. Only meaningful when GST is charged (`gstMode` "included" or "exclusive"). */
   gstRate: DefaultGstRate;
   receiptStyle: ReceiptStyle;
   upiId: string;
@@ -105,7 +110,15 @@ export interface SettingsData {
   phone: string;
   gstin: string;
   fssai: string;
+  /** Up to 3 lines of 48 characters printed above the bill items. */
+  receiptHeader: string;
   receiptFooter: string;
+  billShowFssai: boolean;
+  billShowCustomer: boolean;
+  billShowTable: boolean;
+  billShowServedBy: boolean;
+  /** Print each item's GST rate; the server only does so on bills that charge GST. */
+  billShowItemGst: boolean;
   /** Whether a change to a sent item prints a slip to the kitchen: staff choose, or always / never. */
   kotEditPrint: "ask" | "always" | "never";
   /** Hold orders: Hold saves the cart for every device, and dishes can be held back from the kitchen. */
@@ -122,6 +135,18 @@ export interface SettingsData {
   sacCode: string;
   /** Zomato's GSTIN in the restaurant's state, for GSTR-1 Table 14. Empty when not known. */
   zomatoGstin: string;
+  /** Up to 4 letters or digits before the financial year in invoice numbers; empty for none. */
+  invoicePrefix: string;
+  /** How a bill total is rounded: to the rupee, to 50 paise, or not at all. */
+  roundOff: RoundOff;
+  /** Service charge on dine-in bills, in basis points (1000 = 10%); 0 for none. */
+  serviceChargeBp: number;
+  /** Packaging charge on takeaway and delivery bills, in paise; 0 for none. */
+  packagingChargePaise: number;
+  serviceChargeLabel: string;
+  packagingChargeLabel: string;
+  /** Add each item's packaging amount to the packaging charge. */
+  packagingPerItem: boolean;
 }
 
 export interface Customer {
@@ -192,6 +217,11 @@ export interface OrderItem {
 }
 
 export interface Order {
+  notes?: string;
+  guestCount?: number | null;
+  soldById?: string | null;
+  soldByName?: string | null;
+  summaryRevision?: number;
   captainId?: string | null;
   captainName?: string | null;
   priceTier: PriceTier;

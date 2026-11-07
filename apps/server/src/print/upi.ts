@@ -13,7 +13,7 @@ export function billUpiPayment(bill: Bill) {
     am: (amountPaise / 100).toFixed(2),
     cu: "INR",
     tr: bill.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 35),
-    tn: `Bill #${bill.billNo}`,
+    tn: `Bill ${bill.invoiceNo}`,
   };
   // Percent-encode values (including spaces) for UPI app compatibility.
   const uri = `upi://pay?${Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;

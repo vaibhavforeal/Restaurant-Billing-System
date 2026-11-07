@@ -2,13 +2,23 @@ import type { Order } from "./types";
 
 /** What the table view's side panel shows for a running order: the dishes still on it, their total, and dishes held back. */
 export function orderSummary(order: Order): { lines: Order["items"]; itemCount: number; subtotalPaise: number; heldCount: number } {
-  const lines = order.items.filter((item) => item.status !== "cancelled");
+  const lines = order.items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
   return {
     lines,
     itemCount: lines.reduce((sum, item) => sum + item.qty, 0),
     subtotalPaise: lines.reduce((sum, item) => sum + item.pricePaise * item.qty, 0),
     heldCount: lines.filter((item) => item.held && item.status === "pending").length,
   };
+}
+
+export function maskedPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length > 4 ? `${digits.slice(0, 2)}${"*".repeat(digits.length - 4)}${digits.slice(-2)}` : "*".repeat(digits.length);
+}
+
+export function transferableItems(order: Order): Order["items"] {
+  return order.items.filter((item) => !item.parentItemId && item.status === "pending" && !item.kotId && !item.clientRef?.startsWith("guest:")
+    && order.items.filter((child) => child.parentItemId === item.id).every((child) => child.status === "pending" && !child.kotId && !child.clientRef?.startsWith("guest:")));
 }
 
 /**

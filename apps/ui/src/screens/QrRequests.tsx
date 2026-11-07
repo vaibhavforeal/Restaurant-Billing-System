@@ -7,6 +7,7 @@ import { connectWs } from "../ws";
 import { qrBillGroupOptions } from "../table-transfer";
 import { useLicense } from "./LicenseSettings";
 import { WorkspaceDialog } from "../WorkspaceDialog";
+import { Icon } from "../Icon";
 import { QrNotificationControls } from "../QrNotifications";
 import "../qr-staff.css";
 import "../tables-requests.css";
@@ -133,11 +134,14 @@ export function QrRequests({ tables, disabled, onOpenOrder, onChanged, onBusyCha
       {requests.length === requestLimit && <p className="qr-help">Showing the latest {requestLimit} {filter} requests.</p>}
     </div>;
   const count = <span className="qr-pending-count" role="status" aria-label={compact && !loaded ? "Loading pending requests" : `${pending.length}${pending.length === requestLimit ? " or more" : ""} pending requests`}>{compact && !loaded ? "…" : `${pending.length}${pending.length === requestLimit ? "+" : ""}`}</span>;
-  if (compact) return <section className="tables-request-summary" aria-label="Guest QR requests">
-    <div className="tables-request-summary-heading"><h3>QR requests {count}</h3>{error && <span className="tables-request-attention" role="status" title={error}>Needs attention</span>}</div>
-    <button aria-expanded={expanded} aria-controls="qr-request-list" aria-haspopup="dialog" disabled={busyId !== null || disabled} onClick={() => setExpanded(true)}>Review requests</button>
+  if (compact) return <div className="table-request-icon">
+    <button className="table-request-button" title={error ? `QR requests — ${error}` : "QR requests — review guest orders"}
+      aria-label={`QR requests${loaded ? `, ${pending.length} pending` : ", loading"}${error ? ", needs attention" : ""}`}
+      aria-expanded={expanded} aria-controls="qr-request-list" aria-haspopup="dialog" disabled={busyId !== null || disabled} onClick={() => setExpanded(true)}>
+      <Icon name="qr" size={21} />{count}{error && <span className="table-request-error" aria-hidden="true">!</span>}
+    </button>
     <WorkspaceDialog open={expanded} title="QR requests" onClose={closeInbox} busy={busyId !== null || disabled} className="tables-requests-dialog qr-requests-dialog">{feedback}{inbox}</WorkspaceDialog>
-  </section>;
+  </div>;
   return <section className="qr-inbox panel" aria-label="Guest QR requests">
     <div className="qr-inbox-heading">
       <div><h3>QR requests {count}</h3><p>Review guests’ choices before adding them to a bill.</p></div>

@@ -1,0 +1,60 @@
+@media screen {
+  html[data-theme="light"] {
+    --pos-primary: #252830;
+    --pos-primary-hover: #14171d;
+    --pos-on-primary: #fff;
+    --staff-button-bg: #252830;
+    --staff-button-hover: #14171d;
+    --staff-button-text: #fff;
+    --staff-button-outline: #69717d;
+  }
+
+  html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(button, .pos-overflow > summary):not(:where(
+    [class~="boardui-root"] *, .menu-card, .table-card, .settings-card, .nav-item,
+    .sales-tabs > button, .sales-menu-toggle, .sales-profile,
+    .category-rail > button, .recipe-product-list > button,
+    .report-tabs > button, .menu-view-controls > button,
+    .table-status-button, .pos-segments > button, .tabs > button,
+    .order-pane-switch > button, .table-summary-customer > button,
+    .primary.soft, .text-button, .sales-date-button, .order-held-banner,
+    .cart-item-name, .table-summary-phone
+  )) {
+    background: var(--staff-button-bg);
+    color: var(--staff-button-text);
+    border-color: var(--staff-button-bg);
+  }
+
+  html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(button, .pos-overflow > summary):not(:where(
+    [class~="boardui-root"] *, .menu-card, .table-card, .settings-card, .nav-item,
+    .sales-tabs > button, .sales-menu-toggle, .sales-profile,
+    .category-rail > button, .recipe-product-list > button,
+    .report-tabs > button, .menu-view-controls > button,
+    .table-status-button, .pos-segments > button, .tabs > button,
+    .order-pane-switch > button, .table-summary-customer > button,
+    .primary.soft, .text-button, .sales-date-button, .order-held-banner,
+    .cart-item-name, .table-summary-phone
+  )):hover:not(:disabled) {
+    background: var(--staff-button-hover);
+    border-color: var(--staff-button-hover);
+  }
+
+  html[data-theme="light"] .order-screen.order-with-summary .table-summary-toolbar > button,
+  html[data-theme="light"] .tables-screen.table-overview .table-click-actions > button,
+  html[data-theme="light"] .tables-screen.table-overview .table-click-actions > .table-order-edit {
+    background: var(--staff-button-bg);
+    color: var(--staff-button-text);
+    border-color: var(--staff-button-outline);
+  }
+
+  html[data-theme="light"] .order-screen.order-with-summary .table-summary-toolbar > button:hover:not(:disabled),
+  html[data-theme="light"] .tables-screen.table-overview .table-click-actions > button:hover:not(:disabled) {
+    background: var(--staff-button-hover);
+  }
+
+  html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(
+    button.primary.soft, .settings-card, .menu-view-controls > button,
+    .tabs > button, .pos-segments > button, .info-tip-trigger
+  ) {
+    border-color: var(--staff-button-outline);
+  }
+}

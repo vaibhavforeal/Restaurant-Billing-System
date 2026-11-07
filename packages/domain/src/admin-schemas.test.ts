@@ -71,7 +71,7 @@ describe("user schemas", () => {
 describe("settings schema", () => {
   it("requires restaurantName, defaults the rest to empty strings", () => {
     expect(SettingsUpdate.parse({ restaurantName: "Cafe" })).toEqual({
-      restaurantName: "Cafe", address: "", gstin: "", fssai: "", receiptFooter: "",
+      restaurantName: "Cafe", address: "", gstin: "", fssai: "", receiptHeader: "", receiptFooter: "",
     });
     expect(() => SettingsUpdate.parse({ restaurantName: " " })).toThrow();
   });

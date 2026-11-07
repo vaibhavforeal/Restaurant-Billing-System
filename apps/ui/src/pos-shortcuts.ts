@@ -48,7 +48,7 @@ export function usePosShortcuts() {
       if (!action) return;
       const dialogs = Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]"));
       const scope = dialogs.at(-1) ?? document.querySelector(".app-shell");
-      const button = Array.from(scope?.querySelectorAll<HTMLButtonElement>(`button[data-shortcut="${action.id}"]:not(:disabled)`) ?? [])
+      const button = Array.from(scope?.querySelectorAll<HTMLButtonElement>(`button[data-shortcut~="${action.id}"]:not(:disabled)`) ?? [])
         .find(button => button.getClientRects().length && button.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }));
       if (button) { event.preventDefault(); button.click(); }
     };

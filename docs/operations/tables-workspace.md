@@ -25,7 +25,7 @@ A held dish shows **HELD** with a **Fire** button; **Fire all held (n)** sends e
 held dish on one ticket. Billing a table with held dishes asks "Send N held items to
 the kitchen and continue?" and fires them before the bill.
 
-Turn the feature off with **Settings → Restaurant profile → Hold orders**. While it
+Turn the feature off with **Settings → Bill settings → Hold orders**. While it
 is off, Hold · F8 and the dish Hold buttons are hidden; dishes already held still
 show **Fire**, and billing still offers to fire them, so nothing is stuck.
 

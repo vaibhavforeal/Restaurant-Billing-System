@@ -114,6 +114,7 @@ export function registerOrders(app: FastifyInstance): void {
         .run(id, body.clientRef, body.type, body.tableId, null, req.user.id, now, "takeaway", customType?.id ?? null, customType?.name ?? null);
     }
 
+    app.db.prepare("UPDATE orders SET sold_by_id = ?, sold_by_name = ? WHERE id = ?").run(req.user.id, req.user.name, id);
     const order = orderWithDetails(id)!;
     app.broadcast("order.updated", { order });
     if (body.type === "dine_in") {

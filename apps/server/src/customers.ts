@@ -120,11 +120,11 @@ export function registerCustomers(app: FastifyInstance): void {
     const now = Date.now();
     db.transaction(() => sweepExpiry(db, id, now))();
     const customer = customerJson(db, id)!;
-    const ledger = db.prepare(`SELECT l.id, l.kind, l.points, l.note, l.created_at AS createdAt, l.expires_at AS expiresAt, b.bill_no AS billNo, u.name AS createdByName
+    const ledger = db.prepare(`SELECT l.id, l.kind, l.points, l.note, l.created_at AS createdAt, l.expires_at AS expiresAt, b.bill_no AS billNo, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoiceNo, u.name AS createdByName
       FROM loyalty_ledger l LEFT JOIN bills b ON b.id = l.bill_id JOIN users u ON u.id = l.created_by WHERE l.customer_id = ? ORDER BY l.created_at DESC, l.id DESC LIMIT 100`).all(id);
-    const bills = db.prepare(`SELECT id, bill_no AS billNo, created_at AS createdAt, total_paise AS totalPaise, status FROM bills
+    const bills = db.prepare(`SELECT id, bill_no AS billNo, COALESCE(invoice_no, CAST(bill_no AS TEXT)) AS invoiceNo, created_at AS createdAt, total_paise AS totalPaise, status FROM bills
       WHERE customer_id = ? AND created_at < ? ORDER BY created_at DESC, bill_no DESC LIMIT 21`).all(id, billsBefore ?? Number.MAX_SAFE_INTEGER) as Array<{ createdAt: number }>;
-    const feedback = db.prepare(`SELECT f.id, f.overall, f.food, f.service, f.ambience, f.comment, f.source, f.created_at AS createdAt, b.bill_no AS billNo
+    const feedback = db.prepare(`SELECT f.id, f.overall, f.food, f.service, f.ambience, f.comment, f.source, f.created_at AS createdAt, b.bill_no AS billNo, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoiceNo
       FROM customer_feedback f JOIN bills b ON b.id = f.bill_id WHERE f.customer_id = ? ORDER BY f.created_at DESC LIMIT 20`).all(id);
     return {
       customer, stats: customerStats(db, id), tier: currentTier(db, id, now), expiringSoon: pointsExpiringSoon(db, id, now),

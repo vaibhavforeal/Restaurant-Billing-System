@@ -30,6 +30,7 @@ export function Catalog() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [defaultGstRate, setDefaultGstRate] = useState(5);
+  const [packagingPerItem, setPackagingPerItem] = useState(false);
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [editing, setEditing] = useState<Product | "new" | "new-combo" | null>(null);
@@ -42,12 +43,13 @@ export function Catalog() {
   async function reload() {
     const [c, p, s] = await Promise.all([
       apiFetch<{ categories: Category[] }>("/api/categories"),
-      apiFetch<{ products: Product[]; defaultGstRate: number }>("/api/products"),
+      apiFetch<{ products: Product[]; defaultGstRate: number; packagingPerItem?: boolean }>("/api/products"),
       apiFetch<{ stations: StationInfo[] }>("/api/kot-stations"),
     ]);
     setCategories(c.categories);
     setProducts(p.products);
     setDefaultGstRate(p.defaultGstRate);
+    setPackagingPerItem(p.packagingPerItem === true);
     setStations(s.stations.filter((st) => st.isActive));
     setSelectedCat((cur) => cur ?? c.categories[0]?.id ?? null);
   }
@@ -113,6 +115,7 @@ export function Catalog() {
         defaultCategoryId={selectedCat}
         categories={categories}
         defaultGstRate={defaultGstRate}
+        packagingPerItem={packagingPerItem}
         stations={stations}
         onDone={() => {
           setEditing(null);
@@ -154,20 +157,19 @@ export function Catalog() {
       </aside>
 
       <div className="panel catalog-products">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="catalog-products-heading">
           <h2>Products</h2>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+          <div className="catalog-create-actions">
+            <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null}>
               New combo
             </button>
-            <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null} style={{ padding: "8px 16px" }}>
+            <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null}>
               New product
             </button>
           </div>
         </div>
-        <p className="product-editor-help">Availability applies to new orders. Existing orders stay unchanged.</p>
         <CatalogTransfer busy={busy !== null} run={run} onImported={setMessage} />
-        <div role="alert" style={{ color: "var(--danger-text, crimson)", minHeight: 20 }}>{error}</div>
+        {error && <div role="alert" className="error-message">{error}</div>}
         {message && <p role="status">{message}</p>}
         <div className="catalog-table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>

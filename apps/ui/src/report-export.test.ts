@@ -4,7 +4,7 @@ import { dayEndCsv, netTaxes, NO_GST_SALES_LABEL, type DayEndReport } from "./re
 function report(): DayEndReport {
   return {
     date: "2026-09-29", timezone: "Asia/Calcutta",
-    sales: { billCount: 2, subtotalPaise: 20000, discountPaise: 1000, cgstPaise: 725, sgstPaise: 725,
+    sales: { billCount: 2, subtotalPaise: 20000, discountPaise: 1000, chargesPaise: 2000, cgstPaise: 725, sgstPaise: 725,
       roundingPaise: -50, totalPaise: 20400, outstandingPaise: 5400 },
     taxes: [
       { gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 },
@@ -28,11 +28,12 @@ describe("day-end CSV export", () => {
     const prefix = '"2026-09-29","Asia/Calcutta",';
     const rows = result.split("\r\n").slice(1, -1);
     expect(rows.every((row) => row.startsWith(prefix))).toBe(true);
-    // 45 rows before the Sales without GST line and the two Zomato lines (section 9(5) supplies and the receivable) were added.
-    expect(rows).toHaveLength(48);
+    // 46 rows before the Sales without GST line and the two Zomato lines (section 9(5) supplies and the receivable) were added.
+    expect(rows).toHaveLength(49);
     expect(result).toContain('"Number of bills","","2","count"');
     expect(result).toContain('"Subtotal before discount","","200.00","INR"');
     expect(result).toContain('"Discounts","","10.00","INR"');
+    expect(result).toContain('"Service and packaging charges","","20.00","INR"');
     expect(result).toContain('"Round off","","-0.50","INR"');
     expect(result).toContain('"Sales including GST and rounding","","204.00","INR"');
     expect(result).toContain('"Still unpaid (current)","","54.00","INR"');
@@ -83,7 +84,7 @@ describe("day-end CSV export", () => {
 
   it("exports an empty business date with explicit zero totals and all payment modes", () => {
     const empty = report();
-    empty.sales = { billCount: 0, subtotalPaise: 0, discountPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 };
+    empty.sales = { billCount: 0, subtotalPaise: 0, discountPaise: 0, chargesPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 };
     empty.taxes = []; empty.payments = []; empty.cancellations.orderCount = 0;
     empty.creditNotes = { count: 0, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0, totalPaise: 0, taxes: [] };
     empty.refunds = []; empty.netPayments = []; empty.net = { totalPaise: 0, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0 };

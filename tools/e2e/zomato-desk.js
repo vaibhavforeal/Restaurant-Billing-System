@@ -96,7 +96,7 @@
     showSelect.value = 'all'; showSelect.dispatchEvent(new Event('change', { bubbles: true }));
     const row = await wait(() => [...document.querySelectorAll('.pos-history tbody tr')].find(r => r.textContent.includes('Zomato #E2E-1')), 'Zomato bill row');
     check(row.textContent.includes(money(PRICE)), 'Bills lists "Zomato #E2E-1" with its total');
-    button(`Open bill #${bill.billNo}`, row).click();
+    button(`Open bill ${bill.invoiceNo}`, row).click();
     await clickButton('View bill', await wait(() => document.querySelector('.billing-panel'), 'billing panel'));
     const dialog = await wait(() => document.querySelector('dialog[open]')?.textContent.includes('Tax details') ? document.querySelector('dialog[open]') : null, 'bill dialog');
     check(dialog.textContent.includes('GST paid by Zomato (section 9(5))') && dialog.textContent.includes('Paid: Zomato ' + money(PRICE)) && !/CGST|SGST|Includes GST/.test(dialog.textContent) && !dialog.querySelector('.bill-tax-details table'), 'The bill shows "GST paid by Zomato (section 9(5))", no GST, no per-rate GST rows and the Zomato payment');

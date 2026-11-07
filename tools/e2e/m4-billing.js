@@ -78,17 +78,47 @@
   const plain = document.querySelector('iframe').contentDocument.body.innerText;
   check(!/Tax invoice|Includes GST|CGST|SGST|Bill of supply/.test(plain), 'No-GST receipt without a GSTIN is a plain Restaurant bill with no GST lines');
   await nav('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid');
-  await click(`Open bill #${included.billNo}`);
+  await click(`Open bill ${included.invoiceNo}`);
   await waitFor(() => button('View receipt') || button('View bill'), 'bill actions');
   if (!button('View receipt')) await click('View bill');
   await click('View receipt');
   await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Includes GST') && html.includes('Tax invoice'); }, 'old receipt');
   check((await api(`/bills/${included.id}`)).bill.receipt.gstMode === 'included', 'Old GST bill keeps its mode and receipt after the switch');
+  // GST added on the bill needs a GSTIN, so this round sets one through the API and puts the saved settings back after.
+  const savedSettings = (await api('/settings')).settings;
+  await api('/settings', 'PUT', { ...savedSettings, ...(savedSettings.gstin ? {} : { gstin: '29ABCDE1234F1Z5', stateCode: '29' }), gstMode: 'exclusive' });
+  const added = await checkout();
+  // ₹105 before GST at 5%: CGST = SGST = ₹2.63, ₹110.26 rounds to ₹110.
+  check(added.totalPaise === 11000 && added.cgstPaise === 263 && added.sgstPaise === 263 && added.receipt.gstMode === 'exclusive', 'GST added on the bill totals correct');
+  await payMode(1, 'Cash'); await click('Settle bill');
+  await waitFor(() => document.body.innerText.includes('Paid:'), 'exclusive settlement');
+  await click('View receipt');
+  await waitFor(() => { const html = document.querySelector('iframe')?.contentDocument?.body?.innerText || ''; return html.includes('Tax invoice') && html.includes('CGST 2.5% on 105.00'); }, 'GST added receipt');
+  check(!document.querySelector('iframe').contentDocument.body.innerText.includes('Includes GST'), 'GST added receipt has no Includes GST block');
+  await api('/settings', 'PUT', savedSettings);
+  // Service and packaging charges: set through the API, bill through the API, then put the saved settings back.
+  const gstin = savedSettings.gstin ? {} : { gstin: '29ABCDE1234F1Z5', stateCode: '29' };
+  await api('/settings', 'PUT', { ...savedSettings, ...gstin, gstMode: 'included', serviceChargeBp: 1000, packagingChargePaise: 2000 });
+  const { product: hundred } = await api('/products', 'POST', { categoryId: category.id, name: `Charge meal ${suffix}`, pricePaise: 10000, gstRate: 5, kotStationId: null });
+  const issueFor = async (type, tableId, extra = {}) => {
+    const { order } = await api('/orders', 'POST', { clientRef: crypto.randomUUID(), type, tableId });
+    await api(`/orders/${order.id}/items`, 'POST', { items: [{ productId: hundred.id, qty: 1, clientRef: crypto.randomUUID() }] });
+    const { preview } = await api(`/orders/${order.id}/bill-preview`, 'POST', { discountPaise: 0, ...extra });
+    return (await api(`/orders/${order.id}/bill`, 'POST', { clientRef: crypto.randomUUID(), previewKey: preview.previewKey, ...extra })).bill;
+  };
+  const { table } = await api('/tables', 'POST', { name: `Charge T${suffix % 100000}` });
+  const dine = await issueFor('dine_in', table.id);
+  check(dine.totalPaise === 11000 && dine.charges.length === 1 && dine.charges[0].kind === 'service' && dine.charges[0].amountPaise === 1000, 'Dine-in bill: 10% service on ₹100 at 5% GST included totals ₹110');
+  const parcel = await issueFor('parcel', null);
+  check(parcel.totalPaise === 12000 && parcel.charges.length === 1 && parcel.charges[0].kind === 'packaging' && parcel.charges[0].amountPaise === 2000, 'Takeaway bill: ₹20 packaging added to ₹100');
+  const receiptHtml = await (await fetch(`/api/bills/${dine.id}/receipt`, { headers: { authorization: `Bearer ${localStorage.getItem('masalapos.token')}` } })).text();
+  check(receiptHtml.includes('Service charge 10%'), 'Receipt shows the service charge line');
+  await api('/settings', 'PUT', savedSettings);
   await nav('tables'); await nav('Reports & Analytics'); await click('Day-end / GST');
   await waitFor(() => document.body.innerText.includes('Total received:'), 'day-end report');
   check(document.body.innerText.includes('105.00') || document.body.innerText.includes('110.00'), 'Day-end payment breakdown rendered');
   const report = (await api('/reports/day-end')).report;
-  check(report.sales.billCount >= 2 && report.payments.length === 3, 'Report matches saved cash, UPI and card collections');
-  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo };
+  check(report.sales.billCount >= 2 && report.payments.length === 3 && report.sales.chargesPaise >= 3000, 'Report matches saved cash, UPI and card collections');
+  window.__m4Report = { steps, includedBill: included.billNo, noGstBill: none.billNo, addedGstBill: added.billNo, dineInChargeBill: dine.billNo, takeawayChargeBill: parcel.billNo };
   return window.__m4Report;
 })()

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
 import { money, receiptHtml, receiptSlip } from "./receipt.js";
+import { billUpiPayment } from "./upi.js";
 import { renderBytes } from "./render-bytes.js";
 
 const bill: Bill = {
   ...calculateBill([{ pricePaise: 10500, qty: 2, gstRate: 5 }]),
-  id: "bill-1", billNo: 42, orderId: "order-1", status: "paid", discountNote: null,
+  id: "bill-1", billNo: 42, invoiceNo: "42", orderId: "order-1", status: "paid", discountNote: null,
   createdAt: new Date(2026, 8, 28, 13, 30).getTime(),
   receipt: { restaurantName: "MasalaPOS Cafe", address: "12 Market Road", gstin: "29ABCDE1234F1Z5", fssai: "12345678901234", receiptFooter: "Thank you!", gstMode: "included",
     orderType: "dine_in", tableName: "T1", splitLabel: "B", items: [{ name: "Meal", pricePaise: 10500, qty: 2, gstRate: 5 }] },
@@ -13,6 +14,78 @@ const bill: Bill = {
   refundState: "none", creditNotes: [], refundedQty: {},
 };
 describe("receipts", () => {
+  describe("charge lines", () => {
+    const items = [{ pricePaise: 10000, qty: 1, gstRate: 5 }];
+    const withCharges = (mode: "exclusive" | "included" | "none") => {
+      const totals = calculateBill(items, 0, mode, "off", [
+        { kind: "service", label: "Service charge", gstRate: 18, bp: 1000 }, { kind: "packaging", label: "Packaging", gstRate: 18, amountPaise: 2000 }]);
+      return { ...bill, ...totals, receipt: { ...bill.receipt, gstMode: mode, items: [{ name: "Meal", pricePaise: 10000, qty: 1, gstRate: 5 }] } } as Bill;
+    };
+    const texts = (b: Bill) => [58, 80].map((w) => renderBytes(receiptSlip(b, w as 58 | 80)).replace(/<[0-9A-F]{2}>/g, ""));
+    it("prints each charge after Discount and before the added GST, which covers the charge's taxable value", () => {
+      const b = withCharges("exclusive");
+      expect(b.taxes.find((t) => t.gstRate === 18)!.taxablePaise).toBe(3000);
+      for (const text of texts(b)) {
+        expect(text).toContain("Service charge 10%"); expect(text).toContain("Packaging");
+        expect(text.indexOf("Service charge 10%")).toBeLessThan(text.indexOf("CGST 9%"));
+        expect(text).toContain("CGST 9% on 30.00");
+        expect(text).not.toContain("Packaging 0%");
+      }
+      const html = receiptHtml(b);
+      expect(html).toContain("<td>Service charge 10%</td><td class=\"amount\">₹10.00</td>");
+      expect(html).toContain("<td>Packaging</td><td class=\"amount\">₹20.00</td>");
+      expect(html.indexOf("Service charge 10%")).toBeLessThan(html.indexOf("CGST 9% on 30.00"));
+    });
+    it("prints the charge before Round off when GST is included, and its tax joins the Includes GST block", () => {
+      const b = withCharges("included");
+      for (const text of texts(b)) {
+        expect(text.indexOf("Service charge 10%")).toBeLessThan(text.indexOf("TOTAL"));
+        expect(text).toContain("Taxable @ 18%");
+      }
+      const html = receiptHtml(b);
+      expect(html.indexOf("Service charge 10%")).toBeLessThan(html.indexOf('class="grand-total"'));
+      expect(html.indexOf("Includes GST")).toBeGreaterThan(html.indexOf('class="grand-total"'));
+      // The 18% row is the charges alone (₹30 with GST inside). Each charge is taxed on its own, so the row is
+      // 2544 + 228 + 228 = 3000, a paisa off taxing the ₹30 together (2542 + 229 + 229).
+      expect(b.taxes.find((t) => t.gstRate === 18)).toEqual({ gstRate: 18, taxablePaise: 2544, cgstPaise: 228, sgstPaise: 228 });
+      expect(html).toContain("<td>Taxable @ 18%</td><td class=\"amount\">₹25.44</td>");
+      expect(html).toContain("<td>CGST 9%</td><td class=\"amount\">₹2.28</td>");
+      expect(b.totalPaise).toBe(13000);
+    });
+    it("prints the charges before an actual Round off line, and a 24-character label fits a 58mm slip", () => {
+      const label = "Table service charge fee";
+      expect(label).toHaveLength(24);
+      const totals = calculateBill(items, 0, "exclusive", "rupee", [
+        { kind: "service", label, gstRate: 18, bp: 1000 }, { kind: "packaging", label: "Packaging", gstRate: 18, amountPaise: 2000 }]);
+      // 10000 + 1000 + 2000, plus 500 + 540 GST = 14040, rounded to 14000.
+      expect(totals).toMatchObject({ roundingPaise: -40, totalPaise: 14000 });
+      const b = { ...bill, ...totals, receipt: { ...bill.receipt, gstMode: "exclusive", items: [{ name: "Meal", pricePaise: 10000, qty: 1, gstRate: 5 }] } } as Bill;
+      const html = receiptHtml(b);
+      for (const line of [`${label} 10%`, "<td>Packaging</td>"]) expect(html.indexOf(line), line).toBeLessThan(html.indexOf("Round off</td>"));
+      expect(html.indexOf("Round off</td>")).toBeLessThan(html.indexOf("TOTAL</td>"));
+      for (const width of [58, 80] as const) {
+        const slip = thermal(b, width);
+        expect(slip, String(width)).toContain(label);
+        expect(slip.indexOf(label)).toBeLessThan(slip.indexOf("Round off"));
+        expect(slip.indexOf("Packaging")).toBeLessThan(slip.indexOf("Round off"));
+        expect(slip.indexOf("Round off")).toBeLessThan(slip.indexOf("TOTAL Rs."));
+        expect(fits(slip, width), String(width)).toBe(true);
+      }
+    });
+    it("prints a charge on a no-GST bill and shows no percentage when the charge has none", () => {
+      const html = receiptHtml(withCharges("none"));
+      expect(html).toContain("Service charge 10%"); expect(html).not.toContain("CGST");
+      expect(html).toContain("<td>Packaging</td>");
+    });
+    it("formats a fractional percentage", () => {
+      const b = { ...withCharges("exclusive"), charges: [{ kind: "service" as const, label: "Service", percentBp: 1250, gstRate: 18, amountPaise: 1250, taxablePaise: 1250, cgstPaise: 113, sgstPaise: 113 }] };
+      expect(receiptHtml(b)).toContain("Service 12.5%");
+    });
+    it("prints a bill without charges exactly as before", () => {
+      expect(receiptHtml({ ...bill, charges: [] })).toBe(receiptHtml(bill));
+      expect(receiptSlip({ ...bill, charges: [] }, 58)).toEqual(receiptSlip(bill, 58));
+    });
+  });
   it.each(RECEIPT_STYLES)("uses the saved %s style without changing bill content", (receiptStyle) => {
     const sample = { ...bill, receipt: { ...bill.receipt, receiptStyle } };
     expect(receiptHtml(sample)).toContain(`class="bill bill--${receiptStyle}"`);
@@ -124,6 +197,42 @@ describe("receipts", () => {
     expect(html).toContain("&lt;b&gt;Member discount&lt;/b&gt;"); expect(html).not.toContain("<img");
     expect(html).toContain("size:A4 portrait"); expect(html).toContain("display:table-header-group");
   });
+  it.each(RECEIPT_STYLES)("prints a %s tax invoice with GST added on top, before round-off and the total", (receiptStyle) => {
+    const items = [{ name: "Thali", pricePaise: 10000, qty: 1, gstRate: 5 }, { name: "Mocktail", pricePaise: 20000, qty: 1, gstRate: 18 }];
+    const totals = calculateBill(items, 3000, "exclusive");
+    expect(totals).toMatchObject({ cgstPaise: 1845, sgstPaise: 1845, roundingPaise: 10, totalPaise: 30700 });
+    const added = paid({ ...bill, ...totals, receipt: { ...bill.receipt, receiptStyle, gstMode: "exclusive", items, billShow: { fssai: true, customer: true, table: true, servedBy: false, itemGst: true } } });
+    const html = receiptHtml(added);
+    expect(html).toContain("<h2>Tax invoice</h2>");
+    expect(html).not.toContain("Includes GST");
+    expect(html).toContain("<th scope=\"col\">GST</th>"); expect(html).toContain("<td>18%</td>");
+    for (const label of ["CGST 2.5% on 90.00", "SGST 2.5% on 90.00", "CGST 9% on 180.00", "SGST 9% on 180.00"]) {
+      expect(html.indexOf(label), label).toBeGreaterThan(html.indexOf("Discount</td>"));
+      expect(html.indexOf(label), label).toBeLessThan(html.indexOf("Round off</td>"));
+    }
+    expect(html).toContain("₹2.25"); expect(html).toContain("₹16.20"); expect(html).toContain("₹307.00");
+    expect(html.indexOf("Round off</td>")).toBeLessThan(html.indexOf("TOTAL</td>"));
+    for (const width of [58, 80] as const) {
+      const slip = thermal(added, width);
+      expect(slip).toContain("TAX INVOICE");
+      expect(slip).not.toContain("Includes GST");
+      expect(slip).toContain("GST 18%");
+      for (const label of ["CGST 2.5% on 90.00", "SGST 2.5% on 90.00", "CGST 9% on 180.00", "SGST 9% on 180.00"]) {
+        expect(slip.indexOf(label), label).toBeGreaterThan(slip.indexOf("Discount"));
+        expect(slip.indexOf(label), label).toBeLessThan(slip.indexOf("Round off"));
+      }
+      expect(slip).toContain("16.20");
+      expect(slip.indexOf("Round off")).toBeLessThan(slip.indexOf("TOTAL Rs."));
+      expect(fits(slip, width)).toBe(true);
+    }
+  });
+  it("reprints an included bill with its Includes GST block after the setting changes to GST added on top", () => {
+    // The receipt renders from the bill's snapshot, so only gstMode on the snapshot matters.
+    const included = paid(bill);
+    expect(receiptHtml(included)).toContain("Includes GST");
+    expect(thermal(included, 80)).toContain("Includes GST:");
+    expect(thermal(included, 80)).not.toMatch(/CGST \S+ on /);
+  });
   it.each(RECEIPT_STYLES)("prints a %s bill of supply with the declaration and no GST lines for a no-GST restaurant with a GSTIN", (receiptStyle) => {
     const totals = calculateBill([{ pricePaise: 10050, qty: 2, gstRate: 5 }], 0, "none");
     const supply = paid({ ...bill, ...totals, receipt: { ...bill.receipt, receiptStyle, gstMode: "none" } });
@@ -179,5 +288,120 @@ describe("receipts", () => {
       expect(slip).toContain("RESTAURANT BILL");
       expect(slip).not.toMatch(/DINE-IN|TAKEAWAY|TAX INVOICE|BILL OF SUPPLY|Includes GST|Taxable|CGST|SGST|All prices include tax|GST added to menu prices/);
     }
+  });
+  describe("invoice number", () => {
+    const invoiced: Bill = { ...bill, invoiceNo: "MP/25-26/0007" };
+    it("heads the html, the page footer and the bill-meta cell, without a #", () => {
+      const html = receiptHtml(invoiced);
+      expect(html).toContain("<title>Bill MP/25-26/0007</title>");
+      expect(html).toContain("<dt>Bill no.</dt><dd><strong>MP/25-26/0007</strong>");
+      expect(html).toContain('content:"Bill MP/25-26/0007"');
+      expect(html).not.toContain("#42");
+    });
+    it("prints on the thermal slip", () => {
+      expect(thermal(invoiced, 80)).toContain("Bill MP/25-26/0007");
+    });
+    it("goes in the UPI note and the printed UPI caption", () => {
+      const unpaid: Bill = { ...invoiced, status: "unpaid", payments: [], receipt: { ...invoiced.receipt, upiId: "cafe@upi" } };
+      expect(billUpiPayment(unpaid)!.uri).toContain("tn=Bill%20MP%2F25-26%2F0007");
+      expect(receiptHtml(unpaid)).toContain("Bill MP/25-26/0007 · Amount filled in automatically");
+      expect(thermal(unpaid, 80)).toContain("Bill MP/25-26/0007");
+    });
+  });
+
+  describe("bill settings", () => {
+    const withReceipt = (extra: Partial<Bill["receipt"]>): Bill => ({ ...bill, receipt: { ...bill.receipt, ...extra } });
+    const show = (patch: Partial<NonNullable<Bill["receipt"]["billShow"]>>) =>
+      ({ fssai: true, customer: true, table: true, servedBy: false, itemGst: false, ...patch });
+    const customer = { name: "Asha", phone: "9800000000" } as NonNullable<Bill["receipt"]["customer"]>;
+    it("prints a snapshot without the new fields exactly as before", () => {
+      for (const width of [58, 80] as const) {
+        const plain = receiptSlip(bill, width);
+        expect(receiptSlip(withReceipt({ receiptHeader: "" }), width)).toEqual(plain);
+        expect(thermal(bill, width)).not.toContain("Served by");
+      }
+    });
+    it("prints header lines after the name and before the address", () => {
+      const sample = withReceipt({ receiptHeader: "Pure veg\n\n  Since 1998  " });
+      for (const width of [58, 80] as const) {
+        const text = thermal(sample, width);
+        expect(text.indexOf("Pure veg")).toBeGreaterThan(text.indexOf("MasalaPOS Cafe"));
+        expect(text.indexOf("Pure veg")).toBeLessThan(text.indexOf("12 Market Road"));
+        expect(text.indexOf("Since 1998")).toBeGreaterThan(text.indexOf("Pure veg"));
+      }
+      const html = receiptHtml(sample);
+      expect(html).toContain('class="header-line">Pure veg'); expect(html).toContain('class="header-line">Since 1998');
+    });
+    it("prints each footer line and drops the default thank-you", () => {
+      const sample = withReceipt({ receiptHeader: "", receiptFooter: "Line one\nLine two" });
+      for (const rendered of [receiptHtml(sample), thermal(sample, 58), thermal(sample, 80)]) {
+        expect(rendered).toContain("Line one"); expect(rendered).toContain("Line two");
+        expect(rendered).not.toContain("Thank you for visiting");
+      }
+      expect(thermal(withReceipt({ receiptHeader: "", receiptFooter: " \n " }), 58)).toContain("Thank you for visiting");
+    });
+    it("reprints a legacy snapshot's footer raw, exactly as before", () => {
+      const legacy = withReceipt({ receiptFooter: "Line one\n\n    Indented" });
+      expect(legacy.receipt.receiptHeader).toBeUndefined();
+      expect(receiptHtml(legacy)).toContain("<footer>Line one\n\n    Indented</footer>");
+      const trimmed = receiptHtml(withReceipt({ receiptHeader: "", receiptFooter: "Line one\n\n    Indented" }));
+      expect(trimmed).toContain("<footer>Line one\nIndented</footer>");
+      const text = thermal(legacy, 80);
+      expect(text).toContain("Line one"); expect(text).toContain("Indented");
+    });
+    it("hides FSSAI, customer and table when switched off, and shows them otherwise", () => {
+      const base = withReceipt({ customer });
+      for (const rendered of [receiptHtml(base), thermal(base, 58), thermal(base, 80)]) {
+        expect(rendered).toContain("FSSAI:"); expect(rendered).toContain("Customer:"); expect(rendered).toContain("T1 / B");
+      }
+      const off = withReceipt({ customer, billShow: show({ fssai: false, customer: false, table: false }) });
+      for (const rendered of [receiptHtml(off), thermal(off, 58), thermal(off, 80)]) {
+        expect(rendered).not.toContain("FSSAI:"); expect(rendered).not.toContain("Customer:"); expect(rendered).not.toContain("T1 / B");
+        expect(rendered).toContain("GSTIN:");
+      }
+      expect(thermal(off, 58)).toContain("DINE-IN");
+      expect(receiptHtml(off)).not.toContain("Table / Group");
+    });
+    it("adds Served by only when the flag is on and a name was frozen", () => {
+      const on = withReceipt({ servedBy: "Ravi", billShow: show({ servedBy: true }) });
+      for (const rendered of [receiptHtml(on), thermal(on, 58), thermal(on, 80)]) expect(rendered).toContain("Served by");
+      expect(thermal(on, 58)).toContain("Served by: Ravi");
+      expect(receiptHtml(on)).toContain("<dt>Served by</dt><dd>Ravi</dd>");
+      const off = withReceipt({ servedBy: "Ravi", billShow: show({ servedBy: false }) });
+      for (const rendered of [receiptHtml(off), thermal(off, 58)]) expect(rendered).not.toContain("Served by");
+      const noName = withReceipt({ billShow: show({ servedBy: true }) });
+      for (const rendered of [receiptHtml(noName), thermal(noName, 58), thermal(noName, 80)]) expect(rendered).not.toContain("Served by");
+    });
+    it("shows the item GST rate only when switched on", () => {
+      const on = withReceipt({ billShow: show({ itemGst: true }) });
+      for (const rendered of [receiptHtml(on), thermal(on, 58), thermal(on, 80)]) expect(rendered).toContain("5%");
+      expect(thermal(on, 58)).toContain("  GST 5%"); expect(receiptHtml(on)).toContain('<th scope="col">GST</th>');
+      for (const rendered of [receiptHtml(bill), thermal(bill, 58), thermal(bill, 80)]) expect(rendered).not.toContain("GST 5%");
+      expect(receiptHtml(bill)).not.toContain('<th scope="col">GST</th>');
+    });
+    it("shows item GST only on bills that charge GST, with a matching table class", () => {
+      const on = show({ itemGst: true });
+      const charged = withReceipt({ billShow: on });
+      expect(receiptHtml(charged)).toContain('class="items items--gst"');
+      expect(receiptHtml(bill)).toContain('class="items" aria');
+      for (const other of [withReceipt({ billShow: on, gstPaidBy: "zomato" }), withReceipt({ billShow: on, gstMode: "none" })]) {
+        for (const rendered of [receiptHtml(other), thermal(other, 58), thermal(other, 80)]) {
+          expect(rendered).not.toContain("GST 5%"); expect(rendered).not.toContain('<th scope="col">GST</th>');
+          expect(rendered).not.toContain('class="items items--gst"');
+        }
+      }
+    });
+    it("escapes header markup and strips control bytes", () => {
+      const sample = withReceipt({ receiptHeader: "<b>x</b>\x1b@", receiptFooter: "<i>y</i>\x1b@" });
+      const html = receiptHtml(sample);
+      expect(html).toContain("&lt;b&gt;x&lt;/b&gt;"); expect(html).not.toContain("<b>x</b>"); expect(html).not.toContain("<i>y</i>");
+      for (const width of [58, 80] as const) expect(receiptSlip(sample, width).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
+    });
+    it.each([58, 80] as const)("keeps every %imm line within the paper width with header, footer and item GST", (width) => {
+      const long = "H".repeat(48);
+      const sample = withReceipt({ receiptHeader: `${long}\n${long}\n${long}`, receiptFooter: `${long}\n${long}\n${long}`,
+        servedBy: "Ravi Kumar", customer, billShow: show({ servedBy: true, itemGst: true }) });
+      expect(fits(thermal(sample, width), width)).toBe(true);
+    });
   });
 });

@@ -28,14 +28,14 @@ export function billFeedbackUrl(db: Database, billId: string): string | undefine
   return feedbackUrl(row.feedback_token);
 }
 
-interface TokenBill { id: string; bill_no: number; created_at: number; status: string; customer_id: string | null; restaurant_name: string }
+interface TokenBill { id: string; bill_no: number; invoice_no: string; created_at: number; status: string; customer_id: string | null; restaurant_name: string }
 
 export function registerFeedback(app: FastifyInstance, port = 4100): void {
   serverPort = port;
   const db = app.db;
   const billFor = (token: string) => {
     if (!TOKEN.test(token) || !loyaltySettings(db).feedbackEnabled || !crmEnabled(db)) return undefined;
-    return db.prepare(`SELECT b.id, b.bill_no, b.created_at, b.status, b.customer_id, s.restaurant_name FROM bills b, settings s
+    return db.prepare(`SELECT b.id, b.bill_no, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoice_no, b.created_at, b.status, b.customer_id, s.restaurant_name FROM bills b, settings s
       WHERE s.id = 1 AND b.feedback_token = ?`).get(token) as TokenBill | undefined;
   };
   const crm = requireIntegration(app, "crm");
@@ -50,7 +50,7 @@ export function registerFeedback(app: FastifyInstance, port = 4100): void {
     const bill = billFor(token);
     if (!bill || bill.status === "void") throw httpError(404, "This feedback link is not valid");
     return {
-      restaurantName: bill.restaurant_name, billNo: bill.bill_no, billedAt: bill.created_at,
+      restaurantName: bill.restaurant_name, billNo: bill.bill_no, invoiceNo: bill.invoice_no, billedAt: bill.created_at,
       submitted: submitted(bill.id), open: Date.now() - bill.created_at <= FEEDBACK_WINDOW_MS,
     };
   });
@@ -88,7 +88,7 @@ export function registerFeedback(app: FastifyInstance, port = 4100): void {
       maxRating: z.coerce.number().int().min(1).max(5).optional(), limit: z.coerce.number().int().min(1).max(500).default(200),
     }).parse(req.query);
     const rows = db.prepare(`SELECT f.id, f.overall, f.food, f.service, f.ambience, f.comment, f.source, f.created_at AS createdAt,
-        b.id AS billId, b.bill_no AS billNo, c.id AS customerId, c.name AS customerName, c.phone AS customerPhone, u.name AS recordedBy
+        b.id AS billId, b.bill_no AS billNo, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoiceNo, c.id AS customerId, c.name AS customerName, c.phone AS customerPhone, u.name AS recordedBy
       FROM customer_feedback f JOIN bills b ON b.id = f.bill_id LEFT JOIN customers c ON c.id = f.customer_id LEFT JOIN users u ON u.id = f.created_by
       WHERE f.created_at >= ? AND f.created_at < ? AND f.overall <= ? ORDER BY f.created_at DESC LIMIT ?`)
       .all(q.from ?? 0, q.to ?? Number.MAX_SAFE_INTEGER, q.maxRating ?? 5, q.limit);

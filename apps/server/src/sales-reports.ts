@@ -5,12 +5,12 @@ import { httpError } from "./http-error.js";
 import { requireModule } from "./modules.js";
 
 interface Sales {
-  billCount: number; subtotalPaise: number; discountPaise: number; cgstPaise: number;
+  billCount: number; subtotalPaise: number; discountPaise: number; chargesPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; outstandingPaise: number;
 }
 /** Money received by payment date, net of refunds paid out that date (`refundPaise`, already subtracted per method). */
 interface Collections { billCount: number; cashPaise: number; upiPaise: number; cardPaise: number; refundPaise: number; totalPaise: number }
-const emptySales = (): Sales => ({ billCount: 0, subtotalPaise: 0, discountPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 });
+const emptySales = (): Sales => ({ billCount: 0, subtotalPaise: 0, discountPaise: 0, chargesPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 });
 const emptyCollections = (): Collections => ({ billCount: 0, cashPaise: 0, upiPaise: 0, cardPaise: 0, refundPaise: 0, totalPaise: 0 });
 
 export function reportRange(query: unknown) {
@@ -50,7 +50,7 @@ export function salesReport(db: Database, range: ReportRange): SalesReport {
   const localDate = (column: string) => `strftime('%Y-%m-%d', ${column} / 1000, 'unixepoch', 'localtime')`;
   const { sales, credits, collections, refunds, collectedBills, receivables } = db.transaction(() => ({
     sales: db.prepare(`SELECT ${localDate("created_at")} AS date,
-      COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise,
+      COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise, SUM(charges_paise) AS chargesPaise,
       SUM(cgst_paise) AS cgstPaise, SUM(sgst_paise) AS sgstPaise, SUM(rounding_paise) AS roundingPaise,
       SUM(total_paise) AS totalPaise, SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END) AS outstandingPaise
       FROM bills WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<Sales & { date: string }>,

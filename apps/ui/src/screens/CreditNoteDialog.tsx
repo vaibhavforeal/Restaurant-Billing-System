@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { Bill, BillCreditNote } from "@masalapos/domain";
+import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain/billing";
+import { billChargesGst } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
-import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditReason, defaultRefundRows, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
+import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, OrderItem, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -15,7 +16,11 @@ interface Preview {
   lines: Array<{ orderItemId: string; name: string; qty: number; totalPaise: number }>;
   taxes: Array<{ gstRate: number; taxablePaise: number; cgstPaise: number; sgstPaise: number }>;
   totals: { taxablePaise: number; cgstPaise: number; sgstPaise: number; roundingPaise: number; totalPaise: number };
+  /** Service and packaging charges credited back, one line each. */
+  charges?: Array<{ kind: string; label: string; percentBp?: number; totalPaise: number }>;
   refundable: Refundable;
+  /** For a refund: the items' packaging that "Refund packaging" gives back; 0 when there is none. */
+  packagingPaise?: number;
 }
 interface IssuedCredit { bill: Bill; creditNote: BillCreditNote; order: Order }
 type RefundDraft = { id: string; mode: PayMode; amount: string };
@@ -24,7 +29,7 @@ const modeLabel = (mode: string) => mode.toUpperCase();
 
 /** Print or view the slip of one credit note. `selectable` lets the cashier pick the printer; otherwise `printerId` is used as is. */
 export function CreditNoteActions({ note, printers, printerId, selectable = false, printLabel = "Print credit note" }: {
-  note: Pick<BillCreditNote, "id" | "cnNo">; printers: Printer[]; printerId: string; selectable?: boolean; printLabel?: string;
+  note: Pick<BillCreditNote, "id" | "creditNoteRef">; printers: Printer[]; printerId: string; selectable?: boolean; printLabel?: string;
 }) {
   const [chosen, setChosen] = useState(() => printers.some((p) => p.id === printerId) ? printerId : "");
   const [busy, setBusy] = useState(false);
@@ -46,7 +51,7 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
   }
   const print = () => run(async () => {
     const result = await apiFetch<{ job: PrintJobInfo }>(`/api/credit-notes/${note.id}/print`, { method: "POST", body: JSON.stringify({ printerId: target }) });
-    setMessage(`CN-${note.cnNo} queued for printing${result.job.printerName ? ` on ${result.job.printerName}` : ""}.`);
+    setMessage(`${note.creditNoteRef} queued for printing${result.job.printerName ? ` on ${result.job.printerName}` : ""}.`);
   });
   const view = () => run(async () => {
     const response = await fetch(`/api/credit-notes/${note.id}/receipt`, { headers: authHeaders() });
@@ -59,14 +64,14 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
       {selectable && printers.length > 0 && <label htmlFor={printerField}>Printer <select id={printerField} value={chosen} disabled={busy} onChange={(e) => setChosen(e.target.value)}>
         <option value="">Choose a printer</option>{printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select></label>}
-      {target && <button type="button" className={selectable ? "primary" : ""} disabled={busy} aria-label={`${printLabel} CN-${note.cnNo}`} onClick={() => void print()}>{printLabel}</button>}
-      <button type="button" disabled={busy} aria-label={`View CN-${note.cnNo}`} onClick={() => void view()}>View</button>
+      {target && <button type="button" className={selectable ? "primary" : ""} disabled={busy} aria-label={`${printLabel} ${note.creditNoteRef}`} onClick={() => void print()}>{printLabel}</button>}
+      <button type="button" disabled={busy} aria-label={`View ${note.creditNoteRef}`} onClick={() => void view()}>View</button>
       {html && <button type="button" disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
       {html && <button type="button" onClick={() => setHtml("")}>Hide</button>}
     </div>
     {error && <p className="billing-error" role="alert">{error}</p>}
     {message && <p className="billing-message" role="status">{message}</p>}
-    {html && <iframe className="billing-receipt-frame" ref={frame} title={`Credit note CN-${note.cnNo}`} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={() => setFrameReady(true)} />}
+    {html && <iframe className="billing-receipt-frame" ref={frame} title={`Credit note ${note.creditNoteRef}`} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={() => setFrameReady(true)} />}
   </div>;
 }
 
@@ -76,7 +81,7 @@ export function CreditNoteList({ notes, printers, printerId }: { notes: BillCred
   return <section className="credit-note-list" aria-label="Credit notes">
     <h3>Credit notes</h3>
     <ul>{notes.map((note) => <li key={note.id}>
-      <div className="credit-note-head"><strong>CN-{note.cnNo}</strong><span>{new Date(note.createdAt).toLocaleString()}</span><span className="credit-note-kind">{note.kind === "void" ? "Void" : "Refund"}</span><strong className="pos-money">{money(note.totalPaise)}</strong></div>
+      <div className="credit-note-head"><strong>{note.creditNoteRef}</strong><span>{new Date(note.createdAt).toLocaleString()}</span><span className="credit-note-kind">{note.kind === "void" ? "Void" : "Refund"}</span><strong className="pos-money">{money(note.totalPaise)}</strong></div>
       <p>Reason: {note.reason}</p>
       <p className="muted">Requested by {note.requestedByName} · Approved by {note.approvedByName}{note.refunds.length > 0 && ` · Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}`}</p>
       <CreditNoteActions note={note} printers={printers} printerId={printerId} printLabel="Reprint" />
@@ -108,7 +113,7 @@ export function CreditNoteDialog({ kind, bill, items, role, printers, printerId,
   onStale: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const title = `${kind === "refund" ? "Refund items" : "Void bill"} · Bill #${bill.billNo}`;
+  const title = `${kind === "refund" ? "Refund items" : "Void bill"} · Bill ${bill.invoiceNo}`;
   return <WorkspaceDialog open={kind !== null} title={title} className="credit-note-dialog" busy={busy} onClose={onClose}>
     {kind && <CreditBody kind={kind} bill={bill} items={items} role={role} printers={printers} printerId={printerId} onBusyChange={setBusy} onClose={onClose} onIssued={onIssued} onStale={onStale} />}
   </WorkspaceDialog>;
@@ -128,6 +133,9 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const [tick, setTick] = useState(0);
+  const [refundPackaging, setRefundPackaging] = useState(true);
+  // The packaging on offer for these lines; it does not depend on the tickbox, so ticking keeps the box in place.
+  const [packagingOffer, setPackagingOffer] = useState<{ linesKey: string; paise: number } | null>(null);
   const [rows, setRows] = useState<RefundDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -137,8 +145,10 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const ids = { reason: useId(), pin: useId() };
 
   const lines = billable.map((item) => ({ orderItemId: item.id, qty: qty[item.id] ?? 0 })).filter((line) => line.qty > 0);
-  const key = JSON.stringify(lines);
+  const linesKey = JSON.stringify(lines);
   const needsItems = kind === "refund";
+  const key = JSON.stringify({ lines, refundPackaging });
+  const tickbox = packagingTickbox(packagingOffer, linesKey, loadingPreview);
 
   useEffect(() => {
     if (result) return;
@@ -146,8 +156,8 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     if (needsItems && !lines.length) { setLoadingPreview(false); return; }
     let active = true;
     setLoadingPreview(true);
-    apiFetch<{ preview: Preview }>(`/api/bills/${bill.id}/credit-preview`, { method: "POST", body: JSON.stringify(needsItems ? { kind, lines } : { kind }) })
-      .then((r) => { if (active) setPreview({ ...r.preview, key }); })
+    apiFetch<{ preview: Preview }>(`/api/bills/${bill.id}/credit-preview`, { method: "POST", body: JSON.stringify(creditPreviewBody(kind, lines, refundPackaging)) })
+      .then((r) => { if (active) { setPreview({ ...r.preview, key }); setPackagingOffer({ linesKey, paise: r.preview.packagingPaise ?? 0 }); } })
       .catch((e: unknown) => { if (active) setPreviewError(e instanceof Error ? e.message : "Could not work out the credit"); })
       .finally(() => { if (active) setLoadingPreview(false); });
     return () => { active = false; };
@@ -175,7 +185,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   async function submit() {
     if (lock.current || !ready || !preview) return;
     const refunds = unpaid ? [] : parsed.filter((row) => row.amountPaise).map((row) => ({ mode: row.mode, amountPaise: row.amountPaise! }));
-    const request = { reason, refunds, ...(needsItems ? { lines } : {}) };
+    const request = { reason, refunds, ...(needsItems ? { lines, refundPackaging } : {}) };
     // A retry of the same request replays; a changed request needs its own reference.
     const fingerprint = JSON.stringify({ kind, ...request });
     if (attempt.current?.fingerprint !== fingerprint) attempt.current = { clientRef: uuid(), fingerprint };
@@ -210,7 +220,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   if (result) {
     const note = result.creditNote;
     return <div className="credit-note-result">
-      <p className="billing-message" role="status">Credit note CN-{note.cnNo} issued for {money(note.totalPaise)}.{note.refunds.length > 0 && ` Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}.`}</p>
+      <p className="billing-message" role="status">Credit note {note.creditNoteRef} issued for {money(note.totalPaise)}.{note.refunds.length > 0 && ` Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}.`}</p>
       <CreditNoteActions note={note} printers={printers} printerId={printerId} selectable />
       <div className="credit-note-footer"><button type="button" className="primary" onClick={onClose}>Done</button></div>
     </div>;
@@ -249,12 +259,16 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     <section className="credit-note-preview" aria-label="Credit preview" aria-live="polite">
       <h3>Credit note</h3>
       {needsItems && !lines.length && <p className="muted">Choose how many of each item to refund.</p>}
+      {needsItems && tickbox && <label className="credit-note-packaging">
+        <input type="checkbox" checked={refundPackaging} disabled={busy} onChange={(e) => setRefundPackaging(e.target.checked)} />
+        <span>Refund packaging{tickbox.amountPaise !== null && ` (${money(tickbox.amountPaise)})`}</span>
+      </label>}
       {loadingPreview && <p role="status">Working out the credit…</p>}
       {previewError && <p className="billing-error" role="alert">{previewError}</p>}
       {preview && preview.key === key && <>
-        <ul>{preview.lines.map((line) => <li key={line.orderItemId}><span>{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}</ul>
+        <ul>{preview.lines.map((line) => <li key={line.orderItemId}><span>{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}{(preview.charges ?? []).map((c) => <li key={c.kind}><span>{chargeLabel(c)}</span><span className="pos-money">{money(c.totalPaise)}</span></li>)}</ul>
         <dl className="pos-totals">
-          {bill.receipt.gstMode !== "included" ? <><dt>Item value</dt><dd>{money(preview.totals.taxablePaise)}</dd></> : <>
+          {!billChargesGst(bill.receipt) ? <><dt>Item value</dt><dd>{money(preview.totals.taxablePaise)}</dd></> : <>
             <dt>Taxable value</dt><dd>{money(preview.totals.taxablePaise)}</dd>
             <dt>CGST</dt><dd>{money(preview.totals.cgstPaise)}</dd>
             <dt>SGST</dt><dd>{money(preview.totals.sgstPaise)}</dd>

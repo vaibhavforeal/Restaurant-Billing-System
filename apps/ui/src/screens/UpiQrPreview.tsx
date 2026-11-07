@@ -5,7 +5,7 @@ import { WorkspaceDialog } from "../WorkspaceDialog";
 import "../upi-qr-preview.css";
 
 interface UpiPaymentPreview {
-  billId: string; billNo: number; restaurantName: string; upiId: string;
+  billId: string; invoiceNo: string; restaurantName: string; upiId: string;
   amountPaise: number; qrDataUrl: string;
 }
 
@@ -40,10 +40,10 @@ export function UpiQrPreview({ billId, open, onClose }: { billId: string; open: 
       <p>{error}</p><button onClick={() => setRetry((value) => value + 1)}>Retry QR</button>
     </div> : payment?.billId === billId ? <div className="upi-preview">
       <p className="upi-preview-restaurant">{payment.restaurantName}</p>
-      <p className="upi-preview-bill">Bill #{payment.billNo}</p>
+      <p className="upi-preview-bill">Bill {payment.invoiceNo}</p>
       <p className="upi-preview-amount">₹{paiseToRupees(payment.amountPaise)}</p>
       <img className="upi-preview-image" src={payment.qrDataUrl} width={300} height={300}
-        alt={`UPI payment QR for bill ${payment.billNo}, INR ${paiseToRupees(payment.amountPaise)}`} />
+        alt={`UPI payment QR for bill ${payment.invoiceNo}, INR ${paiseToRupees(payment.amountPaise)}`} />
       <p className="upi-preview-id">{payment.upiId}</p>
       <p>Scan with your UPI app. The bill amount is filled in.</p>
       <p className="upi-preview-note">Verify payment in the restaurant’s UPI app before settling the bill.</p>

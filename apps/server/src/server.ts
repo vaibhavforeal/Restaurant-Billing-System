@@ -14,6 +14,8 @@ import { registerMenuInsights } from "./menu-insights.js";
 import { registerDiscountCaps } from "./discount-caps.js";
 import { registerKotEdits } from "./kot-edit.js";
 import { registerOrderTypes } from "./order-types.js";
+import { registerOrderSummary } from "./order-summary.js";
+import { registerItemTransfers } from "./item-transfers.js";
 import { registerShifts } from "./shifts.js";
 import { registerCustomers } from "./customers.js";
 import { registerLoyaltyTiers } from "./loyalty.js";
@@ -147,6 +149,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerDiscountCaps(app);
   registerKotEdits(app);
   registerOrderTypes(app);
+  registerOrderSummary(app);
+  registerItemTransfers(app);
   registerShifts(app);
   registerCustomers(app);
   registerLoyaltyTiers(app);

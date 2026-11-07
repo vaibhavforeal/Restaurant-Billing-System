@@ -75,6 +75,32 @@ describe("operational reports", () => {
     expect((await report("cashiers")).tables[0]!.rows).toEqual(table.rows);
   });
 
+  it("shows the service and packaging charges on the order type report", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 2000").run();
+    const bill = await issue((await order()).id);
+    const result = (await report("order-types")).tables[0]!;
+    expect(result.columns.map((c) => c.key)).toContain("charges");
+    expect(result.rows.map((r) => [r.orderType, r.charges])).toEqual([["Takeaway", 2000]]);
+    expect(result.totals).toMatchObject({ charges: 2000, total: bill.totalPaise });
+  });
+
+  it("subtracts only the packaging a credit note credited, not the whole bill charge", async () => {
+    app.db.prepare("UPDATE settings SET packaging_charge_paise = 500, packaging_per_item = 1").run();
+    await request("PATCH", `/api/products/${productId}`, { packagingPaise: 1000 });
+    const bill = await issue((await order([{ productId, qty: 2 }])).id);
+    expect(bill.charges).toMatchObject([{ kind: "packaging", amountPaise: 2500 }]);
+    await post(`/api/bills/${bill.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: bill.totalPaise }] });
+    const orderItemId = (app.db.prepare("SELECT order_item_id AS id FROM bill_report_lines WHERE bill_id = ?").get(bill.id) as { id: string }).id;
+    const lines = [{ orderItemId, qty: 1 }];
+    const { preview } = await post(`/api/bills/${bill.id}/credit-preview`, { kind: "refund", lines });
+    expect(preview.charges).toMatchObject([{ kind: "packaging", amountPaise: 1000 }]);
+    await post(`/api/bills/${bill.id}/refund`, { clientRef: uuidv7(), reason: "Cancelled", lines, refunds: [{ mode: "cash", amountPaise: preview.totals.totalPaise }] });
+    app.db.exec("DROP TRIGGER IF EXISTS credit_notes_no_update");
+    app.db.prepare("UPDATE credit_notes SET created_at = ? WHERE bill_id = ?").run(at(28), bill.id);
+    const result = (await report("order-types")).tables[0]!;
+    expect(result.totals).toMatchObject({ charges: 2500 - 1000, total: bill.totalPaise - preview.totals.totalPaise });
+  });
+
   it("shows all local hours and respects inclusive dates and midnight boundaries", async () => {
     const first = await issue((await order()).id), last = await issue((await order()).id), outside = await issue((await order()).id);
     app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(at(27, 0), first.id);

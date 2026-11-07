@@ -189,8 +189,8 @@ describe("reports net of credit notes", () => {
     const table = report.tables[0]!;
     expect(table.columns.map((c) => c.key)).toEqual(["cnNo", "date", "billNo", "kind", "reason", "requestedBy", "approvedBy", "refundModes", "taxable", "gst", "total"]);
     expect(table.rows).toEqual([
-      { cnNo: "CN-1", date: expect.any(Number), billNo: b.billNo, kind: "Refund", reason: "Cold food", requestedBy: "Cara", approvedBy: "Asha", refundModes: "Cash", taxable: 3333, gst: 166, total: 3499 },
-      { cnNo: "CN-2", date: expect.any(Number), billNo: unpaid.billNo, kind: "Void", reason: "Wrong bill", requestedBy: "Asha", approvedBy: "Asha", refundModes: "None", taxable: 10000, gst: 500, total: 10500 },
+      { cnNo: expect.stringMatching(/^CN\/\d\d-\d\d\/001$/), date: expect.any(Number), billNo: b.invoiceNo, kind: "Refund", reason: "Cold food", requestedBy: "Cara", approvedBy: "Asha", refundModes: "Cash", taxable: 3333, gst: 166, total: 3499 },
+      { cnNo: expect.stringMatching(/^CN\/\d\d-\d\d\/002$/), date: expect.any(Number), billNo: unpaid.invoiceNo, kind: "Void", reason: "Wrong bill", requestedBy: "Asha", approvedBy: "Asha", refundModes: "None", taxable: 10000, gst: 500, total: 10500 },
     ]);
     expect(table.totals).toMatchObject({ cnNo: "Total", taxable: 13333, gst: 666, total: 13999 });
     expect((await operations("credit-notes", yesterday, yesterday)).tables[0]!.rows).toEqual([]);

@@ -1,4 +1,4 @@
-import { type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@masalapos/domain";
+import { billChargesGst, type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { RECEIPT_CSS } from "./receipt-style.js";
@@ -7,7 +7,7 @@ import { buyerLines, dateTime, escape, money, slipWriter } from "./receipt.js";
 /** A credit note as printed: the bill JSON's credit note plus its per-rate taxes (which the bill JSON does not carry). */
 export interface CreditNoteView extends BillCreditNote { taxes: TaxLine[] }
 
-const cnLabel = (note: CreditNoteView) => `CN-${note.cnNo}`;
+const cnLabel = (note: CreditNoteView) => note.creditNoteRef;
 /** A void of an unpaid bill refunds nothing: the bill is simply cancelled. */
 const isUnpaidVoid = (note: CreditNoteView) => note.kind === "void" && note.refunds.length === 0;
 const roundingOf = (note: CreditNoteView) => note.totalPaise - note.taxablePaise - note.cgstPaise - note.sgstPaise;
@@ -28,7 +28,7 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
   line(`CREDIT NOTE ${cnLabel(note)}`);
   pos.bold(false).align("left");
   line(dateTime(note.createdAt));
-  line(`Against Bill #${bill.billNo}`);
+  line(`Against Bill ${bill.invoiceNo}`);
   line(`Bill date: ${dateTime(bill.createdAt)}`);
   for (const text of buyerLines(r)) line(text);
   pos.hr(width).bold(true);
@@ -41,9 +41,10 @@ export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 
     pos.bold(true); line(`${index + 1}. ${item.name}`); pos.bold(false);
     pair(`Qty ${item.qty}`, money(item.totalPaise));
   });
+  for (const c of note.charges ?? []) { pos.bold(true); pair(c.label, money(c.totalPaise)); pos.bold(false); }
   pos.hr(width);
   // A bill that charged no GST (no-GST restaurant or Zomato) has a credit note with none either.
-  if (r.gstMode === "included") for (const t of note.taxes) {
+  if (billChargesGst(r)) for (const t of note.taxes) {
     pair(`Taxable @ ${t.gstRate}%`, money(t.taxablePaise));
     pair(`CGST ${t.gstRate / 2}%`, money(t.cgstPaise));
     pair(`SGST ${t.gstRate / 2}%`, money(t.sgstPaise));
@@ -76,7 +77,7 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
   const label = cnLabel(note);
   const unpaidVoid = isUnpaidVoid(note);
   const rounding = roundingOf(note);
-  const supply = r.gstMode !== "included";
+  const supply = !billChargesGst(r);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Credit note ${label}</title><style>${RECEIPT_CSS}
   .items th:nth-child(3),.items td:nth-child(3){width:14%}.items th:last-child,.items td:last-child{width:37%}
@@ -86,11 +87,12 @@ export function creditNoteHtml(note: CreditNoteView, bill: Bill): string {
     ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}${r.phone ? `<p class="phone">Ph: ${e(r.phone)}</p>` : ""}
     <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
   </div><div class="bill-identity"><p class="eyebrow">Credit note</p><p class="bill-number">${label}</p><span class="status">${unpaidVoid ? "BILL VOIDED" : note.kind === "void" ? "VOID" : "REFUND"}</span></div></header>
-  <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(note.createdAt))}</dd></div><div><dt>Against bill</dt><dd>Bill #${bill.billNo}</dd></div>
+  <dl class="bill-meta"><div><dt>Issued on</dt><dd>${e(dateTime(note.createdAt))}</dd></div><div><dt>Against bill</dt><dd>Bill ${e(bill.invoiceNo)}</dd></div>
     <div><dt>Bill date</dt><dd>${e(dateTime(bill.createdAt))}</dd></div></dl>
   ${r.buyer ? `<section class="buyer" aria-label="Issued to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <table class="items" aria-label="Credited items"><thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Amount ₹</th></tr></thead><tbody>
     ${note.lines.length ? note.lines.map((i, index) => `<tr><td>${index + 1}</td><td><span class="item-name">${e(i.name)}</span></td><td>${i.qty}</td><td class="amount"><strong>${money(i.totalPaise)}</strong></td></tr>`).join("") : `<tr><td></td><td><span class="item-name">All items on the bill</span></td><td></td><td class="amount"><strong>${money(note.totalPaise)}</strong></td></tr>`}
+    ${(note.charges ?? []).map((c) => `<tr><td></td><td><span class="item-name">${e(c.label)}</span></td><td></td><td class="amount"><strong>${money(c.totalPaise)}</strong></td></tr>`).join("")}
   </tbody></table><div class="item-count"><span>${note.lines.reduce((sum, l) => sum + l.qty, 0)} total quantity credited</span><span>All amounts in INR</span></div>
   <div class="summary">${supply ? `<section aria-label="GST"><p class="tax-note">No GST was charged on this bill.</p></section>` : `<section aria-label="GST breakdown"><h2 class="section-title">GST breakdown (₹)</h2>
     <table class="taxes"><thead><tr><th scope="col">GST</th><th scope="col">Taxable</th><th scope="col">CGST</th><th scope="col">SGST</th></tr></thead><tbody>

@@ -6,7 +6,7 @@ choose **Open bill**. Administrators and cashiers see **Void bill** and **Refund
 items**. Captains and the kitchen do not.
 
 Every void or refund creates a **credit note**: a numbered, dated record
-(CN-1, CN-2, ...) that is added to the books on the day it is made. The original
+(CN/26-27/001, CN/26-27/002, ...; the counter restarts every 1 April) that is added to the books on the day it is made. The original
 bill is never edited. Available on Basic and Pro.
 
 ## Void or refund?
@@ -128,7 +128,7 @@ every credit note on the bill, with date, kind, amount, reason, who requested
 and approved, and **View**. **Reprint** appears there once a receipt printer is
 set for the bill view.
 
-The slip shows the restaurant name and GSTIN, **CREDIT NOTE CN-n**, the original
+The slip shows the restaurant name and GSTIN, **CREDIT NOTE CN/YY-YY/NNN** (older credit notes show CN-n), the original
 bill number and date, the items and quantities, GST per rate, the total, the
 refund methods, the reason, and the approver. **View** opens the slip in the
 browser, where **Print / save PDF** gives an A4 copy. Printing uses the same print

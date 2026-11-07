@@ -152,7 +152,7 @@ describe("item CSV transfer", () => {
     await apply(token, csv(["A", "Tea", "10", "0"], ["A", "Coffee", "20", "0"]));
     const [coffee, tea] = await products(token);
     const variant = (await app.inject({ method: "POST", url: `/api/products/${tea.id}/variants`, headers: auth(token), payload: { name: "Large", pricePaise: 2000 } })).json().variant;
-    const wrongOwner = toCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", ""]]);
+    const wrongOwner = toCsv([CATALOG_CSV_COLUMNS, [coffee.id, "A", "Coffee", "20", "0", "true", "true", "false", "", "", variant.id, "Large", "30", "true", "", "", "", "", "", "", "", ""]]);
     expect((await preview(token, wrongOwner)).json().error).toContain("belongs to another item");
     await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { categoryId: tea.categoryId, name: "Tea", pricePaise: 500, gstRate: 0 } });
     expect((await preview(token, csv(["A", "Tea", "10", "0"]))).json().error).toContain("ambiguous item name");
@@ -223,5 +223,42 @@ describe("Zomato price CSV columns", () => {
     expect(rows.find((r) => r.values.variant_name === "Half")?.values.variant_zomato_price).toBe("0.00");
     expect((await apply(token, exported)).statusCode).toBe(200);
     expect(await products(token)).toEqual(before);
+  });
+});
+
+describe("packaging CSV columns", () => {
+  it("round-trips item and variant packaging, blank variant packaging meaning the item's", async () => {
+    app = freshApp(); const { token } = await setupAdmin(app);
+    const source = toCsv([
+      ["category", "name", "price", "variant_name", "variant_price", "packaging", "variant_packaging"],
+      ["Mains", "Dal", "200", "", "", "", ""],
+      ["Mains", "Biryani", "300", "Full", "300", "10", "5"],
+      ["Mains", "Biryani", "300", "Half", "180", "10", ""],
+    ]);
+    expect((await apply(token, source)).statusCode).toBe(200);
+    const byName = async () => Object.fromEntries((await products(token)).map((p: { name: string }) => [p.name, p]));
+    const first = await byName();
+    expect(first.Dal.packagingPaise).toBe(0);
+    expect(first.Biryani.packagingPaise).toBe(1000);
+    const variants = Object.fromEntries(first.Biryani.variants.map((v: { name: string; packagingPaise: number | null }) => [v.name, v.packagingPaise]));
+    expect(variants).toEqual({ Full: 500, Half: null });
+
+    const before = await products(token);
+    const exported = (await app.inject({ method: "GET", url: "/api/catalog/export", headers: auth(token) })).json().csv as string;
+    const rows = parseCatalogCsv(exported);
+    expect(rows.find((r) => r.values.name === "Dal")?.values.packaging).toBe("0.00");
+    expect(rows.find((r) => r.values.variant_name === "Full")?.values).toMatchObject({ packaging: "10.00", variant_packaging: "5.00" });
+    expect(rows.find((r) => r.values.variant_name === "Half")?.values.variant_packaging).toBe("");
+    expect((await apply(token, exported)).statusCode).toBe(200);
+    expect(await products(token)).toEqual(before);
+
+    // A blank variant_packaging clears an override; a blank packaging keeps the item's amount.
+    const cleared = toCsv([["category", "name", "price", "variant_name", "variant_price", "packaging", "variant_packaging"], ["Mains", "Biryani", "300", "Full", "300", "", ""]]);
+    expect((await apply(token, cleared)).statusCode).toBe(200);
+    const after = (await byName()).Biryani;
+    expect(after.packagingPaise).toBe(1000);
+    expect(after.variants.find((v: { name: string }) => v.name === "Full").packagingPaise).toBeNull();
+
+    expect((await preview(token, toCsv([["category", "name", "price", "packaging"], ["Mains", "Dal", "200", "1000.01"]]))).statusCode).toBe(400);
   });
 });

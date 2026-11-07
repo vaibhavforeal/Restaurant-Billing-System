@@ -82,4 +82,7 @@ describe("costingPriceNote", () => {
   it("measures against the plain selling price when no GST is charged", () => {
     expect(costingPriceNote("none")).toBe("each selling price (no GST is charged)");
   });
+  it("measures against the menu price when GST is added on the bill", () => {
+    expect(costingPriceNote("exclusive")).toBe("each selling price before GST (GST is added on the bill)");
+  });
 });

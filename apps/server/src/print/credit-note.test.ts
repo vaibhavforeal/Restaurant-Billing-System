@@ -44,8 +44,9 @@ describe("credit note slip", () => {
     const note = view(bill.creditNotes[0]!);
     for (const width of [58, 80] as const) {
       const rendered = renderBytes(creditNoteSlip(note, bill, width));
-      expect(rendered).toContain("CREDIT NOTE CN-1");
-      expect(rendered).toContain(`Bill #${bill.billNo}`);
+      expect(rendered).toContain(`CREDIT NOTE ${note.creditNoteRef}`);
+      expect(note.creditNoteRef).toMatch(/^CN\/\d\d-\d\d\/001$/);
+      expect(rendered).toContain(`Against Bill ${bill.invoiceNo}`);
       expect(rendered).toContain("Thali");
       expect(rendered).toContain("CGST 2.5%"); expect(rendered).toContain("SGST 2.5%"); expect(rendered).not.toContain("@ 2.5%");
       expect(rendered).toContain("TOTAL REFUNDED");
@@ -55,6 +56,22 @@ describe("credit note slip", () => {
       expect(rendered).toContain("Approved by Asha");
       expect(rendered.split("\n").every((line) => line.replace(/<[0-9A-F]{2}>/g, "").length <= (width === 58 ? 32 : 48))).toBe(true);
     }
+  });
+
+  it("lists a credited charge as a line after the items, on the slip and in the HTML", async () => {
+    const { bill } = await refunded();
+    const note: CreditNoteView = { ...view(bill.creditNotes[0]!), charges: [{ kind: "service", label: "Service charge", totalPaise: 350 }] };
+    const html = creditNoteHtml(note, bill);
+    expect(html.indexOf("Thali")).toBeLessThan(html.indexOf("Service charge"));
+    expect(html).toContain('<span class="item-name">Service charge</span>'); expect(html).toContain("<strong>3.50</strong>");
+    for (const width of [58, 80] as const) {
+      const rendered = renderBytes(creditNoteSlip(note, bill, width));
+      expect(rendered.indexOf("Thali")).toBeLessThan(rendered.indexOf("Service charge"));
+      expect(rendered).toContain("3.50");
+      expect(rendered).not.toContain("Charge  ");
+      expect(rendered).toMatch(/Service charge\s+3\.50/);
+    }
+    expect(creditNoteHtml(view(bill.creditNotes[0]!), bill)).not.toContain("Service charge");
   });
 
   it("prints no GST rows on a credit note against a bill that charged no GST", async () => {
@@ -72,6 +89,18 @@ describe("credit note slip", () => {
     }
   });
 
+  it("prints the GST rows on a credit note against a bill with GST added on top", async () => {
+    const { bill } = await refunded();
+    const added: Bill = { ...bill, receipt: { ...bill.receipt, gstMode: "exclusive" as const } };
+    const note = view(bill.creditNotes[0]!);
+    const html = creditNoteHtml(note, added);
+    expect(html).toContain("GST breakdown"); expect(html).not.toContain("No GST was charged");
+    for (const width of [58, 80] as const) {
+      const rendered = renderBytes(creditNoteSlip(note, added, width));
+      expect(rendered).toContain("CGST 2.5%"); expect(rendered).toContain("SGST 2.5%");
+    }
+  });
+
   it("says BILL VOIDED for the void of an unpaid bill", async () => {
     const { bill } = await refunded();
     const note = { ...view(bill.creditNotes[0]!), kind: "void" as const, refunds: [] };
@@ -86,18 +115,19 @@ describe("credit note slip", () => {
     const html = creditNoteHtml(note, bill);
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
-    expect(html).toContain("CN-1");
+    expect(html).toContain(note.creditNoteRef);
+    expect(html).toContain(`<dd>Bill ${bill.invoiceNo}</dd>`);
     expect(creditNoteSlip(note, bill, 58).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
   });
 
   it("serves the credit note receipt with the bill receipt's headers, loading per-rate taxes", async () => {
-    const { noteId } = await refunded();
+    const { bill, noteId } = await refunded();
     const res = await app.inject({ url: `/api/credit-notes/${noteId}/receipt`, headers: auth(token) });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/html");
     expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.headers["content-security-policy"]).toBe("default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
-    expect(res.body).toContain("CN-1");
+    expect(res.body).toContain(bill.creditNotes[0]!.creditNoteRef);
     expect(res.body).toContain("5%");
     expect(res.body).toContain("34.99");
     expect((await app.inject({ url: `/api/credit-notes/${uuidv7()}/receipt`, headers: auth(token) })).statusCode).toBe(404);
@@ -105,13 +135,13 @@ describe("credit note slip", () => {
   });
 
   it("queues a credit_note print job on an active receipt printer", async () => {
-    const { noteId } = await refunded();
+    const { bill, noteId } = await refunded();
     const p = await app.inject({ method: "POST", url: "/api/printers", headers: auth(token), payload: { name: "Receipt", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } });
     const res = await app.inject({ method: "POST", url: `/api/credit-notes/${noteId}/print`, headers: auth(token), payload: { printerId: p.json().printer.id } });
     expect(res.statusCode, res.body).toBe(202);
     expect(res.json().job).toMatchObject({ kind: "credit_note", label: "CN-1" });
     await expect.poll(() => fake.sent.length).toBeGreaterThan(0);
-    expect(renderBytes(fake.sent.at(-1)!.bytes)).toContain("CREDIT NOTE CN-1");
+    expect(renderBytes(fake.sent.at(-1)!.bytes)).toContain(`CREDIT NOTE ${bill.creditNotes[0]!.creditNoteRef}`);
 
     const bad = await app.inject({ method: "POST", url: `/api/credit-notes/${noteId}/print`, headers: auth(token), payload: { printerId: "nope" } });
     expect(bad.statusCode).toBe(400);

@@ -1,4 +1,4 @@
-import { resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
+import { billChargesGst, billShowOf, chargeLabel, billTextLines, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { contextLine } from "./templates.js";
@@ -18,7 +18,7 @@ const quantity = (bill: Bill) => bill.receipt.items.reduce((sum, item) => sum + 
 /** Who the bill is for and their loyalty points, when a customer was attached. */
 function customerLines(bill: Bill): string[] {
   const c = bill.receipt.customer;
-  if (!c) return [];
+  if (!c || !billShowOf(bill.receipt).customer) return [];
   const lines = [`Customer: ${c.name} (${c.phone})${c.typeName ? ` - ${c.typeName}` : ""}${c.tierName ? ` - ${c.tierName} member` : ""}`];
   if (c.pointsRedeemed) lines.push(`Points redeemed: ${c.pointsRedeemed} (Rs.${money(c.pointsValuePaise ?? 0)})`);
   if (c.pointsBalance !== undefined) lines.push(`Points earned: ${c.pointsEarned ?? 0} | Balance: ${c.pointsBalance}`);
@@ -30,7 +30,16 @@ export function buyerLines(r: Bill["receipt"]): string[] {
   if (!b) return [];
   return [`Billed to: ${b.name}`, `GSTIN: ${b.gstin}`, ...(b.address ? [b.address] : []), `Place of supply: ${b.stateName} (${b.stateCode})`];
 }
-const footer = (bill: Bill) => bill.receipt.receiptFooter || "Thank you for visiting. Please come again.";
+const DEFAULT_FOOTER = "Thank you for visiting. Please come again.";
+/**
+ * The footer's printable lines. A bill issued before Bill settings has no receiptHeader (new bills always carry it) and
+ * reprints its footer exactly as it always did, raw; newer bills print trimmed, non-blank lines.
+ */
+const footerLines = (bill: Bill) => {
+  if (bill.receipt.receiptHeader === undefined) return [bill.receipt.receiptFooter || DEFAULT_FOOTER];
+  const lines = billTextLines(bill.receipt.receiptFooter ?? "");
+  return lines.length ? lines : [DEFAULT_FOOTER];
+};
 const paymentModes = (bill: Bill) => [...new Set(bill.payments.map((p) => p.mode.toUpperCase()))].join(" + ");
 // The declaration a composition-scheme bill of supply must carry.
 const compositionNote = "Composition taxable person, not eligible to collect tax on supplies";
@@ -42,12 +51,16 @@ const compositionNote = "Composition taxable person, not eligible to collect tax
  */
 function billHeading(r: Bill["receipt"]): { thermal: string; html: string; declaration: string | null } {
   if (r.gstPaidBy === "zomato") return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
-  if (r.gstMode === "included") return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
+  if (billChargesGst(r)) return { thermal: "TAX INVOICE", html: "Tax invoice", declaration: null };
   if (r.gstin.trim()) return { thermal: "BILL OF SUPPLY", html: "Bill of supply", declaration: compositionNote };
   return { thermal: "RESTAURANT BILL", html: "Restaurant bill", declaration: null };
 }
-/** The per-rate GST shown after the total: only a tax invoice carries it. */
-const includedGst = (bill: Bill) => bill.receipt.gstPaidBy !== "zomato" && bill.receipt.gstMode === "included" ? bill.taxes : [];
+/** A charge line's printed label: its name, plus the percentage when it is a percent of the subtotal. */
+export { chargeLabel };
+/** The per-rate GST the prices already contain, shown after the total. */
+const includedGst = (bill: Bill) => billChargesGst(bill.receipt) && bill.receipt.gstMode === "included" ? bill.taxes : [];
+/** The per-rate GST added on top of the prices, shown as additions before round-off and the total. */
+const addedGst = (bill: Bill) => billChargesGst(bill.receipt) && bill.receipt.gstMode === "exclusive" ? bill.taxes : [];
 
 function wrapText(value: string, width: number): string[] {
   return value.split(/\r?\n/).flatMap((part) => {
@@ -84,6 +97,8 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   const style = resolveReceiptStyle(r.receiptStyle);
   const zomatoGst = r.gstPaidBy === "zomato";
   const heading = billHeading(r);
+  const show = billShowOf(r);
+  const itemGst = show.itemGst && billChargesGst(r);
   const rule = () => pos.line((style === "classic" ? "." : style === "heritage" ? "=" : "-").repeat(width));
   // Fixed numeric columns keep regular rows compact. Oversize values fall back
   // to label/value lines so a large quantity or amount is never truncated.
@@ -96,10 +111,11 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   pos.align(style === "modern" || style === "compact" ? "left" : "center").bold(true).size(1, style === "compact" ? 1 : 2);
   line(r.restaurantName);
   pos.size(1, 1).bold(false);
+  for (const text of billTextLines(r.receiptHeader ?? "")) line(text);
   if (r.address) line(r.address);
   if (r.phone) line(`Ph: ${r.phone}`);
   if (r.gstin) line(`GSTIN: ${r.gstin}`);
-  if (r.fssai) line(`FSSAI: ${r.fssai}`);
+  if (r.fssai && show.fssai) line(`FSSAI: ${r.fssai}`);
   if (style !== "compact") pos.line();
   pos.bold(true);
   line(heading.thermal);
@@ -107,9 +123,10 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   if (style !== "compact") pos.line();
   pos.bold(false).align("left");
   line(`Date: ${dateTime(bill.createdAt)}`);
-  pair(`Bill #${bill.billNo}`, statusLabel(bill));
+  pair(`Bill ${bill.invoiceNo}`, statusLabel(bill));
   line(r.orderType === "zomato" ? contextLine(r.orderType, null, null, r.zomatoOrderId) :
-    r.orderType === "parcel" ? (r.orderTypeName ? r.orderTypeName.toUpperCase() : "TAKEAWAY / Parcel") : `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}`);
+    r.orderType === "parcel" ? (r.orderTypeName ? r.orderTypeName.toUpperCase() : "TAKEAWAY / Parcel") : show.table ? `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}` : "DINE-IN");
+  if (show.servedBy && r.servedBy) line(`Served by: ${r.servedBy}`);
   if (bill.payments.length) line(`Payment mode: ${paymentModes(bill)}`);
   for (const text of buyerLines(r)) line(text);
   if (r.sacCode) line(`SAC: ${r.sacCode} (restaurant service)`);
@@ -127,17 +144,23 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
       row(item.name, values);
       if (paperWidth === 58) line(`  @ ${money(item.pricePaise)} each`);
     }
+    if (itemGst) line(`  GST ${item.gstRate}%`);
     for (const held of item.contents ?? []) line(`  - ${held}`);
   });
   rule();
   pair(`Subtotal (${quantity(bill)} qty)`, money(bill.subtotalPaise));
   if (bill.discountPaise) pair("Discount", `-${money(bill.discountPaise)}`);
+  for (const c of bill.charges ?? []) pair(clean(chargeLabel(c)), money(c.amountPaise));
   if (zomatoGst) line("GST paid by Zomato (section 9(5))");
+  for (const t of addedGst(bill)) {
+    pair(`CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}`, money(t.cgstPaise));
+    pair(`SGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}`, money(t.sgstPaise));
+  }
   if (bill.roundingPaise) pair("Round off", money(bill.roundingPaise));
   rule().bold(true).size(1, 2);
   pair("TOTAL Rs.", money(bill.totalPaise));
   pos.size(1, 1).bold(false); rule();
-  // A tax invoice must show the rate and amount of tax; the prices already contain it, so it follows the total.
+  // A tax invoice must show the rate and amount of tax; when the prices already contain it, it follows the total.
   const taxes = includedGst(bill);
   if (taxes.length) {
     line("Includes GST:");
@@ -164,7 +187,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
     // The bitmap already includes centered padding across the full print width.
     pos.align("left").raster(qr.widthBytes, qr.height, qr.data).align("center");
     line(`UPI: ${payment.upiId}`);
-    line(`Bill #${bill.billNo}`);
+    line(`Bill ${bill.invoiceNo}`);
     rule();
   }
   if (bill.feedbackUrl) {
@@ -174,7 +197,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
     line("Scan on the restaurant Wi-Fi");
     rule();
   }
-  line(footer(bill));
+  for (const text of footerLines(bill)) line(text);
   return finishSlip(pos, profile);
 }
 
@@ -189,31 +212,38 @@ export function receiptHtml(bill: Bill): string {
   // Zomato collects and pays the GST on its orders (section 9(5)): the bill shows the note, never per-rate GST lines.
   const zomatoGst = r.gstPaidBy === "zomato";
   const heading = billHeading(r);
+  const show = billShowOf(r);
+  const itemGst = show.itemGst && billChargesGst(r);
   const taxes = includedGst(bill);
   const payment = billUpiPayment(bill);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Bill #${bill.billNo}</title><style>${RESTAURANT_RECEIPT_CSS}
-  @page{@bottom-left{content:"Bill #${bill.billNo}";font:9px Arial,sans-serif;color:#71717a}}
+  <title>Bill ${escape(bill.invoiceNo)}</title><style>${RESTAURANT_RECEIPT_CSS}
+  @page{@bottom-left{content:"Bill ${escape(bill.invoiceNo)}";font:9px Arial,sans-serif;color:#71717a}}
   </style></head><body><main class="bill bill--${style}" aria-label="Restaurant bill">
   <header class="bill-header"><h1>${e(r.restaurantName)}</h1>
+    ${billTextLines(r.receiptHeader ?? "").map((text) => `<p class="header-line">${e(text)}</p>`).join("")}
     ${r.address ? `<p class="address">${e(r.address)}</p>` : ""}${r.phone ? `<p class="phone">Ph: ${e(r.phone)}</p>` : ""}
-    <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
+    <div class="registration">${r.gstin ? `<span>GSTIN: ${e(r.gstin)}</span>` : ""}${r.fssai && show.fssai ? `<span>FSSAI: ${e(r.fssai)}</span>` : ""}</div>
     <h2>${heading.declaration ? `${heading.html}<small class="supply-note">${heading.declaration}</small>` : heading.html}</h2></header>
   <dl class="bill-meta"><div class="date"><dt>Date</dt><dd>${e(dateTime(bill.createdAt))}</dd></div>
-    <div><dt>Bill no.</dt><dd><strong>#${bill.billNo}</strong> <span class="status">${statusLabel(bill)}</span></dd></div>
+    <div><dt>Bill no.</dt><dd><strong>${escape(bill.invoiceNo)}</strong> <span class="status">${statusLabel(bill)}</span></dd></div>
     <div><dt>Service</dt><dd>${service}</dd></div>
-    <div><dt>${r.orderType === "dine_in" ? "Table / Group" : "Order"}</dt><dd>${r.orderType === "dine_in" ? e(contextLine(r.orderType, r.tableName, r.splitLabel)) : order}</dd></div>
+    ${r.orderType !== "dine_in" || show.table ? `<div><dt>${r.orderType === "dine_in" ? "Table / Group" : "Order"}</dt><dd>${r.orderType === "dine_in" ? e(contextLine(r.orderType, r.tableName, r.splitLabel)) : order}</dd></div>` : ""}
+    ${show.servedBy && r.servedBy ? `<div><dt>Served by</dt><dd>${e(r.servedBy)}</dd></div>` : ""}
     ${bill.payments.length ? `<div><dt>Payment mode</dt><dd>${e(paymentModes(bill))}</dd></div>` : ""}
     ${r.sacCode ? `<div><dt>SAC</dt><dd>${e(r.sacCode)}</dd></div>` : ""}</dl>
   ${r.buyer ? `<section class="buyer" aria-label="Billed to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <p class="currency-note">All amounts in INR (₹)</p>
-  <table class="items" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th><th scope="col">Amount</th></tr></thead><tbody>
-    ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td><td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
+  <table class="items${itemGst ? " items--gst" : ""}" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th>${itemGst ? `<th scope="col">GST</th>` : ""}<th scope="col">Amount</th></tr></thead><tbody>
+    ${r.items.map((i) => `<tr><td>${e(i.name)}${i.contents?.length ? `<small class="combo-contents">${i.contents.map(e).join(", ")}</small>` : ""}</td><td>${i.qty}</td><td class="amount">${money(i.pricePaise)}</td>${itemGst ? `<td>${i.gstRate}%</td>` : ""}<td class="amount">${money(i.pricePaise * i.qty)}</td></tr>`).join("")}
   </tbody></table>
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
     ${bill.discountPaise ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise)}</td></tr>` : ""}
+    ${(bill.charges ?? []).map((c) => `<tr><td>${e(chargeLabel(c))}</td><td class="amount">₹${money(c.amountPaise)}</td></tr>`).join("")}
     ${zomatoGst ? `<tr><td colspan="2" class="tax-note">GST paid by Zomato (section 9(5))</td></tr>` : ""}
+    ${addedGst(bill).map((t) => `<tr class="tax"><td>CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.cgstPaise)}</td></tr>
+    <tr class="tax"><td>SGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.sgstPaise)}</td></tr>`).join("")}
     ${bill.roundingPaise ? `<tr><td>Round off</td><td class="amount">₹${money(bill.roundingPaise)}</td></tr>` : ""}
     <tr class="grand-total"><td>TOTAL</td><td class="amount">₹${money(bill.totalPaise)}</td></tr>
     ${taxes.length ? `<tr><td colspan="2" class="tax-note">Includes GST</td></tr>` + taxes.map((t) => `<tr class="taxable"><td>Taxable @ ${t.gstRate}%</td><td class="amount">₹${money(t.taxablePaise)}</td></tr>
@@ -225,7 +255,7 @@ export function receiptHtml(bill: Bill): string {
     <p class="payment-state"><strong>${bill.status === "paid" ? "PAID IN FULL" : bill.status === "void" ? "VOID - NOT PAYABLE" : `AMOUNT DUE ₹${money(due)}`}</strong></p></section>
   ${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}
   ${customerLines(bill).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}
-  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill #${bill.billNo} · Amount filled in automatically</p></section>` : ""}
+  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill ${e(bill.invoiceNo)} · Amount filled in automatically</p></section>` : ""}
   ${bill.feedbackUrl ? `<section class="upi-payment" aria-label="Feedback"><h2>Rate your visit</h2><div class="upi-qr">${upiQrSvg(bill.feedbackUrl)}</div><p class="tax-note">Scan on the restaurant Wi-Fi</p></section>` : ""}
-  <footer>${e(footer(bill))}</footer></main></body></html>`;
+  <footer>${e(footerLines(bill).join("\n"))}</footer></main></body></html>`;
 }

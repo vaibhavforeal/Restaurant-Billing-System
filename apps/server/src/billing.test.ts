@@ -1,17 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { uuidv7, type Bill } from "@masalapos/domain";
+import { saveReportLines, uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 import { billUpiPayment } from "./print/upi.js";
 
 describe("billing and day-end", () => {
   let app: FastifyInstance;
   let token: string;
+  let adminName: string;
   let productId: string;
   let fake: ReturnType<typeof freshAppWithFakeSink>["fake"];
   beforeEach(async () => {
     ({ app, fake } = freshAppWithFakeSink());
-    ({ token } = await setupAdmin(app));
+    let admin;
+    ({ token, user: admin } = await setupAdmin(app)); adminName = admin.name;
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Meal", categoryId: category.json().category.id, pricePaise: 10500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201); productId = product.json().product.id;
@@ -153,6 +155,15 @@ describe("billing and day-end", () => {
     const later = await issue(await order());
     expect(later.receipt.gstMode).toBe("none"); expect(later.cgstPaise).toBe(0);
   });
+  it("freezes header, print toggles and served-by into the bill", async () => {
+    expect((await putSettings({ receiptHeader: "Pure veg", billShowItemGst: true })).statusCode).toBe(200);
+    const bill = await issue(await order());
+    expect(bill.receipt).toMatchObject({ receiptHeader: "Pure veg", billShow: { fssai: true, customer: true, table: true, servedBy: false, itemGst: true }, servedBy: adminName });
+    expect((await putSettings({ receiptHeader: "Changed", billShowItemGst: false, billShowServedBy: true })).statusCode).toBe(200);
+    const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill as Bill;
+    expect(stored.receipt.receiptHeader).toBe("Pure veg");
+    expect(stored.receipt.billShow).toEqual({ fssai: true, customer: true, table: true, servedBy: false, itemGst: true });
+  });
   it("issues a GST-free bill in none mode, whatever the GSTIN, and leaves earlier bills alone", async () => {
     const before = await issue(await order());
     expect(before.receipt.gstMode).toBe("included");
@@ -167,6 +178,42 @@ describe("billing and day-end", () => {
     await putSettings({ gstMode: "included" });
     expect((await issue(await order())).cgstPaise).toBe(250);
     expect((await app.inject({ url: `/api/bills/${before.id}`, headers: auth(token) })).json().bill).toEqual(before);
+  });
+  it("keeps report lines non-negative and adding up to the bill in every GST mode", async () => {
+    const category = (await app.inject({ url: "/api/categories", headers: auth(token) })).json().categories[0].id as string;
+    const soda = (await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Soda", categoryId: category, pricePaise: 9013, gstRate: 18, kotStationId: null } })).json().product.id as string;
+    for (const gstMode of ["included", "exclusive", "none"]) {
+      expect((await putSettings({ gstMode })).statusCode, gstMode).toBe(200);
+      const res = await app.inject({ method: "POST", url: "/api/orders", headers: auth(token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } });
+      const id = res.json().order.id as string;
+      await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId, qty: 1, clientRef: uuidv7() }, { productId: soda, qty: 2, clientRef: uuidv7() }] } });
+      const bill = (await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: await billRequest(id, { discountPaise: 4603, discountNote: "Regular" }) })).json().bill as Bill;
+      expect(bill.receipt.gstMode).toBe(gstMode);
+      const lines = app.db.prepare("SELECT discount_paise AS d, taxable_paise AS t, cgst_paise AS c, sgst_paise AS s, rounding_paise AS r, total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ d: number; t: number; c: number; s: number; r: number; total: number }>;
+      expect(lines).toHaveLength(2);
+      for (const line of lines) {
+        expect(line.d, gstMode).toBeGreaterThanOrEqual(0);
+        expect(line.total, gstMode).toBe(line.t + line.c + line.s + line.r);
+      }
+      expect(lines.reduce((sum, l) => sum + l.d, 0), gstMode).toBe(4603);
+      expect(lines.reduce((sum, l) => sum + l.total, 0), gstMode).toBe(bill.totalPaise);
+    }
+  });
+  it("issues a tax invoice with GST added on top and keeps it when the setting switches back", async () => {
+    expect((await putSettings({ gstMode: "exclusive" })).statusCode).toBe(200);
+    const bill = await issue(await order());
+    // ₹105 before GST at 5%: CGST = SGST = round-half-up(262.5) = 263; 110.26 rounds to 110.
+    expect(bill).toMatchObject({ subtotalPaise: 10500, cgstPaise: 263, sgstPaise: 263, roundingPaise: -26, totalPaise: 11000 });
+    expect(bill.taxes).toEqual([{ gstRate: 5, taxablePaise: 10500, cgstPaise: 263, sgstPaise: 263 }]);
+    expect(bill.receipt).toMatchObject({ gstMode: "exclusive", sacCode: "996331" });
+    expect((await putSettings({ gstMode: "included" })).statusCode).toBe(200);
+    expect((await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill).toEqual(bill);
+    const receipt = (await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) })).body;
+    expect(receipt).toContain("<h2>Tax invoice</h2>"); expect(receipt).toContain("CGST 2.5% on 105.00"); expect(receipt).not.toContain("Includes GST");
+    const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+    expect(day.sales).toMatchObject({ billCount: 1, totalPaise: 11000 });
+    expect(day.taxes).toEqual([{ gstRate: 5, taxablePaise: 10500, cgstPaise: 263, sgstPaise: 263 }]);
+    expect(day.noGstSalesPaise).toBe(0);
   });
   it("refuses to issue a bill from a preview taken before the GST mode changed", async () => {
     const id = await order(); const body = await billRequest(id);
@@ -258,5 +305,281 @@ describe("billing and day-end", () => {
     expect(report.payments).toEqual([{ mode: "cash", amountPaise: 10500 }]);
     expect(report.taxes).toEqual([{ gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 }]);
     expect((await app.inject({ url: "/api/reports/day-end?date=2026-02-30", headers: auth(token) })).statusCode).toBe(400);
+  });
+
+  describe("invoice numbers and round-off", () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const at = (d: Date) => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(d); };
+    const putSetting = async (fields: object) => expect((await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe", ...fields } })).statusCode).toBe(200);
+    /** An open order holding one item at the given price. */
+    async function orderAt(pricePaise: number) {
+      const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: `Cat${pricePaise}` } });
+      const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: `Item${pricePaise}`, categoryId: category.json().category.id, pricePaise, gstRate: 5, kotStationId: null } });
+      const id = (await app.inject({ method: "POST", url: "/api/orders", headers: auth(token), payload: { clientRef: uuidv7(), type: "parcel", tableId: null } })).json().order.id as string;
+      await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId: product.json().product.id, qty: 1, clientRef: uuidv7() }] } });
+      return id;
+    }
+    const previewOf = async (orderId: string) => (await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill-preview`, headers: auth(token), payload: { discountPaise: 0 } })).json().preview;
+
+    it("numbers bills per financial year and adds the prefix", async () => {
+      at(new Date(2026, 2, 31, 22, 0));
+      expect((await issue(await order())).invoiceNo).toBe("25-26/0001");
+      expect((await issue(await order())).invoiceNo).toBe("25-26/0002");
+      at(new Date(2026, 3, 1, 0, 5));
+      expect((await issue(await order())).invoiceNo).toBe("26-27/0001");
+      await putSetting({ invoicePrefix: "MP" });
+      expect((await issue(await order())).invoiceNo).toBe("MP/26-27/0002");
+    });
+    it("replays keep the number and a rejected request leaves no gap", async () => {
+      at(new Date(2026, 5, 1, 12, 0));
+      const id = await order(); const body = await billRequest(id);
+      const send = () => app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: body });
+      const first = await send(); const replay = await send();
+      expect(first.statusCode).toBe(201); expect(replay.statusCode).toBe(200);
+      expect(first.json().bill.invoiceNo).toBe("26-27/0001"); expect(replay.json().bill.invoiceNo).toBe("26-27/0001");
+      const other = await order();
+      const stale = await app.inject({ method: "POST", url: `/api/orders/${other}/bill`, headers: auth(token), payload: { clientRef: uuidv7(), discountPaise: 0, previewKey: "stale" } });
+      expect(stale.statusCode).toBe(409);
+      expect((await issue(other)).invoiceNo).toBe("26-27/0002");
+    });
+    it("rolls the invoice number back when the bill fails after the number is taken", async () => {
+      at(new Date(2026, 5, 1, 12, 0));
+      expect((await issue(await order())).invoiceNo).toBe("26-27/0001");
+      const id = await order(); const body = await billRequest(id);
+      app.db.exec("CREATE TRIGGER reject_tax_no BEFORE INSERT ON bill_taxes BEGIN SELECT RAISE(ABORT, 'test failure'); END;");
+      expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill`, headers: auth(token), payload: body })).statusCode).toBe(500);
+      app.db.exec("DROP TRIGGER reject_tax_no");
+      expect((await issue(id)).invoiceNo).toBe("26-27/0002");
+      expect((await issue(await order())).invoiceNo).toBe("26-27/0003");
+    });
+    it("round-off off bills the exact amount", async () => {
+      await putSetting({ roundOff: "off" });
+      const bill = await issue(await orderAt(12345));
+      expect(bill.totalPaise).toBe(12345); expect(bill.roundingPaise).toBe(0);
+      const settle = await pay(bill);
+      expect(settle.statusCode).toBe(200); expect(settle.json().bill.status).toBe("paid");
+      const receipt = await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) });
+      expect(receipt.body).not.toContain("Round off");
+    });
+    it("round-off half rounds to 50 paise and changes the preview key", async () => {
+      await putSetting({ roundOff: "half" });
+      expect((await issue(await orderAt(12375))).totalPaise).toBe(12400);
+      const id = await orderAt(12325);
+      await putSetting({ roundOff: "rupee" });
+      const rupee = await previewOf(id);
+      await putSetting({ roundOff: "half" });
+      const half = await previewOf(id);
+      expect(rupee.totalPaise).toBe(12300); expect(half.totalPaise).toBe(12350);
+      expect(half.previewKey).not.toBe(rupee.previewKey);
+    });
+    it("a bill from before invoice numbers shows its bill number", async () => {
+      const bill = await issue(await order());
+      app.db.prepare("UPDATE bills SET invoice_no = NULL WHERE id = ?").run(bill.id);
+      const got = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill as Bill;
+      expect(got.invoiceNo).toBe(String(bill.billNo));
+    });
+    it("the UPI QR payload carries the invoice number", async () => {
+      await putSetting({ upiId: "cafe@upi" });
+      const bill = await issue(await order());
+      const qr = (await app.inject({ url: `/api/bills/${bill.id}/upi-qr`, headers: auth(token) })).json();
+      expect(qr.payment.invoiceNo).toBe(bill.invoiceNo);
+    });
+  });
+
+  describe("service and packaging charges", () => {
+    const charges = { serviceChargeBp: 1000, packagingChargePaise: 2000 };
+    const post = (orderId: string, payload: object) => app.inject({ method: "POST", url: `/api/orders/${orderId}/bill`, headers: auth(token), payload });
+    const previewOf = async (orderId: string, extra: object = {}) => (await app.inject({ method: "POST", url: `/api/orders/${orderId}/bill-preview`, headers: auth(token), payload: extra })).json().preview;
+    async function dineIn(empty = false) {
+      const table = (await app.inject({ method: "POST", url: "/api/tables", headers: auth(token), payload: { name: `T${uuidv7().slice(-6)}` } })).json().table.id as string;
+      return order(table, empty);
+    }
+    async function customParcel(kind: "delivery" | "takeaway") {
+      const type = (await app.inject({ method: "POST", url: "/api/order-types", headers: auth(token), payload: { name: `Custom ${kind}`, kind } })).json().orderType.id as string;
+      const id = await order();
+      app.db.prepare("UPDATE orders SET order_type_id = ? WHERE id = ?").run(type, id);
+      return id;
+    }
+    beforeEach(async () => { expect((await putSettings(charges)).statusCode).toBe(200); });
+
+    it("charges service on dine-in and packaging on takeaway and delivery parcels, and records the order kind", async () => {
+      const dine = await issue(await dineIn());
+      expect(dine.charges).toEqual([{ kind: "service", label: "Service charge", percentBp: 1000, gstRate: 5, amountPaise: 1050, taxablePaise: 1000, cgstPaise: 25, sgstPaise: 25 }]);
+      expect(dine.receipt.orderTypeKind).toBe("dine_in");
+      expect(app.db.prepare("SELECT charges_paise FROM bills WHERE id = ?").get(dine.id)).toEqual({ charges_paise: 1050 });
+      const takeaway = await issue(await order());
+      expect(takeaway.charges!.map((c) => [c.kind, c.amountPaise, c.percentBp])).toEqual([["packaging", 2000, undefined]]);
+      expect(takeaway.receipt.orderTypeKind).toBe("takeaway");
+      const delivery = await issue(await customParcel("delivery"));
+      expect(delivery.charges!.map((c) => c.kind)).toEqual(["packaging"]);
+      expect(delivery.receipt.orderTypeKind).toBe("delivery");
+    });
+    it("totals the charges on the day-end report and prints them on the stored bill's receipt", async () => {
+      const dine = await issue(await dineIn()); const takeaway = await issue(await order());
+      const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+      expect(day.sales.chargesPaise).toBe(1050 + 2000);
+      expect(dine.charges![0]!.amountPaise + takeaway.charges![0]!.amountPaise).toBe(day.sales.chargesPaise);
+      const receipt = (await app.inject({ url: `/api/bills/${dine.id}/receipt`, headers: auth(token) })).body;
+      expect(receipt).toContain("Service charge 10%");
+    });
+    it("lets the cashier remove the service charge, with a different preview key, and records it", async () => {
+      const id = await dineIn();
+      const kept = await previewOf(id), removed = await previewOf(id, { serviceCharge: false });
+      expect(kept.charges).toHaveLength(1); expect(removed.charges).toEqual([]);
+      expect(removed.previewKey).not.toBe(kept.previewKey);
+      expect((await post(id, { clientRef: uuidv7(), previewKey: kept.previewKey, serviceCharge: false })).statusCode).toBe(409);
+      const res = await post(id, { clientRef: uuidv7(), previewKey: removed.previewKey, serviceCharge: false });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().bill.charges).toEqual([]);
+      expect(res.json().bill.receipt.serviceChargeRemoved).toBe(true);
+    });
+    it("refuses a preview taken before a charge setting changed", async () => {
+      const id = await dineIn(); const key = (await previewOf(id)).previewKey;
+      expect((await putSettings({ serviceChargeBp: 500 })).statusCode).toBe(200);
+      const res = await post(id, { clientRef: uuidv7(), previewKey: key });
+      expect(res.statusCode).toBe(409); expect(res.json().error).toBe("Order changed; review a fresh bill preview");
+    });
+    it("reprints the same charges and labels after the settings are cleared", async () => {
+      await putSettings({ serviceChargeLabel: "Service" });
+      const bill = await issue(await dineIn());
+      await putSettings({ serviceChargeBp: 0, packagingChargePaise: 0 });
+      const stored = (await app.inject({ url: `/api/bills/${bill.id}`, headers: auth(token) })).json().bill as Bill;
+      expect(stored.charges).toEqual(bill.charges); expect(stored.charges![0]).toMatchObject({ label: "Service", percentBp: 1000 });
+    });
+    it("includes the charge tax in the day report on an exclusive bill", async () => {
+      await putSettings({ ...charges, gstMode: "exclusive" });
+      const bill = await issue(await dineIn());
+      // 10500 + 1050 service; CGST = SGST = round-half-up(0.025 * 11550) = 289 (288.75).
+      expect(bill).toMatchObject({ cgstPaise: 289, sgstPaise: 289 });
+      const day = (await app.inject({ url: "/api/reports/day-end", headers: auth(token) })).json().report;
+      expect(day.sales.totalPaise).toBe(bill.totalPaise);
+      expect(day.taxes).toEqual([{ gstRate: 5, taxablePaise: 11550, cgstPaise: 289, sgstPaise: 289 }]);
+    });
+    it("keeps report lines adding up with the charges in every GST mode, with no line for a charge", async () => {
+      const category = (await app.inject({ url: "/api/categories", headers: auth(token) })).json().categories[0].id as string;
+      const soda = (await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Soda", categoryId: category, pricePaise: 9013, gstRate: 18, kotStationId: null } })).json().product.id as string;
+      for (const gstMode of ["included", "exclusive", "none"]) {
+        await putSettings({ ...charges, gstMode, gstRate: 18 });
+        for (const dine of [true, false]) {
+          const id = dine ? await dineIn(true) : await order(undefined, true);
+          await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId, qty: 1, clientRef: uuidv7() }, { productId: soda, qty: 2, clientRef: uuidv7() }] } });
+          const bill = (await post(id, await billRequest(id, { discountPaise: 4603, discountNote: "Regular" }))).json().bill as Bill;
+          expect(bill.charges, gstMode).toHaveLength(1);
+          const lines = app.db.prepare("SELECT discount_paise AS d, total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ d: number; total: number }>;
+          expect(lines, gstMode).toHaveLength(2);
+          for (const line of lines) expect(line.d, gstMode).toBeGreaterThanOrEqual(0);
+          expect(lines.reduce((sum, l) => sum + l.d, 0), gstMode).toBe(4603);
+          const chargeTotal = bill.charges!.reduce((sum, c) => sum + c.taxablePaise + c.cgstPaise + c.sgstPaise, 0);
+          expect(lines.reduce((sum, l) => sum + l.total, 0) + chargeTotal, gstMode).toBe(bill.totalPaise);
+        }
+      }
+    });
+    describe("per-item packaging", () => {
+      const setPackaging = (paise: number) => app.inject({ method: "PATCH", url: `/api/products/${productId}`, headers: auth(token), payload: { packagingPaise: paise } });
+      async function withTwo(id: string) {
+        const add = await app.inject({ method: "POST", url: `/api/orders/${id}/items`, headers: auth(token), payload: { items: [{ productId, qty: 2, clientRef: uuidv7() }] } });
+        expect(add.statusCode).toBe(200);
+        return id;
+      }
+      const linePackaging = (billId: string) => app.db.prepare("SELECT packaging_paise AS p FROM bill_report_lines WHERE bill_id = ?").all(billId).map((r) => (r as { p: number }).p);
+      const packagingRows = (billId: string) => app.db.prepare("SELECT amount_paise AS amount FROM bill_charges WHERE bill_id = ? AND kind = 'packaging'").all(billId);
+      beforeEach(async () => {
+        expect((await putSettings({ ...charges, packagingPerItem: true })).statusCode).toBe(200);
+        expect((await setPackaging(1000)).statusCode).toBe(200);
+      });
+
+      it("adds each item's packaging to the flat amount on takeaway and delivery bills", async () => {
+        const takeaway = await issue(await withTwo(await order(undefined, true)));
+        expect(takeaway.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 4000]]);
+        expect(packagingRows(takeaway.id)).toEqual([{ amount: 4000 }]);
+        expect(linePackaging(takeaway.id)).toEqual([2000]);
+        // customParcel already holds 1 of the item: 2000 flat + 3 x 1000.
+        const delivery = await issue(await withTwo(await customParcel("delivery")));
+        expect(delivery.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 5000]]);
+        expect(packagingRows(delivery.id)).toEqual([{ amount: 5000 }]);
+        expect(linePackaging(delivery.id).sort()).toEqual([1000, 2000]);
+      });
+      it.each(["included", "none"])("adds item and flat packaging in %s GST mode, with the report lines adding up to the bill", async (gstMode) => {
+        expect((await putSettings({ gstMode })).statusCode).toBe(200);
+        const bill = await issue(await withTwo(await order(undefined, true)));
+        // 2 x 10500 items; packaging 2000 flat + 2 x 1000, inside the price in both modes.
+        expect(bill.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 4000]]);
+        const charge = bill.charges![0]!;
+        expect(charge.taxablePaise + charge.cgstPaise + charge.sgstPaise).toBe(4000);
+        if (gstMode === "none") expect([charge.taxablePaise, charge.cgstPaise, charge.sgstPaise]).toEqual([4000, 0, 0]);
+        else { expect(charge.cgstPaise).toBeGreaterThan(0); expect(charge.cgstPaise).toBe(charge.sgstPaise); }
+        expect(bill.totalPaise).toBe(25000);
+        expect(packagingRows(bill.id)).toEqual([{ amount: 4000 }]);
+        expect(linePackaging(bill.id)).toEqual([2000]);
+        const lines = app.db.prepare("SELECT total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ total: number }>;
+        const stored = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number };
+        expect(lines.reduce((sum, l) => sum + l.total, 0) + stored.total).toBe(bill.totalPaise);
+      });
+      it("refuses to save report lines for a charge whose GST rate has no tax row", async () => {
+        // A bill row written by hand for an open order, with a packaging charge and no bill_taxes rows at all.
+        const orderId = await withTwo(await order(undefined, true)), id = uuidv7();
+        const admin = (app.db.prepare("SELECT id FROM users LIMIT 1").get() as { id: string }).id;
+        app.db.prepare(`INSERT INTO bills (id, bill_no, order_id, subtotal_paise, discount_paise, cgst_paise, sgst_paise, rounding_paise, total_paise, status, created_at, created_by, receipt_json)
+          VALUES (?, 900, ?, 21000, 0, 0, 0, 0, 25000, 'unpaid', ?, ?, NULL)`).run(id, orderId, Date.now(), admin);
+        app.db.prepare("INSERT INTO bill_charges (bill_id, kind, label, percent_bp, gst_rate, amount_paise, taxable_paise, cgst_paise, sgst_paise, rounding_paise) VALUES (?, 'packaging', 'Packaging', NULL, 5, 4000, 3810, 95, 95, 0)").run(id);
+        expect(() => saveReportLines(app.db, id)).toThrow("The packaging charge at 5% has no tax row on this bill");
+      });
+      it("charges only the flat amount with the toggle off", async () => {
+        await putSettings({ packagingPerItem: false });
+        const bill = await issue(await withTwo(await order(undefined, true)));
+        expect(bill.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 2000]]);
+        expect(linePackaging(bill.id)).toEqual([0]);
+      });
+      it("adds no packaging to a dine-in bill", async () => {
+        const bill = await issue(await withTwo(await dineIn(true)));
+        expect(bill.charges!.map((c) => c.kind)).toEqual(["service"]);
+        expect(linePackaging(bill.id)).toEqual([0]);
+      });
+      it("adds no packaging row when the flat and item amounts are 0", async () => {
+        await putSettings({ packagingChargePaise: 0 }); await setPackaging(0);
+        const bill = await issue(await withTwo(await order(undefined, true)));
+        expect(bill.charges).toEqual([]);
+        expect(packagingRows(bill.id)).toEqual([]);
+      });
+      it("refuses a preview taken before an item's packaging changed", async () => {
+        const id = await withTwo(await order(undefined, true));
+        const key = (await previewOf(id)).previewKey;
+        expect((await setPackaging(1500)).statusCode).toBe(200);
+        const res = await post(id, { clientRef: uuidv7(), previewKey: key });
+        expect(res.statusCode).toBe(409); expect(res.json().error).toBe("Order changed; review a fresh bill preview");
+      });
+    });
+    it("keeps item report lines non-negative when a near-total discount leaves less item value than the round-off", async () => {
+      await putSettings({ gstMode: "exclusive", gstRate: 5, serviceChargeBp: 0, packagingChargePaise: 2200 });
+      const id = await order();
+      // ₹105 item less ₹104.90 leaves 10 paise; packaging 2200 + 110 GST; 2320 rounds to 2300, so the round-off is -20.
+      const bill = (await post(id, await billRequest(id, { discountPaise: 10490, discountNote: "Comp" }))).json().bill as Bill;
+      expect(bill).toMatchObject({ roundingPaise: -20, totalPaise: 2300 });
+      const lines = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise AS value, rounding_paise AS rounding, total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ value: number; rounding: number; total: number }>;
+      expect(lines).toEqual([{ value: 10, rounding: -10, total: 0 }]);
+      const charge = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total, rounding_paise AS rounding FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number; rounding: number };
+      expect(charge).toEqual({ total: 2300, rounding: -10 });
+      const voided = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(token), payload: { clientRef: uuidv7(), reason: "Test", refunds: [] } });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect(app.db.prepare("SELECT SUM(total_paise) AS n FROM credit_notes WHERE bill_id = ?").get(bill.id)).toEqual({ n: bill.totalPaise });
+      expect(app.db.prepare("SELECT rounding_paise, total_paise FROM credit_note_charges").get()).toEqual({ rounding_paise: -10, total_paise: 2300 });
+    });
+    it.each([[18, 3000, -40], [5, 2200, -10]])("keeps every report line non-negative when a takeaway's items are fully discounted (%i%% charge, %i paise packaging)", async (gstRate, packaging, rounding) => {
+      await putSettings({ gstMode: "exclusive", gstRate, serviceChargeBp: 0, packagingChargePaise: packaging });
+      const id = await order();
+      const bill = (await post(id, await billRequest(id, { discountPaise: 10500, discountNote: "Comp" }))).json().bill as Bill;
+      expect(bill.roundingPaise).toBe(rounding);
+      const lines = app.db.prepare("SELECT total_paise AS total, rounding_paise AS rounding FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ total: number; rounding: number }>;
+      expect(lines).toHaveLength(1);
+      for (const line of lines) { expect(line.total).toBeGreaterThanOrEqual(0); expect(line.rounding).toBe(0); }
+      const charge = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total, rounding_paise AS rounding FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number; rounding: number };
+      expect(charge.rounding).toBe(rounding);
+      expect(lines.reduce((sum, l) => sum + l.total, 0) + charge.total).toBe(bill.totalPaise);
+      // A void credits the charge with its rounding, so the credits sum to the bill.
+      const voided = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(token), payload: { clientRef: uuidv7(), reason: "Test", refunds: [] } });
+      expect(voided.statusCode, voided.body).toBe(201);
+      expect(app.db.prepare("SELECT SUM(total_paise) AS n FROM credit_notes WHERE bill_id = ?").get(bill.id)).toEqual({ n: bill.totalPaise });
+      expect(app.db.prepare("SELECT rounding_paise, total_paise FROM credit_note_charges").get()).toEqual({ rounding_paise: rounding, total_paise: charge.total });
+    });
   });
 });
