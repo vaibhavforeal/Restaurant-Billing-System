@@ -1,3 +1,5 @@
+import { BillItemLines } from "./CreditNoteDialog";
+import type { Order } from "../types";
 import { useEffect, useState } from "react";
 import type { Bill } from "@masalapos/domain";
 import { apiFetch, session } from "../api";
@@ -32,7 +34,7 @@ export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
     {!bills.length && <p>No bills to show.</p>}
     <TableScroller><table style={{ width: "100%", textAlign: "left", borderSpacing: "8px 16px" }}>
       <thead><tr><th>Bill</th><th>Date</th><th>Table / parcel</th><th className="pos-money">Total</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody>{bills.map((b) => <tr key={b.id}><td>{b.invoiceNo}</td><td>{new Date(b.createdAt).toLocaleString()}</td><td>{billContextLabel(b.receipt)}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td><span className={`status ${b.status} refund-${b.refundState}`}>{billStatusLabel(b)}</span></td><td><button onClick={() => onOpenOrder(b.orderId)}>Open bill {b.invoiceNo}</button></td></tr>)}</tbody>
+      <tbody>{bills.map((b) => <tr key={b.id}><td>{b.invoiceNo}<BillDetails bill={b} /></td><td>{new Date(b.createdAt).toLocaleString()}</td><td>{billContextLabel(b.receipt)}</td><td className="pos-money">₹{paiseToRupees(b.totalPaise)}</td><td><span className={`status ${b.status} refund-${b.refundState}`}>{billStatusLabel(b)}</span></td><td><button onClick={() => onOpenOrder(b.orderId)}>Open bill {b.invoiceNo}</button></td></tr>)}</tbody>
     </table></TableScroller>
     {more && <button disabled={busy} onClick={async () => {
       setBusy(true);
@@ -43,4 +45,23 @@ export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
       finally { setBusy(false); }
     }}>Load older bills</button>}
   </section>;
+}
+
+/** Load the order snapshots only when a cashier expands a bill. */
+function BillDetails({ bill }: { bill: Bill }) {
+  const [order, setOrder] = useState<Order | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  async function load() {
+    if (loading) return;
+    setLoading(true); setError("");
+    try { setOrder((await apiFetch<{ order: Order }>(`/api/orders/${bill.orderId}`)).order); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load bill items."); }
+    finally { setLoading(false); }
+  }
+  return <details onToggle={(event) => { if (event.currentTarget.open && !order) void load(); }}><summary>View items</summary>
+    {loading && <p role="status">Loading items...</p>}
+    {error && <p role="alert">{error} <button onClick={() => void load()}>Retry</button></p>}
+    {order && <BillItemLines items={order.items} refundedQty={bill.refundedQty} showRefunded={bill.creditNotes.length > 0} />}
+  </details>;
 }

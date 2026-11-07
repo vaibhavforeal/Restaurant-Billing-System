@@ -1,3 +1,5 @@
+import { groupAddonLines } from "../addon-cart";
+import "../addons.css";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, session } from "../api";
 import type { Kot, KotWithContext } from "../types";
@@ -103,7 +105,7 @@ export function Kitchen({ standalone = false, onBusyChange }: { standalone?: boo
     <div className="kitchen-grid">{kots.map((kot) => <article className="kitchen-ticket" key={kot.id}>
       <div className="ticket-header"><strong>KOT #{kot.kotNo}</strong><span><Icon name="clock" size={12} /> {age(kot.createdAt)}</span></div>
       <div className={`ticket-location${kot.orderType === "zomato" ? " kds-tag-zomato" : ""}`}>{kitchenContextLabel(kot)}</div>
-      <ul className="ticket-items">{kot.items.map((item) => <li key={item.id} style={{ textDecoration: item.status === "cancelled" ? "line-through" : "none", opacity: item.status === "cancelled" ? .5 : 1 }}>{item.qty} × {item.name}{item.note && <small>{item.note}</small>}</li>)}</ul>
+      <ul className="ticket-items">{groupAddonLines(kot.items).map((item) => <li key={item.id} className={item.addonOfItemId ? "addon-line" : ""} style={{ textDecoration: item.status === "cancelled" ? "line-through" : "none", opacity: item.status === "cancelled" ? .5 : 1 }}>{item.addonOfItemId ? "+ " : ""}{item.qty} × {item.name}{item.addonOfItemId && !kot.items.some((parent) => parent.id === item.addonOfItemId) && item.addonOfItemName && <small>(for {item.addonOfItemName})</small>}{item.note && <small>{item.note}</small>}</li>)}</ul>
       <button className="primary button-icon" disabled={!connected || !!loadError || busyIds.has(kot.id)} onClick={() => void markDone(kot.id)}><Icon name="check" size={17} />{busyIds.has(kot.id) ? "Saving…" : "Done"}</button>
     </article>)}</div>
   </section>;

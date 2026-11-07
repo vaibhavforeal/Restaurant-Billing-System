@@ -48,3 +48,9 @@ describe("apiFetch and 401 answers", () => {
     expect(signedOut).toHaveBeenCalledTimes(2);
   });
 });
+
+it.each(["addon_picks", "addon_only", "addon_line"])("preserves the server message and %s code for staff and offline actions", async (code) => {
+  const message = "Margherita: choose at least 1 from Toppings";
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ message, code }), { status: 409, headers: { "content-type": "application/json" } })));
+  await expect(apiFetch("/api/orders/o1/items", { method: "POST", body: "{}" })).rejects.toMatchObject({ status: 409, code, message });
+});

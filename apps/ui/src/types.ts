@@ -36,6 +36,8 @@ export interface Product extends ItemPrices {
   variants: Variant[];
   /** A combo is sold as one line holding items picked from its slots. */
   kind: "item" | "combo";
+  addonOnly?: boolean;
+  addonGroupIds?: string[];
   combo?: ComboGroup[];
   /** Packaging per unit in paise, added on takeaway and delivery bills when per-item packaging is on. */
   packagingPaise?: number;
@@ -212,6 +214,7 @@ export interface OrderItem {
   kotId: string | null;
   /** Set on an item inside a combo: the combo's own line. */
   parentItemId?: string | null;
+  addonOfItemId?: string | null;
   /** Held back from the kitchen until staff fire it (pending items only; a combo's line holds its items). */
   held?: boolean;
 }
@@ -275,9 +278,28 @@ export interface KotWithContext {
   splitLabel: string | null;
   items: Array<{
     id: string;
+    addonOfItemId?: string | null;
+    addonOfItemName?: string | null;
     name: string;
     qty: number;
     note: string | null;
     status: "pending" | "sent" | "cancelled";
   }>;
 }
+
+/** UI contract until the add-on backend lands. Money is always integer paise. */
+export interface AddonOption { id: string; productId: string; variantId: string | null; name: string; unavailable?: boolean }
+export interface AddonGroup { id: string; name: string; minPicks: number; maxPicks: number; isActive: boolean; options: AddonOption[]; productIds: string[] }
+export interface PricedAddonOption extends AddonOption { pricePaise: number; isVeg?: boolean }
+export interface AddonPickerGroup { id: string; name: string; minPicks: number; maxPicks: number; isActive?: boolean; options: PricedAddonOption[] }
+export interface AddonSnapshot { name: string; pricePaise: number; productId?: string; variantId?: string | null }
+export type GuestMenu = Omit<import("@masalapos/domain").GuestMenu, "products"> & {
+  products: Array<import("@masalapos/domain").GuestMenu["products"][number] & { addonGroups?: AddonPickerGroup[]; addonOnly?: boolean }>;
+};
+export type GuestSubmission = Omit<import("@masalapos/domain").GuestSubmission, "items"> & {
+  items: Array<import("@masalapos/domain").GuestSubmission["items"][number] & { addonPicks?: string[] }>;
+};
+export type GuestReceipt = Omit<import("@masalapos/domain").GuestReceipt, "items"> & {
+  items: Array<import("@masalapos/domain").GuestReceipt["items"][number] & { addons?: AddonSnapshot[] }>;
+};
+export type GuestRequest = Omit<import("@masalapos/domain").GuestRequest, "items"> & { items: GuestReceipt["items"] };

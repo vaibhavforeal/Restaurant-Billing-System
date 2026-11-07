@@ -1,0 +1,11 @@
+.addon-line { padding-inline-start: 1.5rem !important; }
+.addon-lines { display: grid; gap: .35rem; margin-block: .4rem; padding-inline-start: 1rem; font-size: .9em; font-weight: 400; }
+.addon-snapshot { display: flex; justify-content: space-between; gap: 1rem; }
+.addon-unavailable { opacity: .5; }
+.addon-manager { display: grid; gap: 1rem; }
+.addon-manager-header, .addon-group-row, .addon-group-order { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.addon-group-row { padding-block: .75rem; border-bottom: 1px solid var(--border); }
+.addon-group-row > div { flex: 1; min-width: 12rem; }
+.addon-group-row small { display: block; color: var(--muted); }
+.addon-group-order { margin-block: .4rem; }
+.addon-group-order > span { flex: 1; }

@@ -178,9 +178,9 @@ export function TableOrderPanel({ user, orderId, disabled, onEditItems, onSelect
       {summary.lines.length === 0 ? <p className="reservation-panel-empty">No dishes on this order yet.</p>
         : <ul className="table-order-lines">{summary.lines.map((item) => {
           const children = order.items.filter((child) => child.parentItemId === item.id && child.status !== "cancelled");
-          return <li key={item.id}>
+          return <li key={item.id} className={item.addonOfItemId ? "addon-line" : ""}>
             {dietary.has(item.productId) ? <span className={`table-diet-mark ${dietary.get(item.productId) ? "veg" : "nonveg"}`} role="img" aria-label={dietary.get(item.productId) ? "Vegetarian" : "Non-vegetarian"}><i /></span> : <span />}
-            <div className="table-dish-name">{item.name}{item.held && item.status === "pending" && <small className="status held">held</small>}</div>
+            <div className="table-dish-name">{item.addonOfItemId ? "+ " : ""}{item.name}{item.held && item.status === "pending" && <small className="status held">held</small>}</div>
             <span className="table-dish-qty"><small>QTY:</small> {String(item.qty).padStart(2, "0")}</span>
             <strong className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}</strong>
             {(item.note || children.length > 0) && <div className="table-dish-details">{item.note && <small>{item.note}</small>}{children.length > 0 && <details><summary>{children.length} combo {children.length === 1 ? "item" : "items"} · Expand</summary><ul>{children.map((child) => <li key={child.id}>{child.qty} × {child.name}</li>)}</ul></details>}</div>}

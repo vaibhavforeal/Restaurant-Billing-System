@@ -1,5 +1,9 @@
+import { AddonChoices, AddonLines } from "../AddonChoices";
+import { activeAddonGroups, addonPickProblem, addonTotal, pickedAddons } from "../addon-cart";
+import type { AddonSnapshot } from "../types";
+import { WorkspaceDialog } from "../WorkspaceDialog";
 import { useEffect, useRef, useState } from "react";
-import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "@masalapos/domain";
+import type { GuestMenu as GuestMenuData, GuestReceipt, GuestSubmission } from "../types";
 import { uuid } from "../uuid";
 import { GuestServices } from "./GuestServices";
 import { ComboChoices, comboChoice, comboPickProblem } from "../ComboChoices";
@@ -9,7 +13,7 @@ import { suggestTogether } from "../ordered-together";
 import "../guest-menu.css";
 
 type MenuProduct = GuestMenuData["products"][number];
-type CartItem = GuestSubmission["items"][number] & { key: string; name: string; pricePaise: number; contents?: string[] };
+type CartItem = GuestSubmission["items"][number] & { key: string; name: string; pricePaise: number; contents?: string[]; addons?: AddonSnapshot[] };
 type SavedRequest = { submission: GuestSubmission; receipt: GuestReceipt | null };
 type SavedState = { version: 1; cart: CartItem[]; menuVersion: string | null; reviewRequired: boolean; request: SavedRequest | null; history: SavedRequest[]; historyTruncated: boolean };
 const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(paise / 100);
@@ -49,6 +53,7 @@ function readSaved(token: string): SavedState {
       value.cart.some((item) => typeof item.key !== "string" || typeof item.productId !== "string" ||
         (item.variantId !== null && typeof item.variantId !== "string") || typeof item.name !== "string" ||
         !Number.isSafeInteger(item.pricePaise) || !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 20 || typeof item.note !== "string" ||
+        (item.addonPicks !== undefined && (!Array.isArray(item.addonPicks) || item.addonPicks.some((id) => typeof id !== "string"))) ||
         (item.comboPicks !== undefined && (!Array.isArray(item.comboPicks) || item.comboPicks.some((id) => typeof id !== "string"))))) return emptyState();
     if (value.request && !validRequest(value.request)) return emptyState();
     const history = Array.isArray(value.history) ? value.history.filter((request) => validRequest(request) && request.receipt?.status === "accepted") : [];
@@ -73,9 +78,9 @@ async function guestFetch<T>(path: string, init: RequestInit): Promise<T> {
 }
 
 function reconcileCart(cart: CartItem[], menu: GuestMenuData): CartItem[] {
-  return cart.flatMap((item) => {
+  return cart.flatMap<CartItem>((item) => {
     const product = menu.products.find((candidate) => candidate.id === item.productId);
-    if (!product || product.isSoldOut) return [];
+    if (!product || product.addonOnly || product.isSoldOut) return [];
     const variant = product.variants.find((candidate) => candidate.id === item.variantId);
     if ((item.variantId !== null && !variant) || (item.variantId === null && product.variants.length > 0)) return [];
     // A combo stays only while its picks still fit its slots; its price follows the current extras.
@@ -84,7 +89,8 @@ function reconcileCart(cart: CartItem[], menu: GuestMenuData): CartItem[] {
       if (!chosen) return [];
       return [{ ...item, name: product.name, pricePaise: product.pricePaise + chosen.extraPaise, contents: chosen.items.map((held) => held.qty > 1 ? `${held.qty} × ${held.name}` : held.name) }];
     }
-    return [{ ...item, name: variant ? `${product.name} (${variant.name})` : product.name, pricePaise: variant?.pricePaise ?? product.pricePaise }];
+    if (addonPickProblem(product.addonGroups ?? [], item.addonPicks ?? [])) return [];
+    return [{ ...item, addons: pickedAddons(product.addonGroups ?? [], item.addonPicks ?? []), name: variant ? `${product.name} (${variant.name})` : product.name, pricePaise: variant?.pricePaise ?? product.pricePaise }];
   });
 }
 
@@ -95,6 +101,7 @@ export function GuestMenu({ token }: { token: string }) {
 function GuestMenuContent({ token }: { token: string }) {
   const [saved, setSaved] = useState(() => readSaved(token));
   const savedRef = useRef(saved);
+  const [addonPicking, setAddonPicking] = useState<{ product: MenuProduct; variantId: string | null; picks: string[] } | null>(null);
   const [menu, setMenu] = useState<GuestMenuData | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -215,8 +222,11 @@ function GuestMenuContent({ token }: { token: string }) {
     return () => { active = false; timers.forEach((timer) => window.clearTimeout(timer)); };
   }, [historyPollKey, token]);
 
-  function add(product: MenuProduct, variantId: string | null, comboPicks?: string[]) {
-    if (!menu?.orderingAvailable || product.isSoldOut || savedRef.current.request || sendingRef.current || needsRefresh) return;
+  function add(product: MenuProduct, variantId: string | null, comboPicks?: string[], addonPicks?: string[]) {
+    if (!menu?.orderingAvailable || product.addonOnly || product.isSoldOut || savedRef.current.request || sendingRef.current || needsRefresh) return;
+    if (activeAddonGroups(product.addonGroups ?? []).length && addonPicks === undefined) { setAddonPicking({ product, variantId, picks: [] }); return; }
+    const addonProblem = addonPickProblem(product.addonGroups ?? [], addonPicks ?? []);
+    if (addonProblem) { setError(addonProblem); return; }
     if (product.combo && !comboPicks) {
       // A combo with only fixed items needs no choosing.
       if (comboPickProblem(product.combo, []) === null) add(product, null, []);
@@ -229,15 +239,16 @@ function GuestMenuContent({ token }: { token: string }) {
     const chosen = product.combo ? comboChoice(product.combo, comboPicks ?? []) : null;
     if (product.combo && !chosen) return;
     const samePicks = (item: CartItem) => JSON.stringify([...item.comboPicks ?? []].sort()) === JSON.stringify([...comboPicks ?? []].sort());
-    const existing = current.cart.find((item) => item.productId === product.id && item.variantId === variantId && !item.note && samePicks(item));
+    const existing = current.cart.find((item) => item.productId === product.id && item.variantId === variantId && !item.note && samePicks(item) && JSON.stringify([...(item.addonPicks ?? [])].sort()) === JSON.stringify([...(addonPicks ?? [])].sort()));
     if (existing && existing.qty >= 20) { setError("You can add up to 20 of an item. Please ask staff for larger orders."); return; }
     if (!existing && current.cart.length >= 30) { setError("A request can contain up to 30 menu selections. Please ask staff for a larger order."); return; }
     const cart = existing ? current.cart.map((item) => item.key === existing.key ? { ...item, qty: item.qty + 1 } : item)
       : [...current.cart, { key: uuid(), productId: product.id, variantId, qty: 1, note: "", name: variant ? `${product.name} (${variant.name})` : product.name,
         pricePaise: (variant?.pricePaise ?? product.pricePaise) + (chosen?.extraPaise ?? 0),
+        ...(addonPicks ? { addonPicks, addons: pickedAddons(product.addonGroups ?? [], addonPicks) } : {}),
         ...(chosen ? { comboPicks: comboPicks!, contents: chosen.items.map((item) => item.qty > 1 ? `${item.qty} × ${item.name}` : item.name) } : {}) }];
     save({ ...current, cart, menuVersion: menu.menuVersion });
-    setPicking(null);
+    setPicking(null); setAddonPicking(null);
     setError(""); setNotice(`Added ${product.name} to your request.`);
   }
 
@@ -258,7 +269,7 @@ function GuestMenuContent({ token }: { token: string }) {
     }
     const submission = previous.request?.submission ?? {
       clientRef: uuid(), receiptToken: hexToken(), menuVersion: menu!.menuVersion,
-      items: previous.cart.map(({ productId, variantId, qty, note, comboPicks }) => ({ productId, variantId, qty, note: note.trim(), ...(comboPicks ? { comboPicks } : {}) })),
+      items: previous.cart.map(({ productId, variantId, qty, note, comboPicks, addonPicks }) => ({ productId, variantId, qty, note: note.trim(), ...(comboPicks ? { comboPicks } : {}), ...(addonPicks ? { addonPicks } : {}) })),
     };
     const frozen: SavedState = { ...previous, request: { submission, receipt: null } };
     // Store the immutable request before sending: a lost response or reload must reuse its identity.
@@ -282,7 +293,11 @@ function GuestMenuContent({ token }: { token: string }) {
     } catch (cause) {
       if (!mounted.current) return;
       const stale = cause instanceof GuestApiError && cause.status === 409 && /menu|stale/i.test(cause.code);
-      if (stale) {
+      if (cause instanceof GuestApiError && cause.status === 409 && ["addon_picks", "addon_only", "addon_line"].includes(cause.code)) {
+        save({ ...frozen, request: null, reviewRequired: true });
+        setNeedsRefresh(true);
+        setError(cause.message);
+      } else if (stale) {
         save({ ...frozen, request: null, reviewRequired: true });
         setNeedsRefresh(true);
         setError("The menu changed before your request was submitted. Reload the menu, then review your items and prices.");
@@ -313,17 +328,17 @@ function GuestMenuContent({ token }: { token: string }) {
   }
 
   const locked = !!saved.request || sending || needsRefresh || loading;
-  const subtotal = saved.cart.reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
+  const subtotal = saved.cart.reduce((sum, item) => sum + (item.pricePaise + addonTotal(item.addons)) * item.qty, 0);
   const count = saved.cart.reduce((sum, item) => sum + item.qty, 0);
   const popularIds = menu?.popularProductIds ?? [];
   // "Goes well with your order": dishes often on the same bill as what is in the request, in the size most ordered.
   const suggestions = !menu ? [] : suggestTogether(saved.cart, menu.pairs ?? {}, menu.products).flatMap(({ productId, variantId }) => {
     const product = menu.products.find((p) => p.id === productId);
-    if (!product || product.combo) return [];
+    if (!product || product.addonOnly || product.combo) return [];
     const variant = product.variants.find((v) => v.id === variantId) ?? product.variants[0] ?? null;
     return [{ product, variant }];
   });
-  const visible = withPopularFirst(menu?.products.filter((product) => (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
+  const visible = withPopularFirst(menu?.products.filter((product) => !product.addonOnly && (category === "all" || product.categoryId === category) && (!vegOnly || product.isVeg) &&
     `${product.name} ${product.description} ${product.variants.map((variant) => variant.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [], popularIds);
 
   return <main className="guest-menu">
@@ -369,7 +384,7 @@ function GuestMenuContent({ token }: { token: string }) {
             {!saved.cart.length ? <p className="guest-menu-cart-empty">Your table is ready. Add a dish to get started.</p> : <>
               <ul className="guest-menu-cart-items">{saved.cart.map((item) => <li key={item.key}>
                 <div className="guest-menu-cart-item-heading"><h3>{item.name}</h3><strong>{money(item.pricePaise * item.qty)}</strong></div>
-                {item.contents && <small className="guest-menu-combo-contents">{item.contents.join(", ")}</small>}
+                <AddonLines addons={item.addons} qty={item.qty} />{item.contents && <small className="guest-menu-combo-contents">{item.contents.join(", ")}</small>}
                 <small>{money(item.pricePaise)} each</small>
                 <div className="guest-menu-quantity"><button aria-label={`Decrease ${item.name}`} disabled={locked} onClick={() => editItem(item.key, { qty: item.qty - 1 })}>−</button><span aria-label={`Quantity for ${item.name}`}>{item.qty}</span><button aria-label={`Increase ${item.name}`} disabled={locked || item.qty >= 20} onClick={() => editItem(item.key, { qty: item.qty + 1 })}>+</button><button className="guest-menu-remove" disabled={locked} onClick={() => editItem(item.key, { qty: 0 })} aria-label={`Remove ${item.name}`}>Remove</button></div>
                 <label className="guest-menu-item-note">Instructions for {item.name}<textarea rows={2} maxLength={200} placeholder="Optional: less spicy, no onions…" value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
@@ -388,6 +403,16 @@ function GuestMenuContent({ token }: { token: string }) {
       </>}
       <footer className="guest-menu-footer">No tax is added to menu prices. For allergies or special requirements, please speak with our team.</footer>
     </div>
+    <WorkspaceDialog open={addonPicking !== null} title={addonPicking ? `Add-ons · ${addonPicking.product.name}` : "Choose add-ons"} className="combo-dialog" busy={locked} onClose={() => setAddonPicking(null)}>
+      {addonPicking && (() => {
+        const product = menu?.products.find((value) => value.id === addonPicking.product.id);
+        const groups = product?.addonGroups ?? [];
+        const problem = !product || product.isSoldOut ? "This dish is sold out." : addonPickProblem(groups, addonPicking.picks);
+        const base = product?.variants.find((variant) => variant.id === addonPicking.variantId)?.pricePaise ?? product?.pricePaise ?? 0;
+        return <><AddonChoices groups={groups} picks={addonPicking.picks} disabled={locked} onChange={(picks) => setAddonPicking({ ...addonPicking, picks })} />
+          <div className="combo-dialog-footer"><p role="status">{problem ?? "All set"}</p><button className="guest-menu-primary" disabled={locked || !!problem} onClick={() => { if (product) add(product, addonPicking.variantId, undefined, addonPicking.picks); }}>Add · {money(base + addonTotal(pickedAddons(groups, addonPicking.picks)))}</button></div></>;
+      })()}
+    </WorkspaceDialog>
     {picking?.product.combo && (() => {
       const groups = picking.product.combo!;
       const problem = comboPickProblem(groups, picking.picks);
@@ -445,7 +470,7 @@ function ReceiptCard({ receipt, error, onNew, orderingAvailable }: { receipt: Gu
       <ul>{preparation.items.map((item, index) => <li key={`${index}:${item.name}`}><span>{item.qty} × {item.name}</span><span className={`guest-menu-preparation-state guest-menu-preparation-${item.state}`}>{PREPARATION_LABELS[item.state]}</span></li>)}</ul>
       {preparation.hasChanges && <p className="guest-menu-small">Our team updated some items or quantities. Please check with staff for details and your final bill.</p>}
     </div>}
-    <details><summary>View request · {money(receipt.subtotalPaise)}</summary><ul className="guest-menu-receipt-items">{receipt.items.map((item, index) => <li key={`${item.productId}:${item.variantId}:${index}`}><span><strong>{item.qty} × {item.name}</strong>{item.contents && <small>{item.contents.join(", ")}</small>}{item.note && <small>{item.note}</small>}</span><span>{money(item.qty * item.pricePaise)}</span></li>)}</ul><p className="guest-menu-small">Menu subtotal · No tax is added to menu prices. Pay at the restaurant.</p></details>
+    <details><summary>View request · {money(receipt.subtotalPaise)}</summary><ul className="guest-menu-receipt-items">{receipt.items.map((item, index) => <li key={`${item.productId}:${item.variantId}:${index}`}><span><strong>{item.qty} × {item.name}</strong><AddonLines addons={item.addons} qty={item.qty} />{item.contents && <small>{item.contents.join(", ")}</small>}{item.note && <small>{item.note}</small>}</span><span>{money(item.qty * item.pricePaise)}</span></li>)}</ul><p className="guest-menu-small">Menu subtotal · No tax is added to menu prices. Pay at the restaurant.</p></details>
     {receipt.status !== "pending" && orderingAvailable && <button onClick={onNew}>{receipt.status === "accepted" ? "Order more" : "Start a new request"}</button>}
   </section>;
 }

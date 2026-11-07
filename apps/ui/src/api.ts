@@ -52,7 +52,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit, options?: { 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     if (res.status === 401 && options?.keepSessionOnMessage && body.error !== options.keepSessionOnMessage) session.clear();
-    throw new ApiError(res.status, body.error === "validation" ? (body.issues?.[0]?.message ?? "Check the form values") : (body.error ?? res.statusText), typeof body.code === "string" ? body.code : undefined);
+    throw new ApiError(res.status, body.error === "validation" ? (body.issues?.[0]?.message ?? "Check the form values") : (body.message ?? body.error ?? res.statusText), typeof body.code === "string" ? body.code : undefined);
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }

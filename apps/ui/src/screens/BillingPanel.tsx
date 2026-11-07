@@ -397,6 +397,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             </>}
           </div>
           {preview && !bill && <div className="billing-payment">
+            <BillItemLines items={order.items} refundedQty={{}} showRefunded={false} />
             {quick ? <fieldset disabled={blocked} className="quick-payment"><legend>Payment received</legend>
               <div className="billing-payment-fields">
                 <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={paymentModes} onChange={(mode) => { setQuickMode(mode); savePreference("masalapos.payment-mode", mode); }} /></div>

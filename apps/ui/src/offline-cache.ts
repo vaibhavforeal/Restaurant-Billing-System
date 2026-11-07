@@ -1,5 +1,5 @@
 import type { User } from "./api";
-import type { Category, Order, Product, TableInfo } from "./types";
+import type { AddonGroup, Category, Order, Product, TableInfo } from "./types";
 
 /**
  * Last-known copies of what a counter was looking at, so staff can keep working while the hub is unreachable. Each copy
@@ -10,7 +10,7 @@ import type { DishPairs } from "./ordered-together";
 
 /** `pairs` is missing from copies saved before ordered-together suggestions existed. */
 export interface MenuInsights { popularProductIds: string[]; pairs?: DishPairs }
-export interface CatalogCache { categories: Category[]; products: Product[]; captains: Array<{ id: string; name: string }>; at: number }
+export interface CatalogCache { addonGroups?: AddonGroup[]; categories: Category[]; products: Product[]; captains: Array<{ id: string; name: string }>; at: number }
 
 function write(key: string, value: unknown): void {
   try { localStorage.setItem(PREFIX + key, JSON.stringify(value)); }

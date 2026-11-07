@@ -82,3 +82,15 @@ describe("hold order helpers", () => {
     expect(readOrderSettingsCopy("u2")).toBeNull();
   });
 });
+
+it("preserves add-on picks in held and offline punches without sending display snapshots", () => {
+  expect(punchItems([row("r-addon", "dal", { qty: 2, held: true, addonPicks: ["cheese-option"], addons: [{ productId: "cheese" }] })])).toEqual([
+    { clientRef: "r-addon", productId: "dal", variantId: null, qty: 2, held: true, addonPicks: ["cheese-option"] },
+  ]);
+});
+it("holds and fires a dish once even when its add-ons are held too", () => {
+  const items = [line("dish", "water", { held: true }), line("addon", "dal", { addonOfItemId: "dish", held: true })];
+  expect(heldLines(items).map((item) => item.id)).toEqual(["dish"]);
+  expect(heldTargets(items, [], catalog)).toEqual({ itemIds: [], itemRefs: ["ref-dish-0000"], count: 1 });
+  expect(sendableLines(items, catalog)).toEqual([]);
+});

@@ -1,3 +1,5 @@
+import { groupAddonLines } from "../addon-cart";
+import "../addons.css";
 import { useEffect, useId, useRef, useState } from "react";
 import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain/billing";
 import { billChargesGst } from "@masalapos/domain/gst";
@@ -92,11 +94,11 @@ export function CreditNoteList({ notes, printers, printerId }: { notes: BillCred
 /** The items of an issued bill with how many were billed and refunded. */
 export function BillItemLines({ items, refundedQty, showRefunded }: { items: OrderItem[]; refundedQty: Record<string, number>; showRefunded: boolean }) {
   // A combo is billed and refunded as one line; the items in it are not lines of their own.
-  const billed = items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
+  const billed = groupAddonLines(items.filter((item) => item.status !== "cancelled" && !item.parentItemId));
   if (!billed.length) return null;
   return <section className="bill-item-lines" aria-label="Billed items">
     <h3>Items</h3>
-    <ul>{billed.map((item) => <li key={item.id}><span>{item.name}</span><span className="muted">{item.qty} billed{showRefunded ? ` · ${refundedQty[item.id] ?? 0} refunded` : ""}</span></li>)}</ul>
+    <ul>{billed.map((item) => <li key={item.id} className={item.addonOfItemId ? "addon-line" : ""}><span>{item.addonOfItemId ? "+ " : ""}{item.name}</span><span className="pos-money">{money(item.qty * item.pricePaise)}</span><span className="muted">{item.qty} billed{showRefunded ? ` · ${refundedQty[item.id] ?? 0} refunded` : ""}</span></li>)}</ul>
   </section>;
 }
 
@@ -123,7 +125,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   kind: "void" | "refund"; bill: Bill; items: OrderItem[]; role: "admin" | "cashier" | "waiter" | "kitchen"; printers: Printer[]; printerId: string;
   onBusyChange: (busy: boolean) => void; onClose: () => void; onIssued: (result: IssuedCredit) => void; onStale: () => void;
 }) {
-  const billable = items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
+  const billable = groupAddonLines(items.filter((item) => item.status !== "cancelled" && !item.parentItemId));
   const unpaid = bill.status === "unpaid";
   const [qty, setQty] = useState<Record<string, number>>({});
   const [pick, setPick] = useState("");
@@ -239,8 +241,8 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
         const left = refundableQty(item.qty, refunded);
         const value = qty[item.id] ?? 0;
         const set = (next: number) => setQty((all) => ({ ...all, [item.id]: clampRefundQty(next, item.qty, refunded) }));
-        return <li key={item.id}>
-          <div><strong>{item.name}</strong><span className="muted"> {item.qty} billed · {refunded} refunded{left === 0 ? " · nothing left to refund" : ""}</span></div>
+        return <li key={item.id} className={item.addonOfItemId ? "addon-line" : ""}>
+          <div><strong>{item.addonOfItemId ? "+ " : ""}{item.name}</strong><span className="muted"> {item.qty} billed · {refunded} refunded{left === 0 ? " · nothing left to refund" : ""}</span></div>
           <div className="credit-note-stepper">
             <button type="button" aria-label={`Fewer ${item.name}`} disabled={value <= 0} onClick={() => set(value - 1)}>−</button>
             <input type="number" inputMode="numeric" min={0} max={left} step={1} aria-label={`Quantity to refund of ${item.name}`} value={value} disabled={left === 0} onChange={(e) => set(Number(e.target.value))} />
@@ -268,7 +270,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
       {loadingPreview && <p role="status">Working out the credit…</p>}
       {previewError && <p className="billing-error" role="alert">{previewError}</p>}
       {preview && preview.key === key && <>
-        <ul>{preview.lines.map((line) => <li key={line.orderItemId}><span>{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}{(preview.charges ?? []).map((c) => <li key={c.kind}><span>{chargeLabel(c)}</span><span className="pos-money">{money(c.totalPaise)}</span></li>)}</ul>
+        <ul>{preview.lines.map((line) => <li key={line.orderItemId} className={items.find((item) => item.id === line.orderItemId)?.addonOfItemId ? "addon-line" : ""}><span>{items.find((item) => item.id === line.orderItemId)?.addonOfItemId ? "+ " : ""}{line.qty} × {line.name}</span><span className="pos-money">{money(line.totalPaise)}</span></li>)}{(preview.charges ?? []).map((c) => <li key={c.kind}><span>{chargeLabel(c)}</span><span className="pos-money">{money(c.totalPaise)}</span></li>)}</ul>
         <dl className="pos-totals">
           {!billChargesGst(bill.receipt) ? <><dt>Item value</dt><dd>{money(preview.totals.taxablePaise)}</dd></> : <>
             <dt>Taxable value</dt><dd>{money(preview.totals.taxablePaise)}</dd>

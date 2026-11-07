@@ -1,13 +1,14 @@
+import { groupAddonLines } from "./addon-cart";
 import type { Order } from "./types";
 
 /** What the table view's side panel shows for a running order: the dishes still on it, their total, and dishes held back. */
 export function orderSummary(order: Order): { lines: Order["items"]; itemCount: number; subtotalPaise: number; heldCount: number } {
-  const lines = order.items.filter((item) => item.status !== "cancelled" && !item.parentItemId);
+  const lines = groupAddonLines(order.items.filter((item) => item.status !== "cancelled" && !item.parentItemId));
   return {
     lines,
-    itemCount: lines.reduce((sum, item) => sum + item.qty, 0),
+    itemCount: lines.filter((item) => !item.addonOfItemId).reduce((sum, item) => sum + item.qty, 0),
     subtotalPaise: lines.reduce((sum, item) => sum + item.pricePaise * item.qty, 0),
-    heldCount: lines.filter((item) => item.held && item.status === "pending").length,
+    heldCount: lines.filter((item) => !item.addonOfItemId && item.held && item.status === "pending").length,
   };
 }
 
@@ -17,8 +18,8 @@ export function maskedPhone(phone: string): string {
 }
 
 export function transferableItems(order: Order): Order["items"] {
-  return order.items.filter((item) => !item.parentItemId && item.status === "pending" && !item.kotId && !item.clientRef?.startsWith("guest:")
-    && order.items.filter((child) => child.parentItemId === item.id).every((child) => child.status === "pending" && !child.kotId && !child.clientRef?.startsWith("guest:")));
+  return order.items.filter((item) => !item.parentItemId && !item.addonOfItemId && item.status === "pending" && !item.kotId && !item.clientRef?.startsWith("guest:")
+    && order.items.filter((child) => (child.parentItemId === item.id || child.addonOfItemId === item.id)).every((child) => child.status === "pending" && !child.kotId && !child.clientRef?.startsWith("guest:")));
 }
 
 /**

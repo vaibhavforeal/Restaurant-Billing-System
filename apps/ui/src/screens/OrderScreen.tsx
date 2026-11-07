@@ -1,3 +1,6 @@
+import { AddonChoices, AddonLines } from "../AddonChoices";
+import { addonPickProblem, addonTotal, groupAddonLines, pickedAddons, pricedAddonGroups } from "../addon-cart";
+import type { AddonGroup, AddonPickerGroup, AddonSnapshot } from "../types";
 import { useEffect, useRef, useState } from "react";
 import { priceForTier, PRICE_TIER_LABELS } from "@masalapos/domain/pricing";
 import { ApiError, apiFetch, session, type User } from "../api";
@@ -55,6 +58,8 @@ interface DraftItem {
   note: string;
   /** A combo's chosen options, and what it holds for the cart to show. */
   comboPicks?: string[];
+  addonPicks?: string[];
+  addons?: AddonSnapshot[];
   contents?: string[];
   /** Held back from the kitchen: KOT leaves it for later, Fire sends it. */
   held?: boolean;
@@ -102,6 +107,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [removed, setRemoved] = useState<DraftItem | null>(null);
   const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string; savedItemId?: string } | null>(null);
   /** The combo whose slots staff are choosing before it goes in the cart. */
+  const [addonGroupsByProduct, setAddonGroupsByProduct] = useState<Record<string, AddonPickerGroup[]>>({});
+  const [addonPicking, setAddonPicking] = useState<{ productId: string; variantId: string | null; name: string; pricePaise: number; picks: string[] } | null>(null);
   const [comboPicking, setComboPicking] = useState<{ product: Product; picks: string[] } | null>(null);
   const [message, setMessage] = useState(() => carriedStatusFor(orderId));
   const [transferDialog, setTransferDialog] = useState<"move" | "merge" | null>(null);
@@ -204,6 +211,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   function show(current: Order, catalog: Omit<CatalogCache, "at">) {
     setOrder(current);
+    setAddonGroupsByProduct(Object.fromEntries(catalog.products.map((product) => [product.id, pricedAddonGroups(product, catalog.addonGroups ?? [], catalog.products, current.priceTier)])));
     setCaptains(catalog.captains);
     setCategories(catalog.categories.filter((cat) => cat.isActive));
     setProducts(catalog.products.filter((prod) => prod.isActive).map((prod) => ({ ...prod,
@@ -215,13 +223,14 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   async function reload() {
     const revision = ++reloadRevision.current;
-    let loaded: [{ order: Order }, { categories: Category[] }, { products: Product[] }, { captains: Array<{ id: string; name: string }> }];
+    let loaded: [{ order: Order }, { categories: Category[] }, { products: Product[] }, { captains: Array<{ id: string; name: string }> }, { groups: AddonGroup[] }];
     try {
       loaded = await Promise.all([
         apiFetch<{ order: Order }>(`/api/orders/${orderId}`),
         apiFetch<{ categories: Category[] }>("/api/categories"),
         apiFetch<{ products: Product[] }>("/api/products"),
         apiFetch<{ captains: Array<{ id: string; name: string }> }>("/api/captains"),
+        apiFetch<{ groups: AddonGroup[] }>("/api/addon-groups"),
       ]);
     } catch (error) {
       // Unreachable hub, or an order started offline that the hub has not received yet: work from this device's copy.
@@ -234,8 +243,8 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       return;
     }
     if (revision !== reloadRevision.current) return;
-    const [o, c, p, staff] = loaded;
-    const catalog = { categories: c.categories, products: p.products, captains: staff.captains };
+    const [o, c, p, staff, addons] = loaded;
+    const catalog = { addonGroups: addons.groups, categories: c.categories, products: p.products, captains: staff.captains };
     saveOrderCopy(user.id, o.order); saveCatalogCopy(user.id, catalog);
     setCopyAt(null);
     show(o.order, catalog);
@@ -275,7 +284,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       onEvent: (event, data) => {
         if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
         if (event === "table.changed") void reload().catch(() => {});
-        if (event === "stock.changed") void reload().catch(() => {});
+        if (event === "stock.changed" || event === "catalog.changed") void reload().catch(() => {});
         if (event === "catalog.changed") { void reload().catch(() => {}); loadMenuInsights(); }
         if (event === "settings.changed") { loadOrderSettings(); loadMenuInsights(); }
         if (event === "kot.updated" && (data as { kot: { orderId: string } }).kot.orderId === orderId) void reload().catch(() => {});
@@ -337,8 +346,16 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     });
   }
 
-  function addToDraft(productId: string, variantId: string | null, name: string, pricePaise: number, combo?: Pick<DraftItem, "comboPicks" | "contents">) {
-    if (addRowsToDraft([{ productId, variantId, name, pricePaise, qty: 1, ...combo }])) setMessage("");
+  function addToDraft(productId: string, variantId: string | null, name: string, pricePaise: number, combo?: Pick<DraftItem, "comboPicks" | "contents">, addonPicks?: string[]) {
+    if (actionLock.current || billingLock.current) return;
+    const product = products.find((value) => value.id === productId);
+    if (!product?.isActive || product.isSoldOut) { setError("This dish is unavailable for new orders."); return; }
+    if (product.addonOnly) { setError("This product can only be added under a dish."); return; }
+    const groups = addonGroupsByProduct[productId] ?? [];
+    if (groups.length && addonPicks === undefined) { setAddonPicking({ productId, variantId, name, pricePaise, picks: [] }); return; }
+    const problem = addonPickProblem(groups, addonPicks ?? []);
+    if (problem) { setError(problem); return; }
+    if (addRowsToDraft([{ productId, variantId, name, pricePaise, qty: 1, ...combo, ...(addonPicks ? { addonPicks, addons: pickedAddons(groups, addonPicks) } : {}) }])) setMessage("");
   }
 
   /** Puts dishes in the cart together (one tap, or Repeat last order); false when nothing could be added. */
@@ -354,7 +371,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   /** Repeat last order: the customer's previous bill back in the cart at today's prices, naming what could not go in. */
   function repeatLastOrder(last: LastOrder) {
-    const { rows, skipped } = repeatPlan(last, products);
+    const { rows, skipped } = repeatPlan(last, products.map((product) => ({ ...product, addonGroupIds: (addonGroupsByProduct[product.id] ?? []).map((group) => group.id) })));
     const added = addRowsToDraft(rows);
     const count = rows.reduce((sum, row) => sum + row.qty, 0);
     const notAdded = skipped.length ? `Not added: ${skipped.join(", ")}.` : "";
@@ -682,18 +699,18 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const useOrderControls = !captain && order.type !== "zomato";
   const query = search.toLocaleLowerCase().trim();
   // The items inside a combo show under its line, not as lines of their own.
-  const lines = order.items.filter((item) => !item.parentItemId);
+  const lines = groupAddonLines(order.items.filter((item) => !item.parentItemId));
   const popular = new Set(popularIds);
   // "Goes well with": dishes often on the same bill as what this order already has, added in the size most ordered.
-  const suggestions = order.status !== "open" ? [] : suggestTogether([...lines.filter((item) => item.status !== "cancelled"), ...draft], pairs, products).flatMap(({ productId, variantId }): Array<{ productId: string; variantId: string | null; name: string; pricePaise: number }> => {
+  const suggestions = order.status !== "open" ? [] : suggestTogether([...lines.filter((item) => !item.addonOfItemId && item.status !== "cancelled"), ...draft], pairs, products).flatMap(({ productId, variantId }): Array<{ productId: string; variantId: string | null; name: string; pricePaise: number }> => {
     const dish = products.find((p) => p.id === productId);
-    if (!dish || dish.kind === "combo") return [];
+    if (!dish || dish.addonOnly || dish.kind === "combo") return [];
     const sizes = dish.variants.filter((v) => v.isActive);
     const size = sizes.find((v) => v.id === variantId) ?? sizes[0];
     if (!size) return dish.variants.length ? [] : [{ productId, variantId: null, name: dish.name, pricePaise: dish.pricePaise }];
     return [{ productId, variantId: size.id, name: `${dish.name} (${size.name})`, pricePaise: size.pricePaise }];
   });
-  const activeProducts = withPopularFirst(products.filter((p) => (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query)), popularIds);
+  const activeProducts = withPopularFirst(products.filter((p) => !p.addonOnly && (selectedCat === "all" || p.categoryId === selectedCat) && `${p.name} ${p.variants.map((v) => v.name).join(" ")}`.toLocaleLowerCase().includes(query)), popularIds);
   const hasSentItems = order.items.some((i) => i.status === "sent");
   const canCancelOrder = order.status === "open" && !hasSentItems;
   const total = order.items.filter((i) => i.status !== "cancelled").reduce((sum, i) => sum + i.pricePaise * i.qty, 0);
@@ -703,10 +720,10 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     const product = products.find((p) => p.id === item.productId);
     const priced = item.variantId ? product?.variants.find((v) => v.id === item.variantId) : product;
     const extra = product?.combo && item.comboPicks ? comboExtraPaise(product.combo, item.comboPicks) : 0;
-    return { ...item, pricePaise: priced ? priced.pricePaise + extra : item.pricePaise };
+    return { ...item, addons: pickedAddons(addonGroupsByProduct[item.productId] ?? [], item.addonPicks ?? []), pricePaise: priced ? priced.pricePaise + extra : item.pricePaise };
   });
-  const draftTotal = order.status === "open" ? pricedDraft.reduce((sum, item) => sum + item.pricePaise * item.qty, 0) : 0;
-  const itemCount = (order.status === "open" ? draft.reduce((sum, item) => sum + item.qty, 0) : 0) + lines.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.qty, 0);
+  const draftTotal = order.status === "open" ? pricedDraft.reduce((sum, item) => sum + (item.pricePaise + addonTotal(item.addons)) * item.qty, 0) : 0;
+  const itemCount = (order.status === "open" ? draft.reduce((sum, item) => sum + item.qty, 0) : 0) + lines.filter((item) => !item.addonOfItemId && item.status !== "cancelled").reduce((sum, item) => sum + item.qty, 0);
   const hasKitchenPending = sendableLines(order.items, products).length > 0;
   /** KOT has something to do: an un-held cart row, or a saved kitchen dish that is not held. */
   const canSendKitchen = draft.some((row) => !row.held) || hasKitchenPending;
@@ -739,7 +756,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </div> : order.captainName && <p className="muted">Captain: {order.captainName}</p>)}
         {!captain && !useOrderControls && crm && <OrderCustomer order={order} canAdd={userCan(user, "customers.manage")} disabled={locked} onSaved={(saved) => { setOrder(saved); setMessage(saved.customer ? `Customer: ${saved.customer.name}` : "Customer removed."); }} />}
         {!captain && crm && order.status === "open" && order.customer && userCan(user, "customers.read") && <CustomerUsual customer={order.customer} products={products} disabled={locked}
-          onOrder={new Set([...lines.filter((item) => item.status !== "cancelled").map((item) => item.productId), ...draft.map((item) => item.productId)])}
+          onOrder={new Set([...lines.filter((item) => !item.addonOfItemId && item.status !== "cancelled").map((item) => item.productId), ...draft.map((item) => item.productId)])}
           onAdd={(product, variant) => product.kind === "combo" ? chooseCombo(product) : addToDraft(product.id, variant?.id ?? null, variant ? `${product.name} (${variant.name})` : product.name, variant ? variant.pricePaise : product.pricePaise)}
           onRepeat={repeatLastOrder} />}
         {!useOrderControls && order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
@@ -844,7 +861,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           <h3>{captain ? "Not sent" : "Cart"} ({draft.length} items)</h3>
           {!draft.length && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>Select a dish.</p>}
           {pricedDraft.map((d) => <div className="cart-row draft-row" key={d.clientRef}>
-            <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong>{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : <small>Add notes</small>}</button>
+            <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong><AddonLines addons={d.addons} qty={d.qty} />{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : <small>Add notes</small>}</button>
             <QtyStepper name={d.name} value={d.qty} disabled={locked || queuedRefs.has(d.clientRef)} onChange={(qty) => updateDraft(d.clientRef, { qty })} />
             <span className="pos-money">₹{paiseToRupees(d.pricePaise * d.qty)}{useOrderControls && <small>₹{paiseToRupees(d.pricePaise)} each</small>}</span>
             {showHold && cartRowForKitchen(d, products) && !(useOrderControls && d.held) && <button className="cart-hold" aria-pressed={!!d.held} title={d.held ? `Release ${d.name} for the next KOT` : `Hold ${d.name} back from the kitchen`} aria-label={`${d.held ? "Release" : "Hold"} ${d.name}`} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => updateDraft(d.clientRef, { held: !d.held })}>{d.held ? "Held" : "Hold"}</button>}
@@ -856,15 +873,15 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {lines.length > 0 && <div className="cart-section">
           <h3>{captain ? "Saved items" : "Punched items"}</h3>
           {lines.map((item) => <div className="cart-row saved-row" key={item.id} style={{ opacity: item.status === "cancelled" ? .5 : 1 }}>
-            <div className="saved-item-name"><strong>{item.qty} × {item.name}</strong>{isComboLine(order.items, item) && <small className="cart-combo-contents">{comboContents(order.items, item).join(", ")}</small>}<span className={`status ${item.held && item.status === "pending" ? "held" : itemStatus(item)}`}>{item.held && item.status === "pending" ? "held" : itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
-            {useOrderControls && order.status === "open" && item.status === "pending" && <QtyStepper name={item.name} value={item.qty} disabled={locked || lane.itemActions.has(item.id)} onChange={(qty) => { if (qty !== item.qty) void run(() => updatePendingItem(item.id, { qty })); }} />}
+            <div className="saved-item-name"><strong className={item.addonOfItemId ? "addon-line" : ""}>{item.addonOfItemId ? "+ " : ""}{item.qty} × {item.name}</strong>{isComboLine(order.items, item) && <small className="cart-combo-contents">{comboContents(order.items, item).join(", ")}</small>}<span className={`status ${item.held && item.status === "pending" ? "held" : itemStatus(item)}`}>{item.held && item.status === "pending" ? "held" : itemStatus(item)}</span>{item.note && <small>{item.note}</small>}{item.cancelReason && <small className="danger-text">Cancelled: {item.cancelReason}</small>}{lane.itemActions.has(item.id) ? <small className="cart-row-notice">{lane.itemActions.get(item.id)} · saved</small> : item.clientRef && lane.kitchenRefs.has(item.clientRef) && <small className="cart-row-notice">Kitchen send saved</small>}</div>
+            {useOrderControls && order.status === "open" && item.status === "pending" && !item.addonOfItemId && <QtyStepper name={item.name} value={item.qty} disabled={locked || lane.itemActions.has(item.id)} onChange={(qty) => { if (qty !== item.qty) void run(() => updatePendingItem(item.id, { qty })); }} />}
             <span className="pos-money">₹{paiseToRupees(item.pricePaise * item.qty)}{useOrderControls && <small>₹{paiseToRupees(item.pricePaise)} each</small>}</span>
             {useOrderControls && order.status === "open" && item.status === "pending" && <button className="saved-item-note" aria-label={`Note for ${item.name}`} disabled={locked || lane.itemActions.has(item.id)} onClick={() => setNoteEditor({ clientRef: item.id, savedItemId: item.id, name: item.name, note: item.note ?? "" })}><Icon name="note" size={14} />{item.note ? "Edit notes" : "Add notes"}</button>}
-            {order.status === "open" && item.status === "pending" && item.held && <button className="saved-item-fire" title={`Send ${item.name} to the kitchen now`} aria-label={`Fire ${item.name}`} disabled={locked} onClick={() => fireItem(item)}>Fire</button>}
-            {order.status === "open" && item.status === "pending" && showHold && (item.held || kitchenLineIds.has(item.id)) && !(useOrderControls && item.held) && <button className="cart-hold" aria-pressed={!!item.held} title={item.held ? `Release ${item.name} for the next KOT` : `Hold ${item.name} back from the kitchen`} aria-label={`${item.held ? "Release" : "Hold"} ${item.name}`} disabled={locked} onClick={() => toggleHeld(item)}>{item.held ? "Held" : "Hold"}</button>}
-            {order.status === "open" && item.status === "sent" && !isComboLine(order.items, item) && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
+            {order.status === "open" && item.status === "pending" && !item.addonOfItemId && item.held && <button className="saved-item-fire" title={`Send ${item.name} to the kitchen now`} aria-label={`Fire ${item.name}`} disabled={locked} onClick={() => fireItem(item)}>Fire</button>}
+            {order.status === "open" && item.status === "pending" && !item.addonOfItemId && showHold && (item.held || kitchenLineIds.has(item.id)) && !(useOrderControls && item.held) && <button className="cart-hold" aria-pressed={!!item.held} title={item.held ? `Release ${item.name} for the next KOT` : `Hold ${item.name} back from the kitchen`} aria-label={`${item.held ? "Release" : "Hold"} ${item.name}`} disabled={locked} onClick={() => toggleHeld(item)}>{item.held ? "Held" : "Hold"}</button>}
+            {order.status === "open" && item.status === "sent" && !item.addonOfItemId && !order.items.some((child) => child.addonOfItemId === item.id) && !isComboLine(order.items, item) && <button className="saved-item-edit" title={"Change " + item.name} aria-label={"Change " + item.name} disabled={locked} onClick={() => editSentItem(item)}>Edit</button>}
             {order.status === "open" && item.status !== "cancelled" && (item.status === "pending" || userCan(user, "orders.cancel_sent")) && <button className="saved-item-cancel" title={"Cancel " + item.name} aria-label={"Cancel " + item.name} disabled={locked} onClick={() => cancelItem(item)}>×</button>}
-            {useOrderControls && order.status === "open" && item.status === "pending" && item.held && <button className="order-held-banner" aria-label={`Release ${item.name}`} disabled={locked || lane.itemActions.has(item.id)} onClick={() => toggleHeld(item)}><Icon name="pause" size={16} />Item on hold. Tap here to release</button>}
+            {useOrderControls && order.status === "open" && item.status === "pending" && !item.addonOfItemId && item.held && <button className="order-held-banner" aria-label={`Release ${item.name}`} disabled={locked || lane.itemActions.has(item.id)} onClick={() => toggleHeld(item)}><Icon name="pause" size={16} />Item on hold. Tap here to release</button>}
           </div>)}
         </div>}
         </div>
@@ -887,6 +904,17 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
       </aside>
     </div>
     {order.status === "open" && mobilePane === "menu" && <button className="mobile-cart-link" onClick={() => { focusCartOnSwitch.current = true; setMobilePane("cart"); }}><span>{captain ? "Review order" : "View cart"} · {itemCount} items</span><strong>₹{paiseToRupees(total + draftTotal)}</strong></button>}
+    <WorkspaceDialog open={addonPicking !== null} title={addonPicking ? `Add-ons · ${addonPicking.name}` : "Choose add-ons"} className="combo-dialog" busy={locked} onClose={() => setAddonPicking(null)}>
+      {addonPicking && (() => {
+        const groups = addonGroupsByProduct[addonPicking.productId] ?? [];
+        const product = products.find((value) => value.id === addonPicking.productId);
+        const problem = !product || product.isSoldOut || product.addonOnly ? "This dish is unavailable." : addonPickProblem(groups, addonPicking.picks);
+        return <form onSubmit={(event) => { event.preventDefault(); if (locked || problem) return; addToDraft(addonPicking.productId, addonPicking.variantId, addonPicking.name, addonPicking.pricePaise, undefined, addonPicking.picks); setAddonPicking(null); }}>
+          <AddonChoices groups={groups} picks={addonPicking.picks} disabled={locked} onChange={(picks) => setAddonPicking({ ...addonPicking, picks })} />
+          <div className="combo-dialog-footer"><p role="status">{problem ?? "Ready to add"}</p><button className="primary" disabled={locked || !!problem}>Add · ₹{paiseToRupees(addonPicking.pricePaise + addonTotal(pickedAddons(groups, addonPicking.picks)))}</button></div>
+        </form>;
+      })()}
+    </WorkspaceDialog>
     <WorkspaceDialog open={comboPicking !== null} title={comboPicking ? `Choose · ${comboPicking.product.name}` : "Choose combo items"} className="combo-dialog" busy={locked} onClose={() => setComboPicking(null)}>
       {comboPicking && (() => {
         const groups = comboPicking.product.combo ?? [];
