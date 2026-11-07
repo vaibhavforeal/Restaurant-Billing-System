@@ -2,7 +2,7 @@
 
 An add-on is something picked under a dish and charged as its own line, such as extra cheese on a pizza or a
 raita with a biryani. Each add-on is a menu item with its own price, GST rate, kitchen station, recipe and stock.
-Available on Basic and Pro.
+Available on Basic and Pro. Developers: see [docs/item-addons/README.md](../item-addons/README.md).
 
 ## Setting up add-ons (admin)
 

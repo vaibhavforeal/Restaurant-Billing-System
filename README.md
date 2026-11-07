@@ -31,7 +31,8 @@ Blank service prices use the item's existing price. See
 **Item add-ons:** Put add-on items (extra cheese, a raita, a drink) into groups with a
 minimum and maximum pick and attach them to dishes. Staff and QR guests pick add-ons
 when adding a dish; each is its own bill line with its own price, GST rate, kitchen
-station and stock. See [item add-ons](docs/operations/item-addons.md).
+station and stock. See [item add-ons](docs/operations/item-addons.md) (developer notes:
+[docs/item-addons/README.md](docs/item-addons/README.md)).
 
 Commercial direction: **cloud plus offline**, with Basic (2 devices) and Pro
 (5 devices, recipe editing and QR ordering entitlements). The Windows setup file asks for
