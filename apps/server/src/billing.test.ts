@@ -499,6 +499,22 @@ describe("billing and day-end", () => {
         expect(packagingRows(delivery.id)).toEqual([{ amount: 5000 }]);
         expect(linePackaging(delivery.id).sort()).toEqual([1000, 2000]);
       });
+      it.each(["included", "none"])("adds item and flat packaging in %s GST mode, with the report lines adding up to the bill", async (gstMode) => {
+        expect((await putSettings({ gstMode })).statusCode).toBe(200);
+        const bill = await issue(await withTwo(await order(undefined, true)));
+        // 2 x 10500 items; packaging 2000 flat + 2 x 1000, inside the price in both modes.
+        expect(bill.charges!.map((c) => [c.kind, c.amountPaise])).toEqual([["packaging", 4000]]);
+        const charge = bill.charges![0]!;
+        expect(charge.taxablePaise + charge.cgstPaise + charge.sgstPaise).toBe(4000);
+        if (gstMode === "none") expect([charge.taxablePaise, charge.cgstPaise, charge.sgstPaise]).toEqual([4000, 0, 0]);
+        else { expect(charge.cgstPaise).toBeGreaterThan(0); expect(charge.cgstPaise).toBe(charge.sgstPaise); }
+        expect(bill.totalPaise).toBe(25000);
+        expect(packagingRows(bill.id)).toEqual([{ amount: 4000 }]);
+        expect(linePackaging(bill.id)).toEqual([2000]);
+        const lines = app.db.prepare("SELECT total_paise AS total FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(bill.id) as Array<{ total: number }>;
+        const stored = app.db.prepare("SELECT taxable_paise + cgst_paise + sgst_paise + rounding_paise AS total FROM bill_charges WHERE bill_id = ?").get(bill.id) as { total: number };
+        expect(lines.reduce((sum, l) => sum + l.total, 0) + stored.total).toBe(bill.totalPaise);
+      });
       it("charges only the flat amount with the toggle off", async () => {
         await putSettings({ packagingPerItem: false });
         const bill = await issue(await withTwo(await order(undefined, true)));

@@ -39,6 +39,16 @@ export function creditPreviewBody(kind: "void" | "refund", lines: Array<{ orderI
   return kind === "void" ? { kind } : { kind, lines, refundPackaging };
 }
 
+/**
+ * The "Refund packaging" tickbox: null hides it. While the preview for changed lines loads, the box stays up without
+ * an amount, so it does not flicker; once the new preview arrives it shows that amount, or hides if there is none.
+ */
+export function packagingTickbox(offer: { linesKey: string; paise: number } | null, linesKey: string, loading: boolean): { amountPaise: number | null } | null {
+  if (!offer || offer.paise <= 0) return null;
+  if (offer.linesKey === linesKey) return { amountPaise: offer.paise };
+  return loading ? { amountPaise: null } : null;
+}
+
 /** Units of a billed line that can still be refunded. */
 export function refundableQty(billed: number, refunded: number | undefined): number {
   return Math.max(0, billed - (refunded ?? 0));

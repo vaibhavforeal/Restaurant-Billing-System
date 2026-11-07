@@ -124,6 +124,7 @@ Plan: [`docs/superpowers/plans/2026-11-06-per-item-packaging.md`](../superpowers
 | 6 | UI: Bill settings tickbox, product/variant fields, refund tickbox, `bill-format.md`, dev-app check | Done |
 
 The whole-branch review ran on 2026-11-06 with no money or accounting issues. Its doc fixes and the refund dead end
-(Refund items offered when nothing is left to refund) are fixed. Left as minor follow-ups: the refund tickbox briefly
-hides while a new preview loads, and billing tests for per-item plus flat packaging under the `included` and `none`
-GST modes.
+(Refund items offered when nothing is left to refund) are fixed. So are its two minor follow-ups: the refund tickbox
+now stays up, without an amount, while the preview for changed quantities loads (`packagingTickbox` in
+`apps/ui/src/credit-note-form.ts`), and `billing.test.ts` covers per-item plus flat packaging in the `included` and
+`none` GST modes.

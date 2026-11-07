@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain/billing";
 import { billChargesGst } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
-import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
+import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, OrderItem, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -148,6 +148,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
   const linesKey = JSON.stringify(lines);
   const needsItems = kind === "refund";
   const key = JSON.stringify({ lines, refundPackaging });
+  const tickbox = packagingTickbox(packagingOffer, linesKey, loadingPreview);
 
   useEffect(() => {
     if (result) return;
@@ -258,9 +259,9 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     <section className="credit-note-preview" aria-label="Credit preview" aria-live="polite">
       <h3>Credit note</h3>
       {needsItems && !lines.length && <p className="muted">Choose how many of each item to refund.</p>}
-      {needsItems && packagingOffer?.linesKey === linesKey && packagingOffer.paise > 0 && <label className="credit-note-packaging">
+      {needsItems && tickbox && <label className="credit-note-packaging">
         <input type="checkbox" checked={refundPackaging} disabled={busy} onChange={(e) => setRefundPackaging(e.target.checked)} />
-        <span>Refund packaging ({money(packagingOffer.paise)})</span>
+        <span>Refund packaging{tickbox.amountPaise !== null && ` (${money(tickbox.amountPaise)})`}</span>
       </label>}
       {loadingPreview && <p role="status">Working out the credit…</p>}
       {previewError && <p className="billing-error" role="alert">{previewError}</p>}

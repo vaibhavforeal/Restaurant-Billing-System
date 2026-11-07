@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, itemsLeftToRefund, refundRowsError, refundableQty } from "./credit-note-form";
+import { REFUND_REASONS, billStatusLabel, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, itemsLeftToRefund, refundRowsError, refundableQty } from "./credit-note-form";
 
 describe("defaultRefundRows", () => {
   it("refunds a single payment method in full", () => {
@@ -105,4 +105,21 @@ describe("creditPreviewBody", () => {
     expect(creditPreviewBody("refund", lines, true)).toEqual({ kind: "refund", lines, refundPackaging: true });
   });
   it("sends only the kind for a void", () => expect(creditPreviewBody("void", [], true)).toEqual({ kind: "void" }));
+});
+
+describe("packagingTickbox", () => {
+  const offer = { linesKey: "a", paise: 2500 };
+  it("shows the offer's amount for the lines it was worked out for", () => {
+    expect(packagingTickbox(offer, "a", false)).toEqual({ amountPaise: 2500 });
+    expect(packagingTickbox(offer, "a", true)).toEqual({ amountPaise: 2500 });
+  });
+  it("keeps the box, without the old amount, while the preview for new lines loads", () => {
+    expect(packagingTickbox(offer, "b", true)).toEqual({ amountPaise: null });
+  });
+  it("hides the box once the new lines are known to have no offer, or when there is none", () => {
+    expect(packagingTickbox(offer, "b", false)).toBeNull();
+    expect(packagingTickbox({ linesKey: "a", paise: 0 }, "a", false)).toBeNull();
+    expect(packagingTickbox({ linesKey: "a", paise: 0 }, "b", true)).toBeNull();
+    expect(packagingTickbox(null, "a", true)).toBeNull();
+  });
 });
