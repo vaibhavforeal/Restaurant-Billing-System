@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
-  localDateKey, pointsEarned, nextInvoiceNo, GST_STATES, type BillShow, type BuyerDetailsInput, type Bill, type ChargeInput, type ChargeLine, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
+  localDateKey, pointsEarned, nextInvoiceNo, GST_STATES, applyOffers, offerClock, type OfferLine, type OfferResult, type BillShow, type BuyerDetailsInput, type Bill, type ChargeInput, type ChargeLine, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
@@ -21,10 +21,12 @@ import { earnExpiry, loyaltySettings, sweepExpiry } from "./loyalty.js";
 import { billFeedbackUrl } from "./feedback.js";
 import { crmEnabled } from "./integrations.js";
 import { pointsBalance } from "./mappers.js";
+import { moduleActive } from "./modules.js";
+import { loadOffers } from "./offers.js";
 
 interface BillRow {
   id: string; bill_no: number; invoice_no: string | null; order_id: string; status: Bill["status"];
-  subtotal_paise: number; discount_paise: number; discount_note: string | null;
+  subtotal_paise: number; discount_paise: number; offer_discount_paise: number; discount_note: string | null;
   cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number;
   created_at: number; client_ref: string | null; request_json: string | null; receipt_json: string | null;
 }
@@ -43,7 +45,7 @@ export function loadBill(db: Database, id: string): Bill {
   const payments = db.prepare("SELECT mode, amount_paise AS amountPaise, ref_note AS refNote, created_at AS createdAt FROM payments WHERE bill_id = ? ORDER BY id").all(id) as Bill["payments"];
   const receipt = JSON.parse(r.receipt_json) as ReceiptSnapshot;
   return { id, billNo: r.bill_no, invoiceNo: r.invoice_no ?? String(r.bill_no), orderId: r.order_id, status: r.status, subtotalPaise: r.subtotal_paise,
-    discountPaise: r.discount_paise, discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
+    discountPaise: r.discount_paise, ...(r.offer_discount_paise > 0 ? { offerDiscountPaise: r.offer_discount_paise } : {}), discountNote: r.discount_note, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise,
     roundingPaise: r.rounding_paise, totalPaise: r.total_paise, createdAt: r.created_at,
     receipt, taxes, charges, payments, ...loadBillCreditNotes(db, id, r.total_paise), ...feedbackOf(db, id) };
 }
@@ -51,8 +53,8 @@ export function loadBill(db: Database, id: string): Bill {
 type IssueRole = Parameters<typeof roleFor>[0];
 /** Who is billing, and the admin (if any) who approved a discount above their limit. */
 interface BillActor { id: string; role: IssueRole; approvedBy?: string | null }
-/** The staff-entered discount, and the loyalty points the customer spends. */
-interface BillDiscount { manualPaise: number; redeemPoints?: number }
+/** The staff-entered discount, the loyalty points the customer spends, and the offers the cashier took off this bill. */
+interface BillDiscount { manualPaise: number; redeemPoints?: number; removedOfferIds?: string[] }
 const isDiscountCapError = (err: unknown) => typeof err === "object" && err !== null && "code" in err && err.code === "discount_cap";
 
 /** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
@@ -72,11 +74,14 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   // The restaurant's setting, unless the caller overrides it (Zomato bills charge no GST).
   const settings = readBillingSettings(db);
   const mode = gstMode ?? settings.gstMode;
+  const { type: orderType, kind: orderTypeKind } = db.prepare("SELECT o.type, t.kind FROM orders o LEFT JOIN order_types t ON t.id = COALESCE(o.order_type_id, o.type) WHERE o.id = ?").get(orderId) as { type: string; kind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null };
+  // Offers come off first; the slab, points and manual discount then work on what is left.
+  const offers = orderOffers(db, items, orderType, order.orderTypeId, orderTypeKind, discount.removedOfferIds ?? []);
+  const offerPaise = offers.applied.reduce((sum, offer) => sum + offer.discountPaise, 0);
   // With CRM & Loyalty off in the Marketplace a customer left on the order gives no discount, points or receipt line.
   const customer = crmEnabled(db) ? order.customer : null;
-  const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0), discount);
+  const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0) - offerPaise, discount);
   // Service applies to dine-in; packaging to takeaway and delivery parcels. Zomato orders get neither.
-  const { type: orderType, kind: orderTypeKind } = db.prepare("SELECT o.type, t.kind FROM orders o LEFT JOIN order_types t ON t.id = COALESCE(o.order_type_id, o.type) WHERE o.id = ?").get(orderId) as { type: string; kind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null };
   const serviceDue = orderType === "dine_in" && settings.serviceChargeBp > 0;
   const charges: ChargeInput[] = [];
   if (serviceDue && serviceCharge) charges.push({ kind: "service", label: settings.serviceChargeLabel, gstRate: settings.gstRate, bp: settings.serviceChargeBp });
@@ -85,7 +90,11 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
     const perItem = [...orderItemPackaging(db, orderId).values()].reduce((sum, paise) => sum + paise, 0);
     charges.push({ kind: "packaging", label: settings.packagingChargeLabel, gstRate: settings.gstRate, amountPaise: settings.packagingChargePaise + perItem });
   }
-  try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff, charges); }
+  const priced = items.map((item) => {
+    const offerDiscountPaise = offers.lineDiscounts.get(item.id) ?? 0;
+    return offerDiscountPaise > 0 ? { ...item, offerDiscountPaise } : item;
+  });
+  try { totals = calculateBill(priced, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff, charges); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message.replace("Discount exceeds subtotal", "The discounts are more than the bill") : "Invalid bill"); }
   // The limit is on what staff choose to give; slab discounts are set by an admin and points were earned.
   const limit = effectiveDiscountCap(db, actor);
@@ -106,8 +115,25 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
       const held = contents(item);
       return { name: item.name, qty: item.qty, pricePaise: item.pricePaise, gstRate: item.gstRate, ...(held.length ? { contents: held } : {}),
         ...(item.addonOfItemId ? { addon: true } : {}) };
-    }), ...receiptExtra };
-  return { items, totals, receipt, loyalty: { ...loyalty, customerId: customer?.id ?? null, pointsEarned: earned } };
+    }), ...(offers.applied.length ? { offers: offers.applied.map(({ name, discountPaise }) => ({ name, discountPaise })) } : {}), ...receiptExtra };
+  return { items, totals, receipt, offers, loyalty: { ...loyalty, customerId: customer?.id ?? null, pointsEarned: earned } };
+}
+
+const NO_OFFERS: OfferResult = { lineDiscounts: new Map(), applied: [], removed: [] };
+
+/**
+ * The offers running on this order right now, worked out on its billed lines (a combo counts as its own product, an
+ * add-on as an ordinary line). None while the Offers module is off, and none on a Zomato order.
+ */
+function orderOffers(db: Database, items: Array<{ id: string; productId: string; variantId: string | null; pricePaise: number; qty: number }>,
+  orderType: string, orderTypeId: string, orderTypeKind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null, removedOfferIds: string[]): OfferResult {
+  if (orderType === "zomato" || !moduleActive(db, "offers")) return NO_OFFERS;
+  const offers = loadOffers(db);
+  if (!offers.length) return NO_OFFERS;
+  const category = db.prepare("SELECT category_id FROM products WHERE id = ?");
+  const lines = items.map((item): OfferLine => ({ id: item.id, productId: item.productId, variantId: item.variantId,
+    categoryId: (category.get(item.productId) as { category_id: string }).category_id, pricePaise: item.pricePaise, qty: item.qty }));
+  return applyOffers(lines, offers, { ...offerClock(Date.now()), orderTypeId, orderTypeKind, removedOfferIds });
 }
 
 /**
@@ -172,10 +198,10 @@ function discountNote(manual: string | null, loyalty: ReturnType<typeof priceOrd
  * Call inside an open `db.transaction`. Printing and broadcasting are the caller's job; the returned stock IDs are for `publishStock`.
  */
 export function issueBill(db: Database, orderId: string, opts: {
-  discountPaise: number; discountNote: string | null; redeemPoints?: number; clientRef: string; requestJson: string; actorId: string; role: IssueRole; approvedBy?: string | null;
+  discountPaise: number; discountNote: string | null; redeemPoints?: number; removedOfferIds?: string[]; clientRef: string; requestJson: string; actorId: string; role: IssueRole; approvedBy?: string | null;
   gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>; buyer?: BuyerDetailsInput | null; serviceCharge?: boolean;
 }): { billId: string; changedStockIds: string[] } {
-  const { totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0 }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true);
+  const { totals, receipt, loyalty, offers } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0, removedOfferIds: opts.removedOfferIds ?? [] }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true);
   const id = uuidv7();
   const now = Date.now();
   const billNo = nextSequence(db, "bill_no");
@@ -184,14 +210,19 @@ export function issueBill(db: Database, orderId: string, opts: {
   // A random, unguessable link for the receipt's feedback QR; Zomato's customers are not ours to ask.
   const isZomato = (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string }).type === "zomato";
   const feedbackToken = settings.feedbackEnabled && !isZomato && crmEnabled(db) ? randomBytes(24).toString("base64url") : null;
-  db.prepare(`INSERT INTO bills (id, bill_no, invoice_no, order_id, subtotal_paise, discount_paise, discount_note,
+  db.prepare(`INSERT INTO bills (id, bill_no, invoice_no, order_id, subtotal_paise, discount_paise, offer_discount_paise, discount_note,
     cgst_paise, sgst_paise, rounding_paise, total_paise, charges_paise, created_at, created_by, client_ref, request_json, receipt_json, discount_approved_by,
     customer_id, customer_discount_paise, points_redeemed, points_value_paise, feedback_token, buyer_gstin, buyer_name, buyer_address)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, invoiceNo, orderId, totals.subtotalPaise,
-      totals.discountPaise, discountNote(opts.discountNote, loyalty), totals.cgstPaise, totals.sgstPaise, totals.roundingPaise,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, billNo, invoiceNo, orderId, totals.subtotalPaise,
+      totals.discountPaise, totals.offerDiscountPaise ?? 0, discountNote(opts.discountNote, loyalty), totals.cgstPaise, totals.sgstPaise, totals.roundingPaise,
       totals.totalPaise, (totals.charges ?? []).reduce((sum, c) => sum + c.amountPaise, 0), now, opts.actorId, opts.clientRef, opts.requestJson, JSON.stringify(receipt), opts.discountPaise > 0 ? opts.approvedBy ?? null : null,
       loyalty.customerId, loyalty.customerDiscountPaise, loyalty.pointsRedeemed, loyalty.pointsValuePaise, feedbackToken,
       receipt.buyer?.gstin ?? null, receipt.buyer?.name ?? null, receipt.buyer ? receipt.buyer.address || null : null);
+  // Each offer's name and amount, and where on the lines its money went; written once, before the report lines read them.
+  for (const offer of offers.applied) {
+    db.prepare("INSERT INTO bill_offers (bill_id, offer_id, name, discount_paise) VALUES (?, ?, ?, ?)").run(id, offer.offerId, offer.name, offer.discountPaise);
+    for (const line of offer.perLine) db.prepare("INSERT INTO bill_offer_lines (bill_id, order_item_id, offer_id, discount_paise) VALUES (?, ?, ?, ?)").run(id, line.lineId, offer.offerId, line.discountPaise);
+  }
   // Record any expired points first so this bill's redemption comes out of points that are still good.
   if (loyalty.customerId && (loyalty.pointsRedeemed || loyalty.pointsEarned)) sweepExpiry(db, loyalty.customerId, now);
   const ledger = db.prepare(`INSERT INTO loyalty_ledger (id, customer_id, kind, points, bill_id, created_at, created_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -279,9 +310,11 @@ export function registerBilling(app: FastifyInstance): void {
   const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
   function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor) {
     refuseZomato(orderType(orderId));
-    const { items, totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, actor, undefined, undefined, body.buyer, body.serviceCharge);
-    const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote, serviceCharge: body.serviceCharge })).digest("hex");
-    return { ...totals, receipt, previewKey, maxRedeemPoints: loyalty.maxRedeemPoints };
+    const { items, totals, receipt, loyalty, offers } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds }, actor, undefined, undefined, body.buyer, body.serviceCharge);
+    // The applied offers are in the key, so an offer that starts, ends or changes before the bill is issued sends the cashier back to review.
+    const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, offers: offers.applied, discountNote: body.discountNote, serviceCharge: body.serviceCharge })).digest("hex");
+    return { ...totals, receipt, previewKey, maxRedeemPoints: loyalty.maxRedeemPoints,
+      offers: offers.applied.map(({ offerId, name, discountPaise }) => ({ offerId, name, discountPaise })), removedOffers: offers.removed };
   }
 
   /**
@@ -289,7 +322,7 @@ export function registerBilling(app: FastifyInstance): void {
    * discount is within the limit. Runs before the write transaction because checking a PIN is asynchronous.
    */
   async function discountApproval(req: FastifyRequest, orderId: string, body: z.infer<typeof BillPreview>): Promise<string | null> {
-    try { priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, { id: req.user.id, role: req.user.role }, undefined, undefined, body.buyer, body.serviceCharge); return null; }
+    try { priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds }, { id: req.user.id, role: req.user.role }, undefined, undefined, body.buyer, body.serviceCharge); return null; }
     catch (err) {
       if (!isDiscountCapError(err) || !body.approverPin) throw err;
       return (await resolveApprover(app, req, body.approverPin)).id;
@@ -328,7 +361,7 @@ export function registerBilling(app: FastifyInstance): void {
       const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy });
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
       const target = body.printerId ? printer(body.printerId) : null;
-      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
+      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
       changedStockIds.push(...issued.changedStockIds);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
       return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };

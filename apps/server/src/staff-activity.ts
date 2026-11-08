@@ -53,10 +53,11 @@ export function activityEvents(db: Database, start: number, end: number): Activi
       detail: `${r.kind === "void" ? "Void" : "Refund"}${name(r.reason)}; asked by ${r.staffName}, approved by ${r.approver}`,
       reference: `Bill #${r.billNo}`, paidBillVoid: r.kind === "void" && r.paid === 1 });
   }
-  for (const r of db.prepare(`SELECT b.created_at AS at, b.created_by AS staffId, u.name AS staffName, b.discount_paise AS amount, b.subtotal_paise AS subtotal,
+  // Offers are the owner's, not the staff member's choice, so they are left out of the discount given.
+  for (const r of db.prepare(`SELECT b.created_at AS at, b.created_by AS staffId, u.name AS staffName, b.discount_paise - b.offer_discount_paise AS amount, b.subtotal_paise AS subtotal,
       b.discount_note AS note, b.bill_no AS billNo, a.name AS approver
     FROM bills b JOIN users u ON u.id = b.created_by LEFT JOIN users a ON a.id = b.discount_approved_by
-    WHERE b.discount_paise > 0 AND b.created_at >= ? AND b.created_at < ?`).all(...range) as Array<{ at: number; staffId: string; staffName: string; amount: number; subtotal: number; note: string | null; billNo: number; approver: string | null }>) {
+    WHERE b.discount_paise - b.offer_discount_paise > 0 AND b.created_at >= ? AND b.created_at < ?`).all(...range) as Array<{ at: number; staffId: string; staffName: string; amount: number; subtotal: number; note: string | null; billNo: number; approver: string | null }>) {
     const percent = r.subtotal > 0 ? Math.round(r.amount * 1000 / r.subtotal) / 10 : 100;
     events.push({ kind: "discount", at: r.at, staffId: r.staffId, staffName: r.staffName, count: 1, amountPaise: r.amount,
       detail: `${percent}% off${name(r.note)}${r.approver ? `; approved by ${r.approver}` : ""}`, reference: `Bill #${r.billNo}`, discountPercent: percent });
