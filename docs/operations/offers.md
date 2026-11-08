@@ -40,8 +40,9 @@ All of these are optional. Leave one blank and it does not limit the offer.
    saves more takes it, and the other offer uses what is left. If two save the same, the one made first wins.
 2. **Then one bill offer at most.** The best one applies, worked out on the total after the item offers.
 3. **Your other discounts come after.** A customer's type discount, loyalty points and a discount the cashier types in
-   are worked out on what the offers leave, and they do not need the discount limit or an admin PIN for the offers
-   themselves (see [Discount limits](discount-limits.md)).
+   are worked out on what the offers leave. Offers never count against a cashier's discount limit and need no admin PIN.
+   A discount the cashier types in still follows the limit, and above it needs an admin PIN (see
+   [Discount limits](discount-limits.md)).
 
 ### Example
 

@@ -589,7 +589,7 @@ describe("billing and day-end", () => {
 describe("offers", () => {
   let app: FastifyInstance; let token: string; let adminId: string;
   let pizzas: string; let beverages: string; let margherita: string; let farmhouse: string; let coke: string;
-  const send = (method: "GET" | "POST" | "PATCH", url: string, payload?: object, as = token) =>
+  const send = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = token) =>
     app.inject({ method, url, headers: auth(as), ...(payload ? { payload } : {}) });
   async function product(name: string, categoryId: string, pricePaise: number, extra: object = {}) {
     const res = await send("POST", "/api/products", { name, categoryId, pricePaise, gstRate: 5, kotStationId: null, ...extra });
@@ -711,6 +711,29 @@ describe("offers", () => {
     expect(app.db.prepare("SELECT customer_discount_paise AS paise FROM bills WHERE id = ?").get(bill.id)).toEqual({ paise: 3348 });
   });
 
+  it("caps loyalty points on what is left after offers, and takes the redeemed value off after them", async () => {
+    enableIntegration(app, "crm");
+    const settings = await send("PUT", "/api/loyalty-settings", { enabled: true, pointsPer100: 1, pointValuePaise: 100, minRedeemPoints: 0, maxRedeemPercent: 20 });
+    expect(settings.statusCode, settings.body).toBe(200);
+    await workedOffers();
+    const customer = await send("POST", "/api/customers", { name: "Priya", phone: "9876543210" });
+    expect(customer.statusCode, customer.body).toBe(201);
+    const customerId = customer.json().customer.id as string;
+    expect((await send("POST", `/api/customers/${customerId}/loyalty-adjustments`, { clientRef: uuidv7(), points: 500, note: "Welcome" })).statusCode).toBe(201);
+    const id = await workedOrder();
+    expect((await send("PATCH", `/api/orders/${id}/customer`, { customerId })).statusCode).toBe(200);
+    // ₹1,067.00 less ₹397.40 of offers leaves ₹669.60; 20% of that is ₹133.92, so 133 points at ₹1 each (20% of the full bill would allow 213).
+    expect((await previewOf(id)).maxRedeemPoints).toBe(133);
+    const over = await send("POST", `/api/orders/${id}/bill-preview`, { discountPaise: 0, redeemPoints: 134 });
+    expect(over.statusCode).toBe(400);
+    expect(over.json().error).toBe("Points can pay up to 20% of this bill: at most 133 points");
+    const bill = await issue(id, { redeemPoints: 133 });
+    // ₹669.60 − ₹133.00 = ₹536.60, rounded to ₹537.
+    expect(bill).toMatchObject({ subtotalPaise: 106700, offerDiscountPaise: 39740, discountPaise: 39740 + 13300, roundingPaise: 40, totalPaise: 53700, discountNote: "133 loyalty points" });
+    expect(bill.receipt.customer).toMatchObject({ pointsRedeemed: 133, pointsValuePaise: 13300 });
+    expect(app.db.prepare("SELECT points_redeemed AS points, points_value_paise AS paise FROM bills WHERE id = ?").get(bill.id)).toEqual({ points: 133, paise: 13300 });
+  });
+
   it("gives a Zomato order no offers", async () => {
     enableIntegration(app, "zomato");
     await offer({ name: "BOGO Pizza", kind: "buy_get", buyQty: 1, getQty: 1, percentBp: 10000, categoryIds: [pizzas] });
@@ -752,6 +775,48 @@ describe("offers", () => {
     expect((await previewOf(id)).offers).toEqual([]);
     at(14);
     expect((await previewOf(id)).offers).toEqual([]);
+  });
+
+  it("refuses a bill whose offer window closed between the preview and the bill", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const at = (hours: number, minutes: number) => { const d = new Date(); d.setHours(hours, minutes, 0, 0); return d; };
+    vi.setSystemTime(at(17, 59));
+    await offer({ name: "Tea time", kind: "item_off", percentBp: 2000, categoryIds: [beverages], timeFrom: 15 * 60, timeUntil: 18 * 60 });
+    const id = await workedOrder();
+    const preview = await previewOf(id);
+    expect(preview.offers).toEqual([expect.objectContaining({ name: "Tea time", discountPaise: 2400 })]);
+    vi.setSystemTime(at(18, 0));
+    const res = await send("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().error).toBe("Order changed; review a fresh bill preview");
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM bills").get()).toEqual({ n: 0 });
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM bill_offers").get()).toEqual({ n: 0 });
+    // A fresh preview at 18:00 shows no offer, and that bill issues without one.
+    const fresh = await previewOf(id);
+    expect(fresh.offers).toEqual([]);
+    const bill = await issue(id);
+    expect(bill).toMatchObject({ subtotalPaise: 106700, discountPaise: 0 });
+  });
+
+  it("reads the clock once for a bill, so it carries exactly the offers its preview key covers", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const at = (hours: number, minutes: number, seconds: number, ms: number) => { const d = new Date(); d.setHours(hours, minutes, seconds, ms); return d.getTime(); };
+    vi.setSystemTime(at(17, 59, 59, 0));
+    await offer({ name: "Tea time", kind: "item_off", percentBp: 2000, categoryIds: [beverages], timeFrom: 15 * 60, timeUntil: 18 * 60 });
+    const id = await workedOrder();
+    const preview = await previewOf(id);
+    expect(preview.offers).toEqual([expect.objectContaining({ name: "Tea time", discountPaise: 2400 })]);
+    // Inside the bill's write transaction the clock passes 18:00 right after its first reading. One reading prices the preview-key
+    // check and the issued bill alike; a second one would issue a bill without the offer the key vouched for.
+    const beforeClose = at(17, 59, 59, 999), closed = at(18, 0, 0, 0);
+    let reads = 0;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => (app.db.inTransaction && reads++ > 0 ? closed : beforeClose));
+    const res = await send("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
+    clock.mockRestore();
+    expect(res.statusCode, res.body).toBe(201);
+    const bill = res.json().bill as Bill;
+    expect(bill.receipt.offers).toEqual([{ name: "Tea time", discountPaise: 2400 }]);
+    expect(bill).toMatchObject({ offerDiscountPaise: 2400, discountPaise: 2400 });
   });
 
   it("refuses a bill whose preview showed an offer since switched off", async () => {

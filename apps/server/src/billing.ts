@@ -57,8 +57,12 @@ interface BillActor { id: string; role: IssueRole; approvedBy?: string | null }
 interface BillDiscount { manualPaise: number; redeemPoints?: number; removedOfferIds?: string[] }
 const isDiscountCapError = (err: unknown) => typeof err === "object" && err !== null && "code" in err && err.code === "discount_cap";
 
-/** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
-function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>, buyer: BuyerDetailsInput | null = null, serviceCharge = true) {
+/**
+ * Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill.
+ * `now` is the one clock reading the offers' windows and the customer's slab date are judged on; a caller that prices an
+ * order twice for one bill passes the same value both times.
+ */
+function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>, buyer: BuyerDetailsInput | null = null, serviceCharge = true, now = Date.now()) {
   const order = loadOrderJson(db, orderId);
   if (!order) throw httpError(404, "order not found");
   if (order.status !== "open") throw httpError(409, "order is not open");
@@ -76,11 +80,11 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const mode = gstMode ?? settings.gstMode;
   const { type: orderType, kind: orderTypeKind } = db.prepare("SELECT o.type, t.kind FROM orders o LEFT JOIN order_types t ON t.id = COALESCE(o.order_type_id, o.type) WHERE o.id = ?").get(orderId) as { type: string; kind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null };
   // Offers come off first; the slab, points and manual discount then work on what is left.
-  const offers = orderOffers(db, items, orderType, order.orderTypeId, orderTypeKind, discount.removedOfferIds ?? []);
+  const offers = orderOffers(db, items, orderType, order.orderTypeId, orderTypeKind, discount.removedOfferIds ?? [], now);
   const offerPaise = offers.applied.reduce((sum, offer) => sum + offer.discountPaise, 0);
   // With CRM & Loyalty off in the Marketplace a customer left on the order gives no discount, points or receipt line.
   const customer = crmEnabled(db) ? order.customer : null;
-  const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0) - offerPaise, discount);
+  const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0) - offerPaise, discount, now);
   // Service applies to dine-in; packaging to takeaway and delivery parcels. Zomato orders get neither.
   const serviceDue = orderType === "dine_in" && settings.serviceChargeBp > 0;
   const charges: ChargeInput[] = [];
@@ -126,14 +130,14 @@ const NO_OFFERS: OfferResult = { lineDiscounts: new Map(), applied: [], removed:
  * add-on as an ordinary line). None while the Offers module is off, and none on a Zomato order.
  */
 function orderOffers(db: Database, items: Array<{ id: string; productId: string; variantId: string | null; pricePaise: number; qty: number }>,
-  orderType: string, orderTypeId: string, orderTypeKind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null, removedOfferIds: string[]): OfferResult {
+  orderType: string, orderTypeId: string, orderTypeKind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null, removedOfferIds: string[], now: number): OfferResult {
   if (orderType === "zomato" || !moduleActive(db, "offers")) return NO_OFFERS;
   const offers = loadOffers(db);
   if (!offers.length) return NO_OFFERS;
   const category = db.prepare("SELECT category_id FROM products WHERE id = ?");
   const lines = items.map((item): OfferLine => ({ id: item.id, productId: item.productId, variantId: item.variantId,
     categoryId: (category.get(item.productId) as { category_id: string }).category_id, pricePaise: item.pricePaise, qty: item.qty }));
-  return applyOffers(lines, offers, { ...offerClock(Date.now()), orderTypeId, orderTypeKind, removedOfferIds });
+  return applyOffers(lines, offers, { ...offerClock(now), orderTypeId, orderTypeKind, removedOfferIds });
 }
 
 /**
@@ -157,9 +161,9 @@ type OrderCustomer = NonNullable<NonNullable<ReturnType<typeof loadOrderJson>>["
  * The customer's slab discount and the points they spend. Points need loyalty turned on and enough unexpired balance,
  * and may pay at most `maxRedeemPercent` of what is left of the subtotal after the other discounts.
  */
-function customerDiscounts(db: Database, customer: OrderCustomer | null, subtotalPaise: number, discount: BillDiscount) {
+function customerDiscounts(db: Database, customer: OrderCustomer | null, subtotalPaise: number, discount: BillDiscount, now: number) {
   const settings = loyaltySettings(db);
-  const slab = customer ? customerSlab(db, customer.id, subtotalPaise, localDateKey(Date.now())) : null;
+  const slab = customer ? customerSlab(db, customer.id, subtotalPaise, localDateKey(now)) : null;
   const points = discount.redeemPoints ?? 0;
   const balance = customer && settings.enabled ? pointsBalance(db, customer.id) : 0;
   const payable = Math.max(0, subtotalPaise - discount.manualPaise - (slab?.discountPaise ?? 0));
@@ -200,10 +204,12 @@ function discountNote(manual: string | null, loyalty: ReturnType<typeof priceOrd
 export function issueBill(db: Database, orderId: string, opts: {
   discountPaise: number; discountNote: string | null; redeemPoints?: number; removedOfferIds?: string[]; clientRef: string; requestJson: string; actorId: string; role: IssueRole; approvedBy?: string | null;
   gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>; buyer?: BuyerDetailsInput | null; serviceCharge?: boolean;
+  /** The clock reading the bill is priced and stamped on; the create route passes the one its preview key was checked on. */
+  now?: number;
 }): { billId: string; changedStockIds: string[] } {
-  const { totals, receipt, loyalty, offers } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0, removedOfferIds: opts.removedOfferIds ?? [] }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true);
+  const now = opts.now ?? Date.now();
+  const { totals, receipt, loyalty, offers } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0, removedOfferIds: opts.removedOfferIds ?? [] }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true, now);
   const id = uuidv7();
-  const now = Date.now();
   const billNo = nextSequence(db, "bill_no");
   const invoiceNo = nextInvoiceNo(db, readBillingSettings(db).invoicePrefix, now);
   const settings = loyaltySettings(db);
@@ -308,9 +314,9 @@ export function registerBilling(app: FastifyInstance): void {
     if (type === "zomato") throw httpError(409, "Zomato orders are billed and closed with Picked up on the Zomato desk", "zomato_order");
   }
   const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
-  function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor) {
+  function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor, now = Date.now()) {
     refuseZomato(orderType(orderId));
-    const { items, totals, receipt, loyalty, offers } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds }, actor, undefined, undefined, body.buyer, body.serviceCharge);
+    const { items, totals, receipt, loyalty, offers } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds }, actor, undefined, undefined, body.buyer, body.serviceCharge, now);
     // The applied offers are in the key, so an offer that starts, ends or changes before the bill is issued sends the cashier back to review.
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, offers: offers.applied, discountNote: body.discountNote, serviceCharge: body.serviceCharge })).digest("hex");
     return { ...totals, receipt, previewKey, maxRedeemPoints: loyalty.maxRedeemPoints,
@@ -358,10 +364,12 @@ export function registerBilling(app: FastifyInstance): void {
       }
       refuseZomato(orderType(orderId));
       if (db.prepare("SELECT id FROM bills WHERE order_id = ?").get(orderId)) throw httpError(409, "Order already billed; reload to view its bill");
-      const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy });
+      // One clock reading for the whole create: the key check and the bill itself see the same offers and slab date.
+      const now = Date.now();
+      const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy }, now);
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
       const target = body.printerId ? printer(body.printerId) : null;
-      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
+      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge, now });
       changedStockIds.push(...issued.changedStockIds);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
       return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };

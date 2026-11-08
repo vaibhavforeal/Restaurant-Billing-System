@@ -172,7 +172,10 @@ where the menu is managed. The owner guide says "Catalog, then Offers"; change i
   when `used` is false; otherwise say "Switch it off instead". Summary format:
   `Buy 1 get 1 free · Pizzas · Mon–Thu 15:00–18:00 · Dine-in` (kind and amount, item set, days and times, order types; leave
   out what is "all"; `Buy 2 get 1 at 50% off`, `20% off · Beverages`, `10% off bills over ₹500, up to ₹150`).
-- **Form:** pick the kind first, then show only that kind's fields.
+- **Form:** pick the kind first, then show only that kind's fields. Send `null`, `0` or `false` for the fields the chosen kind
+  doesn't use: the API rejects a value left over from another kind with a 400 (`buyQty` and `getQty` `null`, `sameItemOnly`
+  `false`, `minBillPaise` `0` and `maxDiscountPaise` `null` unless the kind uses them; a form that keeps its state when the
+  admin switches kind must reset these on save).
   - `buy_get`: buy qty, get qty (1 to 20), the discount on the free items (percent, default 100% = free), "Same item only".
   - `item_off` and `bill_off`: a percent **or** a ₹ amount, never both. `bill_off` adds Minimum bill (₹, blank = none) and,
     for a percent, Maximum discount (₹).
