@@ -9,6 +9,7 @@
     "./pricing": "./src/pricing.ts",
     "./combos": "./src/combos.ts",
     "./addons": "./src/addons.ts",
+    "./offers": "./src/offers.ts",
     "./billing": "./src/billing.ts",
     "./gst": "./src/gst.ts",
     "./invoice-numbers": "./src/invoice-numbers.ts",
