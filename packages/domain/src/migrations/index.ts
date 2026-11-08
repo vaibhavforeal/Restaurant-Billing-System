@@ -18,6 +18,7 @@ import { gstExclusive } from "./gst-exclusive.js";
 import { billCharges } from "./bill-charges.js";
 import { billChargeRounding } from "./bill-charge-rounding.js";
 import { perItemPackaging } from "./per-item-packaging.js";
+import { itemAddons } from "./item-addons.js";
 
 /** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 54. */
-export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns, orderSummary, itemTransfers, billSettings, invoiceNumbering, gstExclusive, billCharges, billChargeRounding, perItemPackaging];
+export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns, orderSummary, itemTransfers, billSettings, invoiceNumbering, gstExclusive, billCharges, billChargeRounding, perItemPackaging, itemAddons];

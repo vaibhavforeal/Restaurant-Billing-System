@@ -57,3 +57,15 @@ describe("checkoutBlocker", () => {
     expect(checkoutBlocker({ draftCount: 0, queuedCount: 0, heldCount: 3 })).toMatch(/3 dishes are held/);
   });
 });
+
+it("includes add-on revenue while counting and transferring only dishes", () => {
+  const order = { items: [item({ id: "addon", addonOfItemId: "dish", qty: 2, pricePaise: 3000, held: true }), item({ id: "dish", qty: 2, pricePaise: 10000, held: true })] } as Order;
+  const summary = orderSummary(order);
+  expect(summary.lines.map((line) => line.id)).toEqual(["dish", "addon"]);
+  expect(summary.subtotalPaise).toBe(26000);
+  expect(summary.itemCount).toBe(2);
+  expect(summary.heldCount).toBe(1);
+  expect(transferableItems(order).map((line) => line.id)).toEqual(["dish"]);
+  order.items[0]!.status = "sent";
+  expect(transferableItems(order)).toEqual([]);
+});

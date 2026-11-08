@@ -1,12 +1,14 @@
+import { productAddonPayload } from "../product-addon-payload";
 import { InfoTip } from "../InfoTip";
 ﻿import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import { useNavigationGuard } from "../navigation-guard";
 import { prepareProductPhoto } from "../product-photo";
-import type { Category, Product, Station, Variant } from "../types";
+import type { AddonGroup, Category, Product, Station, Variant } from "../types";
 import { ComboSlotsEditor, slotsFromGroups, slotsToGroups } from "./ComboSlotsEditor";
 import "../product-editor.css";
+import "../addons.css";
 import { withTimeout } from "../abort-signal";
 import { useAiStatus } from "../ai-status";
 import { describeRequest } from "../ai-buttons";
@@ -17,13 +19,15 @@ const emptyVariant = { name: "", price: "", acPrice: "", takeawayPrice: "", zoma
 
 const GST_RATES = [0, 5, 12, 18, 28];
 
-export function ProductEditor({ product, kind = "item", products = [], defaultCategoryId, categories, stations, defaultGstRate, packagingPerItem, onDone }: {
+export function ProductEditor({ product, kind = "item", products = [], addonGroups = [], defaultCategoryId, categories, stations, defaultGstRate, packagingPerItem, onDone }: {
   product: Product | null; /** What a new product is; a saved one keeps its own kind. */ kind?: "item" | "combo";
-  /** The catalog, for choosing what goes in a combo. */ products?: Product[]; defaultCategoryId: string | null; categories: Category[];
+  /** The catalog, for choosing what goes in a combo. */ products?: Product[]; addonGroups?: AddonGroup[]; defaultCategoryId: string | null; categories: Category[];
   stations: Station[]; /** The restaurant's default GST rate, which an item without its own rate uses. */ defaultGstRate: number;
   /** Per-item packaging is on in Bill settings, so the packaging amounts are shown. */ packagingPerItem: boolean; onDone: () => void;
 }) {
   const isCombo = (product?.kind ?? kind) === "combo";
+  const [addonOnly, setAddonOnly] = useState(product?.addonOnly ?? false);
+  const [addonGroupIds, setAddonGroupIds] = useState(product?.addonGroupIds ?? []);
   const noun = isCombo ? "combo" : "product";
   const [slots, setSlots] = useState(() => slotsFromGroups(product?.combo));
   const [slotsChanged, setSlotsChanged] = useState(false);
@@ -63,7 +67,8 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
   const lock = useRef(false);
   const localId = useRef(0);
   const preview = photoChange === undefined ? currentPhoto : photoChange;
-  const dirty = name !== initial.name || description !== initial.description || categoryId !== initial.categoryId ||
+  const addonsChanged = addonOnly !== (product?.addonOnly ?? false) || JSON.stringify(addonGroupIds) !== JSON.stringify(product?.addonGroupIds ?? []);
+  const dirty = addonsChanged || name !== initial.name || description !== initial.description || categoryId !== initial.categoryId ||
     acPrice !== initial.acPrice || takeawayPrice !== initial.takeawayPrice || zomatoPrice !== initial.zomatoPrice || price !== initial.price || gstRate !== initial.gstRate || isVeg !== initial.isVeg || stationId !== initial.stationId ||
     isActive !== initial.isActive || isSoldOut !== initial.isSoldOut || packaging !== initial.packaging || photoChange !== undefined || slotsChanged ||
     (!product && variants.length > 0) || Object.values(newVariant).some((value) => value !== "");
@@ -127,7 +132,7 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
     if (packagingPaise === null) { setError("Packaging must be a valid amount or blank."); return; }
     void run("product", async () => {
       const base = { ...servicePrices(acPrice, takeawayPrice, zomatoPrice), categoryId, name: name.trim(), description: description.trim(), pricePaise, gstRate: gstRate === "" ? null : Number(gstRate), isVeg,
-        kotStationId: isCombo ? null : stationId || null, isSoldOut, ...(packagingPerItem ? { packagingPaise } : {}), ...(photoChange === undefined ? {} : { photo: photoChange }), ...(combo ? { combo: combo.groups } : {}) };
+        kotStationId: isCombo ? null : stationId || null, isSoldOut, ...(packagingPerItem ? { packagingPaise } : {}), ...(photoChange === undefined ? {} : { photo: photoChange }), ...(combo ? { combo: combo.groups } : {}), ...productAddonPayload({ product, isCombo, addonOnly, addonGroupIds, groups: addonGroups }) };
       if (product) await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ ...base, isActive }) });
       else if (isCombo) await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, kind: "combo" }) });
       else await apiFetch("/api/products", { method: "POST", body: JSON.stringify({ ...base, variants: variants.map((variant) => ({ name: variant.name, pricePaise: variant.pricePaise, acPricePaise: variant.acPricePaise, takeawayPricePaise: variant.takeawayPricePaise, zomatoPricePaise: variant.zomatoPricePaise ?? null, ...(packagingPerItem ? { packagingPaise: variant.packagingPaise ?? null } : {}) })) }) });
@@ -215,6 +220,17 @@ export function ProductEditor({ product, kind = "item", products = [], defaultCa
         {photoChange === null && <p role="status" className="product-editor-help">The photo will be removed when saved.</p>}
       </div></section></div>
 
+      {!isCombo && <fieldset disabled={busy !== null} className="combo-slot-editor"><legend>Add-ons</legend>
+        <label><input type="checkbox" checked={addonOnly} onChange={(event) => setAddonOnly(event.target.checked)} /> Add-on only</label>
+        <p className="muted">Add-on-only products appear inside add-on groups, and stay off the ordering menu.</p>
+        {!addonOnly && <><h3>Add-on groups</h3><p className="muted">Select groups in the order staff and guests should see them.</p>
+          {addonGroupIds.map((id, index) => { const group = addonGroups.find((value) => value.id === id); return <div key={id} className="addon-group-order"><span>{group?.name ?? "Unavailable group"}{group?.isActive === false ? " (Archived - skipped when ordering)" : ""}</span>
+            <button type="button" disabled={index === 0} aria-label={`Move ${group?.name ?? "group"} up`} onClick={() => { const next = [...addonGroupIds]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; setAddonGroupIds(next); }}>Move up</button>
+            <button type="button" onClick={() => setAddonGroupIds(addonGroupIds.filter((value) => value !== id))}>Remove</button></div>; })}
+          {addonGroups.filter((group) => group.isActive && !addonGroupIds.includes(group.id)).map((group) => <label className="addon-group-order" key={group.id}><input type="checkbox" checked={false} onChange={() => setAddonGroupIds([...addonGroupIds, group.id])} />{group.name}</label>)}
+          {!addonGroups.length && <p>Create add-on groups in the Catalog first.</p>}
+        </>}
+      </fieldset>}
       {isCombo ? <ComboSlotsEditor slots={slots} products={products.filter((value) => value.id !== product?.id)} disabled={busy !== null} onChange={(next) => { setSlots(next); setSlotsChanged(true); }} />
       : <details className="product-variants" aria-label="Product variants"><summary>Variants (portions) <InfoTip>{product ? "Changes to variants are saved immediately. Other product details use Save product below." : "Variants will be saved with the new product."}</InfoTip></summary><div className="pos-section-body">
 

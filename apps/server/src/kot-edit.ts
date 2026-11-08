@@ -51,6 +51,10 @@ export function registerKotEdits(app: FastifyInstance): void {
       if (item.parent_item_id || db.prepare("SELECT 1 FROM order_items WHERE parent_item_id = ? LIMIT 1").get(item.id)) {
         throw httpError(409, "A sent combo cannot be edited. Cancel it and add it again.", "combo_item");
       }
+      // A dish and its add-ons are billed together; change them by cancelling the dish and adding it again.
+      if (item.addon_of_item_id || db.prepare("SELECT 1 FROM order_items WHERE addon_of_item_id = ? LIMIT 1").get(item.id)) {
+        throw httpError(409, "A sent dish with add-ons cannot be edited. Cancel it and add it again.", "addon_line");
+      }
       const newQty = body.qty ?? item.qty;
       const newNote = body.note === undefined ? item.note : body.note || null;
       if (newQty > item.qty) throw httpError(400, "To add more, add the dish again and send it to the kitchen");
@@ -79,7 +83,7 @@ export function registerKotEdits(app: FastifyInstance): void {
         const kotRow = db.prepare("SELECT * FROM kots WHERE id = ?").get(item.kot_id) as KotRow;
         const tableName = orderTableLabel(db, order.id);
         if (print) printed = printEditSlip(kotRow, order, tableName, { name: item.name_snapshot, oldQty: item.qty, newQty, oldNote: item.note, newNote, reason, atMs: now });
-        kot = kotWithContextJson(kotRow, order, tableName, db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(item.kot_id) as OrderItemRow[]);
+        kot = kotWithContextJson(kotRow, order, tableName, db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(item.kot_id) as OrderItemRow[], db);
       }
       db.prepare(`INSERT INTO kot_edits (id, order_item_id, order_id, kot_id, old_qty, new_qty, old_note, new_note, reason, cancelled_item_id,
         printed, created_at, created_by, client_ref, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

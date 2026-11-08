@@ -14,8 +14,9 @@ export function comboExtraPaise(groups: ComboGroup[], picks: string[]): number {
 const stationed = (catalog: Product[]) => new Set(catalog.filter((product) => product.kotStationId).map((product) => product.id));
 
 /** A cart row goes to the kitchen when it is a kitchen dish, or a combo holding one. */
-export function cartRowForKitchen(row: { productId: string; comboPicks?: string[] | undefined }, catalog: Product[]): boolean {
+export function cartRowForKitchen(row: { productId: string; comboPicks?: string[] | undefined; addons?: Array<{ productId?: string }> | undefined }, catalog: Product[]): boolean {
   const kitchen = stationed(catalog);
+  if (row.addons?.some((addon) => addon.productId && kitchen.has(addon.productId))) return true;
   if (kitchen.has(row.productId)) return true;
   const combo = catalog.find((product) => product.id === row.productId)?.combo;
   return !!combo && comboProductIds(combo, row.comboPicks ?? []).some((id) => kitchen.has(id));
@@ -27,8 +28,8 @@ export function cartRowForKitchen(row: { productId: string; comboPicks?: string[
  */
 export function kitchenLines(items: OrderItem[], catalog: Product[]): OrderItem[] {
   const kitchen = stationed(catalog);
-  return items.filter((item) => item.status === "pending" && !item.parentItemId && (kitchen.has(item.productId)
-    || items.some((held) => held.parentItemId === item.id && held.status === "pending" && kitchen.has(held.productId))));
+  return items.filter((item) => item.status === "pending" && !item.parentItemId && !item.addonOfItemId && (kitchen.has(item.productId)
+    || items.some((held) => (held.parentItemId === item.id || held.addonOfItemId === item.id) && held.status === "pending" && kitchen.has(held.productId))));
 }
 
 /** The items inside a combo line, as "2 × Fries" for one combo. */

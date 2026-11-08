@@ -202,9 +202,14 @@ export function registerOrders(app: FastifyInstance): void {
     if (!order) throw httpError(404, "order not found");
     if (order.status !== "open") throw httpError(409, "order is not open");
     if (item.parent_item_id) throw httpError(409, "Change the combo, not the items in it", "combo_item");
+    if (item.addon_of_item_id && (body.qty !== undefined || body.held !== undefined)) throw httpError(409, "Change the dish, not its add-on", "addon_line");
     if (item.status !== "pending") throw httpError(409, "item is not pending");
 
     const qty = body.qty ?? item.qty;
+    // An add-on already in the kitchen keeps its quantity; change the dish by cancelling it and adding it again.
+    if (qty !== item.qty && app.db.prepare("SELECT 1 FROM order_items WHERE addon_of_item_id = ? AND status = 'sent' LIMIT 1").get(id)) {
+      throw httpError(409, "Its add-ons are already in the kitchen. Cancel the dish and add it again.", "addon_line");
+    }
     const note = body.note === undefined ? item.note : body.note;
     // Un-holding always works, so dishes held before the setting was turned off are never stuck.
     if (body.held === true && item.held !== 1 && !holdOrdersEnabled(app.db)) throw httpError(409, HOLD_OFF);
@@ -214,6 +219,8 @@ export function registerOrders(app: FastifyInstance): void {
       app.db.prepare("UPDATE order_items SET qty = ?, note = ?, held = ? WHERE id = ?").run(qty, note, held, id);
       // A combo's items follow its quantity and cooking note; each holds a whole number of units per combo.
       app.db.prepare("UPDATE order_items SET qty = qty / ? * ?, note = ? WHERE parent_item_id = ? AND status != 'cancelled'").run(item.qty, qty, note, id);
+      // Add-ons are one per unit of the dish; a cancelled one keeps the quantity it was cancelled at.
+      app.db.prepare("UPDATE order_items SET qty = ? WHERE addon_of_item_id = ? AND status != 'cancelled'").run(qty, id);
     })();
 
     const result = orderWithDetails(item.order_id)!;
@@ -234,7 +241,8 @@ export function registerOrders(app: FastifyInstance): void {
     if (item.parent_item_id) throw httpError(409, "Cancel the whole combo, not one item in it", "combo_item");
 
     // A combo is cancelled with the items in it; it counts as sent once any of them reached the kitchen.
-    const rows = [item, ...app.db.prepare("SELECT * FROM order_items WHERE parent_item_id = ? AND status != 'cancelled' ORDER BY id").all(id) as OrderItemRow[]];
+    // Cancelling a dish cancels the add-ons picked under it; an add-on line is cancelled on its own.
+    const rows = [item, ...app.db.prepare("SELECT * FROM order_items WHERE (parent_item_id = ? OR addon_of_item_id = ?) AND status != 'cancelled' ORDER BY id").all(id, id) as OrderItemRow[]];
     if (rows.some((row) => row.status === "sent")) {
       if (!userCan(req.user, "orders.cancel_sent")) {
         return reply.status(403).send({ error: "forbidden", permission: "orders.cancel_sent" });
@@ -261,7 +269,7 @@ export function registerOrders(app: FastifyInstance): void {
         const kot = app.db.prepare("SELECT * FROM kots WHERE id = ?").get(kotId) as KotRow;
         const kotItems = app.db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(kotId) as OrderItemRow[];
         const kotOrder = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(kot.order_id) as OrderRow;
-        return kotWithContextJson(kot, kotOrder, orderTableLabel(app.db, kotOrder.id), kotItems);
+        return kotWithContextJson(kot, kotOrder, orderTableLabel(app.db, kotOrder.id), kotItems, app.db);
       });
       return { ids, kots };
     })();

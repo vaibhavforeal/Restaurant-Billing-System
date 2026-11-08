@@ -28,6 +28,12 @@ in Catalog. Tables choose AC or Non-AC; parcels use takeaway automatically.
 Blank service prices use the item's existing price. See
 [service pricing](docs/operations/service-pricing.md) for setup and CSV fields.
 
+**Item add-ons:** Put add-on items (extra cheese, a raita, a drink) into groups with a
+minimum and maximum pick and attach them to dishes. Staff and QR guests pick add-ons
+when adding a dish; each is its own bill line with its own price, GST rate, kitchen
+station and stock. See [item add-ons](docs/operations/item-addons.md) (developer notes:
+[docs/item-addons/README.md](docs/item-addons/README.md)).
+
 Commercial direction: **cloud plus offline**, with Basic (2 devices) and Pro
 (5 devices, recipe editing and QR ordering entitlements). The Windows setup file asks for
 the Customer ID and Order ID from MasalaPOS's setup card and activates the PC

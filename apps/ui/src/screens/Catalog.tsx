@@ -1,9 +1,10 @@
+import { AddonGroupsManager } from "./AddonGroupsManager";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { priceForTier } from "@masalapos/domain/pricing";
 import { paiseToRupees } from "../money";
 import { useIntegrations } from "../integrations";
-import type { Category, Product, Station, StationInfo } from "../types";
+import type { AddonGroup, Category, Product, Station, StationInfo } from "../types";
 import { ProductEditor } from "./ProductEditor";
 import { CatalogTransfer } from "./CatalogTransfer";
 import { useNavigationGuard } from "../navigation-guard";
@@ -27,6 +28,8 @@ function CatalogWriteGuard({ busy }: { busy: boolean }) {
 export function Catalog() {
   const { isEnabled } = useIntegrations();
   const zomato = isEnabled("zomato");
+  const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
+  const [managingAddons, setManagingAddons] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [defaultGstRate, setDefaultGstRate] = useState(5);
@@ -41,11 +44,13 @@ export function Catalog() {
   const lock = useRef(false);
 
   async function reload() {
-    const [c, p, s] = await Promise.all([
+    const [c, p, s, a] = await Promise.all([
       apiFetch<{ categories: Category[] }>("/api/categories"),
       apiFetch<{ products: Product[]; defaultGstRate: number; packagingPerItem?: boolean }>("/api/products"),
       apiFetch<{ stations: StationInfo[] }>("/api/kot-stations"),
+      apiFetch<{ groups: AddonGroup[] }>("/api/addon-groups"),
     ]);
+    setAddonGroups(a.groups);
     setCategories(c.categories);
     setProducts(p.products);
     setDefaultGstRate(p.defaultGstRate);
@@ -106,12 +111,15 @@ export function Catalog() {
     if (name && name !== cat.name) patchCategory(cat.id, { name });
   }
 
+  if (managingAddons) return <AddonGroupsManager groups={addonGroups} products={products} onChanged={reload} onClose={() => setManagingAddons(false)} />;
+
   if (editing) {
     return (
       <ProductEditor
         product={editing === "new" || editing === "new-combo" ? null : editing}
         kind={editing === "new-combo" ? "combo" : "item"}
         products={products}
+        addonGroups={addonGroups}
         defaultCategoryId={selectedCat}
         categories={categories}
         defaultGstRate={defaultGstRate}
@@ -160,6 +168,7 @@ export function Catalog() {
         <div className="catalog-products-heading">
           <h2>Products</h2>
           <div className="catalog-create-actions">
+            <button disabled={busy !== null} onClick={() => setManagingAddons(true)}>Add-on groups</button>
             <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null}>
               New combo
             </button>
@@ -189,7 +198,7 @@ export function Catalog() {
           <tbody>
             {visible.map((p) => (
               <tr key={p.id} style={{ borderBottom: "1px solid #eee", opacity: p.isActive ? 1 : 0.45 }}>
-                <td className="catalog-product-name" style={{ padding: 6 }}><strong>{p.name}</strong>{p.description && <p>{p.description}</p>}{!p.isActive && <small>Inactive · </small>}{p.photoVersion && <small>Photo added</small>}</td>
+                <td className="catalog-product-name" style={{ padding: 6 }}><strong>{p.name}</strong>{p.addonOnly && <small>Add-on only</small>}{p.description && <p>{p.description}</p>}{!p.isActive && <small>Inactive · </small>}{p.photoVersion && <small>Photo added</small>}</td>
                 <td className="pos-money">₹{paiseToRupees(p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.acPricePaise ?? p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.takeawayPricePaise ?? p.pricePaise)}</td>

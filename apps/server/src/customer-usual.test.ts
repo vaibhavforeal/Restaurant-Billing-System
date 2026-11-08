@@ -66,4 +66,24 @@ describe("customer's usual", () => {
     expect(on.json().settings.customerUsualEnabled).toBe(true);
     expect((await usual()).json().dishes).toHaveLength(1);
   });
+
+  it("leaves add-ons out of the usual dishes, the last order and the favourites", async () => {
+    const { category } = await post("/api/categories", { name: "Extras" });
+    const cheese = (await post("/api/products", { name: "Cheese", categoryId: category.id, pricePaise: 3000, gstRate: 5, kotStationId: null, addonOnly: true })).product.id;
+    const raita = (await post("/api/products", { name: "Raita", categoryId: category.id, pricePaise: 4000, gstRate: 5, kotStationId: null })).product.id;
+    const { group } = await post("/api/addon-groups", { name: "Sides", minPicks: 0, maxPicks: 2, options: [{ productId: cheese }, { productId: raita }] });
+    expect((await request("PATCH", `/api/products/${paneer}`, { addonGroupIds: [group.id] })).statusCode).toBe(200);
+    for (let i = 0; i < 2; i++) {
+      const { order } = await post("/api/orders", { clientRef: uuidv7(), type: "parcel" });
+      await post(`/api/orders/${order.id}/items`, { items: [{ productId: paneer, qty: 1, clientRef: uuidv7(), addonPicks: group.options.map((o: { id: string }) => o.id) }] });
+      expect((await request("PATCH", `/api/orders/${order.id}/customer`, { customerId })).statusCode).toBe(200);
+      const { preview } = await post(`/api/orders/${order.id}/bill-preview`, {});
+      await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey });
+    }
+    const body = (await usual()).json();
+    expect(body.dishes.map((d: { productId: string }) => d.productId)).toEqual([paneer]);
+    expect(body.lastOrder.items.map((i: { name: string }) => i.name)).toEqual(["Paneer tikka"]);
+    const favourites = (await request("GET", `/api/customers/${customerId}`)).json().stats.favourites as Array<{ name: string }>;
+    expect(favourites.map((f) => f.name)).toEqual(["Paneer tikka"]);
+  });
 });

@@ -204,4 +204,30 @@ describe("menu insights", () => {
       expect(orderedTogether(db, NOW, { minBills: 4 })).toEqual({});
     });
   });
+
+  describe("add-ons", () => {
+    /** Marks a report line as an add-on picked under another line of the same bill. */
+    function asAddon(orderItemId: string, productId: string, dishItemId: string) {
+      db.prepare(`INSERT INTO order_items (id, order_id, product_id, name_snapshot, price_paise_snapshot, gst_rate_snapshot, qty, addon_of_item_id)
+        VALUES (?, 'o', ?, ?, 0, 5, 1, ?)`).run(orderItemId, productId, productId, dishItemId);
+    }
+
+    it("never badges an add-on-only product as popular", () => {
+      product("cheese", "drinks");
+      db.prepare("UPDATE products SET addon_only = 1 WHERE id = 'cheese'").run();
+      bill(NOW - DAY, [["cheese", 9], ["lassi", 4], ["dal", 5], ["biryani", 1]]);
+      expect(popular()).toEqual(["dal", "lassi"]);
+    });
+
+    it("does not count a dish picked as an add-on towards popular or ordered together", () => {
+      product("coke", "drinks");
+      for (let i = 0; i < 3; i++) {
+        const { itemIds } = bill(NOW - DAY, [["dal", 1], ["coke", 5]]);
+        asAddon(itemIds[1]!, "coke", itemIds[0]!);
+      }
+      bill(NOW - DAY, [["lassi", 4]]);
+      expect(popular()).toEqual(["dal", "lassi"]);
+      expect(orderedTogether(db, NOW).dal).toBeUndefined();
+    });
+  });
 });

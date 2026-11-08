@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { ComboPickError, GuestSubmission, comboAvailable, effectiveGstRate, nextSplitLabel, resolveComboPicks, uuidv7, type Database, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "@masalapos/domain";
+import { AddonPickError, ComboPickError, GuestSubmission, addonsAvailable, comboAvailable, resolveAddonPicks, type GuestAddonGroup, effectiveGstRate, nextSplitLabel, resolveComboPicks, uuidv7, type Database, type GuestMenu, type GuestReceipt, type GuestRequest, type GuestRequestItem, type QrTable, type GuestPreparation, type PreparationState } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import QRCode from "qrcode";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import { menuPhotoUrl } from "./menu-photo.js";
 import { readGstSettings } from "./gst-settings.js";
 import { moduleActive, requireModule } from "./modules.js";
 import { comboGroupsByCombo } from "./combos.js";
+import { addonGroupsByProduct } from "./addon-groups.js";
 import { insertOrderItem, priceOrderItem } from "./order-items.js";
 import { menuPairs, menuPopularIds } from "./menu-insights.js";
 
@@ -40,6 +41,9 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
   // A combo is as far along as the items in it.
   const inCombos = db.prepare(`${select} WHERE i.parent_item_id IN (SELECT id FROM order_items WHERE guest_request_id = ? AND order_id = ?) ORDER BY i.id`)
     .all(request.id, request.order_id) as Row[];
+  // A dish is as far along as itself and its add-ons together; a drink add-on still at the bar keeps it preparing.
+  const addons = db.prepare(`${select.replace("i.parent_item_id,", "i.parent_item_id, i.addon_of_item_id,")} WHERE i.addon_of_item_id IN (SELECT id FROM order_items WHERE guest_request_id = ? AND order_id = ?) ORDER BY i.id`)
+    .all(request.id, request.order_id) as Array<Row & { addon_of_item_id: string }>;
   const rowState = (row: Row): PreparationState => row.status === "cancelled" || row.order_status === "cancelled" ? "cancelled"
     : row.kot_id ? row.done_at !== null ? "ready" : "preparing"
     : row.kot_station_id ? "queued" : "with_staff";
@@ -50,7 +54,11 @@ function preparation(db: Database, request: RequestRow): GuestPreparation | null
     const before = original[index];
     if (!before || before.qty !== row.qty || before.name !== row.name_snapshot || before.note !== (row.note ?? "")) hasChanges = true;
     const held = inCombos.filter((item) => item.parent_item_id === row.id);
-    const state = held.length && rowState(row) !== "cancelled" ? overallState(held.map(rowState)) : rowState(row);
+    const picked = addons.filter((item) => item.addon_of_item_id === row.id);
+    // Staff cancelling an add-on the guest picked is a change to what they asked for.
+    if (picked.some((item) => item.status === "cancelled")) hasChanges = true;
+    const own = held.length && rowState(row) !== "cancelled" ? overallState(held.map(rowState)) : rowState(row);
+    const state = picked.length && own !== "cancelled" ? overallState([own, ...picked.map(rowState)]) : own;
     if (state === "cancelled") hasChanges = true;
     return { name: row.name_snapshot, qty: row.qty, state };
   });
@@ -107,17 +115,22 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
     const { gstRate: defaultRate } = readGstSettings(app.db);
     const categories = app.db.prepare("SELECT id, name FROM categories WHERE is_active = 1 ORDER BY sort_order, name, id").all() as GuestMenu["categories"];
     const products = app.db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, CASE WHEN ? = 'ac' THEN COALESCE(p.ac_price_paise, p.price_paise) ELSE p.price_paise END AS pricePaise,
-      p.gst_rate AS itemGstRate, p.is_veg, p.description, p.is_sold_out, p.photo_hash, p.kind FROM products p JOIN categories c ON c.id = p.category_id
-      WHERE p.is_active = 1 AND c.is_active = 1 ORDER BY p.name, p.id`).all(table.price_tier) as Array<Omit<GuestMenu["products"][number], "isVeg" | "variants" | "photoUrl" | "isSoldOut" | "gstRate" | "combo"> & { itemGstRate: number | null; is_veg: number; is_sold_out: number; photo_hash: string | null; kind: "item" | "combo" }>;
+      p.gst_rate AS itemGstRate, p.is_veg, p.description, p.is_sold_out, p.photo_hash, p.kind, p.addon_only FROM products p JOIN categories c ON c.id = p.category_id
+      WHERE p.is_active = 1 AND c.is_active = 1 ORDER BY p.name, p.id`).all(table.price_tier) as Array<Omit<GuestMenu["products"][number], "isVeg" | "variants" | "photoUrl" | "isSoldOut" | "gstRate" | "combo" | "addonGroups"> & { itemGstRate: number | null; is_veg: number; is_sold_out: number; photo_hash: string | null; kind: "item" | "combo"; addon_only: number }>;
     const combos = comboGroupsByCombo(app.db);
     const variants = app.db.prepare("SELECT id, product_id, name, CASE WHEN ? = 'ac' THEN COALESCE(ac_price_paise, price_paise) ELSE price_paise END AS pricePaise FROM variants WHERE is_active = 1 ORDER BY name, id").all(table.price_tier) as Array<{ id: string; product_id: string; name: string; pricePaise: number }>;
     const byProduct = new Map<string, GuestMenu["products"][number]["variants"]>();
     for (const v of variants) { const list = byProduct.get(v.product_id) ?? []; list.push({ id: v.id, name: v.name, pricePaise: v.pricePaise }); byProduct.set(v.product_id, list); }
-    // A combo with no slots yet is left off; one that cannot be filled right now shows as sold out.
-    const visible = products.filter((p) => p.kind !== "combo" || combos.has(p.id)).map(({ is_veg, is_sold_out, photo_hash, itemGstRate, kind, ...p }) => {
+    const addons = guestAddonGroups(table.price_tier);
+    // A combo with no slots yet is left off; one that cannot be filled right now shows as sold out. Add-on-only products
+    // are picked under a dish, so they are not listed; a dish whose required add-ons cannot be picked is sold out.
+    const visible = products.filter((p) => (p.kind !== "combo" || combos.has(p.id)) && p.addon_only !== 1).map(({ is_veg, is_sold_out, photo_hash, itemGstRate, kind, addon_only: _addonOnly, ...p }) => {
       const combo = kind === "combo" ? combos.get(p.id)! : null;
-      return { ...p, gstRate: effectiveGstRate(itemGstRate, defaultRate), isVeg: is_veg === 1, isSoldOut: is_sold_out === 1 || (combo !== null && !comboAvailable(combo)),
-        photoUrl: menuPhotoUrl(p.id, photo_hash), variants: byProduct.get(p.id) ?? [], ...(combo ? { combo } : {}) };
+      const addonGroups = addons.get(p.id);
+      const addonsBlocked = !!addonGroups && !addonsAvailable(addonGroups.map((g) => ({ ...g, isActive: true })));
+      return { ...p, gstRate: effectiveGstRate(itemGstRate, defaultRate), isVeg: is_veg === 1,
+        isSoldOut: is_sold_out === 1 || (combo !== null && !comboAvailable(combo)) || addonsBlocked,
+        photoUrl: menuPhotoUrl(p.id, photo_hash), variants: byProduct.get(p.id) ?? [], ...(combo ? { combo } : {}), ...(addonGroups ? { addonGroups } : {}) };
     });
     // Prices never have tax added on top, and the version covers every effective rate.
     const snapshot = { categories, products: visible };
@@ -127,11 +140,27 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       // Hints only: kept out of the version so a change in what sells never asks guests to review their cart.
       popularProductIds: menuPopularIds(app.db), pairs: menuPairs(app.db) };
   }
+  /** Each dish's active add-on groups with the add-ons priced for the table's tier; dishes without any are left out. */
+  function guestAddonGroups(tier: string): Map<string, GuestAddonGroup[]> {
+    const priceSql = (table: string) => `SELECT id, CASE WHEN ? = 'ac' THEN COALESCE(ac_price_paise, price_paise) ELSE price_paise END AS price${table === "products" ? ", is_veg" : ""} FROM ${table}`;
+    const prices = new Map((app.db.prepare(priceSql("products")).all(tier) as Array<{ id: string; price: number; is_veg: number }>).map((r) => [r.id, r]));
+    const variantPrices = new Map((app.db.prepare(priceSql("variants")).all(tier) as Array<{ id: string; price: number }>).map((r) => [r.id, r.price]));
+    const result = new Map<string, GuestAddonGroup[]>();
+    for (const [productId, groups] of addonGroupsByProduct(app.db)) {
+      const active: GuestAddonGroup[] = groups.filter((g) => g.isActive).map((g) => ({ id: g.id, name: g.name, minPicks: g.minPicks, maxPicks: g.maxPicks,
+        options: g.options.map((o) => ({ id: o.id, productId: o.productId, variantId: o.variantId, name: o.name,
+          pricePaise: (o.variantId ? variantPrices.get(o.variantId) : undefined) ?? prices.get(o.productId)!.price,
+          isVeg: prices.get(o.productId)!.is_veg === 1, ...(o.unavailable ? { unavailable: true as const } : {}) })) }));
+      if (active.length) result.set(productId, active);
+    }
+    return result;
+  }
   function snapshotItems(current: GuestMenu, items: GuestSubmission["items"]): GuestRequestItem[] {
     return items.map((item) => {
       const product = current.products.find((p) => p.id === item.productId);
       const variant = item.variantId ? product?.variants.find((v) => v.id === item.variantId) : undefined;
-      if (!product || product.isSoldOut || (item.variantId && !variant) || (!item.variantId && product.variants.length) || (!product.combo && item.comboPicks)) {
+      if (!product || product.isSoldOut || (item.variantId && !variant) || (!item.variantId && product.variants.length) || (!product.combo && item.comboPicks)
+        || (product.combo && item.addonPicks?.length)) {
         throw httpError(409, "An item or option is no longer available. Review the menu and submit again.", "menu_changed");
       }
       if (product.combo) {
@@ -141,8 +170,17 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
         return { ...item, name: product.name, pricePaise: product.pricePaise + chosen.extraPaise, gstRate: product.gstRate,
           contents: chosen.items.map((held) => held.qty > 1 ? `${held.qty} x ${held.name}` : held.name) };
       }
+      if (!product.addonGroups && item.addonPicks?.length) throw httpError(409, "An item or option is no longer available. Review the menu and submit again.", "menu_changed");
+      let addons: Array<{ name: string; pricePaise: number }> = [];
+      if (product.addonGroups) {
+        try {
+          const chosen = resolveAddonPicks(product.addonGroups.map((g) => ({ ...g, isActive: true })), item.addonPicks ?? []);
+          const priced = new Map(product.addonGroups.flatMap((g) => g.options).map((o) => [o.id, o.pricePaise]));
+          addons = chosen.map((choice) => ({ name: choice.name, pricePaise: priced.get(choice.id)! }));
+        } catch (err) { if (err instanceof AddonPickError) throw httpError(409, `${product.name}: ${err.message}`, "menu_changed"); throw err; }
+      }
       return { ...item, name: variant ? `${product.name} (${variant.name})` : product.name,
-        pricePaise: variant?.pricePaise ?? product.pricePaise, gstRate: product.gstRate };
+        pricePaise: variant?.pricePaise ?? product.pricePaise, gstRate: product.gstRate, ...(addons.length ? { addons } : {}) };
     });
   }
 
@@ -171,7 +209,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       if (pending.n >= 10) throw httpError(429, "This table has several requests awaiting review. Please ask a member of staff.");
       app.db.prepare(`INSERT INTO guest_requests (id, client_ref, table_id, table_name, receipt_hash, fingerprint, items_json, subtotal_paise, created_at, expires_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, body.clientRef, table.id, table.name, hash(body.receiptToken), fingerprint,
-          JSON.stringify(items), items.reduce((sum, i) => sum + i.pricePaise * i.qty, 0), now, now + TTL);
+          JSON.stringify(items), items.reduce((sum, i) => sum + (i.pricePaise + (i.addons ?? []).reduce((n, a) => n + a.pricePaise, 0)) * i.qty, 0), now, now + TTL);
     })();
     changed();
     return reply.status(201).send({ request: receiptJson(app.db, getRequest(id)!) });
@@ -245,7 +283,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       const table = getTable(row.table_id);
       if (!table?.is_active) throw httpError(409, "The table is no longer active");
       const items = JSON.parse(row.items_json) as GuestRequestItem[], current = menu(table, true);
-      const latest = snapshotItems(current, items.map(({ productId, variantId, qty, note, comboPicks }) => ({ productId, variantId, qty, note, ...(comboPicks ? { comboPicks } : {}) })));
+      const latest = snapshotItems(current, items.map(({ productId, variantId, qty, note, comboPicks, addonPicks }) => ({ productId, variantId, qty, note, ...(comboPicks ? { comboPicks } : {}), ...(addonPicks ? { addonPicks } : {}) })));
       if (JSON.stringify(latest) !== JSON.stringify(items)) {
         throw httpError(409, "The requested items or prices have changed. Reject this request and ask the customer to review the menu.", "menu_changed");
       }

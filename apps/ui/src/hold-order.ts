@@ -2,7 +2,7 @@ import { cartRowForKitchen, kitchenLines } from "./combo-cart";
 import type { OrderItem, Product } from "./types";
 
 /** The parts of a cart row the hold-order helpers read (OrderScreen's DraftItem has these and more). */
-export interface HoldDraftRow { clientRef: string; productId: string; variantId: string | null; qty: number; note: string; comboPicks?: string[]; held?: boolean }
+export interface HoldDraftRow { clientRef: string; productId: string; variantId: string | null; qty: number; note: string; comboPicks?: string[]; addonPicks?: string[]; addons?: Array<{ productId?: string }>; held?: boolean }
 
 /** A punch request's items for these cart rows. `held` goes only when set, so older hubs see the same body as before. */
 export function punchItems(rows: HoldDraftRow[]) {
@@ -12,13 +12,14 @@ export function punchItems(rows: HoldDraftRow[]) {
     variantId: row.variantId,
     qty: row.qty,
     ...(row.note ? { note: row.note } : {}),
+    ...(row.addonPicks ? { addonPicks: row.addonPicks } : {}),
     ...(row.comboPicks ? { comboPicks: row.comboPicks } : {}),
     ...(row.held ? { held: true as const } : {}),
   }));
 }
 
 /** Order lines held back from the kitchen: pending, held, and not an item inside a combo (the combo's line holds them). */
-export const heldLines = (items: OrderItem[]): OrderItem[] => items.filter((item) => item.status === "pending" && !item.parentItemId && item.held);
+export const heldLines = (items: OrderItem[]): OrderItem[] => items.filter((item) => item.status === "pending" && !item.parentItemId && !item.addonOfItemId && item.held);
 
 /** Order lines a KOT should send now: the kitchen lines that are not held. */
 export function sendableLines(items: OrderItem[], catalog: Product[]): OrderItem[] {

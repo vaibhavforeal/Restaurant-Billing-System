@@ -103,8 +103,8 @@ export interface ReceiptSnapshot {
   billShow?: BillShow;
   /** Who served the order, frozen whenever the order has a known staff name; the Bill settings toggle decides whether it prints. */
   servedBy?: string;
-  /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. */
-  items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[] }>;
+  /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. `addon`: picked under the dish above it. */
+  items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[]; addon?: boolean }>;
 }
 export interface ReceiptBuyer {
   gstin: string; name: string; address: string;

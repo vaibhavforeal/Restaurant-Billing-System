@@ -172,6 +172,6 @@ function broadcastTickets(app: FastifyInstance, orderId: string, tableLabel: str
   const kots = app.db.prepare("SELECT * FROM kots WHERE order_id = ? ORDER BY created_at").all(orderId) as KotRow[];
   for (const kot of kots) {
     const items = app.db.prepare("SELECT * FROM order_items WHERE kot_id = ? ORDER BY id").all(kot.id) as OrderItemRow[];
-    app.broadcast("kot.updated", { kot: kotWithContextJson(kot, row, tableLabel, items) });
+    app.broadcast("kot.updated", { kot: kotWithContextJson(kot, row, tableLabel, items, app.db) });
   }
 }

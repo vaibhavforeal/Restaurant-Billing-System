@@ -48,8 +48,8 @@ describe("catalog schemas Zomato price", () => {
 });
 
 describe("catalog packaging", () => {
-  it("has packaging and variant_packaging as the last CSV columns", () => {
-    expect(CATALOG_CSV_COLUMNS.slice(-2)).toEqual(["packaging", "variant_packaging"]);
+  it("appends packaging, variant_packaging and addon_only as the last CSV columns", () => {
+    expect(CATALOG_CSV_COLUMNS.slice(-3)).toEqual(["packaging", "variant_packaging", "addon_only"]);
   });
   it("accepts packaging up to 100000 paise, with nullable variant packaging", () => {
     expect(ProductCreate.parse({ categoryId: "c1", name: "Dal", pricePaise: 25000, packagingPaise: 100000 }).packagingPaise).toBe(100000);
@@ -60,5 +60,10 @@ describe("catalog packaging", () => {
     expect(VariantCreate.parse({ name: "Large", pricePaise: 30000, packagingPaise: null }).packagingPaise).toBeNull();
     expect(VariantUpdate.parse({ packagingPaise: 0 }).packagingPaise).toBe(0);
     expect(() => VariantUpdate.parse({ packagingPaise: 100001 })).toThrow();
+  });
+
+  it("accepts the addon_only column", () => {
+    expect(CATALOG_CSV_COLUMNS).toContain("addon_only");
+    expect(parseCatalogCsv(toCsv([["category", "name", "price", "addon_only"], ["Extras", "Cheese", "30", "yes"]]))[0]!.values.addon_only).toBe("yes");
   });
 });

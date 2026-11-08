@@ -49,20 +49,20 @@ function rankPopular(db: Database, from: number, now: number, minQty: number, pe
     WITH sold AS (
       SELECT l.product_id, l.qty, l.total_paise AS total
         FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-        WHERE b.created_at >= ? AND b.created_at <= ? AND l.parent_order_item_id IS NULL${inHours}
+        WHERE b.created_at >= ? AND b.created_at <= ? AND l.parent_order_item_id IS NULL AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.id = l.order_item_id AND oi.addon_of_item_id IS NOT NULL)${inHours}
       UNION ALL
       SELECT l.product_id, -cl.qty, -cl.total_paise
         FROM credit_note_lines cl JOIN credit_notes c ON c.id = cl.credit_note_id
         JOIN bill_report_lines l ON l.bill_id = c.bill_id AND l.order_item_id = cl.order_item_id
         JOIN bills b ON b.id = c.bill_id
-        WHERE b.created_at >= ? AND b.created_at <= ?${inHours}
+        WHERE b.created_at >= ? AND b.created_at <= ? AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.id = l.order_item_id AND oi.addon_of_item_id IS NOT NULL)${inHours}
     ), totals AS (
       SELECT product_id, SUM(qty) AS qty, SUM(total) AS total FROM sold GROUP BY product_id
     ), ranked AS (
       SELECT p.id, p.category_id,
         ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY t.qty DESC, t.total DESC, p.name, p.id) AS rank
         FROM totals t JOIN products p ON p.id = t.product_id JOIN categories c ON c.id = p.category_id
-        WHERE p.is_active = 1 AND p.is_sold_out = 0 AND c.is_active = 1 AND t.qty >= ?
+        WHERE p.is_active = 1 AND p.is_sold_out = 0 AND p.addon_only = 0 AND c.is_active = 1 AND t.qty >= ?
           AND (SELECT COUNT(*) FROM products o WHERE o.category_id = p.category_id AND o.is_active = 1) >= 2
     )
     SELECT id, category_id FROM ranked WHERE rank <= ? ORDER BY category_id, rank`)
@@ -88,7 +88,7 @@ export interface PairedDish { productId: string; variantId: string | null }
 
 /**
  * For each dish, the dishes from other categories most often on the same bill (each bill counts once per pair; items
- * inside combos do not count). Partners must be active, in stock, in an active category, and not combos (those need
+ * inside combos and add-ons picked under a dish do not count). Partners must be active, in stock, in an active category, and not combos (those need
  * choices). A partner with sizes is suggested in its most ordered active size. Credit notes are ignored: a refunded dish
  * was still ordered with the rest.
  */
@@ -98,7 +98,7 @@ export function orderedTogether(db: Database, now: number, options: TogetherOpti
   const rows = db.prepare(`
     WITH lines AS (
       SELECT DISTINCT l.bill_id, l.product_id FROM bill_report_lines l JOIN bills b ON b.id = l.bill_id
-        WHERE b.created_at >= ? AND b.created_at <= ? AND l.parent_order_item_id IS NULL
+        WHERE b.created_at >= ? AND b.created_at <= ? AND l.parent_order_item_id IS NULL AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.id = l.order_item_id AND oi.addon_of_item_id IS NOT NULL)
     ), pairs AS (
       SELECT a.product_id AS a, c.product_id AS b, COUNT(*) AS bills
         FROM lines a JOIN lines c ON c.bill_id = a.bill_id AND c.product_id <> a.product_id
@@ -106,7 +106,7 @@ export function orderedTogether(db: Database, now: number, options: TogetherOpti
     ), ranked AS (
       SELECT pr.a, pr.b, ROW_NUMBER() OVER (PARTITION BY pr.a ORDER BY pr.bills DESC, pb.name, pb.id) AS rank
         FROM pairs pr JOIN products pa ON pa.id = pr.a JOIN products pb ON pb.id = pr.b JOIN categories cb ON cb.id = pb.category_id
-        WHERE pb.category_id <> pa.category_id AND pb.is_active = 1 AND pb.is_sold_out = 0 AND pb.kind = 'item' AND cb.is_active = 1
+        WHERE pb.category_id <> pa.category_id AND pb.is_active = 1 AND pb.is_sold_out = 0 AND pb.kind = 'item' AND pb.addon_only = 0 AND cb.is_active = 1
     )
     SELECT a, b FROM ranked WHERE rank <= ? ORDER BY a, rank`).all(from, now, minBills, perProduct) as Array<{ a: string; b: string }>;
   if (!rows.length) return {};

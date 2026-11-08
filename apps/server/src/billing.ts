@@ -104,7 +104,8 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
     ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),
     items: items.map((item) => {
       const held = contents(item);
-      return { name: item.name, qty: item.qty, pricePaise: item.pricePaise, gstRate: item.gstRate, ...(held.length ? { contents: held } : {}) };
+      return { name: item.name, qty: item.qty, pricePaise: item.pricePaise, gstRate: item.gstRate, ...(held.length ? { contents: held } : {}),
+        ...(item.addonOfItemId ? { addon: true } : {}) };
     }), ...receiptExtra };
   return { items, totals, receipt, loyalty: { ...loyalty, customerId: customer?.id ?? null, pointsEarned: earned } };
 }

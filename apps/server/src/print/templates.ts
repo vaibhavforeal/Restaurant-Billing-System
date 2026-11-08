@@ -11,7 +11,8 @@ export interface KotSlipCtx {
   zomatoOrderId?: string | null;
   tableName: string | null;
   splitLabel: string | null;
-  items: Array<{ qty: number; name: string; note: string | null; cancelled: boolean }>;
+  /** `addon`: picked under the dish above it; `forItem`: the dish's name when the dish is on another ticket. */
+  items: Array<{ qty: number; name: string; note: string | null; cancelled: boolean; addon?: boolean; forItem?: string }>;
   atMs: number;
 }
 
@@ -69,6 +70,13 @@ export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProf
   for (const item of ctx.items) {
     if (item.cancelled) {
       pos.bold(true).line(`CANCELLED: ${item.qty} x ${item.name}`).bold(false);
+    } else if (item.addon && !item.forItem) {
+      pos.line(`  + ${item.name}`);
+      if (item.note) pos.line(`    (${item.note})`);
+    } else if (item.addon) {
+      pos.line(`+ ${item.qty} x ${item.name}`);
+      pos.line(`  (for ${item.forItem})`);
+      if (item.note) pos.line(`  (${item.note})`);
     } else {
       pos.line(`${item.qty} x ${item.name}`);
       if (item.note) {

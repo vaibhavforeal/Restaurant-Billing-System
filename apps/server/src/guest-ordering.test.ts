@@ -741,4 +741,90 @@ describe("guest QR ordering", () => {
     expect(await preparation()).toMatchObject({ state: "preparing", items: [{ name: "Thali", qty: 2, state: "preparing" }], hasChanges: false });
     expect(f.balance()).toBe(9.5);
   });
+
+  describe("add-ons", () => {
+    type AddonMenuProduct = GuestMenu["products"][number] & { addonGroups?: Array<{ id: string; name: string; minPicks: number; maxPicks: number;
+      options: Array<{ id: string; name: string; pricePaise: number; isVeg: boolean; unavailable?: true }> }> };
+    async function pizzaFixture(baseMin = 0) {
+      const f = await fixture();
+      const make = async (name: string, pricePaise: number, extra: object = {}) => {
+        const res = await f.api("POST", "/api/products", { name, categoryId: f.category.id, pricePaise, gstRate: 5, ...extra });
+        expect(res.statusCode, res.body).toBe(201);
+        return res.json().product.id as string;
+      };
+      const cheese = await make("Cheese", 3000, { addonOnly: true });
+      const pizza = await make("Pizza", 20000);
+      const group = await f.api("POST", "/api/addon-groups", { name: "Toppings", minPicks: baseMin, maxPicks: 2, options: [{ productId: cheese }, { productId: f.water.id }] });
+      expect(group.statusCode, group.body).toBe(201);
+      expect((await f.api("PATCH", `/api/products/${pizza}`, { addonGroupIds: [group.json().group.id] })).statusCode).toBe(200);
+      const find = async (name: string) => ((await f.menu()).products as AddonMenuProduct[]).find((p) => p.name === name);
+      return { f, cheese, pizza, find };
+    }
+
+    it("guest menu hides add-on-only products and lists add-on groups", async () => {
+      const { find } = await pizzaFixture();
+      expect(await find("Cheese")).toBeUndefined();
+      const pizza = (await find("Pizza"))!;
+      expect(pizza.addonGroups!.map((g) => [g.name, g.minPicks, g.maxPicks, g.options.map((o) => [o.name, o.pricePaise])]))
+        .toEqual([["Toppings", 0, 2, [["Cheese", 3000], ["Water", 10000]]]]);
+      expect(await find("Water")).not.toHaveProperty("addonGroups");
+    });
+
+    it("guest menu shows an item sold out when its required group cannot be filled", async () => {
+      const { f, cheese, find } = await pizzaFixture(2);
+      expect((await find("Pizza"))!.isSoldOut).toBe(false);
+      await f.api("PATCH", `/api/products/${cheese}`, { isSoldOut: true });
+      expect((await find("Pizza"))!.isSoldOut).toBe(true);
+    });
+
+    it("guest submits picks, sees add-ons and subtotal, and staff accept them as lines", async () => {
+      const { f, pizza, find } = await pizzaFixture();
+      const picks = (await find("Pizza"))!.addonGroups![0]!.options.filter((o) => o.name === "Cheese").map((o) => o.id);
+      const { request } = await f.request([{ productId: pizza, variantId: null, qty: 2, note: "", addonPicks: picks } as GuestSubmission["items"][number]]);
+      expect(request.items[0]).toMatchObject({ name: "Pizza", pricePaise: 20000, addons: [{ name: "Cheese", pricePaise: 3000 }] });
+      expect(request.subtotalPaise).toBe(46000);
+      const accepted = await f.accept(request.id);
+      expect(accepted.statusCode, accepted.body).toBe(200);
+      const lines = accepted.json().order.items as Array<{ id: string; name: string; qty: number; pricePaise: number; addonOfItemId: string | null }>;
+      const dish = lines.find((l) => l.name === "Pizza")!;
+      expect(lines.filter((l) => l.addonOfItemId === dish.id).map((l) => [l.name, l.qty, l.pricePaise])).toEqual([["Cheese", 2, 3000]]);
+    });
+
+    it("refuses add-on picks on a combo at submit", async () => {
+      const { f } = await pizzaFixture();
+      const created = await f.api("POST", "/api/products", { name: "Meal deal", categoryId: f.category.id, pricePaise: 25000, gstRate: 5, kind: "combo",
+        combo: [{ name: "Drink", minPicks: 1, maxPicks: 1, options: [{ productId: f.water.id }] }] });
+      expect(created.statusCode, created.body).toBe(201);
+      const deal = ((await f.menu()).products as AddonMenuProduct[]).find((p) => p.name === "Meal deal")!;
+      const res = await f.submit(await f.submission([{ productId: deal.id, variantId: null, qty: 1, note: "", comboPicks: [deal.combo![0]!.options[0]!.id], addonPicks: [randomUUID()] } as GuestSubmission["items"][number]]));
+      expect(res.statusCode).toBe(409);
+      expect(res.json().code).toBe("menu_changed");
+    });
+
+    it("folds add-ons into their dish's preparation state", async () => {
+      const { f, pizza } = await pizzaFixture();
+      const sides = await f.api("POST", "/api/addon-groups", { name: "Sides", minPicks: 0, maxPicks: 1, options: [{ productId: f.meal.id, variantId: f.meal.variants[0]!.id }] });
+      expect((await f.api("PATCH", `/api/products/${pizza}`, { addonGroupIds: [sides.json().group.id] })).statusCode).toBe(200);
+      const pick = sides.json().group.options[0].id as string;
+      const { body, request } = await f.request([{ productId: pizza, variantId: null, qty: 1, note: "", addonPicks: [pick] } as GuestSubmission["items"][number]]);
+      const accepted = await f.accept(request.id);
+      expect(accepted.statusCode, accepted.body).toBe(200);
+      const preparation = async () => ((await f.receipt(request.id, body.receiptToken)).json().request as GuestReceipt).preparation!;
+      // The pizza is with staff (no station); its rice bowl add-on goes to the kitchen.
+      expect((await f.api("POST", `/api/orders/${accepted.json().order.id}/send`)).statusCode).toBe(200);
+      expect(await preparation()).toMatchObject({ state: "preparing", items: [{ name: "Pizza", qty: 1, state: "preparing" }], hasChanges: false });
+      const addon = (accepted.json().order.items as Array<{ id: string; addonOfItemId: string | null }>).find((l) => l.addonOfItemId)!;
+      expect((await f.api("POST", `/api/order-items/${addon.id}/cancel`, { reason: "Out of rice" })).statusCode).toBe(200);
+      expect(await preparation()).toMatchObject({ items: [{ name: "Pizza", state: "with_staff" }], hasChanges: true });
+    });
+
+    it("guest bad picks are menu_changed", async () => {
+      const { f, pizza } = await pizzaFixture();
+      const bad = await f.submit(await f.submission([{ productId: pizza, variantId: null, qty: 1, note: "", addonPicks: [randomUUID()] } as GuestSubmission["items"][number]]));
+      expect(bad.statusCode).toBe(409);
+      expect(bad.json().code).toBe("menu_changed");
+      const onWater = await f.submit(await f.submission([{ productId: f.water.id, variantId: null, qty: 1, note: "", addonPicks: [randomUUID()] } as GuestSubmission["items"][number]]));
+      expect(onWater.json().code).toBe("menu_changed");
+    });
+  });
 });

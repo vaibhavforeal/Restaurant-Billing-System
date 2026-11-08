@@ -42,3 +42,10 @@ describe("combo cart", () => {
     expect(isComboLine(items, items[6]!)).toBe(false);
   });
 });
+
+it("sends a dish when only its add-on has a station, naming the dish once", () => {
+  expect(cartRowForKitchen({ productId: "water", addons: [{ productId: "shake" }] }, catalog)).toBe(true);
+  const items = [line("dish", "water"), line("addon", "shake", { addonOfItemId: "dish" })];
+  expect(kitchenLines(items, catalog).map((item) => item.id)).toEqual(["dish"]);
+  expect(kitchenLines([items[0]!, { ...items[1]!, status: "cancelled" }], catalog)).toEqual([]);
+});

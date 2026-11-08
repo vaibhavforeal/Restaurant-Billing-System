@@ -25,7 +25,7 @@ export function usualChips(dishes: UsualDish[], onOrder: ReadonlySet<string>, pr
   const chips: Array<{ product: Product; variant: Variant | null }> = [];
   for (const dish of dishes) {
     const product = products.find((p) => p.id === dish.productId);
-    if (!product || !product.isActive || product.isSoldOut || onOrder.has(product.id)) continue;
+    if (!product || !product.isActive || product.addonOnly || product.isSoldOut || onOrder.has(product.id)) continue;
     const sizes = activeSizes(product);
     if (product.variants.length && !sizes.length) continue;
     chips.push({ product, variant: sizes.find((v) => v.id === dish.variantId) ?? sizes[0] ?? null });
@@ -43,8 +43,9 @@ export function repeatPlan(last: LastOrder, products: Product[]): { rows: Repeat
   const rows: RepeatRow[] = [], skipped: string[] = [];
   for (const item of last.items) {
     const product = products.find((p) => p.id === item.productId);
-    if (!product || !product.isActive) { skipped.push(`${item.name} (no longer on the menu)`); continue; }
+    if (!product || !product.isActive || product.addonOnly) { skipped.push(`${item.name} (no longer on the menu)`); continue; }
     if (product.isSoldOut) { skipped.push(`${item.name} (sold out)`); continue; }
+    if (product.addonGroupIds?.length) { skipped.push(`${item.name} (choose its add-ons from the menu)`); continue; }
     if (product.kind === "combo") {
       try {
         const chosen = resolveComboPicks(product.combo ?? [], []);
