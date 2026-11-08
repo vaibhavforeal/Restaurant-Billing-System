@@ -5,12 +5,12 @@ import { httpError } from "./http-error.js";
 import { requireModule } from "./modules.js";
 
 interface Sales {
-  billCount: number; subtotalPaise: number; discountPaise: number; chargesPaise: number; cgstPaise: number;
+  billCount: number; subtotalPaise: number; discountPaise: number; offerDiscountPaise: number; chargesPaise: number; cgstPaise: number;
   sgstPaise: number; roundingPaise: number; totalPaise: number; outstandingPaise: number;
 }
 /** Money received by payment date, net of refunds paid out that date (`refundPaise`, already subtracted per method). */
 interface Collections { billCount: number; cashPaise: number; upiPaise: number; cardPaise: number; refundPaise: number; totalPaise: number }
-const emptySales = (): Sales => ({ billCount: 0, subtotalPaise: 0, discountPaise: 0, chargesPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 });
+const emptySales = (): Sales => ({ billCount: 0, subtotalPaise: 0, discountPaise: 0, offerDiscountPaise: 0, chargesPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 });
 const emptyCollections = (): Collections => ({ billCount: 0, cashPaise: 0, upiPaise: 0, cardPaise: 0, refundPaise: 0, totalPaise: 0 });
 
 export function reportRange(query: unknown) {
@@ -50,7 +50,7 @@ export function salesReport(db: Database, range: ReportRange): SalesReport {
   const localDate = (column: string) => `strftime('%Y-%m-%d', ${column} / 1000, 'unixepoch', 'localtime')`;
   const { sales, credits, collections, refunds, collectedBills, receivables } = db.transaction(() => ({
     sales: db.prepare(`SELECT ${localDate("created_at")} AS date,
-      COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise, SUM(charges_paise) AS chargesPaise,
+      COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise, SUM(offer_discount_paise) AS offerDiscountPaise, SUM(charges_paise) AS chargesPaise,
       SUM(cgst_paise) AS cgstPaise, SUM(sgst_paise) AS sgstPaise, SUM(rounding_paise) AS roundingPaise,
       SUM(total_paise) AS totalPaise, SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END) AS outstandingPaise
       FROM bills WHERE created_at >= ? AND created_at < ? GROUP BY date`).all(...bounds) as Array<Sales & { date: string }>,
@@ -101,8 +101,24 @@ export function salesReport(db: Database, range: ReportRange): SalesReport {
     sales: salesTotal, creditNotePaise, netTotalPaise: salesTotal.totalPaise - creditNotePaise, collections: collectionTotal, zomatoReceivablePaise, daily };
 }
 
+export interface OfferReportRow { offerId: string; name: string; bills: number; discountPaise: number }
+
+/**
+ * What each offer took off the bills issued in the range, biggest first. The discount is what the bills froze when they were
+ * issued; the name is the offer's current one. Void bills are left out; an offer on a bill is never deleted, so every row finds its offer.
+ */
+export function offersReport(db: Database, range: ReportRange): OfferReportRow[] {
+  return db.prepare(`SELECT bo.offer_id AS offerId, o.name AS name, COUNT(*) AS bills, SUM(bo.discount_paise) AS discountPaise
+    FROM bill_offers bo JOIN bills b ON b.id = bo.bill_id JOIN offers o ON o.id = bo.offer_id
+    WHERE b.created_at >= ? AND b.created_at < ? AND b.status != 'void'
+    GROUP BY bo.offer_id ORDER BY discountPaise DESC, o.name, bo.offer_id`).all(...range.bounds) as OfferReportRow[];
+}
+
 export function registerSalesReports(app: FastifyInstance) {
   app.get("/api/reports/sales", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req) => {
     return { report: salesReport(app.db, reportRange(req.query)) };
+  });
+  app.get("/api/reports/offers", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports"), requireModule(app, "offers")] }, async (req) => {
+    return { rows: offersReport(app.db, reportRange(req.query)) };
   });
 }

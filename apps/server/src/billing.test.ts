@@ -785,4 +785,20 @@ describe("offers", () => {
     expect(discounts.find((e) => e.reference === `Bill #${offersOnly.billNo}`)).toBeUndefined();
     expect(discounts.find((e) => e.reference === `Bill #${withManual.billNo}`)).toMatchObject({ amountPaise: 1000 });
   });
+
+  it("totals the offer discount on the day-end report, inside the day's discount", async () => {
+    await workedOffers();
+    await issue(await workedOrder());
+    const day = async () => (await send("GET", "/api/reports/day-end")).json().report;
+    expect((await day()).sales).toMatchObject({ billCount: 1, subtotalPaise: 106700, offerDiscountPaise: 39740, discountPaise: 39740 });
+    // A second bill with the cashier's own ₹10 off: discountPaise takes both, offerDiscountPaise only the offers.
+    await issue(await workedOrder(), { discountPaise: 1000, discountNote: "Friend" });
+    expect((await day()).sales).toMatchObject({ billCount: 2, subtotalPaise: 213400, offerDiscountPaise: 79480, discountPaise: 79480 + 1000 });
+  });
+
+  it("reports no offer discount on a day without offers", async () => {
+    const id = await workedOrder();
+    await issue(id);
+    expect((await send("GET", "/api/reports/day-end")).json().report.sales).toMatchObject({ billCount: 1, discountPaise: 0, offerDiscountPaise: 0 });
+  });
 });
