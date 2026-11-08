@@ -13,6 +13,9 @@ deal by hand. See `docs/research/2026-11-07-billingko-comparison.md` (gap 2).
 applied offer in the bill preview and can remove one. Item and category reports, refunds and GST rows
 show each offer's money on the lines it came from, in whole paise.
 
+**Split of work:** as with item add-ons, the backend (domain, server, printing) is built in this branch. All
+web UI (Offers screen, billing panel, reports, day end) is handed to Codex, which builds against the API below.
+
 ## Decisions (agreed with the owner)
 
 1. **Automatic, cashier can remove.** Matching offers apply by themselves in the bill preview. The
