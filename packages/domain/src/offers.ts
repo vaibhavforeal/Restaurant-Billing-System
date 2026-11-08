@@ -12,6 +12,8 @@ export type OfferKind = "buy_get" | "item_off" | "bill_off";
 
 const OFFER_NAME_MAX = 40;
 const BUY_GET_QTY_MAX = 20;
+const OFFER_TARGETS_MAX = 200;
+const OFFER_ORDER_TYPES_MAX = 20;
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const LAST_MINUTE = 24 * 60 - 1;
 
@@ -58,6 +60,8 @@ const isCalendarDate = (value: string) => {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 };
 const LocalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-13").refine(isCalendarDate, "That is not a calendar date");
+/** A list of ids with no repeats; the database keeps one row per offer and target. */
+const idList = (max: number) => z.array(z.string().min(1)).max(max).refine((ids) => new Set(ids).size === ids.length, "An item is listed twice").default([]);
 const Minute = z.number().int().min(0).max(LAST_MINUTE);
 
 const offerFields = z.object({
@@ -71,14 +75,14 @@ const offerFields = z.object({
   amountPaise: z.number().int().min(1).nullable().default(null),
   minBillPaise: z.number().int().min(0).default(0),
   maxDiscountPaise: z.number().int().min(1).nullable().default(null),
-  categoryIds: z.array(z.string().min(1)).default([]),
-  productIds: z.array(z.string().min(1)).default([]),
+  categoryIds: idList(OFFER_TARGETS_MAX),
+  productIds: idList(OFFER_TARGETS_MAX),
   validFrom: LocalDate.nullable().default(null),
   validUntil: LocalDate.nullable().default(null),
   days: z.array(z.number().int().min(0).max(6)).min(1, "Pick at least one day").default(() => [...ALL_DAYS]),
   timeFrom: Minute.nullable().default(null),
   timeUntil: Minute.nullable().default(null),
-  orderTypeIds: z.array(z.string().min(1)).default([]),
+  orderTypeIds: idList(OFFER_ORDER_TYPES_MAX),
 });
 
 /** The checks that need more than one field. */
@@ -91,8 +95,10 @@ function checkOffer(offer: OfferInputValue, ctx: z.RefinementCtx): void {
     if (offer.getQty === null) problem("getQty", "Say how many to get");
     if (offer.percentBp === null) problem("percentBp", "Say how much off the free items get");
     if (offer.amountPaise !== null) problem("amountPaise", "Buy and get takes a percentage, not an amount");
-  } else if ((offer.percentBp === null) === (offer.amountPaise === null)) {
-    problem("percentBp", "Set either a percentage or an amount");
+  } else {
+    if (offer.buyQty !== null) problem("buyQty", "Only buy and get has a buy quantity");
+    if (offer.getQty !== null) problem("getQty", "Only buy and get has a get quantity");
+    if ((offer.percentBp === null) === (offer.amountPaise === null)) problem("percentBp", "Set either a percentage or an amount");
   }
 
   if (offer.kind === "bill_off") {
@@ -203,7 +209,6 @@ interface Unit {
   lineIndex: number;
   price: number;
   used: boolean;
-  discount: number;
 }
 
 /** What an offer would do on the units still free. */
@@ -276,7 +281,7 @@ export function applyOffers(lines: OfferLine[], offers: Offer[], context: OfferC
   const eligible = running.filter((offer) => !cashierRemoved.has(offer.id));
 
   // Dearest units first, then line order; a stable sort keeps the units of one line together.
-  const units: Unit[] = lines.flatMap((line, lineIndex) => Array.from({ length: line.qty }, (): Unit => ({ lineIndex, price: line.pricePaise, used: false, discount: 0 })));
+  const units: Unit[] = lines.flatMap((line, lineIndex) => Array.from({ length: line.qty }, (): Unit => ({ lineIndex, price: line.pricePaise, used: false })));
   units.sort((a, b) => b.price - a.price || a.lineIndex - b.lineIndex);
 
   const perLineOf = (parts: Array<{ lineIndex: number; paise: number }>): AppliedOffer["perLine"] => {
@@ -292,10 +297,7 @@ export function applyOffers(lines: OfferLine[], offers: Offer[], context: OfferC
     const best = pending.map((offer) => planItemOffer(offer, units, lines)).filter((plan) => plan.saving > 0).sort(byPriority)[0];
     if (!best) break;
     for (const unit of best.used) unit.used = true;
-    for (const { unit, paise } of best.rewards) {
-      unit.discount += paise;
-      itemDiscount[unit.lineIndex]! += paise;
-    }
+    for (const { unit, paise } of best.rewards) itemDiscount[unit.lineIndex]! += paise;
     applied.push({ offerId: best.offer.id, name: best.offer.name, discountPaise: best.saving, perLine: perLineOf(best.rewards.map(({ unit, paise }) => ({ lineIndex: unit.lineIndex, paise }))) });
     pending = pending.filter((offer) => offer !== best.offer);
   }

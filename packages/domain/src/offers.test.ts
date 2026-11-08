@@ -40,6 +40,11 @@ describe("OfferInput", () => {
     expect(OfferInput.safeParse({ name: "Big", kind: "bill_off", amountPaise: 5000 }).success).toBe(true);
   });
 
+  it("accepts the largest target and order type lists", () => {
+    const many = (prefix: string, count: number) => Array.from({ length: count }, (_, i) => `${prefix}${i}`);
+    expect(OfferInput.safeParse({ ...valid, categoryIds: many("c", 200), productIds: many("p", 200), orderTypeIds: many("o", 20) }).success).toBe(true);
+  });
+
   it("accepts a window that crosses midnight and dates on one day", () => {
     expect(OfferInput.safeParse({ ...valid, timeFrom: 1320, timeUntil: 120, validFrom: "2026-11-13", validUntil: "2026-11-13", days: [4, 5] }).success).toBe(true);
   });
@@ -73,7 +78,17 @@ describe("OfferInput", () => {
     ["maxDiscountPaise on buy_get", { ...valid, maxDiscountPaise: 100 }],
     ["sameItemOnly on item_off", { ...itemOff, sameItemOnly: true }],
     ["sameItemOnly on bill_off", { ...billOff, sameItemOnly: true }],
-    ["validFrom after validUntil", { ...valid, validFrom: "2026-11-14", validUntil: "2026-11-13" }],
+    ["buyQty on item_off", { ...itemOff, buyQty: 1 }],
+    ["getQty on item_off", { ...itemOff, getQty: 1 }],
+    ["buyQty on bill_off", { ...billOff, buyQty: 2 }],
+    ["getQty on bill_off", { ...billOff, getQty: 2 }],
+    ["a repeated category", { ...valid, categoryIds: ["pizza", "pizza"] }],
+    ["a repeated product", { ...valid, productIds: ["p1", "p1"] }],
+    ["a repeated order type", { ...valid, orderTypeIds: ["dine", "dine"] }],
+    ["201 categories", { ...valid, categoryIds: Array.from({ length: 201 }, (_, i) => `c${i}`) }],
+    ["201 products", { ...valid, productIds: Array.from({ length: 201 }, (_, i) => `p${i}`) }],
+    ["21 order types", { ...valid, orderTypeIds: Array.from({ length: 21 }, (_, i) => `o${i}`) }],
+    ["validFrom after validUntil",{ ...valid, validFrom: "2026-11-14", validUntil: "2026-11-13" }],
     ["a date that is not a calendar date", { ...valid, validFrom: "2026-02-30" }],
     ["a date in the wrong format", { ...valid, validUntil: "13/11/2026" }],
     ["timeFrom without timeUntil", { ...valid, timeFrom: 540 }],
