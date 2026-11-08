@@ -49,12 +49,18 @@ export function saveReportLines(db: Database, billId: string) {
     if (!row) throw new Error(`The ${charge.kind} charge at ${charge.gst_rate}% has no tax row on this bill`);
     row.taxable_paise -= charge.taxable_paise; row.cgst_paise -= charge.cgst_paise; row.sgst_paise -= charge.sgst_paise;
   }
+  // What offers took off each line: it stays on that line, and only the rest of the group's discount is spread.
+  const offerPaise = new Map((db.prepare("SELECT order_item_id AS id, SUM(discount_paise) AS paise FROM bill_offer_lines WHERE bill_id = ? GROUP BY order_item_id").all(billId) as Array<{ id: string; paise: number }>)
+    .map((row) => [row.id, row.paise]));
   for (const tax of taxes) {
     const group = lines.filter((line) => line.rate === tax.gst_rate);
     if (!group.length) continue;
     const weights = group.map((line) => line.subtotal);
+    const offers = group.map((line) => offerPaise.get(line.id) ?? 0);
     const discount = weights.reduce((sum, n) => sum + n, 0) - tax.taxable_paise - (taxOnTop ? 0 : tax.cgst_paise + tax.sgst_paise);
-    const discounts = allocatePaise(discount, weights);
+    const afterOffers = weights.map((n, i) => n - offers[i]!);
+    const rest = allocatePaise(discount - offers.reduce((sum, n) => sum + n, 0), afterOffers);
+    const discounts = offers.map((n, i) => n + rest[i]!);
     const netWeights = weights.map((n, i) => n - discounts[i]!);
     const taxable = allocatePaise(tax.taxable_paise, netWeights);
     const cgst = allocatePaise(tax.cgst_paise, netWeights), sgst = allocatePaise(tax.sgst_paise, netWeights);
