@@ -16,7 +16,7 @@ This README is for developers. For how admins and cashiers use the feature, see
 | Plan | [docs/superpowers/plans/2026-11-08-offers.md](../superpowers/plans/2026-11-08-offers.md) |
 | Migration | 63 `offers` (the next free number is 64) |
 | Module | `offers` (Marketplace add-on, group `addon`), included in Basic and Pro, **off until an admin turns it on** |
-| Who built what | Backend (domain, server, printing): Claude, test-first, with a review per task. UI: **Codex**, building against this README. |
+| Who built what | Backend (domain, server, printing): Claude. UI phase 1 (Catalog offers list and editor): **Codex**, completed 2026-11-09 on `codex/offers-ui`. Billing controls and reports remain. |
 
 ## How it works
 
@@ -154,7 +154,8 @@ Staff activity's "discounts given" leaves offers out (they are the owner's choic
 
 ## UI work for Codex
 
-Everything below is yours; no UI exists yet. The domain module is importable as `@masalapos/domain/offers`
+**Phase 1 is complete:** Catalog → Offers supports create, edit, on/off and deletion of unused offers.
+Sections (b)–(d) remain for later sessions. The domain module is importable as `@masalapos/domain/offers`
 (`OfferInput`, `Offer`, `OfferInputValue`): run the form through `OfferInput.safeParse` to get the server's exact messages
 and field paths without copying the rules.
 
@@ -162,9 +163,9 @@ and field paths without copying the rules.
 Exception worth keeping: show the day-end row whenever its figure is above 0, since past bills' offers stay part of that
 day's discount; hide it only when it is 0.
 
-### (a) Offers list and form
+### (a) Offers list and form — complete
 
-Put them beside **Add-on groups** on the Catalog screen (`apps/ui/src/screens/Catalog.tsx`, which is already
+They live beside **Add-on groups** on the Catalog screen (`apps/ui/src/screens/Catalog.tsx`, which is already
 `catalog.manage` only). The spec says "Settings → Menu → Offers", but Settings has no Menu section; the Catalog page is
 where the menu is managed. The owner guide says "Catalog, then Offers"; change it if you put the screen elsewhere.
 
@@ -227,6 +228,23 @@ the sales exports too. Day-close snapshots from before this change lack the key.
   puts it back; the create body carries `removedOfferIds`; nothing shows when `offers` is empty or the module is off.
 - Reports: the Offers table, and the day-end row (present above 0, hidden at 0 with the module off).
 
+## Phase 1 handoff (2026-11-09)
+
+- Implemented in `OffersManager.tsx`, `OfferForm.tsx`, `offer-form.ts` and scoped `offers.css`; Catalog mounts the
+  manager only while Offers is enabled. Existing inactive selections remain visible and removable.
+- The form uses the shared schema, preserves `active` on PUT, and clears incompatible fields from the saved payload.
+  A successful save closes the editor even when refreshing fails; Retry loading offers only repeats the read.
+- Validation: 232 focused Vitest tests (including the new form/presentation tests), repository typecheck, UI build and
+  CSS-isolation check passed. Playwright with installed Edge checked an in-memory restaurant at desktop 1440×1000,
+  tablet 820×1180 and mobile 390×844, including light/dark layouts, CRUD, overnight help, failed-save recovery,
+  refresh-only retry, used-offer deletion protection, live module gating, duplicate submissions and dirty/busy guards.
+  No uncaught application errors; console errors were limited to intentionally injected HTTP failures. Vite retains
+  its large-chunk warning. Real tablet hardware and other browser engines were not tested.
+- **Next session: section (b), Billing panel.** Add applied/removed offers and re-preview/issue payload handling.
+  Sections (c) and (d), reporting and exports, are still pending. No backend or migration changes were needed here.
+
+Focused UI checks: `npx vitest run apps/ui/src/offer-form.test.ts apps/ui/src/offers-ui.test.ts`.
+
 ## Code map
 
 | Area | Files |
@@ -239,7 +257,8 @@ the sales exports too. Day-close snapshots from before this change lack the key.
 | Receipt | `apps/server/src/print/receipt.ts` |
 | Reports | `apps/server/src/reports.ts` (day end), `sales-reports.ts` (`offersReport`, `GET /api/reports/offers`), `staff-activity.ts` |
 | Module | `packages/domain/src/modules.ts`, `integrations.ts` (`offers`) |
-| UI (Codex) | `apps/ui/src/screens/BillingPanel.tsx`, `Catalog.tsx`, `SalesReports.tsx`, `DayEnd.tsx`, `sales-report.ts`, `report-export.ts`, plus a new offers screen, form model and tests |
+| UI phase 1 | `apps/ui/src/screens/OffersManager.tsx`, `OfferForm.tsx`, `Catalog.tsx`, `apps/ui/src/offer-form.ts`, `offers.css`, `offer-form.test.ts`, `offers-ui.test.ts` |
+| UI remaining | `apps/ui/src/screens/BillingPanel.tsx`, `SalesReports.tsx`, `DayEnd.tsx`, `sales-report.ts`, `report-export.ts` |
 
 ## Tests
 
@@ -283,4 +302,5 @@ These go beyond the spec or adjust it. Each is cheap to change.
   between the key check and the write could give a bill slightly different offers from the preview. The customer slab has
   the same pattern; it is very unlikely.
 - The captain app, QR guest ordering and KOTs are unchanged.
-- The UI doesn't exist yet, so nothing has been tried by hand in a browser or on a real tablet.
+- Catalog offer management has browser coverage (see phase 1 handoff). Billing removal controls and offers reporting UI
+  do not exist yet; real tablet hardware has not been tested.
