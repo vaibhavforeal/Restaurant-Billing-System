@@ -6,7 +6,7 @@ development builds do not update themselves; Settings says so.
 
 ## For the restaurant (admin)
 
-Open **Settings → Updates**.
+Open **Settings → Help & support → Updates**.
 
 - **Update channel**
   - **Stable** (recommended): full releases only.

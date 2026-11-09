@@ -5,7 +5,7 @@ describe("settings sections", () => {
   it("lists each section once with a title, icon and description", () => {
     const ids = SETTINGS_SECTIONS.map((section) => section.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(["profile", "bill", "discounts", "loyalty", "tables", "ai-suggestions", "order-types", "printers", "device", "backups", "plan", "updates", "shortcuts", "support"]);
+    expect(ids).toEqual(["profile", "bill", "discounts", "loyalty", "tables", "ai-suggestions", "order-types", "printers", "device", "backups", "plan", "shortcuts", "support"]);
     for (const section of SETTINGS_SECTIONS) {
       expect(section.title.trim()).not.toBe("");
       expect(section.blurb.trim()).not.toBe("");
@@ -23,6 +23,7 @@ describe("settings sections", () => {
     expect(initialSettingsSection(undefined)).toBeNull();
     expect(initialSettingsSection("plan")).toBe("plan");
     expect(initialSettingsSection("loyalty")).toBe("loyalty");
+    expect(initialSettingsSection("updates")).toBe("support");
   });
 
   it("hides Tables without table rights and Loyalty while the CRM add-on is off", () => {

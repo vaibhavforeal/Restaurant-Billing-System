@@ -19,7 +19,6 @@ import { SystemSettings } from "./SystemSettings";
 import { LicenseSettings } from "./LicenseSettings";
 import { KeyboardSettings } from "./KeyboardSettings";
 import { OrderTypes } from "./OrderTypes";
-import { UpdateSettings } from "./UpdateSettings";
 import { SupportSettings } from "../support";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 import { Icon } from "../Icon";
@@ -282,7 +281,6 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
       {active === "shortcuts" && <KeyboardSettings />}
       {active === "order-types" && <OrderTypes />}
       {active === "tables" && <TableSettings onBusyChange={setTableBusy} />}
-      {active === "updates" && <UpdateSettings />}
       {active === "support" && <SupportSettings />}
       {active === "bill" && <BillSettings onOpenPrinters={() => setActive("printers")} />}
       {active === "ai-suggestions" && <AiSuggestionSettings />}

@@ -14,9 +14,8 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: st
   { id: "device", title: "This device", blurb: "Theme, alerts, bill printer and payment method here", icon: "monitor" },
   { id: "backups", title: "Backups & connections", blurb: "Backups, devices and cloud", icon: "cloud" },
   { id: "plan", title: "Plan & devices", blurb: "Licence, plan and registered devices", icon: "badge" },
-  { id: "updates", title: "Updates", blurb: "Version, update channel and installing", icon: "refresh" },
   { id: "shortcuts", title: "Keyboard shortcuts", blurb: "Counter hotkeys", icon: "keyboard" },
-  { id: "support", title: "Help & support", blurb: "Chat with MasalaPOS, remote access", icon: "help" },
+  { id: "support", title: "Help & support", blurb: "Updates, chat with MasalaPOS and remote access", icon: "help" },
 ];
 
 /** The cards this person sees: Tables needs table rights, and Loyalty belongs to the CRM & Loyalty add-on. */
@@ -26,5 +25,5 @@ export function visibleSettingsSections({ canManageTables, crmActive }: { canMan
 
 /** The card grid is the landing view; only a deep link (e.g. from Marketplace or Customers) opens a section directly. */
 export function initialSettingsSection(requested?: SettingsSectionId): SettingsSectionId | null {
-  return requested ?? null;
+  return requested === "updates" ? "support" : requested ?? null;
 }

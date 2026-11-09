@@ -5,6 +5,7 @@ import { apiFetch, type User } from "./api";
 import { Icon } from "./Icon";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { connectWs } from "./ws";
+import { UpdateSettings } from "./screens/UpdateSettings";
 import "./support.css";
 
 declare global {
@@ -161,6 +162,7 @@ export function SupportSettings() {
     catch (err) { setError(err instanceof Error ? err.message : "Couldn't save."); }
   };
   return <div className="support-settings">
+    <UpdateSettings />
     <section className="panel">
       <h4>Chat with MasalaPOS support</h4>
       <p className="muted">Opens a chat with a MasalaPOS support person in your browser. Anyone signed in can use the <strong>Get support</strong> button in the menu.</p>

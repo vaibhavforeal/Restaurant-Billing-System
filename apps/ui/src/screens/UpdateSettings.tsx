@@ -15,7 +15,7 @@ const STATE_TEXT: Record<UpdateStatus["state"], string> = {
   error: "The last update check did not finish.",
 };
 
-/** Settings → Updates: version, Stable / Patch channel, and installing a downloaded update outside service. */
+/** Settings → Help & support → Updates: version, channel and installing outside service. */
 export function UpdateSettings() {
   const [data, setData] = useState<UpdateState | null>(null);
   const [busy, setBusy] = useState(false);
