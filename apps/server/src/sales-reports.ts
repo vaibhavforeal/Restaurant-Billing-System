@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey, type Database } from "@masalapos/domain";
+import { businessDateKey, businessDateSql, businessDayBounds, localDateKey, type Database } from "@masalapos/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
 import { requireModule } from "./modules.js";
+import { dayStartHour } from "./business-day.js";
 
 interface Sales {
   billCount: number; subtotalPaise: number; discountPaise: number; offerDiscountPaise: number; chargesPaise: number; cgstPaise: number;
@@ -13,10 +14,16 @@ interface Collections { billCount: number; cashPaise: number; upiPaise: number; 
 const emptySales = (): Sales => ({ billCount: 0, subtotalPaise: 0, discountPaise: 0, offerDiscountPaise: 0, chargesPaise: 0, cgstPaise: 0, sgstPaise: 0, roundingPaise: 0, totalPaise: 0, outstandingPaise: 0 });
 const emptyCollections = (): Collections => ({ billCount: 0, cashPaise: 0, upiPaise: 0, cardPaise: 0, refundPaise: 0, totalPaise: 0 });
 
-export function reportRange(query: unknown) {
+/**
+ * A validated report range of business dates. Each date runs from the day-start hour (Settings → Bill settings; 0 is
+ * midnight) to the next day's, so a night past midnight counts as one day. GST returns and the Zomato ledger pass 0: their
+ * dates are calendar dates. `today` is the business date now.
+ */
+export function reportRange(query: unknown, startHour = 0) {
   const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
   const input = z.object({ from: date.optional(), to: date.optional() }).parse(query);
-  const to = input.to ?? localDateKey(Date.now());
+  const today = businessDateKey(Date.now(), startHour);
+  const to = input.to ?? today;
   const end = new Date(`${to}T00:00:00`);
   if (!Number.isFinite(end.getTime()) || localDateKey(end.getTime()) !== to) throw httpError(400, "Invalid end date");
   const defaultStart = new Date(end); defaultStart.setDate(defaultStart.getDate() - 6);
@@ -29,8 +36,8 @@ export function reportRange(query: unknown) {
     dates.push(localDateKey(day.getTime()));
     if (dates.length > 366) throw httpError(400, "Choose a date range of 366 days or less");
   }
-  end.setDate(end.getDate() + 1);
-  return { from, to, dates, bounds: [start.getTime(), end.getTime()] as const };
+  const bounds = [businessDayBounds(from, startHour)[0], businessDayBounds(to, startHour)[1]] as const;
+  return { from, to, dates, bounds, startHour, today };
 }
 
 export type ReportRange = ReturnType<typeof reportRange>;
@@ -47,7 +54,7 @@ export interface SalesReport {
  */
 export function salesReport(db: Database, range: ReportRange): SalesReport {
   const { from, to, dates, bounds } = range;
-  const localDate = (column: string) => `strftime('%Y-%m-%d', ${column} / 1000, 'unixepoch', 'localtime')`;
+  const localDate = (column: string) => businessDateSql(column, range.startHour);
   const { sales, credits, collections, refunds, collectedBills, receivables } = db.transaction(() => ({
     sales: db.prepare(`SELECT ${localDate("created_at")} AS date,
       COUNT(*) AS billCount, SUM(subtotal_paise) AS subtotalPaise, SUM(discount_paise) AS discountPaise, SUM(offer_discount_paise) AS offerDiscountPaise, SUM(charges_paise) AS chargesPaise,
@@ -97,7 +104,7 @@ export function salesReport(db: Database, range: ReportRange): SalesReport {
     creditNotePaise += day.creditNotePaise; zomatoReceivablePaise += day.zomatoReceivablePaise;
   }
   collectionTotal.billCount = collectedBills;
-  return { from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(),
+  return { from, to, today: range.today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(),
     sales: salesTotal, creditNotePaise, netTotalPaise: salesTotal.totalPaise - creditNotePaise, collections: collectionTotal, zomatoReceivablePaise, daily };
 }
 
@@ -116,9 +123,9 @@ export function offersReport(db: Database, range: ReportRange): OfferReportRow[]
 
 export function registerSalesReports(app: FastifyInstance) {
   app.get("/api/reports/sales", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req) => {
-    return { report: salesReport(app.db, reportRange(req.query)) };
+    return { report: salesReport(app.db, reportRange(req.query, dayStartHour(app.db))) };
   });
   app.get("/api/reports/offers", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports"), requireModule(app, "offers")] }, async (req) => {
-    return { rows: offersReport(app.db, reportRange(req.query)) };
+    return { rows: offersReport(app.db, reportRange(req.query, dayStartHour(app.db))) };
   });
 }

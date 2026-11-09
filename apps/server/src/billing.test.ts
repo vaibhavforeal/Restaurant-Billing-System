@@ -113,6 +113,22 @@ describe("billing and day-end", () => {
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get()).toEqual({ n: 0 });
     expect(app.db.prepare("SELECT status FROM orders WHERE id = ?").get(id)).toEqual({ status: "billed" });
   });
+  it("refuses a payment method switched off in Settings, but still replays a settle already made", async () => {
+    const paid = await issue(await order());
+    const replayRef = uuidv7();
+    expect((await pay(paid, replayRef)).statusCode).toBe(200);
+    const off = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe Test", paymentModes: ["upi", "card"] } });
+    expect(off.statusCode).toBe(200);
+    // The cash settle sent before the change is a replay, so it still answers as it did.
+    expect((await pay(paid, replayRef)).statusCode).toBe(200);
+    const bill = await issue(await order());
+    const cash = await pay(bill);
+    expect(cash.statusCode).toBe(409);
+    expect(cash.json().error).toMatch(/Cash payments are turned off/);
+    const upi = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/settle`, headers: auth(token), payload: { clientRef: uuidv7(), payments: [{ mode: "upi", amountPaise: bill.totalPaise }] } });
+    expect(upi.statusCode).toBe(200);
+  });
+
   it("records exact split payments once and leaves a split table occupied until all settle", async () => {
     const t = await app.inject({ method: "POST", url: "/api/tables", headers: auth(token), payload: { name: "T1" } });
     const tableId = t.json().table.id as string;

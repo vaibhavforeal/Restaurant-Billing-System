@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey, type Database, type OperationalReport, type ReportColumn, type ReportTable, type ReportCell } from "@masalapos/domain";
+import { type Database, type OperationalReport, type ReportColumn, type ReportTable, type ReportCell } from "@masalapos/domain";
 import { z } from "zod";
 import { reportRange, type ReportRange } from "./sales-reports.js";
 import { requireModule } from "./modules.js";
+import { dayStartHour } from "./business-day.js";
 
 type Row = Record<string, ReportCell>;
 const column = (key: string, label: string, format?: ReportColumn["format"]): ReportColumn => format ? { key, label, format } : { key, label };
@@ -193,14 +194,14 @@ export function operationalReport(db: Database, kind: OperationalReportKind, ran
       tables.push({ title: "Stock movement details", columns: [column("time", "Recorded at", "time"), column("item", "Stock item"), column("unit", "Unit"), column("reason", "Movement"), column("quantity", "Change", "quantity"), column("staff", "Recorded by"), column("note", "Reason / reference"), column("orderId", "Order reference")], rows: details });
     }
   })();
-  const report: OperationalReport = { kind, from, to, today: localDateKey(generatedAt), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt, notes, tables };
+  const report: OperationalReport = { kind, from, to, today: range.today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt, notes, tables };
   return report;
 }
 
 export function registerOperationalReports(app: FastifyInstance) {
   app.get("/api/reports/operations/:kind", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req, reply) => {
     const { kind } = z.object({ kind: z.enum(OPERATIONAL_REPORT_KINDS) }).parse(req.params);
-    const range = reportRange(req.query);
+    const range = reportRange(req.query, dayStartHour(app.db));
     const report = operationalReport(app.db, kind, range);
     reply.header("Cache-Control", "no-store");
     return { report };

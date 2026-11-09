@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
   localDateKey, pointsEarned, nextInvoiceNo, GST_STATES, applyOffers, offerClock, type OfferLine, type OfferResult, type BillShow, type BuyerDetailsInput, type Bill, type ChargeInput, type ChargeLine, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
+import { orderSettings } from "./order-settings.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
@@ -259,6 +260,8 @@ export function issueBill(db: Database, orderId: string, opts: {
  * read before settling deactivates the table links. Call inside an open `db.transaction`; replay detection by
  * `clientRef` is the caller's job.
  */
+const PAYMENT_NAMES = { cash: "Cash", card: "Card", upi: "UPI" } as const;
+
 export function settleBill(db: Database, billId: string, opts: {
   payments: Array<{ mode: PaymentMode; amountPaise: number; refNote?: string | null }>; clientRef: string; requestJson: string; actorId: string;
 }): string[] {
@@ -392,6 +395,10 @@ export function registerBilling(app: FastifyInstance): void {
         return null;
       }
       refuseZomato((db.prepare("SELECT o.type FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.id = ?").get(id) as { type: string } | undefined)?.type);
+      // A method switched off in Settings is refused for new payments; a replay above still answers as before.
+      const taken = orderSettings(db).paymentModes;
+      const off = body.payments.find((p) => !taken.includes(p.mode));
+      if (off) throw httpError(409, `${PAYMENT_NAMES[off.mode]} payments are turned off in Settings. Use another payment method.`);
       return settleBill(db, id, { payments: body.payments, clientRef: body.clientRef, requestJson, actorId: req.user.id });
     })();
     const bill = getBill(id);
