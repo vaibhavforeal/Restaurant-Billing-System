@@ -115,7 +115,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [transferError, setTransferError] = useState("");
   const [transferSignal, setTransferSignal] = useState(0);
   const transferRefs = useRef(new Map<string, string>());
-  useEffect(() => { if (order) savePreference("masalapos.order-type", order.type); }, [order?.type]);
   useEffect(() => {
     if (order?.type !== "parcel" || order.status !== "open") return;
     let active = true;

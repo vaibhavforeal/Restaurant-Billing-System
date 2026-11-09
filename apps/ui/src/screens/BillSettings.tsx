@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useModules } from "../modules";
+import type { LoyaltySettings } from "./customer-shared";
 import { DEFAULT_GST_RATES, GST_MODES, type GstMode } from "@masalapos/domain/gst";
 import { financialYear, formatInvoiceNo } from "@masalapos/domain/invoice-numbers";
 import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
@@ -58,12 +60,45 @@ function ChargeInput({ saved, max, unit, convert, disabled, noteId, helpId, onCh
   </>;
 }
 
+/**
+ * The "Rate your visit" QR switch. It is stored with the CRM settings and works only with the CRM & Loyalty add-on, so it
+ * shows only then. Saving re-reads the CRM settings and sends back only the switch with the required keys, so the loyalty
+ * values are never overwritten from a stale copy.
+ */
+function useFeedbackQr(active: boolean) {
+  const [saved, setSaved] = useState<boolean | null>(null);
+  const [value, setValue] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!active) return;
+    apiFetch<{ settings: LoyaltySettings }>("/api/loyalty-settings")
+      .then((r) => { setSaved(r.settings.feedbackEnabled); setValue(r.settings.feedbackEnabled); })
+      .catch(() => setError("Could not load the feedback QR setting"));
+  }, [active]);
+  async function save() {
+    if (!active || saved === null || value === saved) return;
+    setError("");
+    try {
+      const { settings: current } = await apiFetch<{ settings: LoyaltySettings }>("/api/loyalty-settings");
+      const { settings } = await apiFetch<{ settings: LoyaltySettings }>("/api/loyalty-settings", { method: "PUT", body: JSON.stringify({
+        enabled: current.enabled, pointsPer100: current.pointsPer100, pointValuePaise: current.pointValuePaise,
+        minRedeemPoints: current.minRedeemPoints, feedbackEnabled: value,
+      }) });
+      setSaved(settings.feedbackEnabled); setValue(settings.feedbackEnabled);
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "Could not save the feedback QR setting");
+    }
+  }
+  return { shown: active && saved !== null, value, setValue, save, error };
+}
+
 const GST_MODE_LABELS: Record<GstMode, string> = { included: "Prices include GST", exclusive: "Prices exclude GST, added on the bill", none: "No GST charged" };
 
 /** Settings → Bill settings: tax, what the printed bill shows, and order handling, beside a live preview of the bill. */
 export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void }) {
   const { form, update, save, busy, status, message } = useSettingsForm("Could not save the bill settings");
   const preview = useBillPreview(form);
+  const feedback = useFeedbackQr(useModules().isActive("crm"));
   const fy = financialYear(Date.now()).short;
   if (!form) return <div className="panel">{status === "error" ? <p role="alert">{message}</p> : <p role="status">Loading settings…</p>}</div>;
   return <div className="panel bill-settings">
@@ -177,6 +212,11 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
           <input type="checkbox" checked={form[key]} disabled={busy} onChange={(e) => update({ [key]: e.target.checked })} />
           <span>{label}{key === "billShowItemGst" && <small> Only printed on bills that charge GST.</small>}</span>
         </label>)}
+        {feedback.shown && <label style={check}>
+          <input type="checkbox" checked={feedback.value} disabled={busy} aria-describedby="feedback-qr-help" onChange={(e) => feedback.setValue(e.target.checked)} />
+          <span>Print a "Rate your visit" QR code <InfoTip id="feedback-qr-help">Guests scan it to rate their visit; ratings appear under Customers → Feedback. The QR code links to this computer on the restaurant's network, so guests scan it on the restaurant Wi-Fi.</InfoTip></span>
+        </label>}
+        {feedback.error && <small role="alert">{feedback.error}</small>}
         <button type="button" className="link-button" onClick={onOpenPrinters}>Bill copies are set per printer</button>
       </fieldset>
 
@@ -198,7 +238,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         </label>
       </fieldset>
 
-      <button className="primary" onClick={save} style={{ fontWeight: 700 }} disabled={busy}>Save</button>
+      <button className="primary" onClick={() => { save(); void feedback.save(); }} style={{ fontWeight: 700 }} disabled={busy}>Save</button>
       <SaveStatus status={status} message={message} />
       {preview.error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{preview.error}</p>}
     </div>

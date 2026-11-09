@@ -86,6 +86,66 @@ describe("receipts", () => {
       expect(receiptSlip({ ...bill, charges: [] }, 58)).toEqual(receiptSlip(bill, 58));
     });
   });
+  describe("offer lines", () => {
+    // BOGO Pizza ₹299.00 and Big Bill ₹74.40 are offers; the other ₹33.48 of the ₹406.88 discount is the customer's slab.
+    const offers = [{ name: "BOGO Pizza", discountPaise: 29900 }, { name: "Big Bill", discountPaise: 7440 }];
+    const withOffers = (discountPaise: number, applied = offers) => ({ ...bill, discountPaise, receipt: { ...bill.receipt, offers: applied } }) as Bill;
+    const widths = [58, 80] as const;
+    it("prints each offer after Subtotal and before Discount, which shows what the offers leave of the total discount", () => {
+      const b = withOffers(40688);
+      for (const width of widths) {
+        const slip = thermal(b, width);
+        expect(slip, String(width)).toMatch(/Offer: BOGO Pizza\s+-299\.00\n/);
+        expect(slip, String(width)).toMatch(/Offer: Big Bill\s+-74\.40\n/);
+        expect(slip, String(width)).toMatch(/\nDiscount\s+-33\.48\n/);
+        expect(slip.indexOf("Subtotal")).toBeLessThan(slip.indexOf("Offer: BOGO Pizza"));
+        expect(slip.indexOf("Offer: BOGO Pizza")).toBeLessThan(slip.indexOf("Offer: Big Bill"));
+        expect(slip.indexOf("Offer: Big Bill")).toBeLessThan(slip.indexOf("\nDiscount"));
+        expect(fits(slip, width), String(width)).toBe(true);
+      }
+      const html = receiptHtml(b);
+      expect(html).toContain('<tr><td>Offer: BOGO Pizza</td><td class="amount">-₹299.00</td></tr>');
+      expect(html).toContain('<tr><td>Offer: Big Bill</td><td class="amount">-₹74.40</td></tr>');
+      expect(html).toContain('<tr><td>Discount</td><td class="amount">-₹33.48</td></tr>');
+      expect(html.indexOf("Subtotal")).toBeLessThan(html.indexOf("Offer: BOGO Pizza"));
+      expect(html.indexOf("Offer: Big Bill")).toBeLessThan(html.indexOf("<td>Discount</td>"));
+    });
+    it("prints no Discount line when the offers are the whole discount", () => {
+      const b = withOffers(37340);
+      for (const width of widths) {
+        const slip = thermal(b, width);
+        expect(slip).toContain("Offer: Big Bill");
+        expect(slip).not.toMatch(/^Discount/m);
+      }
+      const html = receiptHtml(b);
+      expect(html).toContain("Offer: Big Bill");
+      expect(html).not.toContain("<td>Discount</td>");
+    });
+    it("prints a bill issued without offers exactly as before, and a staff discount as a plain Discount line", () => {
+      const old = { ...bill, discountPaise: 500 };
+      expect(old.receipt).not.toHaveProperty("offers");
+      for (const width of widths) {
+        const slip = thermal(old, width);
+        expect(slip).not.toContain("Offer:");
+        expect(slip).toMatch(/\nDiscount\s+-5\.00\n/);
+      }
+      expect(receiptHtml(old)).not.toContain("Offer:");
+      expect(receiptHtml(old)).toContain('<tr><td>Discount</td><td class="amount">-₹5.00</td></tr>');
+      expect(receiptHtml({ ...old, receipt: { ...old.receipt, offers: [] } })).toBe(receiptHtml(old));
+      expect(receiptSlip({ ...old, receipt: { ...old.receipt, offers: [] } }, 58)).toEqual(receiptSlip(old, 58));
+    });
+    it("keeps a long offer name within the paper width and escapes it in the HTML", () => {
+      const name = "<b>Weekend feast 25% off all</b>";
+      const b = withOffers(2500, [{ name: name + " x".repeat(4), discountPaise: 2500 }]);
+      for (const width of widths) {
+        const slip = thermal(b, width);
+        expect(slip).toContain("-25.00");
+        expect(fits(slip, width), String(width)).toBe(true);
+      }
+      expect(receiptHtml(b)).toContain("Offer: &lt;b&gt;Weekend feast 25% off all&lt;/b&gt;");
+      expect(receiptHtml(b)).not.toContain("<b>Weekend");
+    });
+  });
   it.each(RECEIPT_STYLES)("uses the saved %s style without changing bill content", (receiptStyle) => {
     const sample = { ...bill, receipt: { ...bill.receipt, receiptStyle } };
     expect(receiptHtml(sample)).toContain(`class="bill bill--${receiptStyle}"`);

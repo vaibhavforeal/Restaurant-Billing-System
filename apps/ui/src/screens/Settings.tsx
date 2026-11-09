@@ -3,6 +3,11 @@ import { AiSuggestionSettings } from "./AiSuggestionSettings";
 import { BillSettings } from "./BillSettings";
 import { TableSettings } from "./TableSettings";
 import { useCan } from "../permissions";
+import { useModules } from "../modules";
+import { DiscountCaps } from "./DiscountCaps";
+import { CustomerTypesSettings } from "./CustomerTypesSettings";
+import { LoyaltySettings } from "./LoyaltySettings";
+import { DeviceSettings } from "./DeviceSettings";
 import { settingsForSave } from "../settings-save";
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
@@ -18,7 +23,7 @@ import { UpdateSettings } from "./UpdateSettings";
 import { SupportSettings } from "../support";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 import { Icon } from "../Icon";
-import { initialSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId } from "../settings-sections";
+import { initialSettingsSection, SETTINGS_SECTIONS, visibleSettingsSections, type SettingsSectionId } from "../settings-sections";
 import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
@@ -42,9 +47,11 @@ const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.locale
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
 
-/** Opens on a grid of section cards; `section: "plan"` opens Plan & devices directly, e.g. from a Marketplace card that needs a different plan. */
-export function Settings({ section }: { section?: "plan" | undefined } = {}) {
+/** Opens on a grid of section cards; a `section` opens that card directly, e.g. Plan & devices from a Marketplace card that needs a different plan. */
+export function Settings({ section }: { section?: SettingsSectionId | undefined } = {}) {
   const can = useCan();
+  const { isActive } = useModules();
+  const crmActive = isActive("crm");
   const [tableBusy, setTableBusy] = useState(false);
   const [active, setActive] = useState<SettingsSectionId | null>(() => initialSettingsSection(section));
   const sectionHeading = useRef<HTMLHeadingElement>(null);
@@ -256,7 +263,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       <div className="page-header"><div><h2>Settings</h2></div></div>
       {active === null ? (
         <ul className="settings-cards">
-          {SETTINGS_SECTIONS.filter(item => item.id !== "tables" || can("tables.manage")).map(({ id, title, blurb, icon }) => (
+          {visibleSettingsSections({ canManageTables: can("tables.manage"), crmActive }).map(({ id, title, blurb, icon }) => (
             <li key={id}>
               <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setActive(id); }}>
                 <span className="settings-card-icon"><Icon name={icon} size={22} /></span>
@@ -279,6 +286,12 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {active === "support" && <SupportSettings />}
       {active === "bill" && <BillSettings onOpenPrinters={() => setActive("printers")} />}
       {active === "ai-suggestions" && <AiSuggestionSettings />}
+      {active === "discounts" && <>
+        <DiscountCaps />
+        {crmActive ? <CustomerTypesSettings /> : <p className="panel muted">Customer-type discounts come with the CRM &amp; Loyalty add-on.</p>}
+      </>}
+      {active === "loyalty" && (crmActive ? <LoyaltySettings /> : <p className="panel muted">Loyalty comes with the CRM &amp; Loyalty add-on. Turn it on in the Marketplace.</p>)}
+      {active === "device" && <DeviceSettings />}
       {/* Profile section */}
       {active === "profile" && <div className="panel">
 

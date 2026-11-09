@@ -34,7 +34,7 @@ export function dayEndReport(db: Database, date: string) {
   // every section on the same snapshot.
   return db.transaction(() => {
     const sales = db.prepare(`SELECT COUNT(*) AS billCount, COALESCE(SUM(subtotal_paise),0) AS subtotalPaise,
-      COALESCE(SUM(discount_paise),0) AS discountPaise, COALESCE(SUM(charges_paise),0) AS chargesPaise, COALESCE(SUM(cgst_paise),0) AS cgstPaise,
+      COALESCE(SUM(discount_paise),0) AS discountPaise, COALESCE(SUM(offer_discount_paise),0) AS offerDiscountPaise, COALESCE(SUM(charges_paise),0) AS chargesPaise, COALESCE(SUM(cgst_paise),0) AS cgstPaise,
       COALESCE(SUM(sgst_paise),0) AS sgstPaise, COALESCE(SUM(rounding_paise),0) AS roundingPaise,
       COALESCE(SUM(total_paise),0) AS totalPaise,
       COALESCE(SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END),0) AS outstandingPaise

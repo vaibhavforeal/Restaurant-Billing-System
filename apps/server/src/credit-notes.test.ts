@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { uuidv7, type Bill, type BillCreditNote, type PayMode } from "@masalapos/domain";
-import { auth, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
+import { auth, createUser, enableIntegration, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
 import { loadBillCredit, resolveApprover } from "./credit-notes.js";
 
 describe("credit preview, approval and bill credit data", () => {
@@ -980,6 +980,70 @@ describe("credit preview, approval and bill credit data", () => {
       expect(credit.lines.find((l) => l.orderItemId === biryani)!.packagingPaise).toBe(2000);
       expect(credit.charges).toMatchObject([{ kind: "packaging", amountPaise: 2500 }]);
       expect(credit.creditedCharges.packaging).toMatchObject({ amountPaise: 1000, taxablePaise: 1000 });
+    });
+  });
+
+  describe("offers on credit notes", () => {
+    let pizzas: string; let margherita: string; let farmhouse: string; let coke: string;
+    const post = (url: string, payload: object) => app.inject({ method: "POST", url, headers: auth(admin.token), payload });
+    async function item(name: string, category: string, pricePaise: number) {
+      const res = await post("/api/products", { name, categoryId: category, pricePaise, gstRate: 5, kotStationId: null });
+      expect(res.statusCode, res.body).toBe(201);
+      return res.json().product.id as string;
+    }
+    beforeEach(async () => {
+      enableIntegration(app, "offers");
+      pizzas = (await post("/api/categories", { name: "Pizzas" })).json().category.id;
+      const beverages = (await post("/api/categories", { name: "Beverages" })).json().category.id as string;
+      margherita = await item("Margherita", pizzas, 29900);
+      farmhouse = await item("Farmhouse", pizzas, 34900);
+      coke = await item("Coke", beverages, 6000);
+      for (const offer of [
+        { name: "BOGO Pizza", kind: "buy_get", buyQty: 1, getQty: 1, percentBp: 10000, categoryIds: [pizzas] },
+        { name: "Cool Drinks", kind: "item_off", percentBp: 2000, categoryIds: [beverages] },
+        { name: "Big Bill", kind: "bill_off", percentBp: 1000, minBillPaise: 50000, maxDiscountPaise: 15000 },
+      ]) expect((await post("/api/offers", offer)).statusCode).toBe(201);
+    });
+    /** A paid parcel bill of the given lines. */
+    async function paidBill(lines: Array<[string, number]>): Promise<Bill> {
+      const orderId = (await post("/api/orders", { clientRef: uuidv7(), type: "parcel", tableId: null })).json().order.id as string;
+      expect((await post(`/api/orders/${orderId}/items`, { items: lines.map(([productId, qty]) => ({ productId, qty, clientRef: uuidv7() })) })).statusCode).toBe(200);
+      const preview = await post(`/api/orders/${orderId}/bill-preview`, {});
+      const issued = await post(`/api/orders/${orderId}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey });
+      expect(issued.statusCode, issued.body).toBe(201);
+      const b = issued.json().bill as Bill;
+      expect((await post(`/api/bills/${b.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: b.totalPaise }] })).statusCode).toBe(200);
+      return b;
+    }
+    const refund = (billId: string, lines: Array<{ orderItemId: string; qty: number }>, amountPaise: number) =>
+      post(`/api/bills/${billId}/refund`, { clientRef: uuidv7(), reason: "Cold food", lines, refunds: [{ mode: "cash", amountPaise }] });
+    const lineIds = (billId: string) => app.db.prepare("SELECT order_item_id AS orderItemId, qty FROM bill_report_lines WHERE bill_id = ? AND parent_order_item_id IS NULL").all(billId) as Array<{ orderItemId: string; qty: number }>;
+
+    it("credits one unit of a buy-one-get-one line as half of what the line came to", async () => {
+      // 2 x ₹299 with one free: the line comes to ₹299.00, under the ₹500 Big Bill minimum.
+      const b = await paidBill([[margherita, 2]]);
+      expect(b).toMatchObject({ subtotalPaise: 59800, offerDiscountPaise: 29900, totalPaise: 29900 });
+      const [line] = lineIds(b.id);
+      const first = await refund(b.id, [{ orderItemId: line!.orderItemId, qty: 1 }], 14950);
+      expect(first.statusCode, first.body).toBe(201);
+      expect(first.json().creditNote).toMatchObject({ totalPaise: 14950, lines: [{ qty: 1, totalPaise: 14950 }] });
+      const rest = await refund(b.id, [{ orderItemId: line!.orderItemId, qty: 1 }], 14950);
+      expect(rest.statusCode, rest.body).toBe(201);
+      expect(rest.json().bill.refundState).toBe("refunded");
+    });
+
+    it("credits exactly the bill total when every item of the worked example is refunded", async () => {
+      const b = await paidBill([[margherita, 2], [farmhouse, 1], [coke, 2]]);
+      expect(b).toMatchObject({ offerDiscountPaise: 39740, totalPaise: 67000 });
+      const res = await refund(b.id, lineIds(b.id), b.totalPaise);
+      expect(res.statusCode, res.body).toBe(201);
+      expect(res.json().creditNote.totalPaise).toBe(b.totalPaise);
+      expect(res.json().bill.refundState).toBe("refunded");
+      const sum = (table: string, col: string, where: string) =>
+        (app.db.prepare(`SELECT COALESCE(SUM(${col}), 0) AS v FROM ${table} ${where}`).get(b.id) as { v: number }).v;
+      for (const col of ["taxable_paise", "cgst_paise", "sgst_paise"]) {
+        expect(sum("credit_note_taxes", col, "WHERE credit_note_id IN (SELECT id FROM credit_notes WHERE bill_id = ?)"), col).toBe(sum("bill_taxes", col, "WHERE bill_id = ?"));
+      }
     });
   });
 });

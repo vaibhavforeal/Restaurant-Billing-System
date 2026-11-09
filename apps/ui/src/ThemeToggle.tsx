@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { applyTheme, readTheme, saveTheme, THEME_STORAGE_KEY, type Theme } from "./theme";
+import { applyTheme, readTheme, saveTheme, THEME_EVENT, THEME_STORAGE_KEY, type Theme } from "./theme";
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === "dark" ? "dark" : "light");
@@ -11,8 +11,10 @@ export function ThemeToggle() {
       applyTheme(next);
       setTheme(next);
     };
+    const local = () => setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
     window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
+    window.addEventListener(THEME_EVENT, local);
+    return () => { window.removeEventListener("storage", sync); window.removeEventListener(THEME_EVENT, local); };
   }, []);
 
   const dark = theme === "dark";
