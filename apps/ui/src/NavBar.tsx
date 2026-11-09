@@ -10,6 +10,7 @@ import { STAFF_TABS, staffTabVisible } from "./integrations-model";
 import { userCan } from "./permissions";
 import { GetSupportButton } from "./support";
 import { WorkspaceDialog } from "./WorkspaceDialog";
+import type { SettingsSectionId } from "./settings-sections";
 
 export type Page =
   | { name: "home" }
@@ -20,7 +21,7 @@ export type Page =
   | { name: "kitchen" }
   | { name: "catalog" }
   | { name: "users" }
-  | { name: "settings"; section?: "plan" }
+  | { name: "settings"; section?: SettingsSectionId }
   | { name: "bills" }
   | { name: "marketplace" }
   | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "gst" | "analytics" | "bills" | "zomato" | "cash"; period?: { from: string; to: string } }
