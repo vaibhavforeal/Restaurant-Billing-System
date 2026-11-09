@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey, type Database } from "@masalapos/domain";
+import { businessDateSql, type Database } from "@masalapos/domain";
 import type { AnalyticsDay, AnalyticsOrderType, AnalyticsHour, CategoryAnalytics, ItemAnalytics, OrderAnalyticsReport, OrderTypeAnalytics } from "@masalapos/domain/operational-reports";
 import { z } from "zod";
 import { reportRange, type ReportRange } from "./sales-reports.js";
 import { requireModule } from "./modules.js";
+import { dayStartHour } from "./business-day.js";
 
 /**
  * Read stored bill totals and immutable reporting lines in one snapshot. Bills (void ones too) count on their issue
@@ -48,7 +49,7 @@ export function orderAnalyticsReport(db: Database, range: ReportRange, orderType
       ORDER BY qty DESC, totalPaise DESC, name, product_id, variant_id, category_id, category_name`).all(...params) as ItemAnalytics[];
     const categories = db.prepare(`SELECT category_id AS categoryId, category_name AS name, ${aggregates} ${lines}
       GROUP BY category_id, category_name ORDER BY totalPaise DESC, qty DESC, name, category_id`).all(...params) as CategoryAnalytics[];
-    const dailyData = db.prepare(`SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch', 'localtime') AS date,
+    const dailyData = db.prepare(`SELECT ${businessDateSql("at", range.startHour)} AS date,
       COUNT(DISTINCT CASE WHEN type = 'parcel' THEN orderId END) AS takeawayOrders,
       COUNT(DISTINCT CASE WHEN type = 'dine_in' THEN orderId END) AS tableOrders, SUM(total) AS totalPaise
       ${bills} GROUP BY date`).all(...params) as AnalyticsDay[];
@@ -58,14 +59,14 @@ export function orderAnalyticsReport(db: Database, range: ReportRange, orderType
       COUNT(DISTINCT orderId) AS orderCount, SUM(total) AS totalPaise ${bills} GROUP BY hour`).all(...params) as AnalyticsHour[];
     const hourly = Array.from({ length: 24 }, (_, hour) => hours.find((row) => row.hour === hour) ?? { hour, orderCount: 0, totalPaise: 0 });
     const generatedAt = Date.now();
-    return { from, to, today: localDateKey(generatedAt), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    return { from, to, today: range.today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       generatedAt, orderType, totals, comparison, items, categories, daily, hourly };
   })();
 }
 
 export function registerOrderAnalytics(app: FastifyInstance) {
   app.get("/api/reports/analytics", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req, reply) => {
-    const range = reportRange(req.query);
+    const range = reportRange(req.query, dayStartHour(app.db));
     const { type: orderType } = z.object({ type: z.enum(["all", "parcel", "dine_in", "zomato"]).default("all") }).parse(req.query);
     const report = orderAnalyticsReport(app.db, range, orderType);
     reply.header("Cache-Control", "no-store");

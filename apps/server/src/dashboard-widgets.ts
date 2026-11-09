@@ -1,4 +1,4 @@
-import { localDateKey, type Database } from "@masalapos/domain";
+import { businessDateKey, type Database } from "@masalapos/domain";
 import type { AnalyticsOrderType } from "@masalapos/domain/operational-reports";
 import {
   compareRange, periodRange, widgetDef,
@@ -7,6 +7,7 @@ import {
 import { operationalReport } from "./operational-reports.js";
 import { orderAnalyticsReport } from "./order-analytics.js";
 import { reportRange, salesReport } from "./sales-reports.js";
+import { dayStartHour } from "./business-day.js";
 
 const NO_ACCESS = "You no longer have access to this widget.";
 const FAILED = "Could not load this widget";
@@ -61,14 +62,15 @@ export function computeWidgets(
   db: Database, requests: Request[], visible: (def: WidgetDef) => boolean, now: number,
   log?: (error: unknown, widget: string) => void,
 ): DashboardData {
-  const today = localDateKey(now);
+  const startHour = dayStartHour(db);
+  const today = businessDateKey(now, startHour);
   return db.transaction((): DashboardData => {
     const cache = new Map<string, Reports[keyof Reports]>();
     const report = <K extends keyof Reports>(source: K, range: DateRange, orderType: AnalyticsOrderType): Reports[K] => {
       const id = `${source}|${range.from}|${range.to}|${orderType}`;
       let found = cache.get(id);
       if (!found) {
-        const bounds = reportRange(range);
+        const bounds = reportRange(range, startHour);
         found = source === "sales" ? salesReport(db, bounds)
           : source === "analytics" ? orderAnalyticsReport(db, bounds, orderType)
           : operationalReport(db, "cancellations", bounds);

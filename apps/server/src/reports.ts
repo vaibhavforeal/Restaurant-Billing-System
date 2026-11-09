@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { localDateKey, type Database } from "@masalapos/domain";
+import { type Database } from "@masalapos/domain";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { businessBounds, businessToday, dayStartHour } from "./business-day.js";
 
 interface ModeAmount { mode: string; amountPaise: number }
 
@@ -11,30 +12,27 @@ interface ModeAmount { mode: string; amountPaise: number }
  */
 const NO_GST_BILL = "(o.type <> 'zomato' AND COALESCE(json_extract(b.receipt_json, '$.gstMode'), 'included') = 'none')";
 
-/** The server-local start and end (ms) of a `YYYY-MM-DD` business date. */
-export function dayBounds(date: string): [number, number] {
-  const start = new Date(`${date}T00:00:00`);
-  if (!Number.isFinite(start.getTime()) || localDateKey(start.getTime()) !== date) throw httpError(400, "Invalid report date");
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  return [start.getTime(), end.getTime()];
+/** The server-local start and end (ms) of a `YYYY-MM-DD` business date, which starts at the restaurant's day-start hour. */
+export function dayBounds(db: Database, date: string): [number, number] {
+  return businessBounds(date, dayStartHour(db));
 }
 
 export function registerReports(app: FastifyInstance) {
   app.get("/api/reports/day-end", { preHandler: app.requirePermission("reports.read") }, async (req) => {
-    const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(localDateKey(Date.now())) }).parse(req.query);
-    return { report: dayEndReport(app.db, date) };
+    const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(req.query);
+    return { report: dayEndReport(app.db, date ?? businessToday(app.db)) };
   });
 }
 
 /** The day-end / GST report for one business date. Shared by the report screen and day close, which saves it. */
 export function dayEndReport(db: Database, date: string) {
-  const bounds = dayBounds(date);
+  const bounds = dayBounds(db, date);
   // Gross figures are every bill issued this day (void ones too) and every payment received; voids and refunds
   // are credit notes subtracted on their own date, so a closed day never changes. One read transaction keeps
   // every section on the same snapshot.
   return db.transaction(() => {
     const sales = db.prepare(`SELECT COUNT(*) AS billCount, COALESCE(SUM(subtotal_paise),0) AS subtotalPaise,
-      COALESCE(SUM(discount_paise),0) AS discountPaise, COALESCE(SUM(charges_paise),0) AS chargesPaise, COALESCE(SUM(cgst_paise),0) AS cgstPaise,
+      COALESCE(SUM(discount_paise),0) AS discountPaise, COALESCE(SUM(offer_discount_paise),0) AS offerDiscountPaise, COALESCE(SUM(charges_paise),0) AS chargesPaise, COALESCE(SUM(cgst_paise),0) AS cgstPaise,
       COALESCE(SUM(sgst_paise),0) AS sgstPaise, COALESCE(SUM(rounding_paise),0) AS roundingPaise,
       COALESCE(SUM(total_paise),0) AS totalPaise,
       COALESCE(SUM(CASE WHEN status = 'unpaid' THEN total_paise ELSE 0 END),0) AS outstandingPaise

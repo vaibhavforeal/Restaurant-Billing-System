@@ -1,8 +1,8 @@
 // Companion to zomato-desk.js. Run on the disposable Zomato desk fixture (tools/e2e/zomato-desk-server.mts, port 4150), signed in as admin (admin / admin-password).
 // Checks the colour of a Zomato card on the desk (zomato-age-ok / warn / late) against the restaurant's amber and red minutes (defaults 15 and 25).
 // It punches in a temporary order AGE-<timestamp> through the API, then back-dates it 30 minutes through the fixture-only hook POST /__e2e/age-order
-// (no app code, no waiting). It sets amber/red through the real Marketplace, Zomato card, Settings dialog once, and through the API for the live
-// updates (zomato.changed) that must recolour the card without leaving the Tables screen. In `finally` it restores 15/25 and cancels the order,
+// (no app code, no waiting). It sets amber/red once through the real Settings → Bill settings card, and through the API for the live
+// updates (settings.changed) that must recolour the card without leaving the Tables screen. The minutes apply to every order type. In `finally` it restores 15/25 and cancels the order,
 // so no open Zomato order is left (the cancelled ID stays reserved). The result is window.__zomatoDeskAgeResult (progress in window.__zomatoDeskAgeProgress).
 // Never run this against a restaurant database.
 (async () => {
@@ -28,12 +28,12 @@
   const navItem = label => [...document.querySelectorAll('.nav-item')].find(e => e.getAttribute('aria-label') === label);
   const goto = async label => { await wait(() => navItem(label) && (!navItem(label).disabled || navItem(label).classList.contains('active')), 'nav ' + label); if (!navItem(label).disabled) navItem(label).click(); await sleep(80); };
   const button = (name, root = document) => [...root.querySelectorAll('button')].find(b => b.textContent.trim() === name);
-  const marketplaceCard = name => [...document.querySelectorAll('.marketplace-card')].find(e => e.querySelector('h3').textContent === name);
   const cardFor = id => [...document.querySelectorAll('.zomato-desk-card')].find(c => c.querySelector('.zomato-desk-id')?.textContent === '#' + id);
   const tone = id => ['ok', 'warn', 'late'].filter(t => cardFor(id)?.classList.contains('zomato-age-' + t)).join(',');
   const waitTone = (id, expected, label) => wait(() => tone(id) === expected, label + ' (card is "' + tone(id) + '", expected "' + expected + '")');
-  const settings = async () => (await call('GET', '/api/zomato/settings', ownToken)).json;
-  const patchAges = async (warnMinutes, lateMinutes) => call('PATCH', '/api/zomato/settings', ownToken, { ...(await settings()), warnMinutes, lateMinutes });
+  const allSettings = async () => (await call('GET', '/api/settings', ownToken)).json.settings;
+  const settings = async () => { const s = await allSettings(); return { warnMinutes: s.orderWarnMinutes, lateMinutes: s.orderLateMinutes }; };
+  const patchAges = async (orderWarnMinutes, orderLateMinutes) => call('PUT', '/api/settings', ownToken, { ...(await allSettings()), orderWarnMinutes, orderLateMinutes });
   const id = 'AGE-' + Date.now();
   let orderId = null;
 
@@ -57,20 +57,19 @@
     await waitTone(id, 'late', 'Aged card with the defaults');
     check(tone(id) === 'late' && cardFor(id).querySelector('small').textContent === '30 min', 'At 30 minutes the card is zomato-age-late with the default 15/25');
 
-    // ---------- Settings dialog: amber 20, red 40 turns it amber ----------
-    await goto('marketplace'); await wait(() => marketplaceCard('Zomato') && button('Settings', marketplaceCard('Zomato')), 'Zomato Settings button');
-    button('Settings', marketplaceCard('Zomato')).click();
-    const dialog = await wait(() => document.querySelector('dialog[open] .zomato-connection') && document.querySelector('dialog[open]'), 'Zomato settings dialog');
-    const ageInput = label => [...dialog.querySelectorAll('label')].find(l => l.textContent.startsWith(label))?.querySelector('input');
-    await wait(() => ageInput('Amber after (minutes)')?.value === '15' && ageInput('Red after (minutes)')?.value === '25', 'Settings dialog loaded the saved 15/25');
-    setValue(ageInput('Amber after (minutes)'), '20'); setValue(ageInput('Red after (minutes)'), '40'); await sleep(60);
-    const save = await wait(() => { const b = button('Save connection', dialog); return b && !b.disabled ? b : null; }, 'enabled Save connection');
+    // ---------- Settings → Bill settings: amber 20, red 40 turns it amber ----------
+    await goto('settings');
+    const billCard = await wait(() => document.querySelector('[data-section="bill"]'), 'Bill settings card');
+    billCard.click();
+    const form = await wait(() => document.querySelector('.bill-settings-form'), 'Bill settings form');
+    const ageInput = label => [...form.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(label))?.querySelector('input');
+    await wait(() => ageInput('Order turns amber after (minutes)')?.value === '15' && ageInput('Red after (minutes)')?.value === '25', 'Bill settings loaded the saved 15/25');
+    setValue(ageInput('Order turns amber after (minutes)'), '20'); setValue(ageInput('Red after (minutes)'), '40'); await sleep(60);
+    const save = await wait(() => { const b = button('Save', form); return b && !b.disabled ? b : null; }, 'enabled Save');
     save.click();
-    await wait(() => /Connection details saved|Verified live receiving/.test(dialog.textContent), 'settings saved message');
+    await wait(() => /Saved ✓/.test(form.textContent), 'settings saved message');
     const saved = await settings();
-    check(saved.warnMinutes === 20 && saved.lateMinutes === 40, 'Saving the Settings dialog stores amber 20 and red 40');
-    document.querySelector('dialog[open] [aria-label="Close Zomato settings"]').click();
-    await wait(() => !document.querySelector('dialog[open]'), 'settings dialog closed');
+    check(saved.warnMinutes === 20 && saved.lateMinutes === 40, 'Saving Bill settings stores amber 20 and red 40');
     await goto('tables'); await wait(() => cardFor(id), 'Zomato card');
     await waitTone(id, 'warn', 'Aged card with amber 20 and red 40');
     check(tone(id) === 'warn', 'With amber 20 and red 40 the 30-minute card is zomato-age-warn');
@@ -79,14 +78,15 @@
     const marker = document.querySelector('.tables-zomato');
     check((await patchAges(35, 50)).status < 300, 'Admin saves amber 35 and red 50 from another request');
     await waitTone(id, 'ok', 'Card after amber 35 and red 50');
-    check(tone(id) === 'ok' && document.querySelector('.tables-zomato') === marker, 'The card turns zomato-age-ok live (zomato.changed) without leaving Tables or reloading');
+    check(tone(id) === 'ok' && document.querySelector('.tables-zomato') === marker, 'The card turns zomato-age-ok live (settings.changed) without leaving Tables or reloading');
     check((await patchAges(5, 10)).status < 300, 'Admin saves amber 5 and red 10');
     await waitTone(id, 'late', 'Card after amber 5 and red 10');
     check(tone(id) === 'late', 'With amber 5 and red 10 the card turns zomato-age-late live');
 
     // ---------- The server refuses red at or before amber ----------
     const equal = await patchAges(30, 30), reversed = await patchAges(30, 20);
-    check(equal.status === 400 && equal.json.error === 'Red must be later than amber' && reversed.status === 400 && reversed.json.error === 'Red must be later than amber', 'The server refuses red equal to or earlier than amber with 400 "Red must be later than amber"');
+    const refusal = r => r.json?.issues?.[0]?.message ?? r.json?.error;
+    check(equal.status === 400 && refusal(equal) === 'Red must be later than amber' && reversed.status === 400 && refusal(reversed) === 'Red must be later than amber', 'The server refuses red equal to or earlier than amber with 400 "Red must be later than amber"');
     const unchanged = await settings();
     check(unchanged.warnMinutes === 5 && unchanged.lateMinutes === 10, 'The refused saves leave the stored minutes unchanged');
 
