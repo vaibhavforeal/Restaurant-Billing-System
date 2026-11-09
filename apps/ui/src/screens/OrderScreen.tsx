@@ -104,7 +104,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const cartItems = useRef<HTMLDivElement>(null);
   const menuSearch = useRef<HTMLInputElement>(null);
   const menuResults = useRef<HTMLDivElement>(null);
-  const [removed, setRemoved] = useState<DraftItem | null>(null);
   const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string; savedItemId?: string } | null>(null);
   /** The combo whose slots staff are choosing before it goes in the cart. */
   const [addonGroupsByProduct, setAddonGroupsByProduct] = useState<Record<string, AddonPickerGroup[]>>({});
@@ -403,8 +402,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current || billingLock.current) return;
     if (!queuedRefs.has(clientRef)) {
       const current = readDraft();
-      const item = current.find((row) => row.clientRef === clientRef);
-      if (saveDraft(current.filter((row) => row.clientRef !== clientRef))) setRemoved(item ?? null);
+      saveDraft(current.filter((row) => row.clientRef !== clientRef));
     }
   }
 
@@ -889,7 +887,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           <div>{suggestions.map((dish) => <button key={dish.productId} disabled={locked} aria-label={`Also add ${dish.name}, ₹${paiseToRupees(dish.pricePaise)}`} onClick={() => addToDraft(dish.productId, dish.variantId, dish.name, dish.pricePaise)}><Icon name="plus" size={14} />{dish.name}<span className="pos-money">₹{paiseToRupees(dish.pricePaise)}</span></button>)}</div>
         </div>}
         {message && <p className="captain-message" role="status"><Icon name="check" size={16} />{message}</p>}
-        {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total">{useOrderControls && <p className="order-total-count">Total number of items <strong>{itemCount}</strong></p>}<div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
         {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">
           {(useOrderControls || (!isQuick && draft.length > 0)) && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked || !draft.length}>{shortcut("save_items", useOrderControls ? "Save order" : "Punch")}</button>}
