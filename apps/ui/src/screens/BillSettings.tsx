@@ -11,6 +11,7 @@ import { settingsForSave } from "../settings-save";
 import { SaveStatus, useSettingsForm } from "../use-settings-form";
 import type { SettingsData } from "../types";
 import "../bill-settings.css";
+import { validateAgeThresholds } from "../zomato-desk";
 
 const LINES_HINT = "Up to 3 lines, 48 characters each";
 const CHARGES_HELP = "Service charge is added to dine-in bills only; staff can remove it on any bill. Packaging is added to takeaway and delivery bills, plus each item's own packaging amount when per-item packaging is on. Both are taxed at your default GST rate and follow your GST setting. Zomato orders get neither.";
@@ -92,14 +93,21 @@ function useFeedbackQr(active: boolean) {
   return { shown: active && saved !== null, value, setValue, save, error };
 }
 
+const PAYMENT_OPTIONS = [{ mode: "cash", label: "Cash" }, { mode: "card", label: "Card" }, { mode: "upi", label: "UPI" }] as const;
+/** The latest hour the business day may start; the server allows the same. */
+const DAY_START_HOURS = [0, 1, 2, 3, 4, 5, 6] as const;
+
 const GST_MODE_LABELS: Record<GstMode, string> = { included: "Prices include GST", exclusive: "Prices exclude GST, added on the bill", none: "No GST charged" };
 
 /** Settings → Bill settings: tax, what the printed bill shows, and order handling, beside a live preview of the bill. */
 export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void }) {
   const { form, update, save, busy, status, message } = useSettingsForm("Could not save the bill settings");
   const preview = useBillPreview(form);
-  const feedback = useFeedbackQr(useModules().isActive("crm"));
+  const { isActive } = useModules();
+  const feedback = useFeedbackQr(isActive("crm"));
+  const qrActive = isActive("qrOrdering");
   const fy = financialYear(Date.now()).short;
+  const ageError = form ? validateAgeThresholds(form.orderWarnMinutes, form.orderLateMinutes) : "";
   if (!form) return <div className="panel">{status === "error" ? <p role="alert">{message}</p> : <p role="status">Loading settings…</p>}</div>;
   return <div className="panel bill-settings">
     <div className="settings-form bill-settings-form">
@@ -236,9 +244,57 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
             onChange={(e) => update({ holdOrdersEnabled: e.target.checked })} />
           <span>Hold orders <InfoTip id="hold-orders-help">Staff can hold an order to finish later on any device, and hold dishes back from the kitchen until they fire them.</InfoTip></span>
         </label>
+        <label style={check}>
+          <input type="checkbox" checked={form.kotPrintWithKds} disabled={busy} aria-describedby="kot-kds-help"
+            onChange={(e) => update({ kotPrintWithKds: e.target.checked })} />
+          <span>Print kitchen slips while the Kitchen Display is on <InfoTip id="kot-kds-help">Turn this off when the kitchen works from the screens alone. KOT, change and cancel slips then skip the printer while the Kitchen Display add-on is on; they print as usual when it is off.</InfoTip></span>
+        </label>
+        {qrActive && <label style={check}>
+          <input type="checkbox" checked={form.qrAutoAccept} disabled={busy} aria-describedby="qr-auto-help"
+            onChange={(e) => update({ qrAutoAccept: e.target.checked })} />
+          <span>Accept QR orders automatically <InfoTip id="qr-auto-help">A guest's QR order goes straight onto the table's open bill (or a new one) and to the kitchen, recorded under the admin who switches this on. When the table has more than one open bill, or something has changed, it waits for staff as usual.</InfoTip></span>
+        </label>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <label style={field}>
+            <span>Order turns amber after (minutes) <InfoTip id="order-age-help">How long after an order is opened its card on the Orders board turns amber, then red. Applies to every order type.</InfoTip></span>
+            <input type="number" inputMode="numeric" min={1} max={240} step={1} value={form.orderWarnMinutes} disabled={busy} aria-describedby="order-age-help"
+              onChange={(e) => update({ orderWarnMinutes: Number(e.target.value) })} />
+          </label>
+          <label style={field}>
+            Red after (minutes)
+            <input type="number" inputMode="numeric" min={1} max={240} step={1} value={form.orderLateMinutes} disabled={busy} aria-describedby="order-age-help"
+              onChange={(e) => update({ orderLateMinutes: Number(e.target.value) })} />
+          </label>
+        </div>
+        {ageError && <small role="alert">{ageError}</small>}
       </fieldset>
 
-      <button className="primary" onClick={() => { save(); void feedback.save(); }} style={{ fontWeight: 700 }} disabled={busy}>Save</button>
+      <fieldset className="bill-settings-group">
+        <legend>Payments</legend>
+        <p className="muted" style={{ margin: 0 }}>The payment methods the counter takes. Bills offer only these.</p>
+        {PAYMENT_OPTIONS.map(({ mode, label }) => {
+          const on = form.paymentModes.includes(mode);
+          const last = on && form.paymentModes.length === 1;
+          return <label key={mode} style={check}>
+            <input type="checkbox" checked={on} disabled={busy || last} title={last ? "Keep at least one payment method on" : undefined}
+              onChange={(e) => update({ paymentModes: PAYMENT_OPTIONS.map((o) => o.mode).filter((m) => m === mode ? e.target.checked : form.paymentModes.includes(m)) })} />
+            <span>{label}</span>
+          </label>;
+        })}
+      </fieldset>
+
+      <fieldset className="bill-settings-group">
+        <legend>Business day</legend>
+        <label style={field}>
+          <span>The day starts at <InfoTip id="day-start-help">Open past midnight? Start the day later so the whole night counts as one day in the day-end report, day close, the reports and KOT numbers. GST invoices and returns keep the calendar date.</InfoTip></span>
+          <select value={form.dayStartHour} disabled={busy} aria-describedby="day-start-help"
+            onChange={(e) => update({ dayStartHour: Number(e.target.value) })}>
+            {DAY_START_HOURS.map((hour) => <option key={hour} value={hour}>{hour === 0 ? "Midnight (12 a.m.)" : `${hour} a.m.`}</option>)}
+          </select>
+        </label>
+      </fieldset>
+
+      <button className="primary" onClick={() => { save(); void feedback.save(); }} style={{ fontWeight: 700 }} disabled={busy || !!ageError}>Save</button>
       <SaveStatus status={status} message={message} />
       {preview.error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{preview.error}</p>}
     </div>

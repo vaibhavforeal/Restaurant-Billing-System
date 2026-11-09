@@ -15,7 +15,8 @@ import { useIntegrations } from "../integrations";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
-import { preferredPayment, RECEIPT_PRINTER_KEY, rememberPayment } from "../device-preferences";
+import { allowedPayment, preferredPayment, RECEIPT_PRINTER_KEY, rememberPayment } from "../device-preferences";
+import { useOrderSettings } from "../order-settings";
 import { billPaymentLabel, billTaxRates, gstNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
@@ -95,7 +96,17 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const billRevision = useRef(0);
   const [job, setJob] = useState<PrintJobInfo | null>(null);
   const [creditKind, setCreditKind] = useState<"void" | "refund" | null>(null);
-  const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(preferredPayment);
+  const { paymentModes: takenModes } = useOrderSettings();
+  const taken = useRef(takenModes);
+  taken.current = takenModes;
+  const modeOptions = paymentModes.filter((option) => takenModes.includes(option.value));
+  const startMode = () => allowedPayment(preferredPayment(), taken.current);
+  const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(startMode);
+  // A method switched off in Settings while this bill is open moves to one the counter still takes.
+  useEffect(() => {
+    setQuickMode((mode) => allowedPayment(mode, takenModes));
+    setPayments((rows) => rows.map((row) => takenModes.includes(row.mode) || takenModes.length === 0 ? row : { ...row, mode: takenModes[0]! }));
+  }, [takenModes]);
   const [cashReceived, setCashReceived] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const dialogTitle = useRef<HTMLHeadingElement>(null);
@@ -129,7 +140,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   function acceptBill(value: Bill | null) {
     billRevision.current++;
     setBill(value);
-    if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: preferredPayment(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
+    if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: startMode(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
   }
   useEffect(() => {
     let active = true;
@@ -400,7 +411,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             <BillItemLines items={order.items} refundedQty={{}} showRefunded={false} />
             {quick ? <fieldset disabled={blocked} className="quick-payment"><legend>Payment received</legend>
               <div className="billing-payment-fields">
-                <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={paymentModes} onChange={(mode) => { setQuickMode(mode); rememberPayment(mode); }} /></div>
+                <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={modeOptions} onChange={(mode) => { setQuickMode(mode); rememberPayment(mode); }} /></div>
                 {quickMode === "cash" && <label>Cash received (₹)<input type="number" min={paiseToRupees(preview.totalPaise)} step="0.01" placeholder={paiseToRupees(preview.totalPaise)} value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>}
               </div>
               {quickMode === "cash" && <div className="cash-chips" aria-label="Cash quick amounts">{[preview.totalPaise, ...[50000, 100000, 200000].filter((amount) => amount > preview.totalPaise)].map((amount, index) => <button key={amount} onClick={() => setCashReceived(paiseToRupees(amount))}>{index === 0 ? "Exact" : money(amount)}</button>)}</div>}
@@ -416,7 +427,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             {bill.status === "unpaid" && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
               {canShowQr && <><button onClick={() => setShowQr(true)}>Show UPI QR</button><p className="billing-note">Customers can scan from this screen or the printed bill. Verify payment in your UPI app before settling.</p></>}
               {payments.map((p, index) => <div key={p.id} className="billing-payment-row">
-                <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={paymentModes} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); rememberPayment(mode); }} /></div>
+                <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={modeOptions} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); rememberPayment(mode); }} /></div>
                 <label>Amount {index + 1} (₹) <input type="number" min="0.01" step="0.01" value={p.amount} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, amount: e.target.value } : r))} /></label>
                 <label>Reference {index + 1} <input maxLength={200} value={p.refNote} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, refNote: e.target.value } : r))} /></label>
                 <button className="billing-remove-payment" aria-label={`Remove payment ${index + 1}`} onClick={() => setPayments((rows) => rows.filter((r) => r.id !== p.id))}>Remove</button>

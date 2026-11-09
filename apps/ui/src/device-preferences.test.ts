@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { PAYMENT_LAST_KEY, PAYMENT_START_KEY, readPaymentStart, rememberPayment, savePaymentStart, startingPayment } from "./device-preferences";
+import { PAYMENT_LAST_KEY, PAYMENT_START_KEY, allowedPayment, readPaymentStart, rememberPayment, savePaymentStart, startingPayment } from "./device-preferences";
 
 describe("starting payment method", () => {
   it("uses the last method used when the device follows the last one", () => {
@@ -45,5 +45,18 @@ describe("payment preferences in storage", () => {
     rememberPayment("card");
     expect(store.get(PAYMENT_LAST_KEY)).toBe("card");
     expect(PAYMENT_LAST_KEY).toBe("masalapos.payment-mode");
+  });
+});
+
+describe("payment methods the counter takes", () => {
+  it("keeps the preferred method while it is on", () => {
+    expect(allowedPayment("upi", ["cash", "card", "upi"])).toBe("upi");
+  });
+  it("falls back to the first method still on", () => {
+    expect(allowedPayment("cash", ["card", "upi"])).toBe("card");
+    expect(allowedPayment("card", ["upi"])).toBe("upi");
+  });
+  it("keeps the preferred method when the list has not loaded", () => {
+    expect(allowedPayment("card", [])).toBe("card");
   });
 });

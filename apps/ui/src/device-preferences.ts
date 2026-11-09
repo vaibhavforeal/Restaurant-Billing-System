@@ -29,6 +29,11 @@ export function preferredPayment(): PaymentMode {
   return startingPayment(readPaymentStart(), readPreference(PAYMENT_LAST_KEY, "cash"));
 }
 
+/** The preferred method if the counter takes it (Settings → Bill settings), else the first one it does. */
+export function allowedPayment(preferred: PaymentMode, allowed: readonly PaymentMode[]): PaymentMode {
+  return allowed.length === 0 || allowed.includes(preferred) ? preferred : allowed[0]!;
+}
+
 export function rememberPayment(mode: PaymentMode) {
   savePreference(PAYMENT_LAST_KEY, mode);
 }
