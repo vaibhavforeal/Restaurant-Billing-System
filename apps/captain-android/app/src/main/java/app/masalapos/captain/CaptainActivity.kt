@@ -34,6 +34,12 @@ class CaptainActivity : Activity() {
     private lateinit var problemMessage: TextView
     private lateinit var updater: AppUpdater
     private var loadFailed = false
+    /** From a pairing code scanned just now: joins this tablet as a device on the first page load. Never stored. */
+    private var joinCode: String? = null
+
+    companion object {
+        const val EXTRA_JOIN_CODE = "join_code"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +50,7 @@ class CaptainActivity : Activity() {
             return
         }
         server = paired
+        if (savedInstanceState == null) joinCode = Pairing.joinCode(intent.getStringExtra(EXTRA_JOIN_CODE))
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_captain)
         fitSystemBars(findViewById(R.id.root))
@@ -95,7 +102,7 @@ class CaptainActivity : Activity() {
     private fun load() {
         problem.visibility = View.GONE
         web.visibility = View.VISIBLE
-        web.loadUrl(server.captainUrl)
+        web.loadUrl(server.captainUrl(joinCode))
     }
 
     private fun showProblem(message: String) {
@@ -147,7 +154,10 @@ class CaptainActivity : Activity() {
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
-            if (!loadFailed) problem.visibility = View.GONE
+            if (loadFailed) return
+            problem.visibility = View.GONE
+            // The page has the join code now. A later reload opens Captain without it; Retry after a failed load still carries it.
+            joinCode = null
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

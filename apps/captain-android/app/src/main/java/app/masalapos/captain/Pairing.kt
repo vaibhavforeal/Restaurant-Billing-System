@@ -4,8 +4,11 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.net.URLDecoder
 
-/** A POS address to try and, for HTTPS from a pairing code, the restaurant CA fingerprint to pin. */
-data class PairingRequest(val origin: String, val caFingerprint: String?) {
+/**
+ * A POS address to try and, for HTTPS from a pairing code, the restaurant CA fingerprint to pin.
+ * [joinCode] is the code that makes this tablet one of the restaurant's devices, when the pairing code carries one.
+ */
+data class PairingRequest(val origin: String, val caFingerprint: String?, val joinCode: String? = null) {
     val secure get() = origin.startsWith("https://")
 }
 
@@ -27,7 +30,7 @@ object Pairing {
             val origin = origin(query["server"] ?: throw PairingException("This pairing code has no POS address"))
             val fingerprint = query["ca"]?.let(::fingerprint)
             if (origin.startsWith("https://") && fingerprint == null) throw PairingException("This pairing code is missing the restaurant certificate")
-            return listOf(PairingRequest(origin, fingerprint))
+            return listOf(PairingRequest(origin, fingerprint, joinCode(query["code"])))
         }
         if (text.contains("://")) return listOf(PairingRequest(origin(text), null))
         val address = uri("http://$text")
@@ -53,6 +56,18 @@ object Pairing {
     }
 
     fun displayFingerprint(hex: String) = hex.chunked(2).joinToString(":")
+
+    /**
+     * A join code as the POS makes them: six characters, upper-cased, never 0, O, 1, I or L.
+     * Anything else is null, so a pairing code with a damaged join code still pairs.
+     */
+    fun joinCode(value: String?): String? {
+        val code = value?.trim()?.uppercase() ?: return null
+        return code.takeIf { it.length == JOIN_CODE_LENGTH && it.all { c -> c in JOIN_CODE_ALPHABET } }
+    }
+
+    private const val JOIN_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    private const val JOIN_CODE_LENGTH = 6
 
     private fun uri(text: String) = try { URI(text) } catch (_: URISyntaxException) { throw PairingException("That is not a valid POS address") }
 

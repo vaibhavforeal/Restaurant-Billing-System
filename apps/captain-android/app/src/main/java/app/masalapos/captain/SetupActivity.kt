@@ -24,6 +24,8 @@ class SetupActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var scan: Button
     private lateinit var connect: Button
+    /** The join code from the pairing code being connected to, if it had one. */
+    private var joinCode: String? = null
 
     private sealed interface Outcome {
         data class Ready(val server: PairedServer) : Outcome
@@ -96,6 +98,7 @@ class SetupActivity : Activity() {
 
     private fun connect(input: String) {
         val candidates = try { Pairing.parse(input) } catch (e: PairingException) { return showStatus(e.message) }
+        joinCode = candidates.firstNotNullOfOrNull { it.joinCode }
         setBusy(true)
         showStatus(getString(R.string.connecting))
         worker.execute {
@@ -144,7 +147,10 @@ class SetupActivity : Activity() {
 
     private fun pair(server: PairedServer) {
         ServerStore(this).save(server)
-        startActivity(Intent(this, CaptainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        // The join code goes to the first page load only; it is never stored.
+        startActivity(Intent(this, CaptainActivity::class.java)
+            .putExtra(CaptainActivity.EXTRA_JOIN_CODE, joinCode)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         finish()
     }
 

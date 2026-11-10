@@ -5,7 +5,8 @@ import android.util.Base64
 
 /** The paired POS. Only the public CA certificate is stored, never a key or PIN. */
 data class PairedServer(val origin: String, val trust: RestaurantTrust?) {
-    val captainUrl get() = "$origin/captain/"
+    /** Where Captain opens. With a join code the page joins this tablet as a device before the sign-in. */
+    fun captainUrl(joinCode: String?) = if (joinCode == null) "$origin/captain/" else "$origin/captain/#join=$joinCode"
     val host: String get() = java.net.URI(origin).host
 }
 

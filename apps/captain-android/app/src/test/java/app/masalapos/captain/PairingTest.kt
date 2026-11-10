@@ -16,6 +16,30 @@ class PairingTest {
     }
 
     @Test
+    fun readsTheJoinCodeFromAPairingCode() {
+        val request = Pairing.parse("masalapos-captain://pair?server=https%3A%2F%2F192.168.1.50%3A4443&ca=$fingerprint&code=k7m2qp").single()
+        assertEquals("K7M2QP", request.joinCode)
+        assertEquals("https://192.168.1.50:4443", request.origin)
+        assertEquals(fingerprint, request.caFingerprint)
+    }
+
+    @Test
+    fun pairsWithoutAJoinCode() {
+        assertNull(Pairing.parse("masalapos-captain://pair?server=http%3A%2F%2F192.168.1.50%3A4100").single().joinCode)
+        // A code that is not a well-formed join code is left out, and the tablet pairs as before.
+        assertNull(Pairing.parse("masalapos-captain://pair?server=http%3A%2F%2F192.168.1.50%3A4100&code=O0O0O0").single().joinCode)
+        assertNull(Pairing.parse("masalapos-captain://pair?server=http%3A%2F%2F192.168.1.50%3A4100&code=TOOLONG1").single().joinCode)
+        assertNull(Pairing.parse("192.168.1.50").first().joinCode)
+    }
+
+    @Test
+    fun opensCaptainWithTheCode() {
+        val server = PairedServer("http://192.168.1.50:4100", null)
+        assertEquals("http://192.168.1.50:4100/captain/", server.captainUrl(null))
+        assertEquals("http://192.168.1.50:4100/captain/#join=K7M2QP", server.captainUrl("K7M2QP"))
+    }
+
+    @Test
     fun acceptsUnencryptedPairingCodesWithoutACertificate() {
         val request = Pairing.parse("masalapos-captain://pair?server=http%3A%2F%2F192.168.1.50%3A4100").single()
         assertEquals("http://192.168.1.50:4100", request.origin)
