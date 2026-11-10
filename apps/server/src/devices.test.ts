@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { Devices, deviceHash } from "./devices.js";
-import { ADMIN_LOGIN, SETUP, auth, commercialApp, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
+import { ADMIN_LOGIN, SETUP, auth, commercialApp, createUser, freshApp, joinDevice, setupAdmin, testLogin } from "./test-helpers.js";
 
 const A = "a".repeat(64), B = "b".repeat(64), C = "c".repeat(64);
 
@@ -249,7 +249,7 @@ describe("devices on the server", () => {
 
   describe("in a licensed build with no main counter", () => {
     const D = "d".repeat(64), C = "c".repeat(64);
-    /** Basic plan (2 devices) whose one device, "Counter", is not marked main: what a database from before the main counter looks like. */
+    /** Basic plan (2 devices) whose one device, "Main counter", is not marked main: what a database from before the main counter looks like. */
     const licensed = async () => {
       const f = await commercialApp("basic"); apps.push(f.app);
       f.app.db.prepare("UPDATE devices SET is_main = 0").run();
@@ -269,14 +269,12 @@ describe("devices on the server", () => {
 
     it("signing in on the main PC adds no device once the plan's devices are all in use", async () => {
       const { app, headers } = await licensed();
-      const second = await signIn(app, ADMIN_LOGIN, B, "192.168.1.20");
-      const registered = await app.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Kitchen" }, headers: { ...auth(second.json().token), ...withDevice(B) } });
-      expect(registered.statusCode).toBe(200);
+      await joinDevice(app, headers, B, { kind: "kitchen", name: "Kitchen" });
       expect((await signIn(app, ADMIN_LOGIN, C)).statusCode).toBe(200);
-      expect(app.devices.active().map((d) => [d.name, d.isMain])).toEqual([["Counter", false], ["Kitchen", false]]);
+      expect(app.devices.active().map((d) => [d.name, d.isMain])).toEqual([["Main counter", false], ["Kitchen", false]]);
       // A device that already holds a slot can still become the main counter.
       expect((await signIn(app, ADMIN_LOGIN, D)).statusCode).toBe(200);
-      expect(app.devices.active().map((d) => [d.name, d.isMain])).toEqual([["Counter", true], ["Kitchen", false]]);
+      expect(app.devices.active().map((d) => [d.name, d.isMain])).toEqual([["Main counter", true], ["Kitchen", false]]);
       expect((await app.inject({ url: "/api/products", headers })).statusCode).toBe(200);
     });
   });

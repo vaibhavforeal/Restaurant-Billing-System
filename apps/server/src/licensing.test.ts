@@ -37,7 +37,13 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
     issuedAt: now - 1000, expiresAt: now + 60_000, graceUntil: now + 120_000 };
   const clean = LicenseClaims.parse(claims);
   const activate = (c: LicenseClaims = clean) => app.inject({ method: "PUT", url: "/api/license", payload: { license: signed(c) }, headers });
-  const register = (h = headers, name = "Main counter") => app.inject({ method: "POST", url: "/api/license/devices", payload: { name }, headers: h });
+  /** Joins the browser behind `h` as a device, by a code the admin makes. The setup browser is the main counter already. */
+  const register = async (h = headers, name = "Main counter") => {
+    if (app.devices.findByCredential(h["x-masalapos-device"])) return { statusCode: 200, json: () => ({}) as Record<string, unknown>, body: "" };
+    const made = await app.inject({ method: "POST", url: "/api/devices/join-codes", payload: { kind: "counter", name }, headers });
+    if (made.statusCode !== 201) return made;
+    return app.inject({ method: "POST", url: "/api/devices/join", payload: { code: made.json().code }, headers: { "x-masalapos-device": h["x-masalapos-device"] } });
+  };
   const login = async (credential: string, pin = "1234") => {
     const res = await app.inject({ method: "POST", url: "/api/login", payload: pin === SETUP.pin ? ADMIN_LOGIN : testLogin({ name: "Cashier", pin }), headers: { "x-masalapos-device": credential } });
     expect(res.statusCode).toBe(200);
@@ -47,6 +53,16 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
 }
 
 describe("commercial licensing", () => {
+  it("has no self-registration route", async () => {
+    const f = await fixture(); await f.activate();
+    expect((await f.app.inject({ method: "POST", url: "/api/license/devices", headers: f.headers, payload: { name: "Mine" } })).statusCode).toBe(404);
+  });
+
+  it("tells an unjoined browser to get a join code", async () => {
+    const f = await fixture(); await f.activate();
+    expect(f.app.licensing.status("b".repeat(64))).toMatchObject({ canOperate: false, deviceRegistered: false, message: "This device has not joined. Ask an administrator for a join code." });
+  });
+
   it("previews signed changes without writing license state, devices or history", async () => {
     const f = await fixture();
     const state = f.app.db.prepare("SELECT * FROM license_state").get();
@@ -144,7 +160,7 @@ describe("commercial licensing", () => {
     expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["license_activated"]);
     expect(f.app.devices.events().events.map((e) => e.kind)).toEqual(["joined"]);
     expect(f.app.devices.events().events[0]!.actorName).toBe(SETUP.adminName);
-    for (let i = 0; i < 25; i++) await f.register(f.headers, `Counter ${i}`);
+    for (let i = 0; i < 25; i++) { const main = f.app.devices.main()!; f.app.licensing.rename(main.id, `Counter ${i}`, main.version, SETUP.adminName); }
     const first = f.app.devices.events();
     expect(first.events).toHaveLength(20);
     const second = f.app.devices.events(first.nextBefore!);

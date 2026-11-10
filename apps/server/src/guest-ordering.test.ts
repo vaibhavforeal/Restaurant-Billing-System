@@ -47,8 +47,6 @@ async function fixture() {
     return response.json();
   }
   await activate("pro", 1);
-  const registered = await api("POST", "/api/license/devices", { name: "Main counter" });
-  expect(registered.statusCode, registered.body).toBe(200);
   const categoryResponse = await api("POST", "/api/categories", { name: "Meals" });
   expect(categoryResponse.statusCode, categoryResponse.body).toBe(201);
   const category = categoryResponse.json().category as { id: string; name: string };

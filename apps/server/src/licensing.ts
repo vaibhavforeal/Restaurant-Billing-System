@@ -133,7 +133,7 @@ export class Licensing {
       canOperate: state !== "expired" && deviceRegistered,
       message: state === "expired" ? "Your offline license has expired. Renew it to resume billing."
         : currentDevice && !deviceRegistered ? "This browser exceeds your plan's device limit. An administrator can remove an unused device or upgrade the plan."
-        : !deviceRegistered ? "An administrator must register this browser before it can be used for billing."
+        : !deviceRegistered ? "This device has not joined. Ask an administrator for a join code."
         : state === "grace" ? "License renewal is due. Billing remains available until the grace period ends."
         : "Your plan is active." };
   }
@@ -173,21 +173,6 @@ export class Licensing {
     return this.activeDevices().map((d, index) => ({ id: d.id, name: d.name, createdAt: d.createdAt,
       lastSeenAt: d.lastSeenAt, version: d.version,
       current: d.credentialHash === hash, allowed: status.maxDevices !== null && index < status.maxDevices }));
-  }
-  register(credential: unknown, name: string, actorName = "Administrator") {
-    const hash = deviceHash(credential);
-    if (!hash) throw httpError(400, "This browser has no valid device credential");
-    this.app.db.transaction(() => {
-      const status = this.status(credential);
-      if (status.state !== "active" && status.state !== "grace") throw httpError(403, "An active license is required to register devices");
-      const old = this.activeDevices().find((d) => d.credentialHash === hash);
-      if (old) {
-        if (old.name !== name) this.rename(old.id, name, old.version, actorName);
-        return;
-      }
-      if (this.activeDevices().length >= status.maxDevices!) throw httpError(409, "Device limit reached. Remove an old device or upgrade your plan.");
-      this.app.devices.add({ credentialHash: hash, name, kind: "counter" }, actorName);
-    })();
   }
   rename(id: string, name: string, version: number, actorName = "Administrator") {
     this.app.devices.rename(id, name, version, actorName);
@@ -375,11 +360,6 @@ export function registerLicensing(app: FastifyInstance) {
   });
   app.get("/api/license/devices", { preHandler: manage }, async (req, reply) => {
     reply.header("Cache-Control", "no-store"); return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
-  });
-  app.post("/api/license/devices", { preHandler: manage }, async (req) => {
-    const { name } = z.object({ name: deviceName }).parse(req.body);
-    app.licensing.register(req.headers["x-masalapos-device"], name, req.user.name); licenseChanged();
-    return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
   });
   app.patch("/api/license/devices/:id", { preHandler: manage }, async (req) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);

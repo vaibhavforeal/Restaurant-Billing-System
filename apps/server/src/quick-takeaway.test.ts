@@ -37,7 +37,6 @@ async function fixture(gstMode: GstMode = "included") {
   const message = `ff1.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
   const activated = await api("PUT", "/api/license", { license: `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}` });
   expect(activated.statusCode, activated.body).toBe(200);
-  expect((await api("POST", "/api/license/devices", { name: "Main counter" })).statusCode).toBe(200);
   expect((await api("PUT", "/api/settings", { restaurantName: SETUP.restaurantName, gstMode })).statusCode).toBe(200);
   const category = await api("POST", "/api/categories", { name: "Takeaway" });
   const stationId = (db.prepare("SELECT id FROM kot_stations LIMIT 1").get() as { id: string }).id;

@@ -41,8 +41,6 @@ async function fixture() {
     expect(response.statusCode, response.body).toBe(200);
   }
   await activate("pro", 1);
-  const registered = await api("POST", "/api/license/devices", { name: "Main counter" });
-  expect(registered.statusCode, registered.body).toBe(200);
   async function table(name = "T1") {
     const response = await api("POST", "/api/tables", { name, area: "Patio" });
     expect(response.statusCode, response.body).toBe(201);

@@ -112,7 +112,8 @@ export function enableIntegration(app: FastifyInstance, id: IntegrationId): void
 }
 
 /**
- * A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device).
+ * A commercial installation activated on `plan`. The browser that set it up is its one device, the main counter ("Main counter");
+ * requests must send `headers` (token + device).
  * `overrides` are the MasalaPOS owner's module choices signed into the licence.
  */
 export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {}) {
@@ -130,7 +131,5 @@ export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {})
   const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
   const activated = await app.inject({ method: "PUT", url: "/api/license", payload: { license }, headers });
   if (activated.statusCode !== 200) throw new Error(`commercialApp activation failed: ${activated.body}`);
-  const registered = await app.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Counter" }, headers });
-  if (registered.statusCode !== 200) throw new Error(`commercialApp device registration failed: ${registered.body}`);
   return { app, headers };
 }
