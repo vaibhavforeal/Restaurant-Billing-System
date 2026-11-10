@@ -41,6 +41,7 @@ import { CurrentUserProvider, userCan } from "./permissions";
 import { connectWs } from "./ws";
 import { isUnreachable, readSignedIn, saveSignedIn } from "./offline-cache";
 import { BusinessDaySync } from "./order-settings";
+import { DeviceSettingsSync } from "./device-settings";
 
 type State =
   | { kind: "loading" }
@@ -189,6 +190,7 @@ function StaffApp() {
           {/* Sibling keys must differ; each still starts afresh when another staff member signs in. */}
           <ConnectionStatus key={`connection-${user.id}`} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
           <BusinessDaySync key={`day-${user.id}`} />
+          <DeviceSettingsSync key={`device-${user.id}`} />
           <QrNotifications key={`qr-${user.id}`} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}

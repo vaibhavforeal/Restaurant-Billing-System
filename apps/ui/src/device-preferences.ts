@@ -1,12 +1,11 @@
+import type { PaymentStart } from "@masalapos/domain/devices";
 import { readPreference, savePreference } from "./pos-shortcuts";
 
 export type PaymentMode = "cash" | "card" | "upi";
-/** "last" starts each bill on the method used last on this device; a method always starts on that one. */
-export type PaymentStart = PaymentMode | "last";
+/** "last" starts each bill on the method used last on this device; a method always starts on that one. Set per device on the main PC. */
+export type { PaymentStart };
 
 export const PAYMENT_LAST_KEY = "masalapos.payment-mode";
-export const PAYMENT_START_KEY = "masalapos.payment-start";
-export const RECEIPT_PRINTER_KEY = "masalapos.receipt-printer";
 
 const isMode = (value: string): value is PaymentMode => value === "cash" || value === "card" || value === "upi";
 
@@ -15,18 +14,9 @@ export function startingPayment(start: PaymentStart, lastUsed: string): PaymentM
   return isMode(lastUsed) ? lastUsed : "cash";
 }
 
-export function readPaymentStart(): PaymentStart {
-  const value = readPreference(PAYMENT_START_KEY, "last");
-  return isMode(value) ? value : "last";
-}
-
-export function savePaymentStart(start: PaymentStart) {
-  savePreference(PAYMENT_START_KEY, start);
-}
-
-/** The payment method a new bill opens on at this counter. */
-export function preferredPayment(): PaymentMode {
-  return startingPayment(readPaymentStart(), readPreference(PAYMENT_LAST_KEY, "cash"));
+/** The payment method a new bill opens on: the device's setting, which may be "the one used last in this browser". */
+export function preferredPayment(start: PaymentStart): PaymentMode {
+  return startingPayment(start, readPreference(PAYMENT_LAST_KEY, "cash"));
 }
 
 /** The preferred method if the counter takes it (Settings → Bill settings), else the first one it does. */

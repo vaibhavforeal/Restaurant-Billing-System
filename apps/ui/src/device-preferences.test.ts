@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { PAYMENT_LAST_KEY, PAYMENT_START_KEY, allowedPayment, readPaymentStart, rememberPayment, savePaymentStart, startingPayment } from "./device-preferences";
+import { PAYMENT_LAST_KEY, allowedPayment, preferredPayment, rememberPayment, startingPayment } from "./device-preferences";
 
 describe("starting payment method", () => {
   it("uses the last method used when the device follows the last one", () => {
@@ -29,16 +29,12 @@ describe("payment preferences in storage", () => {
     } });
   });
 
-  it("follows the last method by default and keeps the device's choice", () => {
-    expect(readPaymentStart()).toBe("last");
-    savePaymentStart("upi");
-    expect(store.get(PAYMENT_START_KEY)).toBe("upi");
-    expect(readPaymentStart()).toBe("upi");
-  });
-
-  it("treats an unknown saved choice as following the last method", () => {
-    store.set(PAYMENT_START_KEY, "wallet");
-    expect(readPaymentStart()).toBe("last");
+  it("starts on the device's method, or the one used last", () => {
+    store.set(PAYMENT_LAST_KEY, "card");
+    expect(preferredPayment("last")).toBe("card");
+    expect(preferredPayment("upi")).toBe("upi");
+    store.delete(PAYMENT_LAST_KEY);
+    expect(preferredPayment("last")).toBe("cash");
   });
 
   it("remembers the method used on a bill under the existing key", () => {

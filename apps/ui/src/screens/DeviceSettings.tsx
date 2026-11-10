@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import type { DeviceSettings as SavedDeviceSettings, PaymentStart } from "@masalapos/domain/devices";
 import { apiFetch } from "../api";
+import { useDeviceSettings } from "../device-settings";
 import { InfoTip } from "../InfoTip";
 import { useModules } from "../modules";
-import { readPreference, savePreference } from "../pos-shortcuts";
+import { useCan } from "../permissions";
 import { QrNotificationControls } from "../QrNotifications";
-import { readPaymentStart, RECEIPT_PRINTER_KEY, savePaymentStart, type PaymentStart } from "../device-preferences";
 import { readTheme, saveTheme, THEME_EVENT, type Theme } from "../theme";
 
 const field = { display: "grid", gap: 4 } as const;
@@ -15,14 +16,18 @@ const PAYMENT_STARTS: Array<{ value: PaymentStart; label: string }> = [
   { value: "upi", label: "UPI" },
 ];
 
-/** Settings → This device: preferences kept in this browser only, so each counter, tablet or kitchen screen can differ. */
+/**
+ * Settings → This device. Theme and QR alerts are kept in this browser. The bill printer and the starting payment method
+ * are kept on the main PC for this device, and only an administrator changes them.
+ */
 export function DeviceSettings() {
   const { isActive } = useModules();
+  const can = useCan();
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }> | null>(null);
-  const [printerId, setPrinterId] = useState(() => readPreference(RECEIPT_PRINTER_KEY));
-  const [paymentStart, setPaymentStart] = useState<PaymentStart>(readPaymentStart);
-  const [printerError, setPrinterError] = useState("");
+  const device = useDeviceSettings();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const sync = () => setTheme(readTheme());
@@ -32,13 +37,29 @@ export function DeviceSettings() {
   useEffect(() => {
     apiFetch<{ printers: Array<{ id: string; name: string }> }>("/api/billing-printers")
       .then((r) => setPrinters(r.printers))
-      .catch(() => setPrinterError("Could not load the printers"));
+      .catch(() => setError("Could not load the printers"));
   }, []);
 
-  const savedPrinterGone = printers !== null && printerId !== "" && !printers.some((p) => p.id === printerId);
+  const joined = device.deviceId !== null;
+  const allowed = can("settings.manage");
+  const locked = !joined || !allowed || saving;
+
+  async function save(change: Partial<SavedDeviceSettings>) {
+    if (device.deviceId === null) return;
+    setSaving(true); setError("");
+    try {
+      await apiFetch(`/api/devices/${device.deviceId}/settings`, { method: "PATCH", body: JSON.stringify({ version: device.version, ...change }) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save this device's settings");
+    } finally {
+      // Also after a failure: another administrator may have changed this device in the meantime.
+      await device.reload();
+      setSaving(false);
+    }
+  }
 
   return <div className="panel settings-form">
-    <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>These choices are saved on this device only. Set them on each counter, tablet or kitchen screen.</p>
+    <p className="muted" style={{ gridColumn: "1 / -1", margin: 0 }}>Theme and QR alerts are saved in this browser. The bill printer and starting payment method are saved on the main PC for this device.</p>
 
     <fieldset className="bill-settings-group">
       <legend>Theme</legend>
@@ -50,22 +71,23 @@ export function DeviceSettings() {
 
     <fieldset className="bill-settings-group">
       <legend>Billing at this counter</legend>
+      {!joined && <p className="muted" style={{ margin: 0 }}>This browser has not joined as a device, so it has no saved printer.</p>}
+      {joined && !allowed && <p className="muted" style={{ margin: 0 }}>Only an administrator can change these.</p>}
       <label style={field}>
         <span>Bill printer <InfoTip id="device-printer-help">The printer a new bill uses on this device. Staff can still pick another printer on the bill.</InfoTip></span>
-        <select value={savedPrinterGone ? "" : printerId} disabled={printers === null} aria-describedby="device-printer-help"
-          onChange={(e) => { setPrinterId(e.target.value); savePreference(RECEIPT_PRINTER_KEY, e.target.value); }}>
+        <select value={device.settings.billPrinterId ?? ""} disabled={locked || printers === null} aria-describedby="device-printer-help"
+          onChange={(e) => void save({ billPrinterId: e.target.value || null })}>
           <option value="">Browser / A4 receipt</option>
           {printers?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        {savedPrinterGone && <small role="status">The printer saved here is no longer active. Bills use the browser receipt until you choose another.</small>}
-        {printerError && <small role="alert">{printerError}</small>}
       </label>
       <label style={field}>
         <span>Payment method a new bill starts on</span>
-        <select value={paymentStart} onChange={(e) => { const next = e.target.value as PaymentStart; setPaymentStart(next); savePaymentStart(next); }}>
+        <select value={device.settings.paymentStart} disabled={locked} onChange={(e) => void save({ paymentStart: e.target.value as PaymentStart })}>
           {PAYMENT_STARTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </label>
+      {error && <small role="alert">{error}</small>}
     </fieldset>
 
     <fieldset className="bill-settings-group">
