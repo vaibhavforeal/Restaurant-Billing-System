@@ -1,10 +1,27 @@
 # Devices — design
 
-Date: 2026-11-10 · Branch: `feat/devices` · Status: Phases 1 and 2 built (migrations 65 and 66); Phases 3 and 4 not built
+Date: 2026-11-10 · Branch: `feat/devices` · Status: Phases 1 to 3 built (migrations 65 and 66; Phase 3 needed none); Phase 4 not built
 
-Pick-up point for Phase 3 (device settings, printing, presence): `req.device` is set for every joined device and
-`devices.settings` is still `{}`. Join codes live in `apps/server/src/device-join.ts`; the panel that creates them is
-`apps/ui/src/screens/JoinCodePanel.tsx`, shown under **Plan & devices** until Phase 4 moves it into the Devices area.
+Pick-up point for Phase 4 (Devices area): `GET /api/devices` (each row has `online`, `printerInactive`, `allowed`,
+`current` and its saved `settings`) and `PATCH /api/devices/:id/settings` are in `apps/server/src/device-routes.ts`.
+The hub sends `devices.changed` (a device's settings changed, or a printer was switched on or off) and
+`devices.presence`. Rename, remove and device history are still under `/api/license/devices`. Two interim controls
+move into the Devices area: the bill printer and starting payment method on **This device**
+(`apps/ui/src/screens/DeviceSettings.tsx`), and the join-code panel (`apps/ui/src/screens/JoinCodePanel.tsx`) under
+**Plan & devices**. Join codes live in `apps/server/src/device-join.ts`. The next migration is 67.
+
+How Phase 3 settled what the spec left open (plan: `docs/superpowers/plans/2026-11-10-devices-phase-3.md`):
+
+- Until Phase 4, an administrator sets a device's bill printer and starting payment method on that device, under
+  **This device**. The values that were in browser storage are not carried over.
+- A print route with nothing to print to (the field is `null`, or absent on a device with no active printer) answers
+  400 "Choose an active receipt printer". Issuing a bill in the same situation succeeds without a thermal print.
+- `GET /api/devices/me/settings` gives `billPrinterId: null` while the saved printer is switched off, so the counter's
+  buttons match what the server will do. The saved id is kept and comes back when the printer is switched on.
+- `last_seen_at` is also set when a device's last socket closes, so builds without licensing have a "last seen".
+- The per-bill **Receipt printer** choice lasts for one order.
+- The counter loads its device settings at sign-in. Until the list of active printers has loaded (a counter that is
+  offline), it does not second-guess the printer it has, so a bill saved offline is not sent with "do not print".
 
 How Phase 2 settled what the spec left open (plan: `docs/superpowers/plans/2026-11-10-devices-phase-2.md`):
 

@@ -33,6 +33,21 @@ bytes, destination and copy count.
 profile. Test prints produce the configured number of copies. Save edits before
 testing. Deactivated printers cannot be test-printed.
 
+## Each device's bill printer
+
+Every counter, tablet and kitchen screen that has joined has its own bill
+printer, kept on the main PC. An administrator signs in on that device, opens
+**Settings → This device** and chooses the printer under **Bill printer**, or
+**Browser / A4 receipt** for no thermal print. The choice survives clearing the
+browser and replacing the device.
+
+Bills, reprints and credit notes from that device go to its printer without
+anyone choosing one. On the billing screen, **Bill options → Receipt printer**
+changes the printer for the bill in hand only.
+
+If a device's printer is switched off, the device uses the browser receipt
+until the printer is switched on again or another one is chosen.
+
 ## KOT stations
 
 Open **Settings > Printers > KOT stations** to add kitchen stations, assign
@@ -79,8 +94,8 @@ the job retry action when recovering a specific uncertain copy.
 
 This phase adds discovery, per-printer bill/KOT copy/feed/cutter profiles and
 durable recovery. Layout/column/font editing, Unicode thermal rendering, receipt
-payment QR, cash-drawer automation, server-managed counter defaults and thermal
-reports remain later work. Existing browser receipt preferences remain in use.
+payment QR, cash-drawer automation and thermal reports remain later work. Each
+device's bill printer is kept on the main PC (see above).
 
 Automated checks cover legacy upgrades, copy routing, transaction rollback,
 database reopen, backup-generation changes, ambiguous retry confirmation, and
