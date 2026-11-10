@@ -10,23 +10,21 @@ import { LoyaltySettings } from "./LoyaltySettings";
 import { DeviceSettings } from "./DeviceSettings";
 import { settingsForSave } from "../settings-save";
 import { useAction } from "../use-action";
-import { InfoTip } from "../InfoTip";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { GST_STATES } from "@masalapos/domain/restaurant-profile";
-import { apiFetch, session } from "../api";
-import { connectWs } from "../ws";
+import { apiFetch } from "../api";
+import { DevicesSettings } from "./DevicesSettings";
+import type { DevicesTabId } from "../devices-model";
 import { SystemSettings } from "./SystemSettings";
 import { LicenseSettings } from "./LicenseSettings";
 import { KeyboardSettings } from "./KeyboardSettings";
 import { OrderTypes } from "./OrderTypes";
 import { UpdateSettings } from "./UpdateSettings";
 import { SupportSettings } from "../support";
-import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 import { Icon } from "../Icon";
 import { initialSettingsSection, SETTINGS_SECTIONS, visibleSettingsSections, type SettingsSectionId } from "../settings-sections";
-import "../printer-settings.css";
 import "../settings-cards.css";
-import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
+import type { SettingsData } from "../types";
 
 const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptHeader: "", receiptFooter: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "", packagingChargeLabel: "", packagingPerItem: false, orderWarnMinutes: 15, orderLateMinutes: 25, kotPrintWithKds: true, paymentModes: ["cash", "card", "upi"], qrAutoAccept: false, dayStartHour: 0 };
 
@@ -44,12 +42,10 @@ const PROFILE_KEYS = ["restaurantName", "address", "city", "stateCode", "pincode
 
 const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.localeCompare(b));
 
-const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
-  receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
-
 /** Opens on a grid of section cards; a `section` opens that card directly, e.g. Plan & devices from a Marketplace card that needs a different plan. */
 export function Settings({ section }: { section?: SettingsSectionId | undefined } = {}) {
   const can = useCan();
+  const canManage = can("settings.manage");
   const { isActive } = useModules();
   const crmActive = isActive("crm");
   const [tableBusy, setTableBusy] = useState(false);
@@ -61,20 +57,8 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
   const [profileStatus, setProfileStatus] = useState<"" | "saved" | "error">("");
   const [profileError, setProfileError] = useState("");
 
-  // Printers section
-  const [printerSection, setPrinterSection] = useState<"devices" | "stations" | "jobs">("devices");
-  const [printers, setPrinters] = useState<PrinterInfo[]>([]);
-  const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
-  const [editPrinter, setEditPrinter] = useState<Partial<PrinterInfo>>({});
-  const [newPrinter, setNewPrinter] = useState<Omit<PrinterInfo, "id" | "isActive" | "usedBy">>(EMPTY_PRINTER);
-
-  // Stations section
-  const [stations, setStations] = useState<StationInfo[]>([]);
-  const [newStationName, setNewStationName] = useState("");
-
-  // Jobs section
-  const [jobs, setJobs] = useState<PrintJobInfo[]>([]);
-  const [checkedJobs, setCheckedJobs] = useState<Record<string, boolean>>({});
+  // Which tab the Devices card opens on, when another card sends the user to it.
+  const [devicesTab, setDevicesTab] = useState<DevicesTabId | undefined>(undefined);
 
   // Common
   const { busy, error, setError, run } = useAction();
@@ -99,59 +83,16 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
     void loadAll();
   }, []);
 
-  // Connect to WS for live job updates
-  useEffect(() => {
-    const dispose = connectWs({
-      onEvent: (event, data) => {
-        if (event === "print.job") {
-          const jobData = data as { job: PrintJobInfo };
-          setJobs((prev) => {
-            const idx = prev.findIndex((j) => j.id === jobData.job.id);
-            if (idx >= 0) {
-              const updated = [...prev];
-              updated[idx] = jobData.job;
-              return updated;
-            } else {
-              return [jobData.job, ...prev];
-            }
-          });
-        }
-      },
-      onStatus: (connected) => {
-        if (connected) {
-          void loadJobs(); // Refetch on reconnect
-        }
-      },
-      onAuthFail: () => session.clear(),
-    });
-    return dispose;
-  }, []);
-
   async function loadAll() {
+    // Staff who may only see printers get the Devices card alone; the restaurant's settings are not theirs to read.
+    if (!canManage) { setLoaded(true); return; }
     try {
-      const [settingsRes, printersRes, stationsRes, jobsRes] = await Promise.all([
-        apiFetch<{ settings: SettingsData }>("/api/settings"),
-        apiFetch<{ printers: PrinterInfo[] }>("/api/printers"),
-        apiFetch<{ stations: StationInfo[] }>("/api/kot-stations"),
-        apiFetch<{ jobs: PrintJobInfo[] }>("/api/print-jobs"),
-      ]);
+      const settingsRes = await apiFetch<{ settings: SettingsData }>("/api/settings");
       setForm(settingsRes.settings);
-      setPrinters(printersRes.printers);
-      setStations(stationsRes.stations);
-      setJobs(jobsRes.jobs);
       setLoaded(true);
       setError("");
     } catch {
       setError("Failed to load settings");
-    }
-  }
-
-  async function loadJobs() {
-    try {
-      const { jobs: j } = await apiFetch<{ jobs: PrintJobInfo[] }>("/api/print-jobs");
-      setJobs(j);
-    } catch {
-      // ignore — WS reconnect scenario
     }
   }
 
@@ -170,92 +111,6 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
     });
   }
 
-  // Printer actions
-  function addPrinter() {
-    if (!newPrinter.name.trim() || !newPrinter.connection.trim()) return setError("Printer name and connection are required");
-    void run(async () => {
-      await apiFetch("/api/printers", { method: "POST", body: JSON.stringify(newPrinter) });
-      setNewPrinter(EMPTY_PRINTER);
-      await loadAll();
-    }, "Failed to add printer");
-  }
-
-  function startEditPrinter(p: PrinterInfo) {
-    setEditingPrinterId(p.id);
-    setEditPrinter({ name: p.name, kind: p.kind, connection: p.connection, paperWidth: p.paperWidth,
-      receiptProfile: p.receiptProfile, kotProfile: p.kotProfile });
-  }
-
-  async function savePrinter(id: string) {
-    const saved = await run(async () => {
-      await apiFetch(`/api/printers/${id}`, { method: "PATCH", body: JSON.stringify(editPrinter) });
-      setEditingPrinterId(null);
-      await loadAll();
-    }, "Failed to update printer");
-    if (!saved) await loadAll();
-  }
-
-  async function togglePrinter(p: PrinterInfo) {
-    const saved = await run(async () => {
-      await apiFetch(`/api/printers/${p.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !p.isActive }) });
-      await loadAll();
-    }, "Failed to toggle printer");
-    if (!saved) await loadAll();
-  }
-
-  function testPrint(printerId: string, profile: "receipt" | "kot" = "receipt") {
-    void run(async () => {
-      await apiFetch(`/api/printers/${printerId}/test-print`, { method: "POST", body: JSON.stringify({ profile }) });
-      await loadJobs();
-    }, "Test print failed");
-  }
-
-  // Station actions
-  function addStation() {
-    const name = newStationName.trim();
-    if (!name) return setError("Station name is required");
-    void run(async () => {
-      await apiFetch("/api/kot-stations", { method: "POST", body: JSON.stringify({ name }) });
-      setNewStationName("");
-      await loadAll();
-    }, "Failed to add station");
-  }
-
-  async function updateStationPrinter(stationId: string, printerId: string) {
-    const saved = await run(async () => {
-      await apiFetch(`/api/kot-stations/${stationId}`, { method: "PATCH", body: JSON.stringify({ printerId: printerId || null }) });
-      await loadAll();
-    }, "Failed to update station");
-    if (!saved) await loadAll();
-  }
-
-  async function toggleStation(s: StationInfo) {
-    const saved = await run(async () => {
-      await apiFetch(`/api/kot-stations/${s.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !s.isActive }) });
-      await loadAll();
-    }, "Failed to toggle station");
-    if (!saved) await loadAll();
-  }
-
-  // Job actions
-  function retryJob(jobId: string, action: "retry" | "confirm-printed" = "retry") {
-    void run(async () => {
-      await apiFetch(`/api/print-jobs/${jobId}/${action}`, { method: "POST", body: JSON.stringify({ checkedPaper: checkedJobs[jobId] === true }) });
-      setCheckedJobs(previous => ({ ...previous, [jobId]: false }));
-      await loadJobs();
-    }, "Retry failed");
-  }
-
-  // Helper for printer connection placeholder
-  function connectionPlaceholder(kind: string): string {
-    if (kind === "network") return "IP address (e.g. 192.168.1.50)";
-    if (kind === "windows") return "Windows printer name";
-    if (kind === "bluetooth") return "COM port (e.g. COM3)";
-    return "";
-  }
-
-  const activePrinters = printers.filter((p) => p.isActive);
-
   if (!loaded) return <section className="panel">{error ? <><p role="alert">{error}</p><button onClick={() => void loadAll()}>Retry</button></> : <p role="status">Loading settings…</p>}</section>;
 
   return (
@@ -263,9 +118,9 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
       <div className="page-header"><div><h2>Settings</h2></div></div>
       {active === null ? (
         <ul className="settings-cards">
-          {visibleSettingsSections({ canManageTables: can("tables.manage"), crmActive }).map(({ id, title, blurb, icon }) => (
+          {visibleSettingsSections({ canManageSettings: canManage, canReadPrinters: can("printers.read"), canManageTables: can("tables.manage"), crmActive }).map(({ id, title, blurb, icon }) => (
             <li key={id}>
-              <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setActive(id); }}>
+              <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setDevicesTab(undefined); setActive(id); }}>
                 <span className="settings-card-icon"><Icon name={icon} size={22} /></span>
                 <span className="settings-card-title">{title}</span>
                 <span className="settings-card-blurb">{blurb}</span>
@@ -284,7 +139,7 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
       {active === "tables" && <TableSettings onBusyChange={setTableBusy} />}
       {active === "updates" && <UpdateSettings />}
       {active === "support" && <SupportSettings />}
-      {active === "bill" && <BillSettings onOpenPrinters={() => setActive("printers")} />}
+      {active === "bill" && <BillSettings onOpenPrinters={() => { setDevicesTab("printers"); setActive("devices"); }} />}
       {active === "ai-suggestions" && <AiSuggestionSettings />}
       {active === "discounts" && <>
         <DiscountCaps />
@@ -326,250 +181,7 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
         <ActivityAlertSettings />
       </div>}
 
-      {/* Printers section */}
-      {active === "printers" && <>
-        <div className="tabs" role="group" aria-label="Printer settings sections">
-          <button type="button" className={printerSection === "devices" ? "selected" : ""} aria-pressed={printerSection === "devices"} onClick={() => setPrinterSection("devices")}>Printers</button>
-          <button type="button" className={printerSection === "stations" ? "selected" : ""} aria-pressed={printerSection === "stations"} onClick={() => setPrinterSection("stations")}>KOT stations</button>
-          <button type="button" className={printerSection === "jobs" ? "selected" : ""} aria-pressed={printerSection === "jobs"} onClick={() => setPrinterSection("jobs")}>Print jobs</button>
-        </div>
-        {error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>}
-      </>}
-      {active === "printers" && printerSection === "devices" && <div className="panel">
-
-        <div className="printer-table-scroll" role="region" aria-label="Configured printers" tabIndex={0}>
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: 6 }}>Name</th>
-              <th>Kind</th>
-              <th>Connection</th>
-              <th>Paper</th>
-              <th>Active</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {printers.map((p) =>
-              editingPrinterId === p.id ? (
-                <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: 6 }}>
-                    <input
-                      value={editPrinter.name ?? ""}
-                      onChange={(e) => setEditPrinter({ ...editPrinter, name: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      value={editPrinter.kind ?? "network"}
-                      onChange={(e) =>
-                        setEditPrinter({
-                          ...editPrinter,
-                          kind: e.target.value as "network" | "windows" | "bluetooth",
-                          connection: "",
-                        })
-                      }
-                    >
-                      <option value="network">Network (WiFi/LAN)</option>
-                      <option value="windows">USB (Windows driver)</option>
-                      <option value="bluetooth">Bluetooth (COM port)</option>
-                    </select>
-                  </td>
-                  <td>
-                    {editPrinter.kind === "windows" ? <WindowsPrinterPicker value={editPrinter.connection ?? ""}
-                      onChange={connection => setEditPrinter(previous => ({ ...previous, connection }))} disabled={busy} /> : <input
-                      value={editPrinter.connection ?? ""}
-                      placeholder={connectionPlaceholder(editPrinter.kind ?? "network")}
-                      onChange={(e) => setEditPrinter({ ...editPrinter, connection: e.target.value })}
-                    />}
-                  </td>
-                  <td>
-                    <select
-                      value={editPrinter.paperWidth ?? 80}
-                      onChange={(e) => setEditPrinter({ ...editPrinter, paperWidth: Number(e.target.value) as 58 | 80 })}
-                    >
-                      <option value={80}>80mm</option>
-                      <option value={58}>58mm</option>
-                    </select>
-                  </td>
-                  <td>{p.isActive ? "✓" : "—"}</td>
-                  <td>
-                    <button onClick={() => void savePrinter(p.id)} disabled={busy}>Save</button>
-                    <button onClick={() => setEditingPrinterId(null)} disabled={busy}>Cancel</button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={p.id} style={{ borderBottom: "1px solid #eee", opacity: p.isActive ? 1 : 0.45 }}>
-                  <td style={{ padding: 6 }}>{p.name}</td>
-                  <td>{p.kind === "network" ? "Network" : p.kind === "windows" ? "Windows" : "Bluetooth"}</td>
-                  <td>{p.connection}</td>
-                  <td>{p.paperWidth}mm</td>
-                  <td>{p.isActive ? "✓" : "—"}</td>
-                  <td>
-                    <button onClick={() => void testPrint(p.id)} disabled={busy || !p.isActive}>Test print</button>
-                    <button onClick={() => void testPrint(p.id, "kot")} disabled={busy || !p.isActive}>Test KOT</button>
-                    <button onClick={() => startEditPrinter(p)} disabled={busy}>Edit</button>
-                    <button onClick={() => void togglePrinter(p)} disabled={busy}>{p.isActive ? "Deactivate" : "Activate"}</button>
-                  </td>
-                </tr>
-              )
-            )}
-          </tbody>
-        </table>
-        </div>
-
-        {editingPrinterId && <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-          <PrintProfileControls title="Bill profile" value={editPrinter.receiptProfile ?? DEFAULT_PRINT_PROFILE} disabled={busy}
-            onChange={receiptProfile => setEditPrinter(previous => ({ ...previous, receiptProfile }))} />
-          <PrintProfileControls title="KOT and cancellation profile" value={editPrinter.kotProfile ?? DEFAULT_PRINT_PROFILE} disabled={busy}
-            onChange={kotProfile => setEditPrinter(previous => ({ ...previous, kotProfile }))} />
-          <div className="info-action-row"><button disabled={busy} onClick={() => void savePrinter(editingPrinterId)}>Save printer and profiles</button><InfoTip>Test prints use the saved profile and its copy count.</InfoTip></div>
-
-        </div>}
-
-        {/* Add printer form */}
-        <div className="printer-form" style={{ display: "grid", gap: 8, padding: 12, border: "1px solid #ddd", borderRadius: 4 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "start" }}>
-            <input
-              placeholder="Printer name" aria-label="Printer name"
-              value={newPrinter.name}
-              onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
-              style={{ flex: 1 }}
-            />
-            <select
-              aria-label="Printer connection type" value={newPrinter.kind}
-              onChange={(e) =>
-                setNewPrinter({ ...newPrinter, kind: e.target.value as "network" | "windows" | "bluetooth", connection: "" })
-              }
-            >
-              <option value="network">Network (WiFi/LAN)</option>
-              <option value="windows">USB (Windows driver)</option>
-              <option value="bluetooth">Bluetooth (COM port)</option>
-            </select>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "start" }}>
-            {newPrinter.kind === "windows" ? <WindowsPrinterPicker value={newPrinter.connection}
-              onChange={connection => setNewPrinter(previous => ({ ...previous, connection }))} disabled={busy} /> : <input
-              aria-label="Printer address or connection" placeholder={connectionPlaceholder(newPrinter.kind)}
-              value={newPrinter.connection}
-              onChange={(e) => setNewPrinter({ ...newPrinter, connection: e.target.value })}
-              style={{ flex: 1 }}
-            />}
-            <select
-              aria-label="Paper width" value={newPrinter.paperWidth}
-              onChange={(e) => setNewPrinter({ ...newPrinter, paperWidth: Number(e.target.value) as 58 | 80 })}
-            >
-              <option value={80}>80mm</option>
-              <option value={58}>58mm</option>
-            </select>
-            <PrintProfileControls title="New bill profile" value={newPrinter.receiptProfile} disabled={busy}
-              onChange={receiptProfile => setNewPrinter(previous => ({ ...previous, receiptProfile }))} />
-            <PrintProfileControls title="New KOT and cancellation profile" value={newPrinter.kotProfile} disabled={busy}
-              onChange={kotProfile => setNewPrinter(previous => ({ ...previous, kotProfile }))} />
-            <button onClick={() => void addPrinter()} disabled={busy}>Add printer</button>
-          </div>
-        </div>
-      </div>}
-
-      {/* KOT stations section */}
-      {active === "printers" && printerSection === "stations" && <div className="panel" role="region" aria-label="KOT stations">
-
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: 6 }}>Station</th>
-              <th>Printer</th>
-              <th>Active</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {stations.map((s) => (
-              <tr key={s.id} style={{ borderBottom: "1px solid #eee", opacity: s.isActive ? 1 : 0.45 }}>
-                <td style={{ padding: 6 }}>{s.name}</td>
-                <td>
-                  <select
-                    aria-label={`Printer for ${s.name}`}
-                    value={s.printerId ?? ""}
-                    onChange={(e) => void updateStationPrinter(s.id, e.target.value)}
-                    disabled={!s.isActive || busy}
-                  >
-                    <option value="">No printer</option>
-                    {activePrinters.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>{s.isActive ? "✓" : "—"}</td>
-                <td>
-                  <button onClick={() => void toggleStation(s)} disabled={busy}>{s.isActive ? "Deactivate" : "Activate"}</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Add station form */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            placeholder="Station name" aria-label="Station name"
-            value={newStationName}
-            onChange={(e) => setNewStationName(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <button onClick={() => void addStation()} disabled={busy}>Add station</button>
-        </div>
-      </div>}
-
-      {/* Print jobs section */}
-      {active === "printers" && printerSection === "jobs" && <div className="panel" role="region" aria-label="Print jobs">
-        <h3>Print jobs <InfoTip>Jobs survive a restart. Submitted means the printer connection accepted the data; check the paper before retrying an uncertain copy.</InfoTip></h3>
-
-        {error && <p role="alert">{error}</p>}
-
-        {jobs.length === 0 ? (
-          <div style={{ color: "var(--muted)", padding: 12 }}>No print jobs yet.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {jobs.map((job) => (
-              <div
-                key={job.id}
-                className="print-job-card"
-                style={{
-                  padding: 12,
-                  border: "1px solid #ddd",
-                  borderRadius: 4,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{job.label}</div>
-                  <div>{job.printerName} · Copy {job.copyNumber} of {job.copyCount}</div>
-                  <div style={{ fontSize: 14, color: "var(--ink)" }}>
-                    {job.status === "done" && `✓ ${job.error ?? "Submitted"}`}
-                    {job.status === "queued" && "⏳ Queued"}
-                    {job.status === "printing" && "⏳ Printing"}
-                    {job.status === "failed" && <span style={{ color: "var(--danger-text, crimson)" }}>✗ Failed: {job.error}</span>}
-                    {job.status === "unknown" && <span style={{ color: "var(--danger-text, crimson)" }}>Check paper: {job.error}</span>}
-                  </div>
-                </div>
-                {(job.status === "failed" || job.status === "unknown") && <div style={{ display: "grid", gap: 8 }}>
-                  {job.status === "unknown" && <label><input type="checkbox" checked={checkedJobs[job.id] === true}
-                    onChange={event => setCheckedJobs(previous => ({ ...previous, [job.id]: event.target.checked }))} /> I checked the paper</label>}
-                  <button onClick={() => void retryJob(job.id)} style={{ padding: "6px 12px" }}
-                    disabled={busy || (job.status === "unknown" && !checkedJobs[job.id])}>Retry this copy</button>
-                  {job.status === "unknown" && <button disabled={busy || !checkedJobs[job.id]}
-                    onClick={() => void retryJob(job.id, "confirm-printed")}>Mark as already printed</button>}
-                </div>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>}
+      {active === "devices" && <DevicesSettings initialTab={devicesTab} />}
       {active === "backups" && <SystemSettings />}
       {active === "plan" && <LicenseSettings />}
       </div>

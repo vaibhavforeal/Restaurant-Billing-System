@@ -201,7 +201,7 @@ function StaffApp() {
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
           {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}
           {page.name === "users" && userCan(user, "users.manage") && <Users onOpenDiscounts={userCan(user, "settings.manage") ? () => go({ name: "settings", section: "discounts" }) : undefined} />}
-          {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}
+          {page.name === "settings" && (userCan(user, "settings.manage") || userCan(user, "printers.read")) && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeStaff={userCan(user, "users.manage")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}
           {page.name === "inventory" && <ModuleRoute id="inventory" user={user} onNavigate={go}><Inventory user={user} /></ModuleRoute>}

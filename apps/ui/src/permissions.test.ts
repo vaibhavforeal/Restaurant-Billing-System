@@ -15,6 +15,10 @@ describe("permissions in the UI", () => {
     expect(STAFF_TABS.filter((t) => staffTabVisible(t, (s) => cashierPlusCatalog.has(s))))
       .toEqual(["home", "tables", "reports", "customers", "inventory", "kitchen", "catalog", "marketplace"]);
     expect(STAFF_TABS.filter((t) => staffTabVisible(t, () => false))).toEqual(["home"]);
+    // Settings holds the Devices card, which staff who can see printers may open.
+    expect(staffTabVisible("settings", (slug) => slug === "printers.read")).toBe(true);
+    expect(staffTabVisible("settings", (slug) => slug === "settings.manage")).toBe(true);
+    expect(staffTabVisible("settings", () => false)).toBe(false);
   });
 
   it("saves only the permissions that differ from the role", () => {

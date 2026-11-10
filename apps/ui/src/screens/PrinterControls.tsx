@@ -7,7 +7,7 @@ export const DEFAULT_PRINT_PROFILE: PrintProfile = { copies: 1, feedLines: 3, au
 export function PrintProfileControls({ title, value, onChange, disabled }: {
   title: string; value: PrintProfile; onChange: (value: PrintProfile) => void; disabled: boolean;
 }) {
-  return <fieldset className="print-profile-controls" disabled={disabled} style={{ display: "grid", gap: 8, minWidth: 0 }}>
+  return <fieldset className="print-profile-controls" disabled={disabled}>
     <legend>{title}</legend>
     <label>Copies <input type="number" min={1} max={5} step={1} value={value.copies}
       onChange={event => onChange({ ...value, copies: Number(event.target.value) })} /></label>
@@ -39,7 +39,7 @@ export function WindowsPrinterPicker({ value, onChange, disabled }: {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   const known = printers.some(printer => printer.name === value);
-  return <div className="windows-printer-picker" style={{ display: "grid", gap: 6 }}>
+  return <div className="windows-printer-picker">
     <label>Printer on POS computer
       <select aria-label="Installed Windows printer" disabled={disabled || loading} value={known ? value : ""}
         onChange={event => { onChange(event.target.value); setManual(false); }}>

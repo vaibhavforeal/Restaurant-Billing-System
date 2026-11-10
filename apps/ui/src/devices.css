@@ -1,0 +1,24 @@
+/* Settings → Devices. Colours come from the theme tokens, so every rule here holds in the light and the dark theme. */
+.devices-settings { min-width: 0; display: grid; gap: var(--space-4); }
+.devices-panel { display: grid; gap: var(--space-4); min-width: 0; }
+.devices-note { margin: 0; }
+.devices-error { color: var(--danger-text); margin: 0; }
+
+.devices-table { width: 100%; border-collapse: collapse; }
+.devices-table th { text-align: left; border-bottom: var(--border) solid var(--line); }
+.devices-table td { border-bottom: var(--border) solid var(--line); }
+.devices-table tr.devices-inactive > td { color: var(--muted); }
+.devices-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.devices-add-row { display: flex; gap: var(--space-2); }
+.devices-add-row input { flex: 1; min-width: 0; }
+.devices-settings .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.printer-profiles { display: grid; gap: var(--space-3); }
+.printer-form { display: grid; gap: var(--space-2); padding: var(--space-3); border: var(--border) solid var(--line); border-radius: var(--radius); }
+.printer-form-row { display: flex; gap: var(--space-2); align-items: start; flex-wrap: wrap; }
+.printer-form-wide { flex: 1; }
+
+.print-job-list { display: grid; gap: var(--space-2); }
+.print-job-card { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3); border: var(--border) solid var(--line); border-radius: var(--radius); }
+.print-job-detail { display: grid; gap: var(--space-1); flex: 1; min-width: 0; }
+.print-job-actions { display: grid; gap: var(--space-2); }

@@ -20,14 +20,14 @@ export function canToggle(info: IntegrationInfo, canConfigure: boolean): boolean
 
 /** The sidebar tabs for staff in the full POS, in order. */
 export const STAFF_TABS = ["home", "tables", "orders", "reports", "customers", "inventory", "kitchen", "catalog", "users", "marketplace", "settings"] as const;
-/** The permission each tab needs; Home is always there. */
-const TAB_PERMISSION: Record<typeof STAFF_TABS[number], string | null> = {
+/** The permission each tab needs (any one of a list); Home is always there. Settings also opens for staff who can see printers, for its Devices card. */
+const TAB_PERMISSION: Record<typeof STAFF_TABS[number], string | readonly string[] | null> = {
   home: null, tables: "tables.read", orders: "orders.read", reports: "reports.read", customers: "customers.read", inventory: "stock.read",
-  kitchen: "kots.read", catalog: "catalog.manage", users: "users.manage", marketplace: "integrations.read", settings: "settings.manage",
+  kitchen: "kots.read", catalog: "catalog.manage", users: "users.manage", marketplace: "integrations.read", settings: ["settings.manage", "printers.read"],
 };
 export function staffTabVisible(tab: typeof STAFF_TABS[number], can: (slug: string) => boolean): boolean {
   const needed = TAB_PERMISSION[tab];
-  return needed === null || can(needed);
+  return needed === null || (typeof needed === "string" ? can(needed) : needed.some(can));
 }
 
 const TAB_INTEGRATION: Partial<Record<Page["name"], IntegrationId>> = { kitchen: "kds", customers: "crm" };
