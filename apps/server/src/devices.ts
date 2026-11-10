@@ -27,6 +27,7 @@ const record = (r: DeviceRow): DeviceRecord => Object.defineProperty({
 }, "credentialHash", { value: r.credential_hash, enumerable: false }) as DeviceRecord;
 const CHANGED = "This device changed. Refresh the device list and try again.";
 const MAIN_NAME = "Main counter";
+const JOINED = "This device has already joined.";
 
 /**
  * The devices of this restaurant: every counter, kitchen display and captain tablet, in every build. The licence counts
@@ -59,22 +60,47 @@ export class Devices {
   }
 
   /**
-   * Adds a device. A browser that was removed and registers again gets its old row back (same id and kind, a new place
-   * at the end of the list), since its credential hash is still on file.
+   * A removed device keeps its row for the history, but not its browser: its credential hash is swapped for a marker no
+   * real hash can equal, so the same browser can join again as another device.
    */
-  add(input: { credentialHash: string; name: string; kind: DeviceKind; isMain?: boolean }, actorName: string): DeviceRecord {
+  private retire(credentialHash: string) {
+    this.db.prepare("UPDATE devices SET credential_hash = 'retired:' || id WHERE credential_hash = ? AND removed_at IS NOT NULL").run(credentialHash);
+  }
+  /** The active main counter, or null. */
+  main(): DeviceRecord | null {
+    const row = this.db.prepare("SELECT * FROM devices WHERE is_main = 1 AND removed_at IS NULL").get() as DeviceRow | undefined;
+    return row ? record(row) : null;
+  }
+
+  /**
+   * Adds a device at the end of the list. A browser that was removed and joins again is a new device, with the name and
+   * kind asked for now; its removed row stays as it was.
+   */
+  add(input: { credentialHash: string; name: string; kind: DeviceKind; isMain?: boolean }, actorName: string, summary = `Registered ${input.name}.`): DeviceRecord {
     return this.db.transaction(() => {
-      const old = this.byHash(input.credentialHash);
-      if (old && old.removedAt === null) throw httpError(409, "This device is already registered");
-      const id = old?.id ?? randomUUID(), isMain = input.isMain ? 1 : 0;
-      if (old) {
-        this.db.prepare("UPDATE devices SET name = ?, is_main = ?, created_at = ?, removed_at = NULL, last_seen_at = NULL, version = version + 1 WHERE id = ?")
-          .run(input.name, isMain, this.now(), id);
-      } else {
-        this.db.prepare("INSERT INTO devices (id, kind, name, credential_hash, is_main, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-          .run(id, input.kind, input.name, input.credentialHash, isMain, this.now());
-      }
-      this.record(id, "joined", `Registered ${input.name}.`, actorName);
+      if (this.byHash(input.credentialHash)?.removedAt === null) throw httpError(409, JOINED);
+      this.retire(input.credentialHash);
+      const id = randomUUID();
+      this.db.prepare("INSERT INTO devices (id, kind, name, credential_hash, is_main, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(id, input.kind, input.name, input.credentialHash, input.isMain ? 1 : 0, this.now());
+      this.record(id, "joined", summary, actorName);
+      return this.get(id)!;
+    })();
+  }
+
+  /**
+   * Moves an active device to another browser and signs everyone out on the old one. Its name, kind, settings, place in
+   * the list (and so its licence slot) and main-counter mark are kept.
+   */
+  replaceCredential(id: string, credentialHash: string, actorName: string, summary: string): DeviceRecord {
+    return this.db.transaction(() => {
+      const device = this.get(id);
+      if (!device || device.removedAt !== null) throw httpError(404, "Device not found");
+      if (this.byHash(credentialHash)?.removedAt === null) throw httpError(409, JOINED);
+      this.retire(credentialHash);
+      this.db.prepare("UPDATE devices SET credential_hash = ?, last_seen_at = NULL, version = version + 1 WHERE id = ?").run(credentialHash, id);
+      this.db.prepare("DELETE FROM sessions WHERE device = ?").run(device.credentialHash);
+      this.record(id, "replaced", summary, actorName);
       return this.get(id)!;
     })();
   }
@@ -115,7 +141,7 @@ export class Devices {
     const hash = deviceHash(credential);
     if (!hash) return null;
     return this.db.transaction(() => {
-      if (this.db.prepare("SELECT 1 FROM devices WHERE is_main = 1 AND removed_at IS NULL").get()) return null;
+      if (this.main()) return null;
       const existing = this.byHash(hash);
       if (existing && existing.removedAt === null) {
         this.db.prepare("UPDATE devices SET is_main = 1, version = version + 1 WHERE id = ?").run(existing.id);

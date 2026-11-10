@@ -133,7 +133,8 @@ describe("commercial licensing", () => {
     expect((await remove()).statusCode).toBe(204); expect((await remove()).statusCode).toBe(204);
     expect((await f.app.inject({ url: "/api/me", headers: second })).statusCode).toBe(401);
     const reconnected = await f.login("b".repeat(64)); await f.register(reconnected, "Kitchen again");
-    expect((await remove()).statusCode).toBe(409);
+    // The browser came back as a new device, so a late retry of the old removal has nothing left to remove.
+    expect((await remove()).statusCode).toBe(204);
     expect((await f.app.inject({ url: "/api/products", headers: reconnected })).statusCode).toBe(200);
     expect(f.app.devices.events().events.filter((e) => e.kind === "removed")).toHaveLength(1);
   });

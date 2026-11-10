@@ -4,7 +4,7 @@ import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { Devices, deviceHash } from "./devices.js";
 import { ADMIN_LOGIN, SETUP, auth, commercialApp, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
 
-const A = "a".repeat(64), B = "b".repeat(64);
+const A = "a".repeat(64), B = "b".repeat(64), C = "c".repeat(64);
 
 describe("device registry", () => {
   let db: Database, devices: Devices, now: number;
@@ -44,19 +44,50 @@ describe("device registry", () => {
 
   it("refuses a credential an active device already holds", () => {
     add(A, "One");
-    expect(() => devices.add({ credentialHash: deviceHash(A)!, name: "Again", kind: "counter" }, "Asha")).toThrow(/already registered/);
+    expect(() => devices.add({ credentialHash: deviceHash(A)!, name: "Again", kind: "counter" }, "Asha")).toThrow(/already joined/);
     expect(devices.active()).toHaveLength(1);
   });
 
-  it("revives a removed device that registers again", () => {
+  it("a removed browser that joins again is a new device of the kind asked for", () => {
     const first = add(A, "One");
     devices.remove(first.id, "Asha");
-    expect(devices.active()).toEqual([]);
-    expect(devices.findByCredential(A)).toBeNull();
     now = 300;
-    const revived = add(A, "Back", "kitchen");
-    expect(revived).toMatchObject({ id: first.id, name: "Back", kind: "counter", createdAt: 300, removedAt: null, version: 3 });
-    expect(devices.active()).toHaveLength(1);
+    const again = add(A, "Back", "kitchen");
+    expect(again.id).not.toBe(first.id);
+    expect(again).toMatchObject({ name: "Back", kind: "kitchen", createdAt: 300, removedAt: null, version: 1, settings: {} });
+    expect(devices.active().map((d) => d.id)).toEqual([again.id]);
+    expect(db.prepare("SELECT credential_hash AS h, removed_at IS NOT NULL AS removed FROM devices WHERE id = ?").get(first.id)).toEqual({ h: `retired:${first.id}`, removed: 1 });
+  });
+
+  it("moves a device to another browser and keeps everything else", () => {
+    now = 100; add(A, "Main", "counter", true);
+    now = 200; const pass = add(B, "Pass", "kitchen");
+    db.prepare("UPDATE devices SET settings = '{\"x\":1}', last_seen_at = 150 WHERE id = ?").run(pass.id);
+    session(deviceHash(B)!); session(deviceHash(A)!);
+    now = 900;
+    const moved = devices.replaceCredential(pass.id, deviceHash(C)!, "Asha", "Replaced the browser of Pass.");
+    expect(moved).toMatchObject({ id: pass.id, name: "Pass", kind: "kitchen", settings: { x: 1 }, createdAt: 200, lastSeenAt: null, version: 2, credentialHash: deviceHash(C) });
+    expect(devices.active().map((d) => d.name)).toEqual(["Main", "Pass"]);
+    expect(devices.findByCredential(B)).toBeNull();
+    expect(sessions(deviceHash(B)!)).toEqual({ n: 0 });
+    expect(sessions(deviceHash(A)!)).toEqual({ n: 1 });
+    expect(devices.events().events[0]).toMatchObject({ kind: "replaced", summary: "Replaced the browser of Pass.", actorName: "Asha", deviceId: pass.id });
+  });
+
+  it("keeps the main counter the main counter when it is replaced", () => {
+    const main = add(A, "Main", "counter", true);
+    expect(devices.replaceCredential(main.id, deviceHash(B)!, "Asha", "x").isMain).toBe(true);
+    expect(devices.main()?.id).toBe(main.id);
+  });
+
+  it("refuses to replace with a browser that is already a device, or a device that is gone", () => {
+    const one = add(A, "One"), two = add(B, "Two");
+    expect(() => devices.replaceCredential(one.id, deviceHash(B)!, "Asha", "x")).toThrow(/already joined/);
+    expect(() => devices.replaceCredential(one.id, deviceHash(A)!, "Asha", "x")).toThrow(/already joined/);
+    devices.remove(two.id, "Asha");
+    expect(() => devices.replaceCredential(two.id, deviceHash(C)!, "Asha", "x")).toThrow(/Device not found/);
+    // The removed device's old browser can take over another device.
+    expect(devices.replaceCredential(one.id, deviceHash(B)!, "Asha", "x").credentialHash).toBe(deviceHash(B));
   });
 
   it("renames with a stale-write check", () => {
@@ -232,7 +263,7 @@ describe("devices on the server", () => {
       const signedIn = await signIn(app, ADMIN_LOGIN, D);
       expect(signedIn.statusCode).toBe(200);
       expect(app.devices.active()).toMatchObject([{ name: "Main counter", isMain: true, credentialHash: deviceHash(D) }]);
-      expect(app.db.prepare("SELECT count(*) AS n FROM devices").get()).toEqual({ n: 1 });
+      expect(app.db.prepare("SELECT count(*) AS n FROM devices").get()).toEqual({ n: 2 });
       expect((await app.inject({ url: "/api/products", headers: { ...auth(signedIn.json().token), ...withDevice(D) } })).statusCode).toBe(200);
     });
 
