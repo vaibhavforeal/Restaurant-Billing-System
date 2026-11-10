@@ -40,12 +40,17 @@ export function slotsText(list: DeviceList): string | null {
   return list.maxDevices === null ? null : `${list.devices.length} of ${list.maxDevices} devices used`;
 }
 
-/** A kitchen display prints no bills. Otherwise the browser receipt, the printer's name, or that its printer is switched off or gone. */
+/**
+ * A kitchen display prints no bills. Otherwise the browser receipt, the printer's name, or that its printer is switched
+ * off or gone. When the printer's name is not known here (the list of printers could not be read) it is a thermal
+ * printer all the same: only the main PC's word makes it inactive.
+ */
 export function billPrinterText(device: DeviceInfo, activePrinters: ReadonlyArray<{ id: string; name: string }>): string {
   if (device.kind === "kitchen") return "—";
   const id = device.settings.billPrinterId;
   if (id === null) return "Browser / A4";
-  return activePrinters.find((printer) => printer.id === id)?.name ?? "Printer inactive";
+  if (device.printerInactive) return "Printer inactive";
+  return activePrinters.find((printer) => printer.id === id)?.name ?? "Thermal printer";
 }
 
 /** The list with one device's `online` changed (a devices.presence event). */

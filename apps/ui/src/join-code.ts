@@ -14,6 +14,14 @@ export function codeFromLocation(location: { pathname: string; hash: string }): 
   return JOIN_PATH.test(location.pathname) ? normalizeJoinCode(location.hash.slice(1)) ?? "" : "";
 }
 
+/**
+ * Whether the page should join with its code straight away. Only a code the Android Captain app passed (`#join=`): the
+ * person there has just scanned a pairing code to do exactly this. A join link in a browser fills the code in and waits.
+ */
+export function joinsOnOpen(location: { pathname: string; hash: string }): boolean {
+  return location.hash.startsWith(JOIN_HASH) && codeFromLocation(location) !== "";
+}
+
 /** Where a device of each kind works. */
 export function homeForKind(kind: DeviceKind): "/" | "/kitchen/" | "/captain/" {
   return kind === "kitchen" ? "/kitchen/" : kind === "captain" ? "/captain/" : "/";

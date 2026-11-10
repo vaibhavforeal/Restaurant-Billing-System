@@ -43,6 +43,8 @@ describe("the Devices card", () => {
     expect(billPrinterText(device({ settings: { billPrinterId: "p1", paymentStart: "last" } }), printers)).toBe("Front");
     expect(billPrinterText(device({ settings: { billPrinterId: "gone", paymentStart: "last" }, printerInactive: true }), printers)).toBe("Printer inactive");
     expect(billPrinterText(device({ kind: "kitchen" }), printers)).toBe("—");
+    // The printer list could not be read (the licence recovery screen): a working printer is not called inactive.
+    expect(billPrinterText(device({ settings: { billPrinterId: "p1", paymentStart: "last" } }), [])).toBe("Thermal printer");
   });
   it("applies a presence change to one device", () => {
     const list = [device({ id: "a" }), device({ id: "b" })];

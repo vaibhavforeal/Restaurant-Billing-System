@@ -29,6 +29,8 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
   /** Goes up each time the list is read again, so the Add device dialog looks for the device it is waiting for. */
   const [changes, setChanges] = useState(0);
   const sequence = useRef(0);
+  /** The last device list that loaded; `list` itself is emptied when a reload fails, so no stale row can be acted on. */
+  const lastList = useRef<DeviceList | null>(null);
 
   const load = useCallback(async () => {
     const request = ++sequence.current;
@@ -40,6 +42,7 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
         recovery ? { printers: [] } : apiFetch<{ printers: ActivePrinter[] }>("/api/billing-printers").catch(() => ({ printers: [] })),
       ]);
       if (request !== sequence.current) return;
+      lastList.current = devices;
       setList(devices); setHistory(events); setPrinters(active.printers); setError(""); setChanges((n) => n + 1);
     } catch (e) {
       if (request !== sequence.current) return;
@@ -115,6 +118,7 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
       onChanged={(device) => { setList((current) => current && { ...current, devices: current.devices.map((d) => d.id === device.id ? device : d) }); void load(); }}
       onRemoved={() => { setOpenId(null); setNotice("Device removed."); void load(); }}
       onReplace={replaceDevice} onFailed={() => void load()} onClose={() => setOpenId(null)} />}
-    {adding && list && <AddDeviceDialog list={list} replace={adding.replace} changes={changes} onClose={() => { setAdding(null); void load(); }} />}
+    {/* Stays open on the last list that loaded, so a join code on screen is not lost when a reload fails. */}
+    {adding && lastList.current && <AddDeviceDialog list={list ?? lastList.current} replace={adding.replace} changes={changes} onClose={() => { setAdding(null); void load(); }} />}
   </div>;
 }

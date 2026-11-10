@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceKind, DeviceMe } from "@masalapos/domain";
-import { codeFromLocation, countdown, gateDecision, homeForKind, joinCodeHint, redeemJoinCode } from "./join-code";
+import { codeFromLocation, countdown, gateDecision, homeForKind, joinCodeHint, joinsOnOpen, redeemJoinCode } from "./join-code";
 
 const me = (joined: boolean, kind: DeviceKind | null = null, mainPc = false): DeviceMe => ({ joined, kind, mainPc });
 
@@ -17,6 +17,13 @@ describe("joining a device", () => {
     expect(codeFromLocation({ pathname: "/", hash: "#join=K7M2QP" })).toBe("K7M2QP");
     expect(codeFromLocation({ pathname: "/captain/", hash: "#join=nope" })).toBe("");
     expect(codeFromLocation({ pathname: "/captain/", hash: "#K7M2QP" })).toBe("");
+  });
+  it("joins without a tap only for a code the Android app passed", () => {
+    expect(joinsOnOpen({ pathname: "/captain/", hash: "#join=K7M2QP" })).toBe(true);
+    expect(joinsOnOpen({ pathname: "/captain/", hash: "#join=nope" })).toBe(false);
+    // A join link opened or scanned in a browser fills the code in; the person still selects Join.
+    expect(joinsOnOpen({ pathname: "/join", hash: "#K7M2QP" })).toBe(false);
+    expect(joinsOnOpen({ pathname: "/captain/", hash: "" })).toBe(false);
   });
   it("a tablet that has already joined and scans a code again just opens Captain", () => {
     expect(gateDecision(me(true, "captain"), false, "/captain/")).toEqual({ show: "app" });

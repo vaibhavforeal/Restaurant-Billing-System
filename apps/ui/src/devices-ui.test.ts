@@ -21,6 +21,10 @@ describe("Settings → Devices", () => {
   it("Backups no longer explains how to connect devices", () => {
     expect(read("screens/SystemSettings.tsx")).not.toMatch(/system\/connections|Connect your team/);
   });
+  it("a join code on screen outlives a device list that fails to reload", () => {
+    // The dialog is drawn from the last list that loaded, not only while the current load succeeded.
+    expect(read("screens/DevicesTab.tsx")).toMatch(/adding && lastList\.current && <AddDeviceDialog list=\{list \?\? lastList\.current\}/);
+  });
   it("Plan and This device hold no device management", () => {
     expect(read("screens/LicenseSettings.tsx")).not.toMatch(/license\/devices|JoinCodePanel|Rename |Remove /);
     expect(read("screens/DeviceSettings.tsx")).not.toMatch(/billPrinterId|paymentStart|api\/devices/);

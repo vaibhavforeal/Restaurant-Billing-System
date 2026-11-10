@@ -1,8 +1,8 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { DeviceJoined, DeviceKind, DeviceMe } from "@masalapos/domain";
 import { normalizeJoinCode } from "@masalapos/domain/devices";
 import { ApiError, apiFetch, session, type User } from "../api";
-import { codeFromLocation, joinCodeHint, redeemJoinCode } from "../join-code";
+import { codeFromLocation, joinCodeHint, joinsOnOpen, redeemJoinCode } from "../join-code";
 import { AuthLayout } from "./AuthLayout";
 import { Login } from "./Login";
 
@@ -36,6 +36,15 @@ export function JoinScreen({ me, onJoined }: { me: DeviceMe; onJoined: (kind: De
     e.preventDefault();
     void run(async () => onJoined(await redeemJoinCode(code, apiFetch)));
   }
+  // The Android Captain app opens this page with the code it just scanned: join with it at once, so one scan pairs and
+  // joins. If the code is refused the form is left showing why, for a code to be typed.
+  const joinOnOpen = useRef(joinsOnOpen(window.location));
+  useEffect(() => {
+    if (!joinOnOpen.current) return;
+    joinOnOpen.current = false;
+    void run(async () => onJoined(await redeemJoinCode(codeFromLocation(window.location), apiFetch)));
+    // Runs once, when the screen opens.
+  }, []);
   function signedIn(user: User) {
     if (user.role !== "admin") {
       void signOut(); setMainPc("closed"); setError("Only an administrator can re-join the main counter.");
