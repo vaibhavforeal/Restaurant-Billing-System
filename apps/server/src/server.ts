@@ -53,6 +53,7 @@ import { realSend, type SinkSend } from "./print/sinks.js";
 import { PrintQueue } from "./print/queue.js";
 import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discovery.js";
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
+import { configureDevices } from "./devices.js";
 import { registerSupport, type SupportOptions } from "./support.js";
 import { provideModuleAllowances, registerModules } from "./modules.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
@@ -125,6 +126,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return reply.status(status).send({ error: message, ...(code ? { code } : {}) });
   });
 
+  configureDevices(app, opts.licensing?.now);
   configureLicensing(app, opts.licensing, opts.appVersion);
   provideModuleAllowances(app.db, () => app.licensing.status().modules);
   registerAuth(app, opts.demo ?? false);

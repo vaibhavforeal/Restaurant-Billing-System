@@ -5,6 +5,7 @@ import { verifyLicenseSignature } from "@masalapos/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { deviceHash } from "./devices.js";
 
 /** Nothing allowed: an installation without a valid licence. */
 const noModules = (): ModuleMap => Object.fromEntries(MODULE_IDS.map((id) => [id, false])) as ModuleMap;
@@ -59,10 +60,7 @@ interface SavedLicense {
 }
 interface DeviceRow { id: string; credential_hash: string; name: string; created_at: number; last_seen_at: number | null; version: number; revoked_at: number | null }
 
-export function deviceHash(credential: unknown): string | null {
-  return typeof credential === "string" && /^[a-f0-9]{64}$/.test(credential)
-    ? createHash("sha256").update(credential).digest("hex") : null;
-}
+export { deviceHash };
 
 export class Licensing {
   private now: () => number;
