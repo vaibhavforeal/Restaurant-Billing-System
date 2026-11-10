@@ -60,7 +60,8 @@ export async function createUser(
   return { id: (created.json() as { user: { id: string } }).user.id, token };
 }
 
-export async function wsAuth(app: FastifyInstance, token: string): Promise<import("@fastify/websocket").WebSocket> {
+/** Opens a socket and signs it in. `device` is the browser's device credential, as the POS sends it. */
+export async function wsAuth(app: FastifyInstance, token: string, device?: string): Promise<import("@fastify/websocket").WebSocket> {
   const ws = await app.injectWS("/api/ws");
 
   // Wait for connection to open
@@ -73,7 +74,7 @@ export async function wsAuth(app: FastifyInstance, token: string): Promise<impor
   });
 
   // Send auth frame
-  ws.send(JSON.stringify({ type: "auth", token }));
+  ws.send(JSON.stringify({ type: "auth", token, ...(device ? { device } : {}) }));
 
   // Wait for auth.ok
   await new Promise<void>((resolve, reject) => {

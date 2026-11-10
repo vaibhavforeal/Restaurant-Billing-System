@@ -2,11 +2,14 @@ import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "@fastify/websocket";
 import { canSeeCustomers, sessionUser, withoutCustomers } from "./auth.js";
+import { DevicePresence } from "./device-presence.js";
 
 interface ClientInfo {
   token: string;
   userId: string;
   device: unknown;
+  /** The device this socket counts for, fixed when it signed in; null for a browser that is not a device. */
+  deviceId: string | null;
   /** Whether this person may view customers; refreshed whenever sockets are revalidated. */
   canSeeCustomers: boolean;
 }
@@ -14,8 +17,21 @@ interface ClientInfo {
 /** How often connected screens hear from the hub, even when nothing else happens. */
 export const HEARTBEAT_MS = 20_000;
 
-export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): void {
+export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000, now: () => number = Date.now): void {
   const clients = new Map<WebSocket, ClientInfo>();
+  const presence = new DevicePresence((deviceId, online) => {
+    // Builds without licensing never note when a device was last used, so going offline does.
+    if (!online) app.devices.touch(deviceId, now());
+    app.broadcast("devices.presence", { deviceId, online });
+  });
+  app.decorate("deviceOnline", (deviceId: string) => presence.online(deviceId));
+  /** The one way a socket leaves the hub, so the hub closing it and the browser closing it count it out once. */
+  const drop = (ws: WebSocket) => {
+    const info = clients.get(ws);
+    if (!info) return;
+    clients.delete(ws);
+    if (info.deviceId) presence.close(info.deviceId);
+  };
 
   app.decorate("broadcast", (event: string, data: unknown) => {
     const msg = JSON.stringify({ event, data });
@@ -31,10 +47,10 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
       const user = sessionUser(app.db, info.token);
       if (!user) {
         ws.close(4401, "unauthenticated");
-        clients.delete(ws);
+        drop(ws);
       } else if (!app.licensing.sessionAllowed(info.token, info.device) || !app.licensing.status(info.device).canOperate) {
         ws.close(4403, "device or license unavailable");
-        clients.delete(ws);
+        drop(ws);
       } else {
         info.canSeeCustomers = canSeeCustomers(user);
       }
@@ -85,8 +101,10 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
 
           clearTimeout(timeout);
           authenticated = true;
-          clients.set(socket, { token: frame.token, userId: user.id, device: frame.device, canSeeCustomers: canSeeCustomers(user) });
+          const deviceId = app.devices.findByCredential(frame.device)?.id ?? null;
+          clients.set(socket, { token: frame.token, userId: user.id, device: frame.device, deviceId, canSeeCustomers: canSeeCustomers(user) });
           socket.send(JSON.stringify({ event: "auth.ok", data: {} }));
+          if (deviceId) presence.open(deviceId);
         } catch {
           socket.close(4401, "unauthenticated");
         }
@@ -94,7 +112,7 @@ export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000): 
 
       socket.on("close", () => {
         clearTimeout(timeout);
-        clients.delete(socket);
+        drop(socket);
       });
     });
   });
@@ -104,5 +122,7 @@ declare module "fastify" {
   interface FastifyInstance {
     broadcast(event: string, data: unknown): void;
     wsRevalidate(): void;
+    /** Whether the device has a signed-in screen connected right now. */
+    deviceOnline(deviceId: string): boolean;
   }
 }

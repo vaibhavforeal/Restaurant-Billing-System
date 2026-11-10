@@ -131,7 +131,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   configureLicensing(app, opts.licensing, opts.appVersion);
   provideModuleAllowances(app.db, () => app.licensing.status().modules);
   registerAuth(app, opts.demo ?? false);
-  registerWs(app, opts.authTimeoutMs);
+  registerWs(app, opts.authTimeoutMs, opts.licensing?.now);
   registerLicensing(app);
   registerDeviceJoin(app, opts.port, opts.captainHttps, opts.licensing?.now);
   registerSupport(app, {
