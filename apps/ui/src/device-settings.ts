@@ -4,10 +4,32 @@ import { apiFetch } from "./api";
 import { connectWs } from "./ws";
 
 /** What a browser that is not one of the restaurant's devices works with: the browser receipt, and the method used last. */
-export const NO_DEVICE: MyDeviceSettings = { deviceId: null, version: null, settings: { billPrinterId: null, paymentStart: "last" } };
+export const NO_DEVICE: MyDeviceSettings = { deviceId: null, version: null, printerInactive: false, settings: { billPrinterId: null, paymentStart: "last" } };
+
+export const DEVICE_SETTINGS_KEY = "masalapos.device-settings.v1";
+const PAYMENT_STARTS = ["last", "cash", "card", "upi"];
+
+/**
+ * The last settings the main PC gave this device, kept in this browser so a page that loads while the main PC cannot
+ * be reached still knows its printer and starting payment method. The main PC's answer always replaces it.
+ */
+export function readSavedDeviceSettings(): MyDeviceSettings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_SETTINGS_KEY) ?? "null") as Partial<MyDeviceSettings> | null;
+    const settings = saved?.settings;
+    if (!saved || typeof saved.deviceId !== "string" || typeof saved.version !== "number" || !settings) return NO_DEVICE;
+    if ((settings.billPrinterId !== null && typeof settings.billPrinterId !== "string") || !PAYMENT_STARTS.includes(settings.paymentStart)) return NO_DEVICE;
+    return { deviceId: saved.deviceId, version: saved.version, printerInactive: saved.printerInactive === true,
+      settings: { billPrinterId: settings.billPrinterId, paymentStart: settings.paymentStart } };
+  } catch { return NO_DEVICE; }
+}
+
+export function saveDeviceSettings(value: MyDeviceSettings): void {
+  try { localStorage.setItem(DEVICE_SETTINGS_KEY, JSON.stringify(value)); } catch { /* A browser without storage starts from the defaults next time. */ }
+}
 
 // The last answer any screen got, so a screen opened later starts from it and not from the defaults.
-let lastLoaded = NO_DEVICE;
+let lastLoaded: MyDeviceSettings | null = null;
 
 /**
  * This device's settings, kept on the main PC and set by an administrator: its bill printer and the payment method a new
@@ -15,11 +37,13 @@ let lastLoaded = NO_DEVICE;
  * keeps the last values.
  */
 export function useDeviceSettings(): MyDeviceSettings & { reload: () => Promise<void> } {
-  const [value, setValue] = useState(lastLoaded);
+  const [value, setValue] = useState(() => (lastLoaded ??= readSavedDeviceSettings()));
   const reload = useCallback(async () => {
     try {
-      lastLoaded = await apiFetch<MyDeviceSettings>("/api/devices/me/settings", { cache: "no-store" });
-      setValue(lastLoaded);
+      const loaded = await apiFetch<MyDeviceSettings>("/api/devices/me/settings", { cache: "no-store" });
+      lastLoaded = loaded;
+      saveDeviceSettings(loaded);
+      setValue(loaded);
     } catch { /* Keep the last known settings. */ }
   }, []);
   useEffect(() => {

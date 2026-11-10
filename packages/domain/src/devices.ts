@@ -67,5 +67,8 @@ export interface DeviceInfo {
   online: boolean; settings: DeviceSettings; printerInactive: boolean;
 }
 export interface DeviceList { devices: DeviceInfo[]; maxDevices: number | null }
-/** The calling device's own settings, as they apply now. `deviceId` is null for a browser that is not a device. */
-export interface MyDeviceSettings { deviceId: string | null; version: number | null; settings: DeviceSettings }
+/**
+ * The calling device's own settings, as they apply now. `deviceId` is null for a browser that is not a device.
+ * `printerInactive` says a printer is saved for the device but switched off, so `settings.billPrinterId` reads null.
+ */
+export interface MyDeviceSettings { deviceId: string | null; version: number | null; printerInactive: boolean; settings: DeviceSettings }

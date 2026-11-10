@@ -80,6 +80,10 @@ export function DeviceSettings() {
           <option value="">Browser / A4 receipt</option>
           {printers?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        {device.printerInactive && <small role="status">
+          The printer saved for this device is switched off. Bills use the browser receipt until it is switched on again or you choose another.
+          {" "}{allowed && <button type="button" disabled={saving} onClick={() => void save({ billPrinterId: null })}>Forget that printer</button>}
+        </small>}
       </label>
       <label style={field}>
         <span>Payment method a new bill starts on</span>

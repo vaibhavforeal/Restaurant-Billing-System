@@ -20,6 +20,10 @@ How Phase 3 settled what the spec left open (plan: `docs/superpowers/plans/2026-
   buttons match what the server will do. The saved id is kept and comes back when the printer is switched on.
 - `last_seen_at` is also set when a device's last socket closes, so builds without licensing have a "last seen".
 - The per-bill **Receipt printer** choice lasts for one order.
+- The counter keeps the last settings the main PC gave it in browser storage (`masalapos.device-settings.v1`), so a
+  page that loads while the main PC cannot be reached still knows its printer; the main PC's answer always replaces it.
+- `GET /api/devices/me/settings` also carries `printerInactive`. **This device** shows a note when the saved printer is
+  switched off, with **Forget that printer** for an administrator.
 - The counter loads its device settings at sign-in. Until the list of active printers has loaded (a counter that is
   offline), it does not second-guess the printer it has, so a bill saved offline is not sent with "do not print".
 

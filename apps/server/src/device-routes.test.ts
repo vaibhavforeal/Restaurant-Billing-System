@@ -59,7 +59,7 @@ describe("device list and settings over the API", () => {
     expect(res.json().device).toMatchObject({ id: d.id, version: d.version + 1, online: true, settings: { billPrinterId: printerId, paymentStart: "upi" } });
     await settle();
     expect(seen).toEqual([{ deviceId: d.id }]);
-    expect(await mine(cashier)).toEqual({ deviceId: d.id, version: d.version + 1, settings: { billPrinterId: printerId, paymentStart: "upi" } });
+    expect(await mine(cashier)).toEqual({ deviceId: d.id, version: d.version + 1, printerInactive: false, settings: { billPrinterId: printerId, paymentStart: "upi" } });
     expect((await mine(admin)).settings.billPrinterId).toBeNull();
     // The old device routes stay until the Devices area replaces them.
     expect((await app.inject({ method: "GET", url: "/api/license/devices", headers: admin })).statusCode).toBe(200);
@@ -90,13 +90,24 @@ describe("device list and settings over the API", () => {
     await settle();
     expect(seen).toEqual([{}]);
     expect(await two()).toMatchObject({ printerInactive: true, settings: { billPrinterId: printerId } });
-    expect((await mine(cashier)).settings.billPrinterId).toBeNull();
+    expect(await mine(cashier)).toMatchObject({ printerInactive: true, settings: { billPrinterId: null } });
     await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, headers: admin, payload: { name: "Renamed" } });
     await settle();
     expect(seen).toEqual([{}]);   // a rename is not a device change
   });
+  it("a printer that was switched off can be cleared from the device", async () => {
+    let d = await two();
+    await patch(d.id, { version: d.version, billPrinterId: printerId });
+    await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, headers: admin, payload: { isActive: false } });
+    d = await two();
+    expect((await patch(d.id, { version: d.version, billPrinterId: null })).statusCode).toBe(200);
+    expect(await two()).toMatchObject({ printerInactive: false, settings: { billPrinterId: null } });
+    await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, headers: admin, payload: { isActive: true } });
+    // Switching the printer on again does not bring it back to a device that let go of it.
+    expect(await mine(cashier)).toMatchObject({ printerInactive: false, settings: { billPrinterId: null } });
+  });
   it("a browser that is not a device gets the defaults", async () => {
-    expect(await mine(auth(adminToken))).toEqual({ deviceId: null, version: null, settings: { billPrinterId: null, paymentStart: "last" } });
+    expect(await mine(auth(adminToken))).toEqual({ deviceId: null, version: null, printerInactive: false, settings: { billPrinterId: null, paymentStart: "last" } });
     expect((await app.inject({ method: "GET", url: "/api/devices/me/settings" })).statusCode).toBe(401);
   });
   it("a licensed build reports the limit", async () => {

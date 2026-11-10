@@ -1,5 +1,36 @@
-import { describe, expect, it } from "vitest";
-import { printerField, shownPrinter } from "./device-settings";
+import { beforeEach, describe, expect, it } from "vitest";
+import { DEVICE_SETTINGS_KEY, NO_DEVICE, printerField, readSavedDeviceSettings, saveDeviceSettings, shownPrinter } from "./device-settings";
+
+describe("the last settings the main PC gave this device", () => {
+  const store = new Map<string, string>();
+  beforeEach(() => {
+    store.clear();
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value); },
+      removeItem: (key: string) => { store.delete(key); },
+    } });
+  });
+  const loaded = { deviceId: "d1", version: 4, printerInactive: false, settings: { billPrinterId: "front", paymentStart: "upi" as const } };
+
+  it("are kept in this browser, for a page that loads while the main PC cannot be reached", () => {
+    expect(readSavedDeviceSettings()).toEqual(NO_DEVICE);
+    saveDeviceSettings(loaded);
+    expect(readSavedDeviceSettings()).toEqual(loaded);
+    expect(DEVICE_SETTINGS_KEY).toBe("masalapos.device-settings.v1");
+  });
+  it("fall back to no device when what is stored cannot be read", () => {
+    for (const bad of ["not json", "null", "[]", JSON.stringify({ deviceId: 7 }), JSON.stringify({ deviceId: "d1", version: 1, settings: { billPrinterId: 5, paymentStart: "wallet" } })]) {
+      store.set(DEVICE_SETTINGS_KEY, bad);
+      expect(readSavedDeviceSettings()).toEqual(NO_DEVICE);
+    }
+  });
+  it("read as no device where the browser has no storage", () => {
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } } });
+    expect(() => saveDeviceSettings(loaded)).not.toThrow();
+    expect(readSavedDeviceSettings()).toEqual(NO_DEVICE);
+  });
+});
 
 const active = [{ id: "front" }, { id: "back" }];
 

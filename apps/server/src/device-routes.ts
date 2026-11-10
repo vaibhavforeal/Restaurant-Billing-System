@@ -39,8 +39,8 @@ export function registerDevices(app: FastifyInstance): void {
   app.get("/api/devices/me/settings", { preHandler: app.requireAuth }, async (req, reply) => {
     reply.header("Cache-Control", "no-store");
     const device = req.device;
-    if (!device) return { deviceId: null, version: null, settings: deviceSettings({}) } satisfies MyDeviceSettings;
-    return { deviceId: device.id, version: device.version,
+    if (!device) return { deviceId: null, version: null, printerInactive: false, settings: deviceSettings({}) } satisfies MyDeviceSettings;
+    return { deviceId: device.id, version: device.version, printerInactive: app.devices.printerInactive(device),
       settings: { ...app.devices.settings(device), billPrinterId: app.devices.billPrinterId(device) } } satisfies MyDeviceSettings;
   });
 }
