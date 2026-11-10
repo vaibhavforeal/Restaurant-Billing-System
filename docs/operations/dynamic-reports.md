@@ -174,7 +174,7 @@ layouts are kept.
 
 **Home still shows the fixed dashboard.** Check each of these:
 
-1. The licence includes Dynamic Reports (**Settings → Plan and devices**), and the
+1. The licence includes Dynamic Reports (**Settings → Plan**), and the
    counter has checked in since the portal change.
 2. The **Dynamic Reports** switch is on in Marketplace.
 3. The person has **Customise own dashboard**, and has signed in again since it was

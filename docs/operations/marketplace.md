@@ -66,7 +66,7 @@ MasalaPOS to add it." and, for admins, **View licence**; the switch can only be 
 | --- | --- | --- |
 | Sidebar | No **kitchen** item for admins and cashiers | **kitchen** item |
 | Kitchen board (`/kitchen/`, MasalaPOS Kitchen app, kitchen tab) | "Kitchen Display is turned off. Ask an admin to turn it on in the Marketplace." | Open tickets, each with a **Done** button |
-| Settings → Backups & connections | No "Kitchen displays" section | Kitchen display links and set-up notes |
+| Settings → Devices → Add device | No **Kitchen display** type | **Kitchen display** type, with its links and set-up notes |
 | Kitchen API | `GET /api/kots` and `POST /api/kots/:id/done` answer 403 with `code: "kds_off"` | Available to admin, cashier and kitchen staff |
 | Sending and printing KOTs | Unchanged | Unchanged |
 | Billing | Never waits for the kitchen | Never waits for the kitchen |

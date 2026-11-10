@@ -22,7 +22,7 @@ Open **Settings → Updates**.
 - If you don't install it, the update installs the next time MasalaPOS is quit from the tray.
 
 MasalaPOS takes a **pre-update backup** automatically the first time the new version starts
-(Settings → Backups & connections lists it). Kitchen displays and counters reconnect on their own.
+(Settings → Backups lists it). Kitchen displays and counters reconnect on their own.
 
 ## For the MasalaPOS team: publishing a release
 

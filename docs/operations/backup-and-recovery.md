@@ -80,7 +80,7 @@ Increment the app version for each distributed release.
 
 1. Stop work on all counters and decide which snapshot to restore. Everything
    recorded after that point will leave the live database.
-2. In **Settings → Backups & connections** on the main PC choose **Restore from a
+2. In **Settings → Backups** on the main PC choose **Restore from a
    backup file…**, **Restore…** next to a backup on this PC, or a backup in Google
    Drive. The server copies it to `data/restore-incoming/`, verifies it and shows the
    restaurant name, bill and order counts and the last bill time. Nothing changes until

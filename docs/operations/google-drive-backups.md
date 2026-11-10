@@ -1,6 +1,6 @@
 # Google Drive backups
 
-Admins connect a Google account in **Settings → Backups & connections** on the main POS
+Admins connect a Google account in **Settings → Backups** on the main POS
 PC. Every verified local backup (daily, manual, pre-update) is then uploaded to a
 **MasalaPOS Backups** folder in that account, and any of them can be restored from the same
 screen, including backups uploaded by an older PC. Local backups and backup files keep

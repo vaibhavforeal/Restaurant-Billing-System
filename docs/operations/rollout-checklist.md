@@ -69,7 +69,7 @@ Allow about 2–3 hours for a full run. Do it outside service hours.
 
 ## 4. Printers
 
-Do this for **each** printer. Start in **Settings → Printers**.
+Do this for **each** printer. Start in **Settings → Devices → Printers**.
 
 ### 4a. Add and test
 
@@ -108,7 +108,7 @@ Phones need HTTPS to install the Captain app. Do this on the main PC, from the f
   .\tools\setup-captain-https.ps1 -ServerAddress <main-PC-IP> -OpenFirewall
   ```
   Restart MasalaPOS.
-- [ ] **Settings → Backups & connections → Captain tablets** shows an HTTPS address, a QR code and a certificate expiry date.
+- [ ] **Settings → Devices → Add device**, type **Captain**, then **Create join code**: the join address is an HTTPS address, and **Certificate details** shows a certificate expiry date. Each tablet joins with its own code.
 - [ ] Install the restaurant certificate on each phone/tablet (download it from that settings panel; never copy the `.pfx` or password files). Android: Settings → Security → Install certificate → CA certificate. iPad: open the file, install the profile, then enable it under General → About → Certificate Trust Settings.
 - [ ] Open `https://<main-PC-IP>:4443/captain/`. **Expect:** no certificate warning; captain login appears.
 - [ ] Install it: Chrome → **Install app**; iPad Safari → Share → **Add to Home Screen**. Open it from the home screen.

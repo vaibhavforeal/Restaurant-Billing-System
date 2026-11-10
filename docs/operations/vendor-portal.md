@@ -113,13 +113,13 @@ Each customer's **Counters** tab and every order show the licences on one timeli
   - The old computer's licence is signed and offline, so it keeps working until it ends.
 - **Replace computer** (Support): for a counter that died after its order's term ended, so releasing the seat wouldn't help (the order can't activate another computer, but a renewal kept this counter going).
   - The restaurant enters the Customer ID and Order ID on the new computer first. It is refused, but MasalaPOS now knows it.
-  - Enter the new computer's Installation ID (MasalaPOS shows it under Settings > Plan and devices). It takes over the seat and the current licence: same plan, end date, devices and modules. Renewals not yet paid move to it too.
+  - Enter the new computer's Installation ID (MasalaPOS shows it under Settings > Plan). It takes over the seat and the current licence: same plan, end date, devices and modules. Renewals not yet paid move to it too.
   - The new computer gets the licence at its next check, or straight away when the restaurant enters the IDs again.
   - The old computer's licence keeps working offline until it ends, as after a release.
 - **Reset pairing** (Support): after the restaurant restored its data folder and now holds a different installation secret. The next computer to check in with that installation ID claims it.
 - **Download licence file** (Support): for a counter that can't reach the service.
 
-**A counter without internet:** on the counter, Settings › Plan and devices › Activation details › **Download activation request**. In the portal, open the order and choose **Activate a counter without internet**, then pick that file. The counter takes a seat and you get its licence file to apply on the counter.
+**A counter without internet:** on the counter, Settings › Plan › Activation details › **Download activation request**. In the portal, open the order and choose **Activate a counter without internet**, then pick that file. The counter takes a seat and you get its licence file to apply on the counter.
 
 ## Follow-ups, leads and support
 

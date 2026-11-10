@@ -43,7 +43,7 @@ A module works when all three hold:
 In the [MasalaPOS Portal](vendor-portal.md), open the customer, then **Counters**, then the counter. Its **Modules** table shows each module, whether the plan includes it, and MasalaPOS's choice for this counter: **Follow the plan**, **Allow** or **Block**. Only admins change it; everyone else sees it.
 
 - Saving signs the counter's current licence terms with the new modules as the next licence revision.
-  - The restaurant's MasalaPOS collects it within an hour, or at once when an admin presses **Check for renewal** in **Settings → Plan and devices**.
+  - The restaurant's MasalaPOS collects it within an hour, or at once when an admin presses **Check for renewal** in **Settings → Plan**.
   - Until then the counter shows "Waiting for its next check-in".
 - An order can set modules too (**Modules** on the order). They become the counter's choices when it activates with that order, or when a renewal order is paid.
 - A counter whose licence has run out gets no new revision. Its next order carries the change, because every licence the service issues includes MasalaPOS's choices.
@@ -64,7 +64,7 @@ modules. Each card shows its state:
 Administrators use the switches; cashiers see the same cards read-only. A change applies to
 every counter at once.
 
-**Settings → Plan and devices** lists the modules the licence includes.
+**Settings → Plan** lists the modules the licence includes.
 
 ## What switching a module off does
 

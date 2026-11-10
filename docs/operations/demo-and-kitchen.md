@@ -55,7 +55,8 @@ It connects to the selected POS for sign-in, tickets and all saved actions.
 ## Tablet or browser
 
 On the same restaurant network, open the main PC's `/kitchen/` address. Find
-the exact link in **Settings → Backups & connections → Kitchen displays**.
+the exact link in **Settings → Devices → Add device** (choose **Kitchen display**). A kitchen screen joins with
+the code shown there before anyone signs in; see [Devices](devices.md).
 Example: `http://192.168.1.20:4110/kitchen/` for the demo. A different device
 must use the main PC's LAN address; `127.0.0.1` refers to itself.
 

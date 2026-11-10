@@ -1,14 +1,25 @@
 # Devices — design
 
-Date: 2026-11-10 · Branch: `feat/devices` · Status: Phases 1 to 3 built (migrations 65 and 66; Phase 3 needed none); Phase 4 not built
+Date: 2026-11-10 · Branch: `feat/devices` · Status: Phases 1 to 4 built (migrations 65 and 66; Phases 3 and 4 needed none)
 
-Pick-up point for Phase 4 (Devices area): `GET /api/devices` (each row has `online`, `printerInactive`, `allowed`,
-`current` and its saved `settings`) and `PATCH /api/devices/:id/settings` are in `apps/server/src/device-routes.ts`.
-The hub sends `devices.changed` (a device's settings changed, or a printer was switched on or off) and
-`devices.presence`. Rename, remove and device history are still under `/api/license/devices`. Two interim controls
-move into the Devices area: the bill printer and starting payment method on **This device**
-(`apps/ui/src/screens/DeviceSettings.tsx`), and the join-code panel (`apps/ui/src/screens/JoinCodePanel.tsx`) under
-**Plan & devices**. Join codes live in `apps/server/src/device-join.ts`. The next migration is 67.
+The next migration is 67. Operations guide: `docs/operations/devices.md`.
+
+How Phase 4 settled what the spec left open (plan: `docs/superpowers/plans/2026-11-10-devices-phase-4.md`):
+
+- Settings opens for staff who can see printers but do not manage settings. They get the Devices card only, with the
+  Printers, Kitchen stations and Print jobs tabs.
+- The device list, renaming, removing and device history stay reachable when the licence has stopped this browser, and
+  the licence recovery screen shows the device list (rename and remove only), so a slot can still be freed.
+- The Add device dialog learns that a device joined from the device history (a `joined` or `replaced` event newer than
+  the code), and also asks every five seconds while a code is on screen.
+- Kitchen displays have no bill printer or starting payment method.
+- Each printer in a printers response carries `usedBy` (device names and active kitchen station names).
+- `/api/license/devices`, `Licensing.devices`, `rename`, `revoke` and the `LicensedDevice` type are removed with no alias.
+- A captain join code carries Android pairing codes (`pairings`). The Android app keeps the join code in memory only
+  and ignores one that is not well formed.
+- The Captain page reads the code from `#join=<code>` on any path.
+- The tab is called "Kitchen stations". `printer-settings.css` and `connections.css` are kept for the shared printer
+  controls and the connection help.
 
 How Phase 3 settled what the spec left open (plan: `docs/superpowers/plans/2026-11-10-devices-phase-3.md`):
 

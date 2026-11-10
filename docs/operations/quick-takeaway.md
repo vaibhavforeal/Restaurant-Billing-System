@@ -42,7 +42,7 @@ when the bill is issued. Payment and receipt printing do not deduct stock again.
 ## Receipts and existing orders
 
 The paid receipt is queued on this device's bill printer, which an administrator
-sets under **Settings → This device**. To use another printer for one bill, or
+sets under **Settings → Devices** (open the device). To use another printer for one bill, or
 none, choose it under **Bill options → Receipt printer** before confirming
 payment; the next order goes back to the device's printer. For browser printing, choose
 **View receipt**, then **Print / save PDF**. Paid bills remain available in

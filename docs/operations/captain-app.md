@@ -19,7 +19,7 @@ Captain tokens extend the existing palette and spacing: 44px touch controls, 48p
 
 `apps/captain-android` is a small Kotlin app that opens the POS's own `/captain/` screens, so tablets always match the POS release and no order logic is duplicated. Compared with installing the PWA from Chrome, it:
 
-- pairs by scanning a code in **Settings → Backups & connections → Android Captain app**. The code carries the POS address and the SHA-256 fingerprint of the restaurant CA. The app downloads `/captain/restaurant-ca.cer`, checks that fingerprint, and from then on accepts only server certificates issued by that CA for the paired address. Tablets need no certificate installed in Android settings.
+- pairs by scanning the pairing code shown in **Settings → Devices → Add device** for a **Captain**. The code carries the POS address, the SHA-256 fingerprint of the restaurant CA, and the tablet's join code, so one scan connects the tablet and joins it as a device. A pairing code without a join code still pairs; the tablet then shows the join screen. The app downloads `/captain/restaurant-ca.cer`, checks that fingerprint, and from then on accepts only server certificates issued by that CA for the paired address. Tablets need no certificate installed in Android settings.
 - accepts a typed address too. It tries `https://<address>:4443` first, then `http://<address>:4100`. A typed HTTPS address shows the fingerprint for staff to compare with POS Settings. A plain HTTP connection warns that passwords and orders are unencrypted.
 - keeps the screen on, closes Captain dialogs and leaves orders with the Android back button, and shows a native reconnect screen with **Change POS server**.
 - updates itself. Each MasalaPOS build ships the matching APK at `/captain/android/MasalaPOS-Captain.apk` with `version.json`. The app checks on start and every six hours, verifies the SHA-256, and asks Android to install it. The first update asks staff to allow installs from MasalaPOS Captain.
@@ -28,9 +28,9 @@ The app does not use the PWA service worker. Drafts and the retry queue stay in 
 
 ### Rolling out to tablets
 
-1. On the POS, open **Settings → Backups & connections → Android Captain app**.
+1. On the POS, open **Settings → Devices → Add device**, choose **Captain**, name the tablet and select **Create join code**. Each tablet gets its own code, valid for ten minutes.
 2. On the tablet, scan the download code (plain LAN HTTP, because the tablet does not trust the CA yet) and install the APK. Android asks once to allow installs from the browser.
-3. Open MasalaPOS Captain, tap **Scan pairing code**, scan the pairing code and sign in with a captain's username and password.
+3. Open MasalaPOS Captain, tap **Scan pairing code** and scan the pairing code. The tablet connects and joins in one step. Sign in with a captain's username and password.
 
 Run the Captain HTTPS setup below first, so pairing codes are encrypted. Without it, pairing codes use the unencrypted desktop address.
 
@@ -66,7 +66,7 @@ On the POS PC, reserve its IPv4 address in the router. In a PowerShell window at
 
 Replace the example with that PC's actual restaurant LAN address. The default data directory is `%APPDATA%\masalapos-desktop\data` and the HTTPS port is 4443. For a development server, pass its actual `-DataDirectory`. Restart MasalaPOS after setup. The desktop continues to use HTTP port 4100; HTTPS uses the same handlers, database, staff permissions and live event hub.
 
-In **Settings → Backups & connections → Captain tablets**, find the HTTPS URL, QR code, certificate expiry and certificate fingerprint. Download the public restaurant certificate there, or copy only `restaurant-ca.cer` from the path printed by the setup script. Never transfer the `.pfx` files or `pfx-password.txt` to tablets.
+In **Settings → Devices → Add device**, after making a code for a **Captain**, find the HTTPS join address, its QR code, and under **Certificate details** the certificate expiry and fingerprint. Download the public restaurant certificate there, or copy only `restaurant-ca.cer` from the path printed by the setup script. Never transfer the `.pfx` files or `pfx-password.txt` to tablets.
 
 ### Windows Firewall
 

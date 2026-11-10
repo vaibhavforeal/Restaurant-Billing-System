@@ -108,7 +108,7 @@ implemented). Normal startup backs up existing databases before migration 008.
 
 ### Quick way: from the activation request
 
-Ask the restaurant for the file from **Settings > Plan and devices > Activation
+Ask the restaurant for the file from **Settings > Plan > Activation
 details > Download activation request**, then run:
 
 ```powershell
@@ -150,7 +150,7 @@ illustrative, and dates are Unix milliseconds:
 }
 ```
 
-Use the installation ID shown in Plan and devices. The helper resolves Basic to
+Use the installation ID shown in Settings > Plan. The helper resolves Basic to
 2 devices and Pro to 5, each with its plan's modules; add `--allow kds,qrOrdering` or
 `--deny reservations` to change the modules for this restaurant.
 Signed `maxDevices` and `features`
@@ -166,7 +166,7 @@ node --import tsx tools/issue-license.ts C:\secure\license-private.pem claims.js
 ```
 
 The helper refuses to overwrite an existing output. Import its contents into
-**Settings > Plan and devices** (also shown immediately after initial setup in a
+**Settings > Plan** (also shown immediately after initial setup in a
 commercial build). The browser that runs first-time setup becomes the **Main
 counter** whether or not a licence is installed yet, and uses the first device
 slot. Every other device joins with a join code (see **Adding and replacing
@@ -194,14 +194,14 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
 - If the hand-off fails (for example MasalaPOS is first opened by a different Windows user), the counter's setup still asks for the two IDs as before:
 - Counter fallback: setup starts by asking for the Customer ID and Order ID from MasalaPOS's setup card.
 - The counter checks a typo locally (each ID has a check character), then enrols with the service. It installs the order's licence, pre-fills the restaurant name, and registers the browser that set it up.
-- **No internet? Set up now and activate later** finishes setup without a licence. Plan and devices then shows an **Activate this counter** form for the same two IDs.
-- After setup, an admin can move the counter to another order of the same customer (a trial becoming paid) from **Activation details > Use a different Order ID**. Plan and devices shows both IDs for support calls.
+- **No internet? Set up now and activate later** finishes setup without a licence. Settings > Plan then shows an **Activate this counter** form for the same two IDs.
+- After setup, an admin can move the counter to another order of the same customer (a trial becoming paid) from **Activation details > Use a different Order ID**. Settings > Plan shows both IDs for support calls.
 - Renewals, module changes and staff adjustments made in the portal arrive with the hourly check, or at once with **Check for renewal**.
 - Setup activation is open only until the first user exists, and is throttled like wrong passwords.
 
 **Without internet: a licence file.**
 
-1. Open **Settings > Plan and devices**. Commercial builds show this screen
+1. Open **Settings > Plan**. Commercial builds show this screen
    automatically until the installation is activated and the current browser is
    registered. **Activation details > Download activation request** creates a
    JSON file containing installation identity, current subscription scope and
@@ -231,58 +231,42 @@ when a status refresh fails.
 ## Adding and replacing devices
 
 A browser that is not one of the restaurant's devices shows only **Enter join
-code**, on the POS, `/kitchen/` and `/captain/` alike, in every build.
+code**, on the POS, `/kitchen/` and `/captain/` alike, in every build. An
+administrator makes the code under **Settings > Devices > Add device**, for a new
+device or to replace an existing one. [Devices](devices.md) describes adding,
+replacing and removing devices, and re-joining the main counter.
 
-1. On a device that is already in, an administrator opens **Settings > Plan and
-   devices > Add a device**, chooses **New device**, its type (billing counter,
-   kitchen display or captain) and a name, and selects **Create join code**.
-2. The screen shows a six-character code, a ten-minute countdown, and a QR code
-   for each address of the main PC. The code has no `0`, `O`, `1`, `I` or `L`.
-3. On the new device, open the address (or scan the QR, which fills the code in),
-   enter the code and select **Join**. It lands on the screen for its type and
-   the normal sign-in.
+What matters for the licence:
 
-A code works once. Wrong, used and expired codes get the same answer, "That code
-is not valid or has expired", and one address can try ten codes a minute. Making
-another code for the same device cancels the earlier unused one. A new-device code
-is refused when the plan's devices are all in use, both when it is made and when
-it is entered.
-
-**Replace an existing device** makes a code that moves a device to another
-browser: after a browser's storage was cleared, or when a tablet is swapped. The
-device keeps its name, type, settings and place in the allowance, so it needs no
-free slot, and its old browser is signed out. A captain tablet that uses the HTTPS
-address must join on the HTTPS address; its join links point there when HTTPS is
-set up.
-
-If the main counter's own browser storage is cleared, no other device is needed:
-on the main POS PC the join screen offers **This is the main counter**. An
-administrator signs in there and selects **Re-join as main counter**. It works
-only on the main PC itself and only for an administrator.
+- A new-device code is refused when the plan's devices are all in use, both when
+  it is made and when it is entered.
+- Replacing a device keeps its place in the allowance, so it needs no free slot.
+- A code works once, for ten minutes. Wrong, used and expired codes get the same
+  answer, and one address can try ten codes a minute.
 
 ## Device management and local history
 
-Administrators can rename any registered device from **Plan and devices**.
-Renaming preserves its place in the allowance. **Last active** records use of a
-valid registration at most once a minute; it is not a live online/offline signal.
-Older registrations show **Not recorded** until used after upgrading.
+Administrators rename and remove devices under **Settings > Devices**. Renaming
+keeps a device's place in the allowance. Removing a device signs out its staff
+sessions and closes its WebSockets; a removed device needs a new join code and
+joins as a new device at the end of the list. The main counter cannot be removed.
+A change made against a list that is out of date is refused; the list reloads.
 
-Removing a device signs out its staff sessions and closes its WebSockets. Removing
-the current browser signs out the administrator too. Repeated removal is safe;
-if the device was renamed or registered again after the list loaded, the stale
-action is rejected. Refresh and review the list before retrying. A removed device
-needs a new join code to come back; it joins as a new device at the end of the
-list. The main counter cannot be removed.
+The device list shows which devices are connected now, and when the others were
+last seen. A device past the plan's allowance is marked **Over limit**.
 
-The history list under **Plan and devices** shows successful licence activations,
-with the acting administrator and server time. It supports loading older entries,
-and an exact retry does not create a duplicate entry. Registrations, renames and
-removals are recorded in the device history instead (the `device_events` table),
-which the Devices screen will show once it is built; until then they are recorded
-but not listed in the app. Both histories are local SQLite data included in
+**Settings > Plan** lists successful licence activations, with the acting
+administrator and server time. It supports loading older entries, and an exact
+retry does not create a duplicate entry. Joins, renames, replacements, removals
+and settings changes are in the device history under **Settings > Devices** (the
+`device_events` table). Both histories are local SQLite data included in
 database backups; they are not cloud audit storage or a tamper-proof log.
 Migration 65 moves existing devices and their history across and keeps device
 priority.
+
+When the licence stops a device (expired, or over the limit), the recovery screen
+an administrator sees still lists the devices and allows renaming and removing
+them, so a slot can be freed.
 
 ## Expiry, downgrades, and recovery
 

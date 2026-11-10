@@ -1,6 +1,8 @@
 # Printer setup and recovery
 
-Open **Settings > Printers** as an administrator.
+Open **Settings > Devices > Printers** as an administrator. Printers must be reachable from the main PC: on the
+network, installed in Windows on the main PC, or paired to it by Bluetooth. The **Used by** column lists the devices
+whose bills go to each printer and the kitchen stations routed to it.
 
 ## Add and configure a printer
 
@@ -36,24 +38,26 @@ testing. Deactivated printers cannot be test-printed.
 ## Each device's bill printer
 
 Every counter, tablet and kitchen screen that has joined has its own bill
-printer, kept on the main PC. An administrator signs in on that device, opens
-**Settings → This device** and chooses the printer under **Bill printer**, or
-**Browser / A4 receipt** for no thermal print. The choice survives clearing the
-browser and replacing the device.
+printer, kept on the main PC. An administrator opens **Settings → Devices**,
+selects the device and chooses the printer under **Bill printer**, or
+**Browser / A4 receipt** for no thermal print. This can be done from any device,
+and the choice survives clearing the browser and replacing the device. A kitchen
+display has no bill printer. See [Devices](devices.md).
 
 Bills, reprints and credit notes from that device go to its printer without
 anyone choosing one. On the billing screen, **Bill options → Receipt printer**
 changes the printer for the bill in hand only.
 
 If a device's printer is switched off, the device uses the browser receipt
-until the printer is switched on again or another one is chosen.
+until the printer is switched on again or another one is chosen. The device
+list marks it **Printer inactive**.
 
-## KOT stations
+## Kitchen stations
 
-Open **Settings > Printers > KOT stations** to add kitchen stations, assign
+Open **Settings > Devices > Kitchen stations** to add kitchen stations, assign
 an active printer to each station, or activate and deactivate stations.
 Choose **No printer** to leave a station without a printer assignment.
-The **Printers** tab manages the devices and their bill and KOT profiles.
+The **Printers** tab manages the printers and their bill and KOT profiles.
 
 ## Print jobs
 
