@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { Devices, deviceHash } from "./devices.js";
+import { ADMIN_LOGIN, SETUP, auth, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
 
 const A = "a".repeat(64), B = "b".repeat(64);
 
@@ -128,5 +130,64 @@ describe("device registry", () => {
     expect(new Set([...first.events, ...second.events].map((e) => e.id)).size).toBe(26);
     expect(JSON.stringify(first)).not.toContain(deviceHash(A)!);
     expect(JSON.stringify(second)).not.toContain(A);
+  });
+});
+
+describe("devices on the server", () => {
+  const apps: FastifyInstance[] = [];
+  afterEach(async () => { for (const app of apps.splice(0)) { await app.close(); app.db.close(); } });
+  const dev = () => { const app = freshApp(); apps.push(app); return app; };
+  const withDevice = (credential: string) => ({ "x-masalapos-device": credential });
+  const signIn = (app: FastifyInstance, payload: object, credential: string, remoteAddress?: string) =>
+    app.inject({ method: "POST", url: "/api/login", payload, headers: withDevice(credential), ...(remoteAddress ? { remoteAddress } : {}) });
+
+  it("setup makes the setup browser the main counter in a dev build", async () => {
+    const app = dev();
+    await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: withDevice(A) });
+    expect(app.devices.active()).toMatchObject([{ name: "Main counter", kind: "counter", isMain: true }]);
+    expect(app.devices.events().events).toMatchObject([{ kind: "joined", actorName: SETUP.adminName }]);
+  });
+
+  it("setup without a device credential in a dev build makes no device", async () => {
+    const app = dev(); await setupAdmin(app);
+    expect(app.devices.active()).toEqual([]);
+  });
+
+  it("an admin signing in on the main PC becomes the main counter when there is none", async () => {
+    const app = dev(); await setupAdmin(app);
+    const lan = await signIn(app, ADMIN_LOGIN, B, "192.168.1.20");
+    expect(lan.statusCode).toBe(200);
+    expect(app.devices.active()).toEqual([]);
+    expect((await signIn(app, { ...ADMIN_LOGIN, password: "wrong-password" }, A)).statusCode).toBe(401);
+    expect(app.devices.active()).toEqual([]);
+    expect((await signIn(app, ADMIN_LOGIN, A)).statusCode).toBe(200);
+    expect(app.devices.active()).toMatchObject([{ name: "Main counter", isMain: true, credentialHash: deviceHash(A) }]);
+    await signIn(app, ADMIN_LOGIN, B);
+    expect(app.devices.active()).toHaveLength(1);
+  });
+
+  it("a cashier signing in on the main PC does not become the main counter", async () => {
+    const app = dev(); const admin = await setupAdmin(app);
+    const cashier = { name: "Ravi", pin: "2345", role: "cashier" as const };
+    await createUser(app, admin.token, cashier);
+    expect((await signIn(app, testLogin(cashier), A)).statusCode).toBe(200);
+    expect(app.devices.active()).toEqual([]);
+  });
+
+  it("puts the calling device on the request", async () => {
+    const app = dev();
+    app.get("/api/test-device", { preHandler: app.requireAuth }, async (req) => ({ name: req.device?.name ?? null }));
+    app.get("/api/test-device-permission", { preHandler: app.requirePermission("settings.manage") }, async (req) => ({ name: req.device?.name ?? null }));
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: withDevice(A) });
+    const token = auth(setup.json().token);
+    const ask = async (url: string, headers: Record<string, string>) => {
+      const res = await app.inject({ url, headers });
+      return [res.statusCode, res.json()];
+    };
+    expect(await ask("/api/test-device", token)).toEqual([200, { name: null }]);
+    expect(await ask("/api/test-device", { ...token, ...withDevice(B) })).toEqual([200, { name: null }]);
+    expect(await ask("/api/test-device", { ...token, ...withDevice(A) })).toEqual([200, { name: "Main counter" }]);
+    expect(await ask("/api/test-device-permission", { ...token, ...withDevice(A) })).toEqual([200, { name: "Main counter" }]);
+    expect(await ask("/api/test-device-permission", token)).toEqual([200, { name: null }]);
   });
 });

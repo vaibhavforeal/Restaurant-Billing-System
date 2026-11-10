@@ -166,9 +166,15 @@ node --import tsx tools/issue-license.ts C:\secure\license-private.pem claims.js
 
 The helper refuses to overwrite an existing output. Import its contents into
 **Settings > Plan and devices** (also shown immediately after initial setup in a
-commercial build). Sign in as an administrator on each device and register it by
-name. Staff access and plan entitlement are both required; a Pro license never
-grants administrator permissions.
+commercial build). The browser that runs first-time setup becomes the **Main
+counter** whether or not a licence is installed yet, and uses the first device
+slot. Sign in as an administrator on each other device and register it by name.
+Staff access and plan entitlement are both required; a Pro license never grants
+administrator permissions.
+
+A restaurant set up before the main counter existed, with no device in use, gets
+its main counter the next time an administrator signs in on the main PC itself.
+Signing in from another PC or a tablet never creates it.
 
 Renewals, upgrades, and downgrades keep all identity fields and increase `revision`.
 The API permits retrying the same signed grant and rejects older grants. Store the
@@ -229,14 +235,18 @@ Removing a device signs out its staff sessions and closes its WebSockets. Removi
 the current browser signs out the administrator too. Repeated removal is safe;
 if the device was renamed or registered again after the list loaded, the stale
 action is rejected. Refresh and review the list before retrying. A removed device
-must sign in and register again to use an available slot.
+must sign in and register again to use an available slot; it then goes to the end
+of the list. The main counter cannot be removed.
 
-**License and device history** shows successful activations, registrations,
-renames and removals, with the acting administrator and server time. It supports
-loading older entries. Exact retries and no-op renames do not create duplicate
-entries. History is local SQLite data included in database backups; it is not
-cloud audit storage or a tamper-proof log. Migration 013 preserves existing
-licenses and device priority. Changes before this upgrade are not backfilled.
+The history list under **Plan and devices** shows successful licence activations,
+with the acting administrator and server time. It supports loading older entries,
+and an exact retry does not create a duplicate entry. Registrations, renames and
+removals are recorded in the device history instead (the `device_events` table),
+which the Devices screen will show once it is built; until then they are recorded
+but not listed in the app. Both histories are local SQLite data included in
+database backups; they are not cloud audit storage or a tamper-proof log.
+Migration 65 moves existing devices and their history across and keeps device
+priority.
 
 ## Expiry, downgrades, and recovery
 
