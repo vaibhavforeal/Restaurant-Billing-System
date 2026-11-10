@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DeviceSettingsPatch, JoinCodeCreate, deviceSettings, normalizeJoinCode } from "./devices.js";
+import { DeviceRename, DeviceSettingsPatch, JoinCodeCreate, deviceSettings, normalizeJoinCode } from "./devices.js";
 
 describe("device join codes", () => {
   it("normalises a typed join code", () => {
@@ -28,5 +28,14 @@ describe("device settings", () => {
     expect(DeviceSettingsPatch.safeParse({ paymentStart: "cash" }).success).toBe(false);
     expect(DeviceSettingsPatch.safeParse({ version: 1, theme: "dark" }).success).toBe(false);
     expect(DeviceSettingsPatch.safeParse({ version: 1, paymentStart: "wallet" }).success).toBe(false);
+  });
+});
+
+describe("renaming a device", () => {
+  it("trims the name and needs a version", () => {
+    expect(DeviceRename.parse({ name: "  Bar ", version: 2 })).toEqual({ name: "Bar", version: 2 });
+    expect(DeviceRename.safeParse({ name: " ", version: 2 }).success).toBe(false);
+    expect(DeviceRename.safeParse({ name: "Bar" }).success).toBe(false);
+    expect(DeviceRename.safeParse({ name: "Bar", version: 2, kind: "kitchen" }).success).toBe(false);
   });
 });

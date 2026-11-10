@@ -1,4 +1,4 @@
-import { DeviceSettingsPatch, deviceSettings, type DeviceInfo, type DeviceList, type MyDeviceSettings } from "@masalapos/domain";
+import { DeviceRemove, DeviceRename, DeviceSettingsPatch, deviceSettings, type DeviceInfo, type DeviceList, type MyDeviceSettings } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { DeviceRecord } from "./devices.js";
@@ -23,6 +23,32 @@ export function registerDevices(app: FastifyInstance): void {
   app.get("/api/devices", { preHandler: manage }, async (req, reply) => {
     reply.header("Cache-Control", "no-store");
     return deviceList(req);
+  });
+
+  const deviceId = (req: FastifyRequest) => z.object({ id: z.string().uuid() }).parse(req.params).id;
+
+  // Renaming and removing also tell every screen (and close the removed device's sockets), as a licence change does.
+  app.patch("/api/devices/:id", { preHandler: manage }, async (req, reply) => {
+    const id = deviceId(req);
+    const { name, version } = DeviceRename.parse(req.body);
+    app.devices.rename(id, name, version, req.user.name);
+    app.licensing.announceChange();
+    reply.header("Cache-Control", "no-store");
+    return { device: deviceList(req).devices.find((d) => d.id === id)! };
+  });
+
+  app.delete("/api/devices/:id", { preHandler: manage }, async (req, reply) => {
+    const id = deviceId(req);
+    const { version } = DeviceRemove.parse(req.body ?? {});
+    app.devices.remove(id, req.user.name, version);
+    app.licensing.announceChange();
+    return reply.header("Cache-Control", "no-store").status(204).send();
+  });
+
+  app.get("/api/devices/events", { preHandler: manage }, async (req, reply) => {
+    const { before } = z.object({ before: z.coerce.number().int().positive().safe().optional() }).parse(req.query);
+    reply.header("Cache-Control", "no-store");
+    return app.devices.events(before);
   });
 
   app.patch("/api/devices/:id/settings", { preHandler: manage }, async (req) => {

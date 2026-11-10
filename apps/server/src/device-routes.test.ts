@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "@fastify/websocket";
 import type { DeviceInfo } from "@masalapos/domain";
-import { SETUP, auth, commercialApp, createUser, freshApp, joinDevice, wsAuth } from "./test-helpers.js";
+import { SETUP, auth, commercialApp, createUser, freshApp, joinDevice, testLogin, wsAuth } from "./test-helpers.js";
 
 const A = "a".repeat(64), B = "b".repeat(64);
 
@@ -118,5 +118,48 @@ describe("device list and settings over the API", () => {
       expect(body.maxDevices).toBe(2);
       expect(body.devices.map((d: DeviceInfo) => d.allowed)).toEqual([true, true]);
     } finally { await licensed.close(); licensed.db.close(); }
+  });
+  describe("renaming, removing and history", () => {
+    it("renames a device with a stale-write check", async () => {
+      const d = await two();
+      const res = await app.inject({ method: "PATCH", url: `/api/devices/${d.id}`, headers: admin, payload: { name: "Bar", version: d.version } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().device).toMatchObject({ id: d.id, name: "Bar", version: d.version + 1 });
+      const stale = await app.inject({ method: "PATCH", url: `/api/devices/${d.id}`, headers: admin, payload: { name: "Pass", version: d.version } });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().error).toBe("This device changed. Refresh the device list and try again.");
+      expect((await app.inject({ method: "PATCH", url: `/api/devices/${d.id}`, headers: cashier, payload: { name: "X", version: d.version + 1 } })).statusCode).toBe(403);
+      expect((await app.inject({ method: "PATCH", url: `/api/devices/${d.id}`, headers: admin, payload: { name: " ", version: d.version + 1 } })).statusCode).toBe(400);
+    });
+    it("removes a device, signs its staff out and tells every screen", async () => {
+      const d = await two();
+      // The fixture's cashier signed in without a device; this is the same person signed in on device B.
+      const onB = { ...auth((await app.inject({ method: "POST", url: "/api/login", payload: testLogin({ name: "Ravi", pin: "4321" }), headers: { "x-masalapos-device": B } })).json().token), "x-masalapos-device": B };
+      expect((await app.inject({ method: "GET", url: "/api/me", headers: onB })).statusCode).toBe(200);
+      const seen = events(await wsAuth(app, adminToken, A), "license.changed");
+      expect((await app.inject({ method: "DELETE", url: `/api/devices/${d.id}`, headers: admin, payload: { version: d.version } })).statusCode).toBe(204);
+      await settle();
+      expect(seen.length).toBe(1);
+      expect((await list()).devices.map((x) => x.name)).toEqual(["Main counter"]);
+      expect((await app.inject({ method: "GET", url: "/api/me", headers: onB })).statusCode).toBe(401);
+      expect((await app.inject({ method: "DELETE", url: `/api/devices/${d.id}`, headers: admin })).statusCode).toBe(204);
+    });
+    it("refuses to remove the main counter", async () => {
+      const main = (await list()).devices.find((x) => x.isMain)!;
+      const res = await app.inject({ method: "DELETE", url: `/api/devices/${main.id}`, headers: admin, payload: { version: main.version } });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toBe("The main counter can't be removed.");
+    });
+    it("pages the device history", async () => {
+      const d = await two();
+      await app.inject({ method: "PATCH", url: `/api/devices/${d.id}`, headers: admin, payload: { name: "Bar", version: d.version } });
+      const res = await app.inject({ method: "GET", url: "/api/devices/events", headers: admin });
+      expect(res.headers["cache-control"]).toBe("no-store");
+      expect(res.json().events[0]).toMatchObject({ kind: "renamed", deviceId: d.id, summary: "Renamed Two to Bar." });
+      expect(res.json().nextBefore).toBeNull();
+      expect(res.body).not.toMatch(/credential/i);
+      expect((await app.inject({ method: "GET", url: "/api/devices/events?before=nope", headers: admin })).statusCode).toBe(400);
+      expect((await app.inject({ method: "GET", url: "/api/devices/events", headers: cashier })).statusCode).toBe(403);
+    });
   });
 });

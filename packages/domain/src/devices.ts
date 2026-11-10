@@ -57,6 +57,10 @@ export const DeviceSettingsPatch = z.object({
   paymentStart: z.enum(PAYMENT_STARTS).optional(),
 }).strict();
 export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatch>;
+/** A new name for a device, with the device version it was made against. */
+export const DeviceRename = z.object({ name: z.string().trim().min(1).max(80), version: z.number().int().positive() }).strict();
+/** Removing a device; the version is checked when it is given. */
+export const DeviceRemove = z.object({ version: z.number().int().positive().optional() }).strict();
 /** A row of the device list. `settings` is what is saved; `printerInactive` says its printer is switched off. */
 export interface DeviceInfo {
   id: string; kind: DeviceKind; name: string; isMain: boolean; createdAt: number; lastSeenAt: number | null; version: number;

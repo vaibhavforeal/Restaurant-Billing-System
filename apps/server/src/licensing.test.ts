@@ -197,6 +197,12 @@ describe("commercial licensing", () => {
     for (const url of ["/api/license", "/api/license/devices", "/api/license/history", "/api/license/activation-request"]) expect((await f.app.inject({ url, headers: f.headers })).statusCode).toBe(200);
     expect((await f.app.inject({ method: "PATCH", url: `/api/license/devices/${target.id}`, headers: f.headers, payload: { name: "Main PC", version: target.version } })).statusCode).toBe(200);
     expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(403);
+    // The Devices area's own routes: an administrator can still see, rename and remove devices; adding and settings wait for the licence.
+    for (const url of ["/api/devices", "/api/devices/events"]) expect((await f.app.inject({ url, headers: f.headers })).statusCode).toBe(200);
+    const now = (await f.app.inject({ url: "/api/devices", headers: f.headers })).json().devices[0];
+    expect((await f.app.inject({ method: "PATCH", url: `/api/devices/${now.id}`, headers: f.headers, payload: { name: "Front PC", version: now.version } })).statusCode).toBe(200);
+    expect((await f.app.inject({ method: "PATCH", url: `/api/devices/${now.id}/settings`, headers: f.headers, payload: { version: now.version + 1, paymentStart: "cash" } })).statusCode).toBe(403);
+    expect((await f.app.inject({ method: "POST", url: "/api/devices/join-codes", headers: f.headers, payload: { kind: "counter", name: "Two" } })).statusCode).toBe(403);
   });
 
   it("reports server time and throttles last-active writes without changing device versions", async () => {

@@ -309,6 +309,8 @@ export class Licensing {
     if (path === "/api/me" || path === "/api/logout" || path?.startsWith("/api/license")) return;
     // Support must be reachable exactly when a licence problem stops billing.
     if (path?.startsWith("/api/support/")) return;
+    // An administrator whose licence has lapsed, or who is over the device limit, must still see, rename and remove devices to recover.
+    if (path === "/api/devices" || path === "/api/devices/:id" || path === "/api/devices/events") return;
     // The main counter's way back in after its browser storage was cleared; the route itself checks for an administrator on the main PC.
     if (path === "/api/devices/rejoin-main") return;
     // Never charge for access to backups, even after a subscription expires.
