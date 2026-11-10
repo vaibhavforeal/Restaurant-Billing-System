@@ -1,6 +1,12 @@
 # Devices — design
 
-Date: 2026-11-10 · Branch: `feat/devices` · Status: approved in brainstorm; not built
+Date: 2026-11-10 · Branch: `feat/devices` · Status: Phase 1 built (migration 65); Phases 2 to 4 not built
+
+Pick-up point for Phase 2 (join codes): `Devices.add` in `apps/server/src/devices.ts` is where a join code creates a
+device, and `POST /api/license/devices` is the route Phase 2 removes. Two things to settle there: `add` gives a removed
+browser its old row back with its old kind, ignoring the kind asked for, so a join code for a different kind needs that
+changed; and `ensureMain` takes the licence's device limit at sign-in, so it adds no main counter once every slot is
+in use.
 
 ## Why
 
