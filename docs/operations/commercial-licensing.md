@@ -174,7 +174,9 @@ administrator permissions.
 
 A restaurant set up before the main counter existed, with no device in use, gets
 its main counter the next time an administrator signs in on the main PC itself.
-Signing in from another PC or a tablet never creates it.
+Signing in from another PC or a tablet never creates it. If the plan's devices are
+all in use by then, no main counter is added until a device is removed; a browser
+that already holds a slot becomes the main counter without using another one.
 
 Renewals, upgrades, and downgrades keep all identity fields and increase `revision`.
 The API permits retrying the same signed grant and rejects older grants. Store the

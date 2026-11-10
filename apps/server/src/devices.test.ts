@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, migrate, openDb, type Database } from "@masalapos/domain";
 import { Devices, deviceHash } from "./devices.js";
-import { ADMIN_LOGIN, SETUP, auth, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
+import { ADMIN_LOGIN, SETUP, auth, commercialApp, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
 
 const A = "a".repeat(64), B = "b".repeat(64);
 
@@ -112,6 +112,21 @@ describe("device registry", () => {
     expect(devices.active()).toMatchObject([{ name: "Old counter", isMain: true }]);
   });
 
+  it("adds a main counter only while the device limit has room, but always promotes a device already in the list", () => {
+    add(A, "One"); now = 200; add(B, "Two");
+    const C = "c".repeat(64);
+    expect(devices.ensureMain(C, "Asha", 2)).toBeNull();
+    expect(devices.active().map((d) => [d.name, d.isMain])).toEqual([["One", false], ["Two", false]]);
+    expect(devices.ensureMain(B, "Asha", 2)).toMatchObject({ name: "Two", isMain: true });
+    expect(devices.active()).toHaveLength(2);
+  });
+
+  it("keeps the credential hash out of anything serialised from a device", () => {
+    const d = add(A, "One");
+    expect(d.credentialHash).toBe(deviceHash(A));
+    expect(JSON.stringify([d, devices.active(), devices.findByCredential(A), { ...d }])).not.toContain(deviceHash(A)!);
+  });
+
   it("touch updates last seen without changing the version", () => {
     const d = add(A, "One");
     devices.touch(d.id, 777);
@@ -189,5 +204,49 @@ describe("devices on the server", () => {
     expect(await ask("/api/test-device", { ...token, ...withDevice(A) })).toEqual([200, { name: "Main counter" }]);
     expect(await ask("/api/test-device-permission", { ...token, ...withDevice(A) })).toEqual([200, { name: "Main counter" }]);
     expect(await ask("/api/test-device-permission", token)).toEqual([200, { name: null }]);
+  });
+
+  it("never sends the credential hash when a route returns the calling device", async () => {
+    const app = dev();
+    app.get("/api/test-device-whole", { preHandler: app.requireAuth }, async (req) => ({ device: req.device }));
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: withDevice(A) });
+    const res = await app.inject({ url: "/api/test-device-whole", headers: { ...auth(setup.json().token), ...withDevice(A) } });
+    expect(res.json().device).toMatchObject({ name: "Main counter", isMain: true });
+    expect(res.body).not.toContain(deviceHash(A)!);
+    expect(res.body).not.toContain("credentialHash");
+  });
+
+  describe("in a licensed build with no main counter", () => {
+    const D = "d".repeat(64), C = "c".repeat(64);
+    /** Basic plan (2 devices) whose one device, "Counter", is not marked main: what a database from before the main counter looks like. */
+    const licensed = async () => {
+      const f = await commercialApp("basic"); apps.push(f.app);
+      f.app.db.prepare("UPDATE devices SET is_main = 0").run();
+      return f;
+    };
+
+    it("an admin signing in on the main PC with the removed counter's browser gets it back as the main counter", async () => {
+      const { app } = await licensed();
+      app.db.prepare("UPDATE devices SET removed_at = 1").run();
+      app.db.prepare("DELETE FROM sessions").run();
+      const signedIn = await signIn(app, ADMIN_LOGIN, D);
+      expect(signedIn.statusCode).toBe(200);
+      expect(app.devices.active()).toMatchObject([{ name: "Main counter", isMain: true, credentialHash: deviceHash(D) }]);
+      expect(app.db.prepare("SELECT count(*) AS n FROM devices").get()).toEqual({ n: 1 });
+      expect((await app.inject({ url: "/api/products", headers: { ...auth(signedIn.json().token), ...withDevice(D) } })).statusCode).toBe(200);
+    });
+
+    it("signing in on the main PC adds no device once the plan's devices are all in use", async () => {
+      const { app, headers } = await licensed();
+      const second = await signIn(app, ADMIN_LOGIN, B, "192.168.1.20");
+      const registered = await app.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Kitchen" }, headers: { ...auth(second.json().token), ...withDevice(B) } });
+      expect(registered.statusCode).toBe(200);
+      expect((await signIn(app, ADMIN_LOGIN, C)).statusCode).toBe(200);
+      expect(app.devices.active().map((d) => [d.name, d.isMain])).toEqual([["Counter", false], ["Kitchen", false]]);
+      // A device that already holds a slot can still become the main counter.
+      expect((await signIn(app, ADMIN_LOGIN, D)).statusCode).toBe(200);
+      expect(app.devices.active().map((d) => [d.name, d.isMain])).toEqual([["Counter", true], ["Kitchen", false]]);
+      expect((await app.inject({ url: "/api/products", headers })).statusCode).toBe(200);
+    });
   });
 });

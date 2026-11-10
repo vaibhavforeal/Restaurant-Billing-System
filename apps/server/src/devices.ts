@@ -10,7 +10,9 @@ export function deviceHash(credential: unknown): string | null {
 }
 
 export interface DeviceRecord {
-  id: string; kind: DeviceKind; name: string; credentialHash: string; isMain: boolean;
+  id: string; kind: DeviceKind; name: string; isMain: boolean;
+  /** Readable in code, but left out when the record is serialised or spread, so no response can carry it by accident. */
+  readonly credentialHash: string;
   settings: Record<string, unknown>; createdAt: number; removedAt: number | null;
   lastSeenAt: number | null; version: number;
 }
@@ -18,11 +20,11 @@ interface DeviceRow {
   id: string; kind: DeviceKind; name: string; credential_hash: string; is_main: number; settings: string;
   created_at: number; removed_at: number | null; last_seen_at: number | null; version: number;
 }
-const record = (r: DeviceRow): DeviceRecord => ({
-  id: r.id, kind: r.kind, name: r.name, credentialHash: r.credential_hash, isMain: r.is_main === 1,
+const record = (r: DeviceRow): DeviceRecord => Object.defineProperty({
+  id: r.id, kind: r.kind, name: r.name, isMain: r.is_main === 1,
   settings: JSON.parse(r.settings) as Record<string, unknown>, createdAt: r.created_at, removedAt: r.removed_at,
   lastSeenAt: r.last_seen_at, version: r.version,
-});
+}, "credentialHash", { value: r.credential_hash, enumerable: false }) as DeviceRecord;
 const CHANGED = "This device changed. Refresh the device list and try again.";
 const MAIN_NAME = "Main counter";
 
@@ -106,16 +108,21 @@ export class Devices {
   /**
    * Gives the restaurant its main counter when it has none: the active device holding this credential is marked as
    * main, or the credential is added as "Main counter". Returns the main device it made, else null.
+   * With a `limit` (the licence's device count), nothing is added once that many devices are in use: a main counter
+   * added past the limit would be blocked and could never be removed. Marking a device already in the list is always allowed.
    */
-  ensureMain(credential: unknown, actorName: string): DeviceRecord | null {
+  ensureMain(credential: unknown, actorName: string, limit?: number | null): DeviceRecord | null {
     const hash = deviceHash(credential);
     if (!hash) return null;
     return this.db.transaction(() => {
       if (this.db.prepare("SELECT 1 FROM devices WHERE is_main = 1 AND removed_at IS NULL").get()) return null;
       const existing = this.byHash(hash);
-      if (!existing || existing.removedAt !== null) return this.add({ credentialHash: hash, name: MAIN_NAME, kind: "counter", isMain: true }, actorName);
-      this.db.prepare("UPDATE devices SET is_main = 1, version = version + 1 WHERE id = ?").run(existing.id);
-      return this.get(existing.id);
+      if (existing && existing.removedAt === null) {
+        this.db.prepare("UPDATE devices SET is_main = 1, version = version + 1 WHERE id = ?").run(existing.id);
+        return this.get(existing.id);
+      }
+      if (limit != null && this.active().length >= limit) return null;
+      return this.add({ credentialHash: hash, name: MAIN_NAME, kind: "counter", isMain: true }, actorName);
     })();
   }
 

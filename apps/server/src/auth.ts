@@ -226,8 +226,10 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     const valid = await verifyPassword(password, user?.password_hash || await standIn());
     if (user?.password_hash && valid) {
       throttle.clearPinFailures(ip);
-      // A restaurant with no main counter (set up before devices had one) gets it when an admin signs in on the main PC itself.
-      if (user.role === "admin" && fromMainPc(req) && app.devices.ensureMain(req.headers["x-masalapos-device"], user.name)) app.licensing.announceChange();
+      // A restaurant with no main counter (set up before devices had one) gets it when an admin signs in on the main PC itself,
+      // unless the plan's devices are all in use already.
+      if (user.role === "admin" && fromMainPc(req)
+        && app.devices.ensureMain(req.headers["x-masalapos-device"], user.name, app.licensing.status().maxDevices)) app.licensing.announceChange();
       const token = createSession(user.id, req.headers["x-masalapos-device"]);
       return { token, user: authedUser(app.db, { id: user.id, name: user.name, role: user.role }) };
     }
