@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceKind, DeviceMe } from "@masalapos/domain";
-import { codeFromLocation, countdown, gateDecision, homeForKind, redeemJoinCode } from "./join-code";
+import { codeFromLocation, countdown, gateDecision, homeForKind, joinCodeHint, redeemJoinCode } from "./join-code";
 
 const me = (joined: boolean, kind: DeviceKind | null = null, mainPc = false): DeviceMe => ({ joined, kind, mainPc });
 
@@ -54,6 +54,21 @@ describe("joining a device", () => {
       await expect(redeemJoinCode("ZZZZZZ", wrong.api)).rejects.toThrow("not valid or has expired");
       expect(wrong.calls).toHaveLength(1);
     });
+  });
+
+  it("keeps the join screen up through a network drop, so a half-typed code is not lost", () => {
+    expect(gateDecision("unreachable", "unreachable", "/", true)).toEqual({ show: "stay" });
+    expect(gateDecision(me(false), "unreachable", "/", true)).toEqual({ show: "stay" });
+    expect(gateDecision(me(true, "counter"), false, "/", true)).toEqual({ show: "app" });
+    expect(gateDecision(me(false), false, "/", true)).toEqual({ show: "join", me: me(false) });
+  });
+  it("says why a full-length code cannot be right", () => {
+    const hint = "Codes have 6 letters and digits, and never 0, O, 1, I or L.";
+    expect(joinCodeHint("K7M2Q0")).toBe(hint);
+    expect(joinCodeHint("k7m-2ql")).toBe(hint);
+    expect(joinCodeHint("K7M2QPX")).toBe(hint);
+    expect(joinCodeHint("K7M–2QP")).toBe(hint);
+    for (const fine of ["", "K7M", "K7M2Q", "K7M2QP", "k7m 2qp"]) expect(joinCodeHint(fine)).toBe("");
   });
 
   it("counts down in minutes and seconds", () => {

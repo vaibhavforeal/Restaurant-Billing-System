@@ -87,6 +87,24 @@ describe("joining over the API", () => {
     expect((await app.inject({ method: "POST", url: "/api/devices/join-codes", headers, payload: { replacesDeviceId: second.id } })).statusCode).toBe(201);
   });
 
+  it("lets no new device in while the licence cannot be read, since the limit is unknown", async () => {
+    const { app, headers } = await licensed();
+    const fresh = await makeCode(app, headers);
+    await joinDevice(app, headers, B, { kind: "counter", name: "Second" });
+    const replace = await makeCode(app, headers, { replacesDeviceId: app.devices.findByCredential(B)!.id });
+    const envelope = app.db.prepare("SELECT envelope FROM license_state WHERE id = 1").get() as { envelope: string };
+    app.db.prepare("UPDATE devices SET removed_at = 1 WHERE name = 'Second'").run();
+    app.db.prepare("UPDATE license_state SET envelope = NULL WHERE id = 1").run();
+    expect(app.licensing.status().maxDevices).toBeNull();
+    const refused = await join(app, fresh, C);
+    expect([refused.statusCode, refused.json().error]).toEqual([409, "Device limit reached. Remove an old device or upgrade your plan."]);
+    expect(app.devices.active()).toHaveLength(1);
+    // The code is still good once the licence reads again.
+    app.db.prepare("UPDATE license_state SET envelope = ? WHERE id = 1").run(envelope.envelope);
+    expect((await join(app, fresh, C)).statusCode).toBe(200);
+    expect(replace).toMatch(/^[A-Z2-9]{6}$/);
+  });
+
   it("a dev build has no limit", async () => {
     const { app, headers } = await dev();
     await joinDevice(app, headers, B, { kind: "counter", name: "Two" });

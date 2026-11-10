@@ -108,7 +108,7 @@
     window.fetch = async (...args) => String(args[0]) === '/api/license/devices' && !args[1]?.method
       ? new Response(JSON.stringify({ error: 'Device list unavailable' }), { status: 503, headers: { 'content-type': 'application/json' } }) : originalFetch(...args);
     await click('Refresh plan'); await wait(() => alertHas('Device list unavailable'));
-    check(!panel().querySelector('.license-devices li') && !button('Create join code'), 'Failed refresh removes stale device actions');
+    check(!panel().querySelector('.license-devices li') && button('Create join code').disabled, 'Failed refresh removes stale device actions');
     window.fetch = originalFetch; await click('Refresh plan'); await wait(() => !!panel().querySelector('.license-devices li'));
     check(!alertHas('Device list unavailable'), 'Device management recovers after a failed refresh');
     const history = (await api('/license/history')).events;

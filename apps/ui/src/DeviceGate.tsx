@@ -16,7 +16,8 @@ type Gate = { show: "checking" } | { show: "app" } | { show: "join"; me: DeviceM
  */
 export function DeviceGate({ children }: { children: ReactNode }) {
   const [gate, setGate] = useState<Gate>({ show: "checking" });
-  const sequence = useRef(0);
+  const sequence = useRef(0), showing = useRef<Gate["show"]>("checking");
+  showing.current = gate.show;
   const check = useCallback(async () => {
     const request = ++sequence.current;
     /** The answer, or "unreachable" when the hub could not be reached at all; any other failure is thrown. */
@@ -27,8 +28,8 @@ export function DeviceGate({ children }: { children: ReactNode }) {
     try {
       const [me, setup] = await Promise.all([ask<DeviceMe>("/api/devices/me"), ask<{ needsSetup: boolean }>("/api/needs-setup")]);
       if (request !== sequence.current) return;
-      const decision = gateDecision(me, setup === "unreachable" ? setup : setup.needsSetup, window.location.pathname);
-      if ("redirect" in decision) window.location.replace(decision.redirect); else setGate(decision);
+      const decision = gateDecision(me, setup === "unreachable" ? setup : setup.needsSetup, window.location.pathname, showing.current === "join");
+      if ("redirect" in decision) window.location.replace(decision.redirect); else if (decision.show !== "stay") setGate(decision);
     } catch {
       if (request === sequence.current) setGate((current) => current.show === "app" ? current : { show: "error" });
     }

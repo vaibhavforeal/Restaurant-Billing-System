@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { DeviceKind, JoinCodeIssued, LicensedDevice } from "@masalapos/domain";
 import { apiFetch } from "../api";
+import { JOIN_CODE_TTL_MS } from "@masalapos/domain/devices";
 import { countdown } from "../join-code";
 
 const KINDS: { kind: DeviceKind; label: string }[] = [
@@ -19,18 +20,20 @@ export function JoinCodePanel({ devices, atLimit, disabled }: { devices: License
   const [name, setName] = useState("");
   const [replaces, setReplaces] = useState("");
   const [issued, setIssued] = useState<JoinCodeIssued | null>(null);
-  const [left, setLeft] = useState(0);
+  // The countdown runs from when the code arrived, on this device's own clock, so a wrong clock here cannot shorten or stretch it.
+  const [until, setUntil] = useState(0);
+  const [left, setLeft] = useState(JOIN_CODE_TTL_MS);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
 
   useEffect(() => {
     if (!issued) return;
-    const tick = () => setLeft(issued.expiresAt - Date.now());
+    const tick = () => setLeft(until - Date.now());
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [issued]);
+  }, [issued, until]);
   // A device chosen for replacement may be removed while this panel is open.
   const target = devices.find((d) => d.id === replaces);
 
@@ -40,7 +43,8 @@ export function JoinCodePanel({ devices, atLimit, disabled }: { devices: License
     lock.current = true; setBusy(true); setError("");
     try {
       const body = mode === "new" ? { kind, name: name.trim() } : { replacesDeviceId: target!.id };
-      setIssued(await apiFetch<JoinCodeIssued>("/api/devices/join-codes", { method: "POST", body: JSON.stringify(body) }));
+      const code = await apiFetch<JoinCodeIssued>("/api/devices/join-codes", { method: "POST", body: JSON.stringify(body) });
+      setLeft(JOIN_CODE_TTL_MS); setUntil(Date.now() + JOIN_CODE_TTL_MS); setIssued(code);
       setName(""); setReplaces("");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not create a join code"); }
     finally { lock.current = false; setBusy(false); }

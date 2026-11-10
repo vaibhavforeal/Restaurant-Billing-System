@@ -157,7 +157,8 @@ export function LicenseSettings() {
           setRenaming(null); setMessage("Device renamed.");
         }); }}><label>New device name<input required maxLength={80} disabled={busy} value={renaming.name} onChange={(e) => setRenaming({ ...renaming, name: e.target.value })} /></label>
           <button disabled={busy || !devices || !renaming.name.trim()}>Save device name</button><button type="button" disabled={busy} onClick={() => setRenaming(null)}>Cancel rename</button></form>}
-        {devices && status && <JoinCodePanel devices={devices} disabled={busy || loading} atLimit={status.maxDevices !== null && devices.length >= status.maxDevices} />}
+        {/* Stays mounted when the list cannot load, so a code already on screen is not lost. */}
+        {status && <JoinCodePanel devices={devices ?? []} disabled={busy || devices === null} atLimit={status.maxDevices !== null && (devices?.length ?? 0) >= status.maxDevices} />}
       </div>;
   return <section className="panel license-settings" aria-label="Plan and devices">
     <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>

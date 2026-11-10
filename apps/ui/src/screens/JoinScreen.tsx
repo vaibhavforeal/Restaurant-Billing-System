@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { DeviceJoined, DeviceKind, DeviceMe } from "@masalapos/domain";
 import { normalizeJoinCode } from "@masalapos/domain/devices";
 import { ApiError, apiFetch, session, type User } from "../api";
-import { codeFromLocation, redeemJoinCode } from "../join-code";
+import { codeFromLocation, joinCodeHint, redeemJoinCode } from "../join-code";
 import { AuthLayout } from "./AuthLayout";
 import { Login } from "./Login";
 
@@ -27,13 +27,18 @@ export function JoinScreen({ me, onJoined }: { me: DeviceMe; onJoined: (kind: De
     catch (e) { setError(message(e)); }
     finally { lock.current = false; setBusy(false); }
   }
+  /** Ends the sign-in made only to re-join, on the hub as well as here. */
+  async function signOut() {
+    try { await apiFetch("/api/logout", { method: "POST" }); } catch { /* the local sign-out below is what matters on this screen */ }
+    session.clear();
+  }
   function join(e: FormEvent) {
     e.preventDefault();
     void run(async () => onJoined(await redeemJoinCode(code, apiFetch)));
   }
   function signedIn(user: User) {
     if (user.role !== "admin") {
-      session.clear(); setMainPc("closed"); setError("Only an administrator can re-join the main counter.");
+      void signOut(); setMainPc("closed"); setError("Only an administrator can re-join the main counter.");
       return;
     }
     // Signing in on the main PC already makes this browser the main counter when the restaurant has none.
@@ -56,13 +61,13 @@ export function JoinScreen({ me, onJoined }: { me: DeviceMe; onJoined: (kind: De
       <button type="button" className="primary" style={{ width: "100%" }} disabled={busy}
         onClick={() => void run(async () => onJoined((await apiFetch<DeviceJoined>("/api/devices/rejoin-main", { method: "POST" })).kind))}>
         {busy ? "Re-joining…" : "Re-join as main counter"}</button>
-      <button type="button" disabled={busy} onClick={() => { session.clear(); setMainPc("closed"); setError(""); }}>Cancel</button>
+      <button type="button" disabled={busy} onClick={() => { void signOut(); setMainPc("closed"); setError(""); }}>Cancel</button>
     </div> : <form className="auth-form" onSubmit={join}>
       <h2>Enter join code</h2>
       <p className="muted">Ask an administrator for a code. On the main counter: Settings, Plan &amp; devices, Add a device.</p>
       <label>Join code<input aria-label="Join code" name="join-code" autoComplete="off" autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoFocus maxLength={12}
         value={code} disabled={busy} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(""); }} /></label>
-      <div className="error-message" role="alert">{error}</div>
+      <div className="error-message" role="alert">{error || joinCodeHint(code)}</div>
       <button type="submit" className="primary" style={{ width: "100%" }} disabled={busy || !normalizeJoinCode(code)}>{busy ? "Joining…" : "Join"}</button>
       {me.mainPc && <button type="button" disabled={busy} onClick={() => { setError(""); setMainPc("sign-in"); }}>This is the main counter</button>}
     </form>}

@@ -18,11 +18,18 @@ export function homeForKind(kind: DeviceKind): "/" | "/kitchen/" | "/captain/" {
  * When the hub cannot be reached the app is shown, so a captain tablet out of range keeps working from its saved copies.
  * A restaurant that is not set up yet has no devices, and its first browser becomes the main counter during setup.
  */
-export function gateDecision(me: DeviceMe | "unreachable", needsSetup: boolean | "unreachable", pathname: string):
-  { show: "app" } | { show: "join"; me: DeviceMe } | { redirect: string } {
-  if (me === "unreachable" || needsSetup === "unreachable" || needsSetup) return { show: "app" };
+export function gateDecision(me: DeviceMe | "unreachable", needsSetup: boolean | "unreachable", pathname: string, onJoinScreen = false):
+  { show: "app" } | { show: "join"; me: DeviceMe } | { show: "stay" } | { redirect: string } {
+  // A browser already on the join screen stays there through a network drop, so a half-typed code is not lost.
+  if (me === "unreachable" || needsSetup === "unreachable") return { show: onJoinScreen ? "stay" : "app" };
+  if (needsSetup) return { show: "app" };
   if (!me.joined) return { show: "join", me };
   return me.kind && JOIN_PATH.test(pathname) ? { redirect: homeForKind(me.kind) } : { show: "app" };
+}
+
+/** Why a code of full length cannot be right, for the person typing it; "" while it is still being typed or is well formed. */
+export function joinCodeHint(input: string): string {
+  return input.replace(/[\s-]/g, "").length >= 6 && !normalizeJoinCode(input) ? "Codes have 6 letters and digits, and never 0, O, 1, I or L." : "";
 }
 
 /**

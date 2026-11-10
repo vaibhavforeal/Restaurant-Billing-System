@@ -87,7 +87,8 @@ const JOIN_ATTEMPTS_PER_MINUTE = 10;
 export function registerDeviceJoin(app: FastifyInstance, port = 4100, captainHttps?: CaptainHttpsInfo, now?: () => number) {
   const codes = new JoinCodes(app.db, app.devices, now);
   const rate = guestRateLimiter();
-  const limit = () => app.licensing.status().maxDevices;
+  /** The licence's device count; none in builds without licensing. A licensed build whose licence cannot be read has no known count, so no new device gets in until it can. */
+  const limit = () => { const max = app.licensing.status().maxDevices; return max === null && app.licensing.enabled ? 0 : max; };
   const joined = (device: DeviceRecord): DeviceJoined => ({ kind: device.kind, name: device.name });
   /** Where the new device can open the join screen. A captain tablet works over HTTPS when that is set up, and a browser's credential belongs to one origin. */
   const origins = (kind: DeviceRecord["kind"]) => {
