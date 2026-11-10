@@ -56,7 +56,7 @@ describe("commercial licensing", () => {
     expect(preview.json().previewKey).toMatch(/^[a-f0-9]{64}$/);
     expect(f.app.db.prepare("SELECT * FROM license_state").get()).toEqual(state);
     expect(f.app.licensing.history().events).toEqual([]);
-    expect(f.app.db.prepare("SELECT count(*) AS n FROM licensed_devices").get()).toEqual({ n: 0 });
+    expect(f.app.db.prepare("SELECT count(*) AS n FROM devices").get()).toEqual({ n: 0 });
     const bad = signed({ ...f.claims, installationId: randomUUID() });
     expect((await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: bad } })).statusCode).toBe(400);
   });
@@ -133,21 +133,36 @@ describe("commercial licensing", () => {
     const reconnected = await f.login("b".repeat(64)); await f.register(reconnected, "Kitchen again");
     expect((await remove()).statusCode).toBe(409);
     expect((await f.app.inject({ url: "/api/products", headers: reconnected })).statusCode).toBe(200);
-    expect(f.app.licensing.history().events.filter((e) => e.kind === "device_removed")).toHaveLength(1);
+    expect(f.app.devices.events().events.filter((e) => e.kind === "removed")).toHaveLength(1);
   });
 
   it("records successful changes once and pages history without leaking credentials", async () => {
     const f = await fixture(); await f.activate(); await f.activate(); await f.register(); await f.register();
-    expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["device_registered", "license_activated"]);
-    expect(f.app.licensing.history().events[0]!.actorName).toBe(SETUP.adminName);
+    expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["license_activated"]);
+    expect(f.app.devices.events().events.map((e) => e.kind)).toEqual(["joined"]);
+    expect(f.app.devices.events().events[0]!.actorName).toBe(SETUP.adminName);
     for (let i = 0; i < 25; i++) await f.register(f.headers, `Counter ${i}`);
-    const first = (await f.app.inject({ url: "/api/license/history", headers: f.headers })).json();
+    const first = f.app.devices.events();
     expect(first.events).toHaveLength(20);
-    const second = (await f.app.inject({ url: `/api/license/history?before=${first.nextBefore}`, headers: f.headers })).json();
-    expect(second.events).toHaveLength(7); expect(second.nextBefore).toBeNull();
-    expect(new Set([...first.events, ...second.events].map((e) => e.id)).size).toBe(27);
-    expect(JSON.stringify(first)).not.toContain(device); expect(JSON.stringify(first)).not.toContain("ff1.");
+    const second = f.app.devices.events(first.nextBefore!);
+    expect(second.events).toHaveLength(6); expect(second.nextBefore).toBeNull();
+    expect(new Set([...first.events, ...second.events].map((e) => e.id)).size).toBe(26);
+    const licence = await f.app.inject({ url: "/api/license/history", headers: f.headers });
+    expect(licence.statusCode).toBe(200);
+    expect(licence.json().events.map((e: { kind: string }) => e.kind)).toEqual(["license_activated"]);
+    expect(licence.body).not.toContain(device); expect(licence.body).not.toContain("ff1.");
     expect((await f.app.inject({ url: "/api/license/history?before=nope", headers: f.headers })).statusCode).toBe(400);
+  });
+
+  it("keeps licence and device history apart", async () => {
+    const f = await fixture(); await f.activate(); await f.register();
+    const second = await f.login("b".repeat(64)); await f.register(second, "Kitchen");
+    const target = f.app.licensing.devices().find((d) => d.name === "Kitchen")!;
+    f.app.licensing.rename(target.id, "Kitchen screen", target.version, "Asha");
+    f.app.licensing.revoke(target.id, "Asha");
+    expect(f.app.db.prepare("SELECT count(*) AS n FROM license_events WHERE device_id IS NOT NULL OR kind <> 'license_activated'").get()).toEqual({ n: 0 });
+    expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["license_activated"]);
+    expect(f.app.devices.events().events.filter((e) => e.deviceId === target.id).map((e) => e.kind)).toEqual(["removed", "renamed", "joined"]);
   });
 
   it("keeps device and history APIs available after expiry and denies staff management", async () => {
