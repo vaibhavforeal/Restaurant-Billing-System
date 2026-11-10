@@ -3,6 +3,8 @@ import { KNOWN_PERMISSIONS, LoginBody, SetupBody, effectivePermissions, staffCan
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { randomBytes } from "node:crypto";
 import { deviceHash, enrollBody } from "./licensing.js";
+import type { DeviceRecord } from "./devices.js";
+import { fromMainPc } from "./system.js";
 import { createPinThrottle } from "./pin-throttle.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -108,10 +110,16 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     return session.user;
   };
 
+  // The device a request comes from, beside the person making it. Null for a browser that is not in the registry, which
+  // builds without licensing still let through.
+  app.decorateRequest("device", null);
+  const callingDevice = (req: FastifyRequest) => app.devices.findByCredential(req.headers["x-masalapos-device"]);
+
   const requireAuth: preHandlerHookHandler = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = authenticate(req);
     if (!user) return reply.status(401).send({ error: "unauthenticated" });
     req.user = user;
+    req.device = callingDevice(req);
     app.licensing.assertAccess(req);
   };
 
@@ -129,6 +137,7 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
         return reply.status(403).send({ error: "forbidden", permission: slug });
       }
       req.user = user;
+      req.device = callingDevice(req);
       app.licensing.assertAccess(req);
     };
   });
@@ -190,15 +199,9 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     });
     write();
 
-    // A counter activated in the first step of setup registers the browser that set it up, so the admin lands straight in.
+    // The browser that sets the restaurant up is its main counter, licensed or not, so the admin lands straight in.
     const credential = req.headers["x-masalapos-device"];
-    if (app.licensing.enabled) {
-      const status = app.licensing.status(credential);
-      if ((status.state === "active" || status.state === "grace") && status.registeredDevices === 0) {
-        try { app.licensing.register(credential, "Main counter", body.adminName); app.licensing.announceChange(); }
-        catch { /* The admin can still register it from Plan and devices. */ }
-      }
-    }
+    if (app.devices.ensureMain(credential, body.adminName)) app.licensing.announceChange();
 
     const token = createSession(id, credential);
     return reply.status(201).send({ token, user: authedUser(app.db, { id, name: body.adminName, role: "admin" }) });
@@ -223,6 +226,10 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
     const valid = await verifyPassword(password, user?.password_hash || await standIn());
     if (user?.password_hash && valid) {
       throttle.clearPinFailures(ip);
+      // A restaurant with no main counter (set up before devices had one) gets it when an admin signs in on the main PC itself,
+      // unless the plan's devices are all in use already.
+      if (user.role === "admin" && fromMainPc(req)
+        && app.devices.ensureMain(req.headers["x-masalapos-device"], user.name, app.licensing.status().maxDevices)) app.licensing.announceChange();
       const token = createSession(user.id, req.headers["x-masalapos-device"]);
       return { token, user: authedUser(app.db, { id: user.id, name: user.name, role: user.role }) };
     }
@@ -248,5 +255,7 @@ declare module "fastify" {
   }
   interface FastifyRequest {
     user: AuthedUser;
+    /** The registered device this request came from, or null. Set by requireAuth and requirePermission. */
+    device: DeviceRecord | null;
   }
 }

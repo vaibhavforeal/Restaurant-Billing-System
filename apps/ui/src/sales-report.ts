@@ -1,4 +1,5 @@
 import { toCsv } from "@masalapos/domain/csv";
+import { businessDateKey } from "@masalapos/domain/dates";
 import { paiseToRupees } from "./money";
 
 export interface SalesTotals {
@@ -17,7 +18,12 @@ export type SalesReportKind = "sales" | "collections";
 export interface ReportPeriod { from: string; to: string }
 export const reportMoney = (paise: number) => `₹${paiseToRupees(paise)}`;
 export function localDay(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
-export function recentPeriod(days: number, end = localDay()): ReportPeriod {
+let dayStartHour = 0;
+/** The hour the restaurant's business day starts (Settings → Bill settings), loaded with the order settings at sign-in. */
+export function setDayStartHour(hour: number) { dayStartHour = hour; }
+/** Today's business date: before the day-start hour, still the night before, as the reports and day close count it. */
+export function businessToday(now = new Date()) { return businessDateKey(now.getTime(), dayStartHour); }
+export function recentPeriod(days: number, end = businessToday()): ReportPeriod {
   const start = new Date(`${end}T12:00:00`); start.setDate(start.getDate() - days + 1);
   return { from: localDay(start), to: end };
 }

@@ -16,6 +16,13 @@ export const UpiId = z.string().trim().max(255).refine(
 
 const DefaultRate = z.literal(DEFAULT_GST_RATES, "GST rate must be 5, 12 or 18");
 
+/** The payment methods the counter can take, in the order the bill shows them. */
+export const COUNTER_PAYMENT_MODES = ["cash", "card", "upi"] as const;
+export type CounterPaymentMode = typeof COUNTER_PAYMENT_MODES[number];
+/** The latest hour a business day may start; a later start would split one evening's trade across two days. */
+export const MAX_DAY_START_HOUR = 6;
+const OrderAgeMinutes = z.number().int().min(1, "Use 1 to 240 minutes").max(240, "Use 1 to 240 minutes");
+
 /** Full-replace shape for the settings singleton (PUT). GSTIN is 15 chars, FSSAI 14 — light caps, empty allowed (unregistered restaurants). */
 export const SettingsUpdate = z.object({
   receiptStyle: z.enum(RECEIPT_STYLES).optional(),
@@ -68,7 +75,22 @@ export const SettingsUpdate = z.object({
   sacCode: z.string().trim().regex(/^\d{4,8}$/, "Enter a 4 to 8 digit SAC code").optional(),
   /** Zomato's GSTIN in the restaurant's state, for GSTR-1 Table 14 (supplies where Zomato pays the GST). Empty when not known. */
   zomatoGstin: OptionalGstin.optional(),
+  /** An open order turns amber, then red, on the order board after this many minutes. */
+  orderWarnMinutes: OrderAgeMinutes.optional(),
+  orderLateMinutes: OrderAgeMinutes.optional(),
+  /** KOT slips still print at the kitchen stations while the Kitchen Display is on. */
+  kotPrintWithKds: z.boolean().optional(),
+  /** The payment methods the counter takes; at least one. */
+  paymentModes: z.array(z.enum(COUNTER_PAYMENT_MODES)).min(1, "Keep at least one payment method on")
+    .refine((modes) => new Set(modes).size === modes.length, "List each payment method once").optional(),
+  /** QR guest orders go to the table's bill and the kitchen without staff review. */
+  qrAutoAccept: z.boolean().optional(),
+  /** The hour (0-6) the business day starts: reports, day close and KOT numbers count a night past midnight as one day. */
+  dayStartHour: z.number().int().min(0).max(MAX_DAY_START_HOUR, `The day can start at ${MAX_DAY_START_HOUR} a.m. at the latest`).optional(),
 }).superRefine((s, ctx) => {
+  if (s.orderWarnMinutes !== undefined && s.orderLateMinutes !== undefined && s.orderLateMinutes <= s.orderWarnMinutes) {
+    ctx.addIssue({ code: "custom", path: ["orderLateMinutes"], message: "Red must be later than amber" });
+  }
   if (s.stateCode !== undefined && s.zomatoGstin && !gstinMatchesState(s.zomatoGstin, s.stateCode)) {
     ctx.addIssue({ code: "custom", path: ["zomatoGstin"], message: "Use Zomato's GSTIN for your state" });
   }

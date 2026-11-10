@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type ModuleOverrides, type IntegrationId, type Plan } from "@masalapos/domain";
+import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type DeviceKind, type ModuleOverrides, type IntegrationId, type Plan } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer, type ServerOptions } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -60,7 +60,8 @@ export async function createUser(
   return { id: (created.json() as { user: { id: string } }).user.id, token };
 }
 
-export async function wsAuth(app: FastifyInstance, token: string): Promise<import("@fastify/websocket").WebSocket> {
+/** Opens a socket and signs it in. `device` is the browser's device credential, as the POS sends it. */
+export async function wsAuth(app: FastifyInstance, token: string, device?: string): Promise<import("@fastify/websocket").WebSocket> {
   const ws = await app.injectWS("/api/ws");
 
   // Wait for connection to open
@@ -73,7 +74,7 @@ export async function wsAuth(app: FastifyInstance, token: string): Promise<impor
   });
 
   // Send auth frame
-  ws.send(JSON.stringify({ type: "auth", token }));
+  ws.send(JSON.stringify({ type: "auth", token, ...(device ? { device } : {}) }));
 
   // Wait for auth.ok
   await new Promise<void>((resolve, reject) => {
@@ -94,6 +95,15 @@ export async function wsAuth(app: FastifyInstance, token: string): Promise<impor
   return ws;
 }
 
+/** Joins another browser as a device, the way staff do it: an admin (`adminHeaders`) makes a code and the new browser enters it. */
+export async function joinDevice(app: FastifyInstance, adminHeaders: Record<string, string>, credential: string,
+  device: { kind: DeviceKind; name: string } = { kind: "counter", name: "Counter 2" }): Promise<void> {
+  const made = await app.inject({ method: "POST", url: "/api/devices/join-codes", payload: device, headers: adminHeaders });
+  if (made.statusCode !== 201) throw new Error(`joinDevice could not make a code: ${made.body}`);
+  const joined = await app.inject({ method: "POST", url: "/api/devices/join", payload: { code: (made.json() as { code: string }).code }, headers: { "x-masalapos-device": credential } });
+  if (joined.statusCode !== 200) throw new Error(`joinDevice could not join: ${joined.body}`);
+}
+
 /** Turn a Marketplace integration on directly in the database (the first admin is recorded as the actor). */
 export function enableIntegration(app: FastifyInstance, id: IntegrationId): void {
   const admin = app.db.prepare("SELECT id FROM users WHERE role='admin' ORDER BY created_at, id LIMIT 1").get() as { id: string } | undefined;
@@ -103,7 +113,8 @@ export function enableIntegration(app: FastifyInstance, id: IntegrationId): void
 }
 
 /**
- * A commercial installation activated on `plan` with one registered device; requests must send `headers` (token + device).
+ * A commercial installation activated on `plan`. The browser that set it up is its one device, the main counter ("Main counter");
+ * requests must send `headers` (token + device).
  * `overrides` are the MasalaPOS owner's module choices signed into the licence.
  */
 export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {}) {
@@ -121,7 +132,5 @@ export async function commercialApp(plan: Plan, overrides: ModuleOverrides = {})
   const license = `${message}.${sign(null, Buffer.from(message), keys.privateKey).toString("base64url")}`;
   const activated = await app.inject({ method: "PUT", url: "/api/license", payload: { license }, headers });
   if (activated.statusCode !== 200) throw new Error(`commercialApp activation failed: ${activated.body}`);
-  const registered = await app.inject({ method: "POST", url: "/api/license/devices", payload: { name: "Counter" }, headers });
-  if (registered.statusCode !== 200) throw new Error(`commercialApp device registration failed: ${registered.body}`);
   return { app, headers };
 }

@@ -47,8 +47,6 @@ async function fixture() {
     return response.json();
   }
   await activate("pro", 1);
-  const registered = await api("POST", "/api/license/devices", { name: "Main counter" });
-  expect(registered.statusCode, registered.body).toBe(200);
   const categoryResponse = await api("POST", "/api/categories", { name: "Meals" });
   expect(categoryResponse.statusCode, categoryResponse.body).toBe(201);
   const category = categoryResponse.json().category as { id: string; name: string };
@@ -525,6 +523,60 @@ describe("guest QR ordering", () => {
     expect((await f.api("POST", `/api/orders/${order.id}/send`)).statusCode).toBe(200);
     expect(f.count("kots")).toBe(1);
     expect(f.balance()).toBe(9.5);
+  });
+
+  describe("auto-accept", () => {
+    const turn = (f: Awaited<ReturnType<typeof fixture>>, qrAutoAccept: boolean, as?: Headers) =>
+      f.api("PUT", "/api/settings", { restaurantName: "Cafe Test", qrAutoAccept }, as);
+
+    it("sends a guest order straight to a new bill and the kitchen, in the name of the admin who switched it on", async () => {
+      const f = await fixture();
+      expect((await turn(f, true)).statusCode).toBe(200);
+      const placed = await f.request();
+      expect(placed.request.status).toBe("accepted");
+      const [row] = (await f.api("GET", "/api/qr/requests?status=accepted")).json().requests as GuestRequest[];
+      expect(row).toMatchObject({ id: placed.request.id, status: "accepted", reviewedByName: SETUP.adminName });
+      const order = (await f.api("GET", `/api/orders/${row!.orderId}`)).json().order as Order;
+      expect(order).toMatchObject({ tableId: f.diningTable.id, splitLabel: "A", status: "open" });
+      expect(order.items.map((i) => i.status)).toEqual(["sent"]);
+      expect(f.count("kots")).toBe(1);
+      expect(f.balance()).toBe(9.5);
+      expect((await f.receipt(placed.request.id, placed.body.receiptToken)).json().request.status).toBe("accepted");
+    });
+
+    it("adds to the table's only open bill and sends only the guest's items", async () => {
+      const f = await fixture();
+      const open = await f.order();
+      const punched = await f.api("POST", `/api/orders/${open.id}/items`, { items: [{ productId: f.meal.id, variantId: f.meal.variants[1]!.id, qty: 1 }] });
+      expect(punched.statusCode, punched.body).toBe(200);
+      await turn(f, true);
+      const placed = await f.request();
+      expect(placed.request.status).toBe("accepted");
+      const order = (await f.api("GET", `/api/orders/${open.id}`)).json().order as Order;
+      expect(order.items.map((i) => [i.variantId, i.status])).toEqual([[f.meal.variants[1]!.id, "pending"], [f.meal.variants[0]!.id, "sent"]]);
+      expect(f.count("orders")).toBe(1);
+    });
+
+    it("leaves the request for staff when the table has two open bills, or while switched off", async () => {
+      const f = await fixture();
+      const off = await f.request();
+      expect(off.request.status).toBe("pending");
+      await f.order(); await f.order();
+      await turn(f, true);
+      const ambiguous = await f.request();
+      expect(ambiguous.request.status).toBe("pending");
+      expect(f.count("kots")).toBe(0);
+    });
+
+    it("stops when switched off and records who switched it on", async () => {
+      const f = await fixture();
+      await turn(f, true);
+      const by = () => (f.app.db.prepare("SELECT qr_auto_accept_by AS v FROM settings WHERE id = 1").get() as { v: string | null }).v;
+      expect(by()).not.toBeNull();
+      await turn(f, false);
+      expect(by()).toBeNull();
+      expect((await f.request()).request.status).toBe("pending");
+    });
   });
 
   it("attaches approval to the chosen open order at the same table and makes repeated approval idempotent", async () => {

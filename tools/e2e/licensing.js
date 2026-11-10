@@ -22,10 +22,12 @@
     if (res.status === 204) return {};
     const value = await res.json(); if (!res.ok) throw new Error(JSON.stringify(value)); return value;
   };
+  // Another browser joins the way staff do it: the admin here makes a code and the other browser enters it.
   const registerOther = async (credential, name) => {
+    const { code } = await api('/devices/join-codes', 'POST', { kind: 'counter', name });
+    await api('/devices/join', 'POST', { code }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
     const login = await api('/login', 'POST', { username: 'admin', password: 'admin-password' }, { 'x-masalapos-device': credential, 'content-type': 'application/json' });
-    const as = { authorization: 'Bearer ' + login.token, 'x-masalapos-device': credential, 'content-type': 'application/json' };
-    await api('/license/devices', 'POST', { name }, as); return as;
+    return { authorization: 'Bearer ' + login.token, 'x-masalapos-device': credential, 'content-type': 'application/json' };
   };
   URL.createObjectURL = function (blob) { const url = originalUrl.call(this, blob); blobs.set(url, blob); return url; };
   HTMLAnchorElement.prototype.click = function () { if (blobs.has(this.href)) downloads.push({ filename: this.download, text: blobs.get(this.href).text() }); return originalClick.call(this); };
@@ -68,9 +70,9 @@
     window.fetch = originalFetch; await click('Apply license');
     await wait(() => !input('Signed license').value && !button('Refresh plan').disabled);
     check((await api('/license/history')).events.filter((e) => e.kind === 'license_activated').length === 1, 'Retry after a lost acknowledgement records activation once');
-    await set(input('Device name'), 'Main counter'); await click('Register this device');
+    // The browser that set the restaurant up is its main counter already, so activation alone opens the workspace.
     await wait(() => document.body.innerText.includes('Dashboard'));
-    check((await api('/license')).canOperate, 'Registering this browser unlocks the restaurant workspace');
+    check((await api('/license')).canOperate, 'Activation unlocks the restaurant workspace on the main counter');
     await api('/users', 'POST', { name: 'QA Cashier', username: 'qacashier', password: 'password-2468', role: 'cashier' });
     const cashier = await api('/login', 'POST', { username: 'qacashier', password: 'password-2468' }, { 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' });
     const asCashier = { authorization: 'Bearer ' + cashier.token, 'x-masalapos-device': headers()['x-masalapos-device'], 'content-type': 'application/json' };
@@ -106,7 +108,7 @@
     window.fetch = async (...args) => String(args[0]) === '/api/license/devices' && !args[1]?.method
       ? new Response(JSON.stringify({ error: 'Device list unavailable' }), { status: 503, headers: { 'content-type': 'application/json' } }) : originalFetch(...args);
     await click('Refresh plan'); await wait(() => alertHas('Device list unavailable'));
-    check(!panel().querySelector('.license-devices li') && button('Register this device').disabled, 'Failed refresh removes stale device actions');
+    check(!panel().querySelector('.license-devices li') && button('Create join code').disabled, 'Failed refresh removes stale device actions');
     window.fetch = originalFetch; await click('Refresh plan'); await wait(() => !!panel().querySelector('.license-devices li'));
     check(!alertHas('Device list unavailable'), 'Device management recovers after a failed refresh');
     const history = (await api('/license/history')).events;

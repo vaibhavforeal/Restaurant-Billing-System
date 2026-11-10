@@ -14,6 +14,7 @@ import { moduleActive, requireModule } from "./modules.js";
 import { comboGroupsByCombo } from "./combos.js";
 import { addonGroupsByProduct } from "./addon-groups.js";
 import { insertOrderItem, priceOrderItem } from "./order-items.js";
+import { sendKitchenTickets } from "./kots.js";
 import { menuPairs, menuPopularIds } from "./menu-insights.js";
 
 const idParams = z.object({ id: z.string().uuid() });
@@ -212,6 +213,7 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
           JSON.stringify(items), items.reduce((sum, i) => sum + (i.pricePaise + (i.addons ?? []).reduce((n, a) => n + a.pricePaise, 0)) * i.qty, 0), now, now + TTL);
     })();
     changed();
+    autoAccept(id, table.id);
     return reply.status(201).send({ request: receiptJson(app.db, getRequest(id)!) });
   });
   app.get("/api/guest/requests/:id", async (req, reply) => {
@@ -269,53 +271,92 @@ export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
       .run(reason, Date.now(), req.user.id, id);
     changed(); return { request: requestJson(app.db, getRequest(id)!) };
   });
-  app.post("/api/qr/requests/:id/accept", { preHandler: [app.requirePermission("orders.update"), app.requirePermission("orders.create"), requireModule(app, "qrOrdering")] }, async (req) => {
-    const { id } = idParams.parse(req.params);
-    const body = z.object({ orderId: z.string().uuid().nullable() }).strict().parse(req.body);
-    const decision = JSON.stringify(body);
-    expire();
-    let didAccept = false;
+  /**
+   * Accepts a pending request onto `chosen` (an open bill at its table) or a new bill group, as `userId`. `accepted` is false
+   * for an exact retry of the same decision; `itemIds` are the dishes this call added.
+   */
+  function acceptRequest(id: string, chosen: string | null, userId: string, decision: string) {
+    let accepted = false;
+    const itemIds: string[] = [];
     const orderId = app.db.transaction(() => {
-      const row = getRequest(id);
-      if (!row) throw httpError(404, "Request not found");
-      if (row.status === "accepted" && row.decision_json === decision) return row.order_id!;
-      if (row.status !== "pending") throw httpError(409, "This request has already been reviewed or expired");
-      const table = getTable(row.table_id);
-      if (!table?.is_active) throw httpError(409, "The table is no longer active");
-      const items = JSON.parse(row.items_json) as GuestRequestItem[], current = menu(table, true);
-      const latest = snapshotItems(current, items.map(({ productId, variantId, qty, note, comboPicks, addonPicks }) => ({ productId, variantId, qty, note, ...(comboPicks ? { comboPicks } : {}), ...(addonPicks ? { addonPicks } : {}) })));
-      if (JSON.stringify(latest) !== JSON.stringify(items)) {
-        throw httpError(409, "The requested items or prices have changed. Reject this request and ask the customer to review the menu.", "menu_changed");
+    const row = getRequest(id);
+    if (!row) throw httpError(404, "Request not found");
+    if (row.status === "accepted" && row.decision_json === decision) return row.order_id!;
+    if (row.status !== "pending") throw httpError(409, "This request has already been reviewed or expired");
+    const table = getTable(row.table_id);
+    if (!table?.is_active) throw httpError(409, "The table is no longer active");
+    const items = JSON.parse(row.items_json) as GuestRequestItem[], current = menu(table, true);
+    const latest = snapshotItems(current, items.map(({ productId, variantId, qty, note, comboPicks, addonPicks }) => ({ productId, variantId, qty, note, ...(comboPicks ? { comboPicks } : {}), ...(addonPicks ? { addonPicks } : {}) })));
+    if (JSON.stringify(latest) !== JSON.stringify(items)) {
+      throw httpError(409, "The requested items or prices have changed. Reject this request and ask the customer to review the menu.", "menu_changed");
+    }
+    const now = Date.now(), target = chosen ?? uuidv7();
+    if (chosen) {
+      const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(target) as OrderRow | undefined;
+      // A table linked to a combined order may add to it; the order is open, so the link is active.
+      const atThisTable = order?.table_id === row.table_id
+        || !!app.db.prepare("SELECT 1 FROM table_links WHERE table_id = ? AND order_id = ?").get(row.table_id, target);
+      if (!order || order.type !== "dine_in" || !atThisTable || order.status !== "open") {
+        throw httpError(409, "Choose an open bill at this table, or create a new bill group");
       }
-      const now = Date.now(), target = body.orderId ?? uuidv7();
-      if (body.orderId) {
-        const order = app.db.prepare("SELECT * FROM orders WHERE id = ?").get(target) as OrderRow | undefined;
-        // A table linked to a combined order may add to it; the order is open, so the link is active.
-        const atThisTable = order?.table_id === row.table_id
-          || !!app.db.prepare("SELECT 1 FROM table_links WHERE table_id = ? AND order_id = ?").get(row.table_id, target);
-        if (!order || order.type !== "dine_in" || !atThisTable || order.status !== "open") {
-          throw httpError(409, "Choose an open bill at this table, or create a new bill group");
-        }
-        if (order.price_tier !== table.price_tier) throw httpError(409, "This bill uses different pricing. Create a new bill group.");
-      } else {
-        assertTableNotReserved(app.db, row.table_id, now);
-        const label = nextSplitLabel(app.db, row.table_id);
-        if (label === null) throw httpError(409, "This table has too many open bill groups");
-        app.db.prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier) VALUES (?, ?, 'dine_in', ?, ?, ?, ?, ?)")
-          .run(target, `guest:${id}`, row.table_id, label, req.user.id, now, table.price_tier);
-      }
-      for (const [index, item] of items.entries()) {
-        insertOrderItem(app.db, target, priceOrderItem(app.db, table.price_tier, item), { clientRef: `guest:${id}:${index}`, guestRequestId: id });
-      }
-      app.db.prepare("UPDATE guest_requests SET status = 'accepted', order_id = ?, reviewed_at = ?, reviewed_by = ?, decision_json = ? WHERE id = ?")
-        .run(target, now, req.user.id, decision, id);
-      didAccept = true; return target;
+      if (order.price_tier !== table.price_tier) throw httpError(409, "This bill uses different pricing. Create a new bill group.");
+    } else {
+      assertTableNotReserved(app.db, row.table_id, now);
+      const label = nextSplitLabel(app.db, row.table_id);
+      if (label === null) throw httpError(409, "This table has too many open bill groups");
+      app.db.prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier) VALUES (?, ?, 'dine_in', ?, ?, ?, ?, ?)")
+        .run(target, `guest:${id}`, row.table_id, label, userId, now, table.price_tier);
+    }
+    for (const [index, item] of items.entries()) {
+      itemIds.push(insertOrderItem(app.db, target, priceOrderItem(app.db, table.price_tier, item), { clientRef: `guest:${id}:${index}`, guestRequestId: id }));
+    }
+    app.db.prepare("UPDATE guest_requests SET status = 'accepted', order_id = ?, reviewed_at = ?, reviewed_by = ?, decision_json = ? WHERE id = ?")
+      .run(target, now, userId, decision, id);
+    accepted = true; return target;
     })();
+    return { orderId, accepted, itemIds };
+  }
+  /** Tells every screen about an accepted request and returns it with its order. */
+  function publishAccepted(id: string, orderId: string, accepted: boolean) {
     const request = requestJson(app.db, getRequest(id)!), order = loadOrderJson(app.db, orderId)!;
-    if (didAccept) {
+    if (accepted) {
       changed(); app.broadcast("order.updated", { order }); app.broadcast("table.changed", { tableId: request.tableId });
       if (order.tableId && order.tableId !== request.tableId) app.broadcast("table.changed", { tableId: order.tableId });
     }
     return { request, order };
+  }
+  /**
+   * With auto-accept on (Settings → Tables), a new guest request goes onto the table's only open bill, or a new one, and its
+   * dishes go to the kitchen, all under the admin who switched auto-accept on. A table with several open bills needs a
+   * person to choose, and anything that fails (a changed menu, a reserved table) leaves the request pending for staff.
+   */
+  function autoAccept(id: string, tableId: string): void {
+    const auto = app.db.prepare("SELECT qr_auto_accept AS enabled, qr_auto_accept_by AS by FROM settings WHERE id = 1").get() as { enabled: number; by: string | null };
+    if (auto.enabled !== 1 || !auto.by) return;
+    const open = app.db.prepare(`SELECT id FROM orders WHERE status = 'open' AND type = 'dine_in'
+      AND (table_id = ? OR id IN (SELECT order_id FROM table_links WHERE table_id = ?))`).all(tableId, tableId) as Array<{ id: string }>;
+    if (open.length > 1) return;
+    const chosen = open[0]?.id ?? null;
+    let result: ReturnType<typeof acceptRequest>;
+    try {
+      result = acceptRequest(id, chosen, auto.by, JSON.stringify({ orderId: chosen, auto: true }));
+    } catch (error) {
+      app.log.info({ err: error, requestId: id }, "QR request left for staff: auto-accept could not add it");
+      return;
+    }
+    publishAccepted(id, result.orderId, result.accepted);
+    try {
+      sendKitchenTickets(app, result.orderId, { clientRef: uuidv7(), itemIds: result.itemIds }, auto.by);
+    } catch (error) {
+      // Dishes with no kitchen station have nothing to send; any other failure leaves them pending on the bill for staff.
+      app.log.info({ err: error, requestId: id }, "Auto-accepted QR items were not sent to the kitchen");
+    }
+  }
+  app.post("/api/qr/requests/:id/accept", { preHandler: [app.requirePermission("orders.update"), app.requirePermission("orders.create"), requireModule(app, "qrOrdering")] }, async (req) => {
+    const { id } = idParams.parse(req.params);
+    const body = z.object({ orderId: z.string().uuid().nullable() }).strict().parse(req.body);
+    expire();
+    const result = acceptRequest(id, body.orderId, req.user.id, JSON.stringify(body));
+    return publishAccepted(id, result.orderId, result.accepted);
   });
 }

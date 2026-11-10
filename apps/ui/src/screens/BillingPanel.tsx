@@ -14,7 +14,10 @@ import { SegmentedControl } from "../PosControls";
 import { useIntegrations } from "../integrations";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
-import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
+import { useShortcutLabels } from "../pos-shortcuts";
+import { allowedPayment, preferredPayment, rememberPayment } from "../device-preferences";
+import { printerField, shownPrinter, useDeviceSettings } from "../device-settings";
+import { useOrderSettings } from "../order-settings";
 import { billPaymentLabel, billTaxRates, gstNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
@@ -28,7 +31,6 @@ import { showServiceChargeBox } from "../charges-form";
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
 const paymentModes = [{ value: "cash", label: "Cash" }, { value: "card", label: "Card" }, { value: "upi", label: "UPI" }] as const;
-function preferredPayment(): "cash" | "card" | "upi" { const value = readPreference("masalapos.payment-mode", "cash"); return value === "card" || value === "upi" ? value : "cash"; }
 
 type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string; refNote: string };
 
@@ -80,7 +82,17 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const [redeemCap, setRedeemCap] = useState<number | null>(null);
   useEffect(() => setRedeemCap(null), [order.customer?.id]);
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-  const [printerId, setPrinterId] = useState(() => readPreference("masalapos.receipt-printer"));
+  // Null until the list has loaded, so a counter that is offline does not take its printer for a switched-off one.
+  const [activePrinters, setActivePrinters] = useState<Array<{ id: string; name: string }> | null>(null);
+  // This device's bill printer and starting payment method come from the main PC. The cashier may pick another printer
+  // for the bill in hand; the next order starts on the device's printer again.
+  const device = useDeviceSettings();
+  const devicePrinterId = device.settings.billPrinterId;
+  const [printerChoice, setPrinterChoice] = useState<string | undefined>(undefined);
+  useEffect(() => setPrinterChoice(undefined), [order.id]);
+  const printerId = shownPrinter(printerChoice, devicePrinterId, activePrinters);
+  const paymentStart = useRef(device.settings.paymentStart);
+  paymentStart.current = device.settings.paymentStart;
   const [payments, setPayments] = useState<PaymentDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -95,7 +107,22 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const billRevision = useRef(0);
   const [job, setJob] = useState<PrintJobInfo | null>(null);
   const [creditKind, setCreditKind] = useState<"void" | "refund" | null>(null);
-  const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(preferredPayment);
+  const { paymentModes: takenModes } = useOrderSettings();
+  const taken = useRef(takenModes);
+  taken.current = takenModes;
+  const modeOptions = paymentModes.filter((option) => takenModes.includes(option.value));
+  const startMode = () => allowedPayment(preferredPayment(paymentStart.current), taken.current);
+  const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(startMode);
+  // The device's starting method can reach this panel after it opened, or change while it is open. It applies until the
+  // cashier picks a method for this order.
+  const modeChosen = useRef(false);
+  useEffect(() => { modeChosen.current = false; }, [order.id]);
+  useEffect(() => { if (!modeChosen.current) setQuickMode(startMode()); }, [device.settings.paymentStart]);
+  // A method switched off in Settings while this bill is open moves to one the counter still takes.
+  useEffect(() => {
+    setQuickMode((mode) => allowedPayment(mode, takenModes));
+    setPayments((rows) => rows.map((row) => takenModes.includes(row.mode) || takenModes.length === 0 ? row : { ...row, mode: takenModes[0]! }));
+  }, [takenModes]);
   const [cashReceived, setCashReceived] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const dialogTitle = useRef<HTMLHeadingElement>(null);
@@ -129,7 +156,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   function acceptBill(value: Bill | null) {
     billRevision.current++;
     setBill(value);
-    if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: preferredPayment(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
+    if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: startMode(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
   }
   useEffect(() => {
     let active = true;
@@ -141,7 +168,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       if (!active) return;
       if (revision === billRevision.current) acceptBill(b.bill);
       setPrinters(p.printers);
-      setPrinterId((id) => p.printers.some((printer) => printer.id === id) ? id : "");
+      setActivePrinters(p.printers);
     }).catch((e: unknown) => {
       // Offline (or an order the hub has not received yet) there is simply no bill to show.
       if (!active || isUnreachable(e) || (e instanceof ApiError && e.status === 404)) return;
@@ -213,7 +240,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     if (value.charges?.some((c) => c.kind === "service")) setServiceDue(true);
     setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
-    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge, ...(pin ? { approverPin: pin } : {}) };
+    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), ...printerField(printerId, devicePrinterId), redeemPoints, buyer, serviceCharge, removedOfferIds: [], ...(pin ? { approverPin: pin } : {}) };
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
@@ -251,7 +278,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     catch { setError("Payment is recorded. Reopen the order if its status has not refreshed."); }
     if (printerId) {
       try {
-        const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${paid.id}/print`, { method: "POST", body: JSON.stringify({ printerId }) });
+        const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${paid.id}/print`, { method: "POST", body: JSON.stringify(printerField(printerId, devicePrinterId)) });
         setJob(result.job);
       } catch { setError("Payment is recorded. Receipt printing was not confirmed; check the printer before printing again."); }
     }
@@ -298,7 +325,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     setFrameReady(false); setHtml(await response.text());
   }
   function changePrinter(value: string) {
-    setPrinterId(value); savePreference("masalapos.receipt-printer", value);
+    setPrinterChoice(value);
     setPreview(null); createRequest.current = null;
   }
   const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -400,7 +427,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             <BillItemLines items={order.items} refundedQty={{}} showRefunded={false} />
             {quick ? <fieldset disabled={blocked} className="quick-payment"><legend>Payment received</legend>
               <div className="billing-payment-fields">
-                <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={paymentModes} onChange={(mode) => { setQuickMode(mode); savePreference("masalapos.payment-mode", mode); }} /></div>
+                <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={modeOptions} onChange={(mode) => { modeChosen.current = true; setQuickMode(mode); rememberPayment(mode); }} /></div>
                 {quickMode === "cash" && <label>Cash received (₹)<input type="number" min={paiseToRupees(preview.totalPaise)} step="0.01" placeholder={paiseToRupees(preview.totalPaise)} value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>}
               </div>
               {quickMode === "cash" && <div className="cash-chips" aria-label="Cash quick amounts">{[preview.totalPaise, ...[50000, 100000, 200000].filter((amount) => amount > preview.totalPaise)].map((amount, index) => <button key={amount} onClick={() => setCashReceived(paiseToRupees(amount))}>{index === 0 ? "Exact" : money(amount)}</button>)}</div>}
@@ -416,7 +443,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             {bill.status === "unpaid" && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
               {canShowQr && <><button onClick={() => setShowQr(true)}>Show UPI QR</button><p className="billing-note">Customers can scan from this screen or the printed bill. Verify payment in your UPI app before settling.</p></>}
               {payments.map((p, index) => <div key={p.id} className="billing-payment-row">
-                <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={paymentModes} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); savePreference("masalapos.payment-mode", mode); }} /></div>
+                <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={modeOptions} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); rememberPayment(mode); }} /></div>
                 <label>Amount {index + 1} (₹) <input type="number" min="0.01" step="0.01" value={p.amount} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, amount: e.target.value } : r))} /></label>
                 <label>Reference {index + 1} <input maxLength={200} value={p.refNote} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, refNote: e.target.value } : r))} /></label>
                 <button className="billing-remove-payment" aria-label={`Remove payment ${index + 1}`} onClick={() => setPayments((rows) => rows.filter((r) => r.id !== p.id))}>Remove</button>
@@ -431,7 +458,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
               {canGoToTables && <button className="primary" disabled={blocked} onClick={goToTables}>Go to tables</button>}
               <button disabled={busy} onClick={() => void run(viewReceipt)}>View receipt</button>
               {printerId && !zomatoBill && <button disabled={busy} onClick={() => void run(async () => {
-                const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${bill.id}/print`, { method: "POST", body: JSON.stringify({ printerId }) });
+                const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${bill.id}/print`, { method: "POST", body: JSON.stringify(printerField(printerId, devicePrinterId)) });
                 setJob(result.job); setMessage("Receipt queued for printing.");
               })}>Print receipt</button>}
               {html && !zomatoBill && <button disabled={!frameReady} onClick={() => frame.current?.contentWindow?.print()}>Print / save PDF</button>}
@@ -439,7 +466,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
               {canVoid && <button className="billing-void" disabled={blocked} onClick={() => setCreditKind("void")}>Void bill</button>}
             </div>
             {onlyVoidLeft && <p className="billing-refund-hint muted">All items are refunded. The packaging was kept; void the bill to return it.</p>}
-            <CreditNoteList notes={bill.creditNotes} printers={printers} printerId={printerId} />
+            <CreditNoteList notes={bill.creditNotes} printers={printers} printerId={printerId} devicePrinterId={devicePrinterId} />
             {job && <p className="billing-print-status" role="status">Receipt print: {job.status === "done" ? "submitted" : job.status}{job.error ? ` — ${job.error}. Check the paper before reprinting. An admin can retry the affected copy in Settings.` : ""}{job.copyCount > 1 ? ` · ${job.copyCount} copies requested; each copy is tracked in Settings.` : ""}</p>}
           </div>}
         </div>
@@ -447,7 +474,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       </div>
     </dialog>, document.body)}
     {bill && <UpiQrPreview billId={bill.id} open={showQr && canShowQr} onClose={() => setShowQr(false)} />}
-    {bill && !zomatoBill && can("bills.refund") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role ?? "cashier"} printers={printers} printerId={printerId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
+    {bill && !zomatoBill && can("bills.refund") && <CreditNoteDialog kind={creditKind} bill={bill} items={order.items} role={role ?? "cashier"} printers={printers} printerId={printerId} devicePrinterId={devicePrinterId} onClose={() => setCreditKind(null)} onIssued={creditIssued} onStale={() => void reloadBill()} />}
   </section>;
 }
 

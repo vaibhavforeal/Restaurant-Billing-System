@@ -77,7 +77,10 @@ export function registerPrinters(app: FastifyInstance, discover: () => Promise<P
         body.kotProfile ? JSON.stringify(body.kotProfile) : row.kot_profile,
         id,
       );
-    return { printer: toPrinterJson(getPrinter(id)!) };
+    const saved = getPrinter(id)!;
+    // Devices that print bills here gain or lose their printer, so their screens re-read their settings.
+    if (saved.is_active !== row.is_active) app.broadcast("devices.changed", {});
+    return { printer: toPrinterJson(saved) };
   });
 
   app.post("/api/printers/:id/test-print", { preHandler: manage }, async (req, reply) => {

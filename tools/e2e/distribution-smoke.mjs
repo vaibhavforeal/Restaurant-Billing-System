@@ -66,7 +66,7 @@ for (const edition of ["demo", "commercial"]) {
       const message = `ff1.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
       const license = `${message}.${sign(null, Buffer.from(message), signingKey).toString("base64url")}`;
       assert.equal((await api("/api/license", "PUT", { license })).status, 200);
-      assert.equal((await api("/api/license/devices", "POST", { name: "QA counter" })).status, 200);
+      // The browser that ran setup is the main counter already; other devices join by code.
       const active = await (await api("/api/license")).json();
       assert.equal(active.canOperate, true);
       const tables = await (await api("/api/tables")).json();

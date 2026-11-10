@@ -25,6 +25,8 @@ export const BillPreview = z.object({
   buyer: BuyerDetails.nullable().default(null),
   /** Cashier's choice to keep the service charge; false removes it from a dine-in bill. */
   serviceCharge: z.boolean().default(true),
+  /** Offers the cashier switched off for this bill. */
+  removedOfferIds: z.array(z.string().min(1).max(64)).max(50).default([]),
 }).superRefine((v, ctx) => {
   if (v.discountPaise > 0 && !v.discountNote) ctx.addIssue({ code: "custom", message: "Discount reason required", path: ["discountNote"] });
 });
@@ -32,7 +34,8 @@ export const BillCreate = BillPreview.safeExtend({
   clientRef: Ref,
   // Preview fingerprint prevents charging an order changed on another counter.
   previewKey: z.string().min(1).max(128),
-  printerId: z.string().min(1).nullable().default(null),
+  // Left out: the calling device's bill printer. A printer id: that printer for this bill. null: no thermal print.
+  printerId: z.string().min(1).nullable().optional(),
 });
 export const BillSettle = z.object({
   clientRef: Ref,
@@ -42,7 +45,8 @@ export const BillSettle = z.object({
     refNote: z.string().trim().max(200).default(""),
   })).max(20),
 });
-export const BillPrint = z.object({ printerId: z.string().min(1) });
+/** The printer for one print request, read the same way as `BillCreate.printerId`. */
+export const BillPrint = z.object({ printerId: z.string().min(1).nullable().optional() });
 export type BillCreateInput = z.infer<typeof BillCreate>;
 export type BillSettleInput = z.infer<typeof BillSettle>;
 
@@ -66,10 +70,14 @@ export interface ChargeLine {
 /** A charge's name on a bill: the label, then its percentage when it has one (`Service charge 10%`). */
 export const chargeLabel = (c: { label: string; percentBp?: number | null | undefined }) => c.percentBp ? `${c.label} ${c.percentBp / 100}%` : c.label;
 export interface BillTotals {
-  subtotalPaise: number; discountPaise: number; cgstPaise: number;
-  sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];
+  subtotalPaise: number;
+  /** The total of every discount, offers included. */
+  discountPaise: number;
+  cgstPaise: number; sgstPaise: number; roundingPaise: number; totalPaise: number; taxes: TaxLine[];
   /** Always set by `calculateBill`; optional so older payloads and fixtures still type-check. */
   charges?: ChargeLine[];
+  /** The part of `discountPaise` that came from offers; present only when an offer applied. */
+  offerDiscountPaise?: number;
 }
 export interface ReceiptSnapshot {
   /** Missing on older bills, which continue to use the Classic layout. */
@@ -105,6 +113,8 @@ export interface ReceiptSnapshot {
   servedBy?: string;
   /** `contents`: what one combo held, e.g. ["Veg Burger", "2 x Coke"]. `addon`: picked under the dish above it. */
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[]; addon?: boolean }>;
+  /** The offers that took money off this bill, by name; absent when none applied. */
+  offers?: Array<{ name: string; discountPaise: number }>;
 }
 export interface ReceiptBuyer {
   gstin: string; name: string; address: string;
@@ -172,23 +182,32 @@ function taxGroup(gross: number, rate: number, mode: GstMode): Omit<TaxLine, "gs
   return { taxablePaise: gross - 2 * half, cgstPaise: half, sgstPaise: half };
 }
 
-/** All financial arithmetic uses integer paise / BigInt. */
-export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee", charges: ChargeInput[] = []): BillTotals {
+/**
+ * All financial arithmetic uses integer paise / BigInt.
+ * A line's `offerDiscountPaise` comes off that line before GST; `discountPaise` is the bill-level discount, spread over what is left.
+ */
+export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number; offerDiscountPaise?: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee", charges: ChargeInput[] = []): BillTotals {
   if (!items.length) throw new Error("Bill must contain at least one item");
   const groups = new Map<number, number>();
   let subtotalPaise = 0;
+  let offerDiscountPaise = 0;
   for (const item of items) {
     if (!Number.isSafeInteger(item.pricePaise) || item.pricePaise < 0 || !Number.isSafeInteger(item.qty) || item.qty < 1 ||
         ![0, 5, 12, 18, 28].includes(item.gstRate)) throw new Error("Invalid bill item");
     const amount = item.pricePaise * item.qty;
+    const offer = item.offerDiscountPaise ?? 0;
+    if (!Number.isSafeInteger(offer) || offer < 0 || offer > amount) throw new Error("Invalid bill item");
     subtotalPaise += amount;
     if (!Number.isSafeInteger(subtotalPaise) || subtotalPaise > 1_000_000_000) throw new Error("Bill exceeds supported amount");
-    groups.set(item.gstRate, (groups.get(item.gstRate) ?? 0) + amount);
+    offerDiscountPaise += offer;
+    groups.set(item.gstRate, (groups.get(item.gstRate) ?? 0) + amount - offer);
   }
-  if (!Number.isSafeInteger(discountPaise) || discountPaise < 0 || discountPaise > subtotalPaise) throw new Error("Discount exceeds subtotal");
+  const afterOffersPaise = subtotalPaise - offerDiscountPaise;
+  if (!Number.isSafeInteger(discountPaise) || discountPaise < 0 || discountPaise > afterOffersPaise) throw new Error("Discount exceeds subtotal");
+  const totalDiscountPaise = offerDiscountPaise + discountPaise;
   const allocation = [...groups.entries()].sort(([a], [b]) => a - b).map(([rate, amount]) => {
     const product = BigInt(amount) * BigInt(discountPaise);
-    const denominator = BigInt(subtotalPaise || 1);
+    const denominator = BigInt(afterOffersPaise || 1);
     return { rate, amount, discount: Number(product / denominator), remainder: product % denominator };
   });
   let remaining = discountPaise - allocation.reduce((sum, row) => sum + row.discount, 0);
@@ -202,7 +221,7 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
     let amountPaise: number;
     if (charge.kind === "service") {
       if (!Number.isSafeInteger(charge.bp) || charge.bp < 0 || charge.bp > 10_000) throw new Error("Invalid charge");
-      amountPaise = Number((BigInt(subtotalPaise - discountPaise) * BigInt(charge.bp) + 5_000n) / 10_000n);
+      amountPaise = Number((BigInt(subtotalPaise - totalDiscountPaise) * BigInt(charge.bp) + 5_000n) / 10_000n);
     } else {
       if (!Number.isSafeInteger(charge.amountPaise) || charge.amountPaise < 0 || charge.amountPaise > 1_000_000_000) throw new Error("Invalid charge");
       amountPaise = charge.amountPaise;
@@ -219,8 +238,11 @@ export function calculateBill(items: Array<{ pricePaise: number; qty: number; gs
   const chargesPaise = lines.reduce((sum, line) => sum + line.amountPaise, 0);
   const cgstPaise = taxes.reduce((sum, row) => sum + row.cgstPaise, 0);
   const sgstPaise = taxes.reduce((sum, row) => sum + row.sgstPaise, 0);
-  const unrounded = subtotalPaise - discountPaise + chargesPaise + (mode === "exclusive" ? cgstPaise + sgstPaise : 0);
+  const unrounded = subtotalPaise - totalDiscountPaise + chargesPaise + (mode === "exclusive" ? cgstPaise + sgstPaise : 0);
   if (!Number.isSafeInteger(unrounded) || unrounded > 1_000_000_000) throw new Error("Bill exceeds supported amount");
   const totalPaise = roundTotal(unrounded, roundOff);
-  return { subtotalPaise, discountPaise, cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes, charges: lines };
+  return {
+    subtotalPaise, discountPaise: totalDiscountPaise, ...(offerDiscountPaise > 0 ? { offerDiscountPaise } : {}),
+    cgstPaise, sgstPaise, roundingPaise: totalPaise - unrounded, totalPaise, taxes, charges: lines,
+  };
 }

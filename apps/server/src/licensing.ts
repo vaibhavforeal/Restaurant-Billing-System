@@ -1,10 +1,11 @@
-import { createHash, createPublicKey, randomUUID } from "node:crypto";
+import { createHash, createPublicKey } from "node:crypto";
 import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@masalapos/domain";
 import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { verifyLicenseSignature } from "@masalapos/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { httpError } from "./http-error.js";
+import { deviceHash } from "./devices.js";
 
 /** Nothing allowed: an installation without a valid licence. */
 const noModules = (): ModuleMap => Object.fromEntries(MODULE_IDS.map((id) => [id, false])) as ModuleMap;
@@ -57,12 +58,8 @@ interface SavedLicense {
   envelope: string | null; revision: number; last_seen_at: number;
   license_id: string | null; organization_id: string | null; outlet_id: string | null;
 }
-interface DeviceRow { id: string; credential_hash: string; name: string; created_at: number; last_seen_at: number | null; version: number; revoked_at: number | null }
 
-export function deviceHash(credential: unknown): string | null {
-  return typeof credential === "string" && /^[a-f0-9]{64}$/.test(credential)
-    ? createHash("sha256").update(credential).digest("hex") : null;
-}
+export { deviceHash };
 
 export class Licensing {
   private now: () => number;
@@ -90,12 +87,12 @@ export class Licensing {
       return claims;
     } catch { throw httpError(400, "License is invalid or belongs to another installation"); }
   }
-  private activeDevices() {
-    return this.app.db.prepare("SELECT * FROM licensed_devices WHERE revoked_at IS NULL ORDER BY created_at, id").all() as DeviceRow[];
-  }
-  private audit(kind: LicenseEvent["kind"], summary: string, actorName: string, revision: number | null = null, deviceId: string | null = null) {
-    this.app.db.prepare("INSERT INTO license_events (occurred_at, actor_name, kind, summary, revision, device_id) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(this.now(), actorName, kind, summary, revision, deviceId);
+  /** The device registry owns the list; the licence only counts it. Oldest first, which decides who keeps a slot. */
+  private activeDevices() { return this.app.devices.active(); }
+  /** Licence events only; what happens to devices is recorded by the device registry. */
+  private audit(summary: string, actorName: string, revision: number) {
+    this.app.db.prepare("INSERT INTO license_events (occurred_at, actor_name, kind, summary, revision) VALUES (?, ?, 'license_activated', ?, ?)")
+      .run(this.now(), actorName, summary, revision);
   }
   status(credential?: unknown): LicenseStatus {
     const now = this.now();
@@ -125,10 +122,10 @@ export class Licensing {
     }
     const state = now >= claims.graceUntil ? "expired" : now >= claims.expiresAt ? "grace" : "active";
     const hash = deviceHash(credential);
-    const currentDevice = devices.find((d) => d.credential_hash === hash);
-    const deviceRegistered = devices.slice(0, claims.maxDevices).some((d) => d.credential_hash === hash);
-    if (deviceRegistered && currentDevice && state !== "expired" && (currentDevice.last_seen_at === null || now - currentDevice.last_seen_at >= 60_000)) {
-      this.app.db.prepare("UPDATE licensed_devices SET last_seen_at = ? WHERE id = ?").run(now, currentDevice.id);
+    const currentDevice = devices.find((d) => d.credentialHash === hash);
+    const deviceRegistered = devices.slice(0, claims.maxDevices).some((d) => d.credentialHash === hash);
+    if (deviceRegistered && currentDevice && state !== "expired" && (currentDevice.lastSeenAt === null || now - currentDevice.lastSeenAt >= 60_000)) {
+      this.app.devices.touch(currentDevice.id, now);
     }
     return { ...base, state, plan: claims.plan, maxDevices: claims.maxDevices, features: claims.features, modules: claims.modules,
       expiresAt: claims.expiresAt, graceUntil: claims.graceUntil, deviceRegistered, trial: claims.trial === true,
@@ -136,7 +133,7 @@ export class Licensing {
       canOperate: state !== "expired" && deviceRegistered,
       message: state === "expired" ? "Your offline license has expired. Renew it to resume billing."
         : currentDevice && !deviceRegistered ? "This browser exceeds your plan's device limit. An administrator can remove an unused device or upgrade the plan."
-        : !deviceRegistered ? "An administrator must register this browser before it can be used for billing."
+        : !deviceRegistered ? "This device has not joined. Ask an administrator for a join code."
         : state === "grace" ? "License renewal is due. Billing remains available until the grace period ends."
         : "Your plan is active." };
   }
@@ -167,56 +164,23 @@ export class Licensing {
       if (previewKey && preview.previewKey !== previewKey) throw httpError(409, "The license or registered devices changed. Preview this license again before applying it.");
       this.app.db.prepare("UPDATE license_state SET envelope = ?, revision = ?, last_seen_at = ?, license_id = ?, organization_id = ?, outlet_id = ? WHERE id = 1")
         .run(envelope, claims.revision, Math.max(now, saved.last_seen_at), claims.licenseId, claims.organizationId, claims.outletId);
-      this.audit("license_activated", `${claims.plan === "pro" ? "Pro" : "Basic"} license applied: revision ${claims.revision}, ${claims.maxDevices} devices.`, actorName, claims.revision);
+      this.audit(`${claims.plan === "pro" ? "Pro" : "Basic"} license applied: revision ${claims.revision}, ${claims.maxDevices} devices.`, actorName, claims.revision);
     })();
   }
   devices(credential?: unknown): LicensedDevice[] {
     const status = this.status(credential);
     const hash = deviceHash(credential);
-    return this.activeDevices().map((d, index) => ({ id: d.id, name: d.name, createdAt: d.created_at,
-      lastSeenAt: d.last_seen_at, version: d.version,
-      current: d.credential_hash === hash, allowed: status.maxDevices !== null && index < status.maxDevices }));
-  }
-  register(credential: unknown, name: string, actorName = "Administrator") {
-    const hash = deviceHash(credential);
-    if (!hash) throw httpError(400, "This browser has no valid device credential");
-    this.app.db.transaction(() => {
-      const status = this.status(credential);
-      if (status.state !== "active" && status.state !== "grace") throw httpError(403, "An active license is required to register devices");
-      const old = this.activeDevices().find((d) => d.credential_hash === hash);
-      if (old) {
-        if (old.name !== name) this.rename(old.id, name, old.version, actorName);
-        return;
-      }
-      if (this.activeDevices().length >= status.maxDevices!) throw httpError(409, "Device limit reached. Remove an old device or upgrade your plan.");
-      this.app.db.prepare(`INSERT INTO licensed_devices (id, credential_hash, name, created_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(credential_hash) DO UPDATE SET name = excluded.name, created_at = excluded.created_at, revoked_at = NULL, last_seen_at = NULL, version = licensed_devices.version + 1`)
-        .run(randomUUID(), hash, name, this.now());
-      const id = this.activeDevices().find((d) => d.credential_hash === hash)!.id;
-      this.audit("device_registered", `Registered ${name}.`, actorName, null, id);
-    })();
+    return this.activeDevices().map((d, index) => ({ id: d.id, name: d.name, createdAt: d.createdAt,
+      lastSeenAt: d.lastSeenAt, version: d.version,
+      current: d.credentialHash === hash, allowed: status.maxDevices !== null && index < status.maxDevices }));
   }
   rename(id: string, name: string, version: number, actorName = "Administrator") {
-    this.app.db.transaction(() => {
-      const device = this.activeDevices().find((d) => d.id === id);
-      if (!device) throw httpError(404, "Device not found");
-      if (device.version !== version) throw httpError(409, "This device changed. Refresh the device list and try again.");
-      if (device.name === name) return;
-      this.app.db.prepare("UPDATE licensed_devices SET name = ?, version = version + 1 WHERE id = ?").run(name, id);
-      this.audit("device_renamed", `Renamed ${device.name} to ${name}.`, actorName, null, id);
-    })();
+    this.app.devices.rename(id, name, version, actorName);
   }
   revoke(id: string, actorName = "Administrator", version?: number) {
-    this.app.db.transaction(() => {
-      const device = this.app.db.prepare("SELECT * FROM licensed_devices WHERE id = ?").get(id) as DeviceRow | undefined;
-      if (!device) throw httpError(404, "Device not found");
-      if (device.revoked_at !== null) return;
-      if (version !== undefined && device.version !== version) throw httpError(409, "This device changed. Refresh the device list and try again.");
-      this.app.db.prepare("UPDATE licensed_devices SET revoked_at = ?, version = version + 1 WHERE id = ?").run(this.now(), id);
-      this.app.db.prepare("DELETE FROM sessions WHERE device = ?").run(device.credential_hash);
-      this.audit("device_removed", `Removed ${device.name}.`, actorName, null, id);
-    })();
+    this.app.devices.remove(id, actorName, version);
   }
+  /** Licence events only. Device history is `app.devices.events()`. */
   history(before?: number): LicenseHistory {
     const rows = this.app.db.prepare(`SELECT id, occurred_at AS occurredAt, actor_name AS actorName, kind, summary, revision, device_id AS deviceId
       FROM license_events WHERE id < ? ORDER BY id DESC LIMIT 21`).all(before ?? Number.MAX_SAFE_INTEGER) as LicenseEvent[];
@@ -345,6 +309,8 @@ export class Licensing {
     if (path === "/api/me" || path === "/api/logout" || path?.startsWith("/api/license")) return;
     // Support must be reachable exactly when a licence problem stops billing.
     if (path?.startsWith("/api/support/")) return;
+    // The main counter's way back in after its browser storage was cleared; the route itself checks for an administrator on the main PC.
+    if (path === "/api/devices/rejoin-main") return;
     // Never charge for access to backups, even after a subscription expires.
     if (path?.startsWith("/api/system/backups")) return;
     const status = this.status(req.headers["x-masalapos-device"]);
@@ -394,11 +360,6 @@ export function registerLicensing(app: FastifyInstance) {
   });
   app.get("/api/license/devices", { preHandler: manage }, async (req, reply) => {
     reply.header("Cache-Control", "no-store"); return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
-  });
-  app.post("/api/license/devices", { preHandler: manage }, async (req) => {
-    const { name } = z.object({ name: deviceName }).parse(req.body);
-    app.licensing.register(req.headers["x-masalapos-device"], name, req.user.name); licenseChanged();
-    return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
   });
   app.patch("/api/license/devices/:id", { preHandler: manage }, async (req) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);

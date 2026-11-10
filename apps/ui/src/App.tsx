@@ -34,11 +34,14 @@ import { listenForAndroidBack } from "./android-back";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
+import { DeviceGate } from "./DeviceGate";
 import { RemoteConsent } from "./support";
 import "./compact-workspace.css";
 import { CurrentUserProvider, userCan } from "./permissions";
 import { connectWs } from "./ws";
 import { isUnreachable, readSignedIn, saveSignedIn } from "./offline-cache";
+import { BusinessDaySync } from "./order-settings";
+import { DeviceSettingsSync } from "./device-settings";
 
 type State =
   | { kind: "loading" }
@@ -60,8 +63,9 @@ export function App() {
   }
   const feedback = /^\/feedback\/([A-Za-z0-9_-]{32})\/?$/.exec(window.location.pathname);
   if (feedback) return <FeedbackPage token={feedback[1]!} />;
-  if (/^\/kitchen\/?$/.test(window.location.pathname)) return <KitchenApp />;
-  return <StaffApp />;
+  // Staff screens are for the restaurant's own devices; guests above need no device.
+  if (/^\/kitchen\/?$/.test(window.location.pathname)) return <DeviceGate><KitchenApp /></DeviceGate>;
+  return <DeviceGate><StaffApp /></DeviceGate>;
 }
 
 /** Admins and cashiers reach the kitchen board only while the Kitchen Display is on. Kitchen staff cannot read the Marketplace, so their board explains a turned-off KDS itself. */
@@ -78,7 +82,7 @@ function CustomersRoute({ user, onNavigate }: { user: User; onNavigate: (page: P
   const { ready, isEnabled } = useIntegrations();
   if (!ready) return <p role="status">Loading customers…</p>;
   if (!isEnabled("crm")) return <IntegrationOff name="CRM & Loyalty" canManage={userCan(user, "integrations.configure")} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
-  return <Customers isAdmin={userCan(user, "settings.manage")} canExport={userCan(user, "crm.export")} />;
+  return <Customers isAdmin={userCan(user, "settings.manage")} canExport={userCan(user, "crm.export")} onOpenSettings={(section) => onNavigate({ name: "settings", section })} />;
 }
 
 /** A page that belongs to a module: while the module is not available it explains why instead. */
@@ -185,6 +189,8 @@ function StaffApp() {
           <LicenseGate key={user.id} user={user}>
           {/* Sibling keys must differ; each still starts afresh when another staff member signs in. */}
           <ConnectionStatus key={`connection-${user.id}`} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
+          <BusinessDaySync key={`day-${user.id}`} />
+          <DeviceSettingsSync key={`device-${user.id}`} />
           <QrNotifications key={`qr-${user.id}`} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
@@ -194,7 +200,7 @@ function StaffApp() {
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
           {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}
-          {page.name === "users" && userCan(user, "users.manage") && <Users />}
+          {page.name === "users" && userCan(user, "users.manage") && <Users onOpenDiscounts={userCan(user, "settings.manage") ? () => go({ name: "settings", section: "discounts" }) : undefined} />}
           {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeStaff={userCan(user, "users.manage")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}

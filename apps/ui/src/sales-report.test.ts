@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { salesMetrics, salesReportCsv, recentPeriod, type SalesReport } from "./sales-report";
+import { salesMetrics, salesReportCsv, recentPeriod, businessToday, setDayStartHour, type SalesReport } from "./sales-report";
 
 const sales = { billCount: 2, subtotalPaise: 10001, discountPaise: 0, chargesPaise: 900, cgstPaise: 250, sgstPaise: 250, roundingPaise: -1, totalPaise: 10500, outstandingPaise: 10500 };
 const collections = { billCount: 1, cashPaise: 5000, upiPaise: 5500, cardPaise: 0, refundPaise: 500, totalPaise: 10000 };
@@ -39,5 +39,19 @@ describe("sales and collections CSV", () => {
   it("builds calendar ranges across months and leap years", () => {
     expect(recentPeriod(7, "2026-10-03")).toEqual({ from: "2026-09-27", to: "2026-10-03" });
     expect(recentPeriod(7, "2024-03-01")).toEqual({ from: "2024-02-24", to: "2024-03-01" });
+  });
+});
+
+describe("business today", () => {
+  it("is the calendar date until a later day-start hour is set, then the night before until that hour", () => {
+    const late = new Date(2026, 10, 10, 1, 30);
+    setDayStartHour(0);
+    expect(businessToday(late)).toBe("2026-11-10");
+    setDayStartHour(4);
+    expect(businessToday(late)).toBe("2026-11-09");
+    expect(businessToday(new Date(2026, 10, 10, 4, 0))).toBe("2026-11-10");
+    // A preset period ends on the business today.
+    expect(recentPeriod(7, businessToday(late))).toEqual({ from: "2026-11-03", to: "2026-11-09" });
+    setDayStartHour(0);
   });
 });

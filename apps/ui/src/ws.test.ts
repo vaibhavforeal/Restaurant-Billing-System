@@ -125,6 +125,16 @@ describe("shared websocket", () => {
     expect(good.onEvent).toHaveBeenCalledOnce();
   });
 
+  it("asks whether this is still a device when the hub ends the session", () => {
+    const h = handlers();
+    connectWs(h);
+    FakeSocket.all[0]!.open(); FakeSocket.all[0]!.emit("auth.ok");
+    // Removing or replacing a device deletes its sessions, which closes its socket with 4401.
+    FakeSocket.all[0]!.drop(4401);
+    expect(h.onAuthFail).toHaveBeenCalledOnce();
+    expect(vi.mocked(window.dispatchEvent).mock.calls.map(([e]) => e.type)).toEqual(["masalapos:license-changed"]);
+  });
+
   it("raises license.changed once, not once per subscriber", () => {
     connectWs(handlers()); connectWs(handlers()); connectWs(handlers());
     FakeSocket.all[0]!.emit("license.changed");

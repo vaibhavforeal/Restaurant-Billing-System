@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import {
-  CUSTOM_REPORT_LIMITS, CustomReportConfig, CustomReportSave, customReportProblem, customReportSource, localDateKey, uuidv7,
+  CUSTOM_REPORT_LIMITS, CustomReportConfig, CustomReportSave, customReportProblem, customReportSource, uuidv7,
   type CustomReport, type CustomReportConfigValue, type CustomReportField, type ReportCell, type ReportColumn, type SavedCustomReport,
 } from "@masalapos/domain";
 import { z } from "zod";
@@ -8,10 +8,14 @@ import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { requireModule } from "./modules.js";
 import { billSpendSql } from "./loyalty.js";
+import { dayStartHour } from "./business-day.js";
 
 type Row = Record<string, ReportCell>;
 const AGG = { sum: "SUM", avg: "AVG", max: "MAX" } as const;
 const local = (col: string, pattern: string) => `strftime('${pattern}', ${col} / 1000, 'unixepoch', 'localtime')`;
+/** Date and month columns follow the business day (it may start after midnight); the hour column is the clock hour. */
+const business = (col: string, pattern: string, startHour: number) =>
+  `strftime('${pattern}', ${col} / 1000, 'unixepoch', 'localtime'${startHour ? `, '-${startHour} hours'` : ""})`;
 
 interface SourceSql {
   from: string;
@@ -26,10 +30,10 @@ interface SourceSql {
 }
 
 /** `start`/`end` are validated epoch milliseconds from reportRange, so they are safe to inline into the correlated subqueries. */
-function sourceSql(id: string, start: number, end: number): SourceSql {
+function sourceSql(id: string, start: number, end: number, startHour: number): SourceSql {
   const billJoins = `JOIN orders o ON o.id = b.order_id LEFT JOIN users u ON u.id = b.created_by LEFT JOIN dining_tables dt ON dt.id = o.table_id
     LEFT JOIN order_types ot ON ot.id = COALESCE(o.order_type_id, o.type) LEFT JOIN customers c ON c.id = b.customer_id`;
-  const billWhen = (col: string) => ({ date: local(col, "%Y-%m-%d"), month: local(col, "%Y-%m"), hour: local(col, "%H:00"), time: col });
+  const billWhen = (col: string) => ({ date: business(col, "%Y-%m-%d", startHour), month: business(col, "%Y-%m", startHour), hour: local(col, "%H:00"), time: col });
   const billWho = {
     orderType: "COALESCE(ot.name, o.order_type_id, o.type)", table: "COALESCE(dt.name, 'Takeaway')", issuedBy: "COALESCE(u.name, 'Unknown')",
     customer: "COALESCE(c.name, 'Walk-in')", customerPhone: "COALESCE(c.phone, '')",
@@ -93,7 +97,7 @@ function sourceSql(id: string, start: number, end: number): SourceSql {
       from: "loyalty_ledger l JOIN customers c ON c.id = l.customer_id LEFT JOIN bills b ON b.id = l.bill_id LEFT JOIN users u ON u.id = l.created_by",
       dateColumn: "l.created_at", order: "l.created_at DESC, l.id DESC",
       fields: {
-        date: local("l.created_at", "%Y-%m-%d"), month: local("l.created_at", "%Y-%m"), time: "l.created_at",
+        date: business("l.created_at", "%Y-%m-%d", startHour), month: business("l.created_at", "%Y-%m", startHour), time: "l.created_at",
         customer: "c.name", customerPhone: "c.phone",
         entry: "CASE l.kind WHEN 'earn' THEN 'Earned' WHEN 'redeem' THEN 'Redeemed' WHEN 'reverse' THEN 'Reversed' WHEN 'adjust' THEN 'Adjusted' ELSE 'Expired' END",
         billNo: "b.bill_no", note: "COALESCE(l.note, '')", recordedBy: "COALESCE(u.name, '')", entries: "1", points: "l.points",
@@ -105,7 +109,7 @@ function sourceSql(id: string, start: number, end: number): SourceSql {
       from: "customer_feedback f JOIN bills b ON b.id = f.bill_id LEFT JOIN customers c ON c.id = f.customer_id",
       dateColumn: "f.created_at", order: "f.created_at DESC, f.id DESC",
       fields: {
-        date: local("f.created_at", "%Y-%m-%d"), month: local("f.created_at", "%Y-%m"), time: "f.created_at",
+        date: business("f.created_at", "%Y-%m-%d", startHour), month: business("f.created_at", "%Y-%m", startHour), time: "f.created_at",
         billNo: "b.bill_no", customer: "COALESCE(c.name, 'Walk-in')", source: "CASE f.source WHEN 'qr' THEN 'QR code' ELSE 'Staff' END",
         comment: "COALESCE(f.comment, '')", responses: "1", overall: "f.overall", food: "f.food", service: "f.service", ambience: "f.ambience",
       },
@@ -121,9 +125,9 @@ const formatOf = (field: CustomReportField): ReportColumn["format"] | undefined 
 function runCustomReport(app: FastifyInstance, config: CustomReportConfigValue, query: unknown, title: string): CustomReport {
   const problem = customReportProblem(config);
   if (problem) throw httpError(400, problem);
-  const { from, to, bounds } = reportRange(query);
+  const { from, to, bounds, today, startHour } = reportRange(query, dayStartHour(app.db));
   const source = customReportSource(config.source)!;
-  const sql = sourceSql(config.source, bounds[0], bounds[1]);
+  const sql = sourceSql(config.source, bounds[0], bounds[1], startHour);
   const field = (id: string) => source.fields.find((f) => f.id === id)!;
   const grouped = config.groupBy.length > 0;
 
@@ -178,7 +182,7 @@ function runCustomReport(app: FastifyInstance, config: CustomReportConfigValue, 
     }
   }
   return {
-    kind: "custom", from, to, today: localDateKey(generatedAt), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt, notes,
+    kind: "custom", from, to, today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt, notes,
     tables: [{ title, columns, rows, ...(totals ? { totals } : {}) }],
   };
 }

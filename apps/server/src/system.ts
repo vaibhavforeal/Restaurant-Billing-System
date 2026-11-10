@@ -13,7 +13,7 @@ import { httpError } from "./http-error.js";
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 /** The desktop window on the main POS PC talks to the server over loopback; counters and tablets use the LAN. */
-function fromMainPc(req: FastifyRequest): boolean {
+export function fromMainPc(req: FastifyRequest): boolean {
   return LOOPBACK.has(req.socket.remoteAddress ?? "");
 }
 /** e.g. "MasalaPOS backup - Spice Garden - 2026-10-31 1430.db": ASCII so every browser keeps the name. */

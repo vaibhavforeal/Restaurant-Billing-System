@@ -73,7 +73,7 @@ export interface LicensePreview {
 }
 export interface LicenseEvent {
   id: number; occurredAt: number; actorName: string;
-  kind: "license_activated" | "device_registered" | "device_renamed" | "device_removed";
+  kind: "license_activated";
   summary: string; revision: number | null; deviceId: string | null;
 }
 export interface LicenseHistory { events: LicenseEvent[]; nextBefore: number | null }

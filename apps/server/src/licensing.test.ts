@@ -37,7 +37,13 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
     issuedAt: now - 1000, expiresAt: now + 60_000, graceUntil: now + 120_000 };
   const clean = LicenseClaims.parse(claims);
   const activate = (c: LicenseClaims = clean) => app.inject({ method: "PUT", url: "/api/license", payload: { license: signed(c) }, headers });
-  const register = (h = headers, name = "Main counter") => app.inject({ method: "POST", url: "/api/license/devices", payload: { name }, headers: h });
+  /** Joins the browser behind `h` as a device, by a code the admin makes. The setup browser is the main counter already. */
+  const register = async (h = headers, name = "Main counter") => {
+    if (app.devices.findByCredential(h["x-masalapos-device"])) return { statusCode: 200, json: () => ({}) as Record<string, unknown>, body: "" };
+    const made = await app.inject({ method: "POST", url: "/api/devices/join-codes", payload: { kind: "counter", name }, headers });
+    if (made.statusCode !== 201) return made;
+    return app.inject({ method: "POST", url: "/api/devices/join", payload: { code: made.json().code }, headers: { "x-masalapos-device": h["x-masalapos-device"] } });
+  };
   const login = async (credential: string, pin = "1234") => {
     const res = await app.inject({ method: "POST", url: "/api/login", payload: pin === SETUP.pin ? ADMIN_LOGIN : testLogin({ name: "Cashier", pin }), headers: { "x-masalapos-device": credential } });
     expect(res.statusCode).toBe(200);
@@ -47,16 +53,28 @@ async function fixture(extra: { serviceUrl?: string; fetch?: typeof fetch; logs?
 }
 
 describe("commercial licensing", () => {
+  it("has no self-registration route", async () => {
+    const f = await fixture(); await f.activate();
+    expect((await f.app.inject({ method: "POST", url: "/api/license/devices", headers: f.headers, payload: { name: "Mine" } })).statusCode).toBe(404);
+  });
+
+  it("tells an unjoined browser to get a join code", async () => {
+    const f = await fixture(); await f.activate();
+    expect(f.app.licensing.status("b".repeat(64))).toMatchObject({ canOperate: false, deviceRegistered: false, message: "This device has not joined. Ask an administrator for a join code." });
+  });
+
   it("previews signed changes without writing license state, devices or history", async () => {
     const f = await fixture();
     const state = f.app.db.prepare("SELECT * FROM license_state").get();
-    const preview = await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: signed(f.claims) } });
+    // Setup already made this browser the main counter; the preview adds nothing to it.
+    expect(f.app.db.prepare("SELECT count(*) AS n FROM devices").get()).toEqual({ n: 1 });
+    const preview =await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: signed(f.claims) } });
     expect(preview.statusCode, preview.body).toBe(200);
     expect(preview.json()).toMatchObject({ currentPlan: null, plan: "basic", revision: 1, maxDevices: 2, blockedDevices: [], alreadyInstalled: false });
     expect(preview.json().previewKey).toMatch(/^[a-f0-9]{64}$/);
     expect(f.app.db.prepare("SELECT * FROM license_state").get()).toEqual(state);
     expect(f.app.licensing.history().events).toEqual([]);
-    expect(f.app.db.prepare("SELECT count(*) AS n FROM licensed_devices").get()).toEqual({ n: 0 });
+    expect(f.app.db.prepare("SELECT count(*) AS n FROM devices").get()).toEqual({ n: 1 });
     const bad = signed({ ...f.claims, installationId: randomUUID() });
     expect((await f.app.inject({ method: "POST", url: "/api/license/preview", headers: f.headers, payload: { license: bad } })).statusCode).toBe(400);
   });
@@ -131,23 +149,39 @@ describe("commercial licensing", () => {
     expect((await remove()).statusCode).toBe(204); expect((await remove()).statusCode).toBe(204);
     expect((await f.app.inject({ url: "/api/me", headers: second })).statusCode).toBe(401);
     const reconnected = await f.login("b".repeat(64)); await f.register(reconnected, "Kitchen again");
-    expect((await remove()).statusCode).toBe(409);
+    // The browser came back as a new device, so a late retry of the old removal has nothing left to remove.
+    expect((await remove()).statusCode).toBe(204);
     expect((await f.app.inject({ url: "/api/products", headers: reconnected })).statusCode).toBe(200);
-    expect(f.app.licensing.history().events.filter((e) => e.kind === "device_removed")).toHaveLength(1);
+    expect(f.app.devices.events().events.filter((e) => e.kind === "removed")).toHaveLength(1);
   });
 
   it("records successful changes once and pages history without leaking credentials", async () => {
     const f = await fixture(); await f.activate(); await f.activate(); await f.register(); await f.register();
-    expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["device_registered", "license_activated"]);
-    expect(f.app.licensing.history().events[0]!.actorName).toBe(SETUP.adminName);
-    for (let i = 0; i < 25; i++) await f.register(f.headers, `Counter ${i}`);
-    const first = (await f.app.inject({ url: "/api/license/history", headers: f.headers })).json();
+    expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["license_activated"]);
+    expect(f.app.devices.events().events.map((e) => e.kind)).toEqual(["joined"]);
+    expect(f.app.devices.events().events[0]!.actorName).toBe(SETUP.adminName);
+    for (let i = 0; i < 25; i++) { const main = f.app.devices.main()!; f.app.licensing.rename(main.id, `Counter ${i}`, main.version, SETUP.adminName); }
+    const first = f.app.devices.events();
     expect(first.events).toHaveLength(20);
-    const second = (await f.app.inject({ url: `/api/license/history?before=${first.nextBefore}`, headers: f.headers })).json();
-    expect(second.events).toHaveLength(7); expect(second.nextBefore).toBeNull();
-    expect(new Set([...first.events, ...second.events].map((e) => e.id)).size).toBe(27);
-    expect(JSON.stringify(first)).not.toContain(device); expect(JSON.stringify(first)).not.toContain("ff1.");
+    const second = f.app.devices.events(first.nextBefore!);
+    expect(second.events).toHaveLength(6); expect(second.nextBefore).toBeNull();
+    expect(new Set([...first.events, ...second.events].map((e) => e.id)).size).toBe(26);
+    const licence = await f.app.inject({ url: "/api/license/history", headers: f.headers });
+    expect(licence.statusCode).toBe(200);
+    expect(licence.json().events.map((e: { kind: string }) => e.kind)).toEqual(["license_activated"]);
+    expect(licence.body).not.toContain(device); expect(licence.body).not.toContain("ff1.");
     expect((await f.app.inject({ url: "/api/license/history?before=nope", headers: f.headers })).statusCode).toBe(400);
+  });
+
+  it("keeps licence and device history apart", async () => {
+    const f = await fixture(); await f.activate(); await f.register();
+    const second = await f.login("b".repeat(64)); await f.register(second, "Kitchen");
+    const target = f.app.licensing.devices().find((d) => d.name === "Kitchen")!;
+    f.app.licensing.rename(target.id, "Kitchen screen", target.version, "Asha");
+    f.app.licensing.revoke(target.id, "Asha");
+    expect(f.app.db.prepare("SELECT count(*) AS n FROM license_events WHERE device_id IS NOT NULL OR kind <> 'license_activated'").get()).toEqual({ n: 0 });
+    expect(f.app.licensing.history().events.map((e) => e.kind)).toEqual(["license_activated"]);
+    expect(f.app.devices.events().events.filter((e) => e.deviceId === target.id).map((e) => e.kind)).toEqual(["removed", "renamed", "joined"]);
   });
 
   it("keeps device and history APIs available after expiry and denies staff management", async () => {
@@ -189,9 +223,12 @@ describe("commercial licensing", () => {
     const f = await fixture();
     expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(403);
     expect((await f.activate()).statusCode).toBe(200);
-    expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(403);
-    expect((await f.register()).statusCode).toBe(200);
+    // The setup browser is the main counter already; any other browser waits for an administrator to register it.
     expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(200);
+    const second = await f.login("b".repeat(64));
+    expect((await f.app.inject({ url: "/api/products", headers: second })).statusCode).toBe(403);
+    expect((await f.register(second, "Kitchen")).statusCode).toBe(200);
+    expect((await f.app.inject({ url: "/api/products", headers: second })).statusCode).toBe(200);
     expect((await f.app.inject({ url: "/api/test-recipes", headers: f.headers })).statusCode).toBe(403);
     const pro = { ...f.claims, revision: 2, plan: "pro" as const, features: PLANS.pro.features, modules: planModules("pro"), maxDevices: 5 };
     expect((await f.activate(pro)).statusCode).toBe(200);
@@ -318,14 +355,25 @@ describe("commercial licensing", () => {
     const deniedClosed = new Promise<number>((resolve) => denied.once("close", resolve));
     denied.send(JSON.stringify({ type: "auth", token: f.headers.authorization.slice(7), device: "b".repeat(64) }));
     expect(await deniedClosed).toBe(4403);
+    const kitchen = await f.login("b".repeat(64)); await f.register(kitchen, "Kitchen");
     const ws = await f.app.injectWS("/api/ws");
     const authed = new Promise<string>((resolve) => ws.once("message", (raw: Buffer) => resolve(raw.toString())));
-    ws.send(JSON.stringify({ type: "auth", token: f.headers.authorization.slice(7), device }));
+    ws.send(JSON.stringify({ type: "auth", token: kitchen.authorization.slice(7), device: "b".repeat(64) }));
     expect(JSON.parse(await authed).event).toBe("auth.ok");
     const closed = new Promise<number>((resolve) => ws.once("close", resolve));
-    const id = f.app.licensing.devices(device)[0]!.id;
+    const id = f.app.licensing.devices(device).find((d) => d.name === "Kitchen")!.id;
     await f.app.inject({ method: "DELETE", url: `/api/license/devices/${id}`, headers: f.headers });
     expect(await closed).toBe(4401);
+  });
+
+  it("refuses to remove the main counter", async () => {
+    const f = await fixture(); await f.activate();
+    const main = f.app.licensing.devices(device)[0]!;
+    expect(main).toMatchObject({ name: "Main counter", current: true, allowed: true });
+    const res = await f.app.inject({ method: "DELETE", url: `/api/license/devices/${main.id}`, headers: f.headers, payload: { version: main.version } });
+    expect([res.statusCode, res.json()]).toEqual([409, { error: "The main counter can't be removed." }]);
+    expect((await f.app.inject({ url: "/api/products", headers: f.headers })).statusCode).toBe(200);
+    expect(f.app.licensing.devices(device)).toHaveLength(1);
   });
 
   it("retains licensing and device enforcement after the server restarts", async () => {
@@ -681,7 +729,7 @@ describe("activation with a Customer ID and Order ID", () => {
     // Skipping activation (no internet) still lets setup finish; the licence comes later from Settings.
     const offline = bare({ serviceUrl, fetch: service(() => { throw new TypeError("fetch failed"); }).fetch });
     expect((await offline.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } })).statusCode).toBe(201);
-    expect(offline.licensing.status(device)).toMatchObject({ state: "unactivated", registeredDevices: 0 });
+    expect(offline.licensing.status(device)).toMatchObject({ state: "unactivated", registeredDevices: 1 });
   });
 
   it("a build without the service sets up offline, and development builds need no activation", async () => {

@@ -5,6 +5,7 @@ import { chargeLabel, type Bill, type BillCreditNote } from "@masalapos/domain/b
 import { billChargesGst } from "@masalapos/domain/gst";
 import { ApiError, apiFetch, authHeaders, session } from "../api";
 import { PAY_MODES, REFUND_REASONS, clampRefundQty, creditPreviewBody, creditReason, defaultRefundRows, packagingTickbox, previewPending, refundRowsError, refundableQty, type PayMode } from "../credit-note-form";
+import { printerField as printerRequestField } from "../device-settings";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, OrderItem, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
@@ -30,8 +31,10 @@ type RefundDraft = { id: string; mode: PayMode; amount: string };
 const modeLabel = (mode: string) => mode.toUpperCase();
 
 /** Print or view the slip of one credit note. `selectable` lets the cashier pick the printer; otherwise `printerId` is used as is. */
-export function CreditNoteActions({ note, printers, printerId, selectable = false, printLabel = "Print credit note" }: {
-  note: Pick<BillCreditNote, "id" | "creditNoteRef">; printers: Printer[]; printerId: string; selectable?: boolean; printLabel?: string;
+export function CreditNoteActions({ note, printers, printerId, devicePrinterId, selectable = false, printLabel = "Print credit note" }: {
+  note: Pick<BillCreditNote, "id" | "creditNoteRef">; printers: Printer[]; printerId: string;
+  /** This device's own bill printer: the main PC uses it when the print request names none. */
+  devicePrinterId: string | null; selectable?: boolean; printLabel?: string;
 }) {
   const [chosen, setChosen] = useState(() => printers.some((p) => p.id === printerId) ? printerId : "");
   const [busy, setBusy] = useState(false);
@@ -52,7 +55,7 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
     finally { lock.current = false; setBusy(false); }
   }
   const print = () => run(async () => {
-    const result = await apiFetch<{ job: PrintJobInfo }>(`/api/credit-notes/${note.id}/print`, { method: "POST", body: JSON.stringify({ printerId: target }) });
+    const result = await apiFetch<{ job: PrintJobInfo }>(`/api/credit-notes/${note.id}/print`, { method: "POST", body: JSON.stringify(printerRequestField(target, devicePrinterId)) });
     setMessage(`${note.creditNoteRef} queued for printing${result.job.printerName ? ` on ${result.job.printerName}` : ""}.`);
   });
   const view = () => run(async () => {
@@ -78,7 +81,7 @@ export function CreditNoteActions({ note, printers, printerId, selectable = fals
 }
 
 /** Credit notes of a bill, newest last: number, date, kind, amount, reason, who requested and approved, and a reprint. */
-export function CreditNoteList({ notes, printers, printerId }: { notes: BillCreditNote[]; printers: Printer[]; printerId: string }) {
+export function CreditNoteList({ notes, printers, printerId, devicePrinterId }: { notes: BillCreditNote[]; printers: Printer[]; printerId: string; devicePrinterId: string | null }) {
   if (!notes.length) return null;
   return <section className="credit-note-list" aria-label="Credit notes">
     <h3>Credit notes</h3>
@@ -86,7 +89,7 @@ export function CreditNoteList({ notes, printers, printerId }: { notes: BillCred
       <div className="credit-note-head"><strong>{note.creditNoteRef}</strong><span>{new Date(note.createdAt).toLocaleString()}</span><span className="credit-note-kind">{note.kind === "void" ? "Void" : "Refund"}</span><strong className="pos-money">{money(note.totalPaise)}</strong></div>
       <p>Reason: {note.reason}</p>
       <p className="muted">Requested by {note.requestedByName} · Approved by {note.approvedByName}{note.refunds.length > 0 && ` · Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}`}</p>
-      <CreditNoteActions note={note} printers={printers} printerId={printerId} printLabel="Reprint" />
+      <CreditNoteActions note={note} printers={printers} printerId={printerId} devicePrinterId={devicePrinterId} printLabel="Reprint" />
     </li>)}</ul>
   </section>;
 }
@@ -102,13 +105,14 @@ export function BillItemLines({ items, refundedQty, showRefunded }: { items: Ord
   </section>;
 }
 
-export function CreditNoteDialog({ kind, bill, items, role, printers, printerId, onClose, onIssued, onStale }: {
+export function CreditNoteDialog({ kind, bill, items, role, printers, printerId, devicePrinterId, onClose, onIssued, onStale }: {
   kind: "void" | "refund" | null;
   bill: Bill;
   items: OrderItem[];
   role: "admin" | "cashier" | "waiter" | "kitchen";
   printers: Printer[];
   printerId: string;
+  devicePrinterId: string | null;
   onClose: () => void;
   onIssued: (result: IssuedCredit) => void;
   /** The server says the bill changed: reload it. */
@@ -117,12 +121,12 @@ export function CreditNoteDialog({ kind, bill, items, role, printers, printerId,
   const [busy, setBusy] = useState(false);
   const title = `${kind === "refund" ? "Refund items" : "Void bill"} · Bill ${bill.invoiceNo}`;
   return <WorkspaceDialog open={kind !== null} title={title} className="credit-note-dialog" busy={busy} onClose={onClose}>
-    {kind && <CreditBody kind={kind} bill={bill} items={items} role={role} printers={printers} printerId={printerId} onBusyChange={setBusy} onClose={onClose} onIssued={onIssued} onStale={onStale} />}
+    {kind && <CreditBody kind={kind} bill={bill} items={items} role={role} printers={printers} printerId={printerId} devicePrinterId={devicePrinterId} onBusyChange={setBusy} onClose={onClose} onIssued={onIssued} onStale={onStale} />}
   </WorkspaceDialog>;
 }
 
-function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange, onClose, onIssued, onStale }: {
-  kind: "void" | "refund"; bill: Bill; items: OrderItem[]; role: "admin" | "cashier" | "waiter" | "kitchen"; printers: Printer[]; printerId: string;
+function CreditBody({ kind, bill, items, role, printers, printerId, devicePrinterId, onBusyChange, onClose, onIssued, onStale }: {
+  kind: "void" | "refund"; bill: Bill; items: OrderItem[]; role: "admin" | "cashier" | "waiter" | "kitchen"; printers: Printer[]; printerId: string; devicePrinterId: string | null;
   onBusyChange: (busy: boolean) => void; onClose: () => void; onIssued: (result: IssuedCredit) => void; onStale: () => void;
 }) {
   const billable = groupAddonLines(items.filter((item) => item.status !== "cancelled" && !item.parentItemId));
@@ -225,7 +229,7 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
     const note = result.creditNote;
     return <div className="credit-note-result">
       <p className="billing-message" role="status">Credit note {note.creditNoteRef} issued for {money(note.totalPaise)}.{note.refunds.length > 0 && ` Refunded ${note.refunds.map((r) => `${modeLabel(r.mode)} ${money(r.amountPaise)}`).join(" + ")}.`}</p>
-      <CreditNoteActions note={note} printers={printers} printerId={printerId} selectable />
+      <CreditNoteActions note={note} printers={printers} printerId={printerId} devicePrinterId={devicePrinterId} selectable />
       <div className="credit-note-footer"><button type="button" className="primary" onClick={onClose}>Done</button></div>
     </div>;
   }

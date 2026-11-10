@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { localDay } from "../sales-report";
+import { businessToday } from "../sales-report";
 import { ApiError, apiFetch } from "../api";
 import { paiseToRupees, rupeesToPaise } from "../money";
 import { refFor, type RequestRef } from "../request-ref";
@@ -22,7 +22,7 @@ const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digi
 
 /** Cash drawer shift for the signed-in cashier, the day's shifts, and (admin) closing the business date. */
 export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; canCloseDay: boolean }) {
-  const [date, setDate] = useState(() => localDay());
+  const [date, setDate] = useState(() => businessToday());
   const [mine, setMine] = useState<Shift | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [day, setDay] = useState<DayCloseState | null>(null);
@@ -113,7 +113,7 @@ export function CashDrawer({ canSettle, canCloseDay }: { canSettle: boolean; can
     </>}
 
     <div className="page-header"><h3>Shifts and day close</h3>
-      <label>Date <input type="date" value={date} max={localDay()} onChange={(e) => e.target.value && setDate(e.target.value)} /></label>
+      <label>Date <input type="date" value={date} max={businessToday()} onChange={(e) => e.target.value && setDate(e.target.value)} /></label>
     </div>
     <div className="sales-report-table" role="region" aria-label="Shifts" tabIndex={0}>
       <table>

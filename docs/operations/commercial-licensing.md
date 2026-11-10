@@ -20,8 +20,9 @@ choices applied, set on the counter's page in the MasalaPOS Portal or with `--al
 The main PC's browser/Electron profile uses one slot. Other counter browsers,
 waiter phones, and kitchen displays each use a slot. Multiple tabs in one profile
 share a credential. Clearing browser storage, using another profile, or using a
-different URL origin requires registration again. An admin can remove the old
-registration. These are browser registrations, not hardware fingerprints.
+different URL origin makes the browser a stranger again: it shows the join screen.
+An admin gives it a **Replace** join code, which keeps the device's name and slot.
+Devices are browsers that joined, not hardware fingerprints.
 
 ## Cloud and offline boundary
 
@@ -166,9 +167,18 @@ node --import tsx tools/issue-license.ts C:\secure\license-private.pem claims.js
 
 The helper refuses to overwrite an existing output. Import its contents into
 **Settings > Plan and devices** (also shown immediately after initial setup in a
-commercial build). Sign in as an administrator on each device and register it by
-name. Staff access and plan entitlement are both required; a Pro license never
-grants administrator permissions.
+commercial build). The browser that runs first-time setup becomes the **Main
+counter** whether or not a licence is installed yet, and uses the first device
+slot. Every other device joins with a join code (see **Adding and replacing
+devices** below).
+Staff access and plan entitlement are both required; a Pro license never grants
+administrator permissions.
+
+A restaurant set up before the main counter existed, with no device in use, gets
+its main counter the next time an administrator signs in on the main PC itself.
+Signing in from another PC or a tablet never creates it. If the plan's devices are
+all in use by then, no main counter is added until a device is removed; a browser
+that already holds a slot becomes the main counter without using another one.
 
 Renewals, upgrades, and downgrades keep all identity fields and increase `revision`.
 The API permits retrying the same signed grant and rejects older grants. Store the
@@ -207,8 +217,8 @@ signature edits, invalid dates, and subscription/outlet transfers are refused.
    device list since preview, preview again. An unchanged retry after a lost
    response applies the license once. An already-installed file is identified in
    preview without creating another history entry.
-5. For initial activation, enter a **Device name** and **Register this device**.
-   Existing registrations survive renewals, so no new registration is required.
+5. Nothing more is needed on the main counter: the browser that ran setup is
+   already a device. Devices survive renewals.
 
 The activation request is an information handoff, not proof of purchase. In the portal, an order's **Activate a counter without internet** takes the file. That uses one of the order's seats and gives back the licence file. `tools/issue-license.ts` remains the emergency hand-issuing route; its claims JSON reader also accepts UTF-8 BOM files. There are no automatic trials: a trial is a 7-day trial order from the portal, entered at setup like any other. Builds made without `MASALAPOS_LICENSE_SERVICE_URL` never contact the service; see `apps/licensing-worker/README.md`.
 
@@ -217,6 +227,38 @@ server, including blocked registrations after a downgrade. License status is
 shared across screens and refreshes on changes, focus and every 30 seconds;
 late responses cannot replace a newer status. The server remains authoritative
 when a status refresh fails.
+
+## Adding and replacing devices
+
+A browser that is not one of the restaurant's devices shows only **Enter join
+code**, on the POS, `/kitchen/` and `/captain/` alike, in every build.
+
+1. On a device that is already in, an administrator opens **Settings > Plan and
+   devices > Add a device**, chooses **New device**, its type (billing counter,
+   kitchen display or captain) and a name, and selects **Create join code**.
+2. The screen shows a six-character code, a ten-minute countdown, and a QR code
+   for each address of the main PC. The code has no `0`, `O`, `1`, `I` or `L`.
+3. On the new device, open the address (or scan the QR, which fills the code in),
+   enter the code and select **Join**. It lands on the screen for its type and
+   the normal sign-in.
+
+A code works once. Wrong, used and expired codes get the same answer, "That code
+is not valid or has expired", and one address can try ten codes a minute. Making
+another code for the same device cancels the earlier unused one. A new-device code
+is refused when the plan's devices are all in use, both when it is made and when
+it is entered.
+
+**Replace an existing device** makes a code that moves a device to another
+browser: after a browser's storage was cleared, or when a tablet is swapped. The
+device keeps its name, type, settings and place in the allowance, so it needs no
+free slot, and its old browser is signed out. A captain tablet that uses the HTTPS
+address must join on the HTTPS address; its join links point there when HTTPS is
+set up.
+
+If the main counter's own browser storage is cleared, no other device is needed:
+on the main POS PC the join screen offers **This is the main counter**. An
+administrator signs in there and selects **Re-join as main counter**. It works
+only on the main PC itself and only for an administrator.
 
 ## Device management and local history
 
@@ -229,14 +271,18 @@ Removing a device signs out its staff sessions and closes its WebSockets. Removi
 the current browser signs out the administrator too. Repeated removal is safe;
 if the device was renamed or registered again after the list loaded, the stale
 action is rejected. Refresh and review the list before retrying. A removed device
-must sign in and register again to use an available slot.
+needs a new join code to come back; it joins as a new device at the end of the
+list. The main counter cannot be removed.
 
-**License and device history** shows successful activations, registrations,
-renames and removals, with the acting administrator and server time. It supports
-loading older entries. Exact retries and no-op renames do not create duplicate
-entries. History is local SQLite data included in database backups; it is not
-cloud audit storage or a tamper-proof log. Migration 013 preserves existing
-licenses and device priority. Changes before this upgrade are not backfilled.
+The history list under **Plan and devices** shows successful licence activations,
+with the acting administrator and server time. It supports loading older entries,
+and an exact retry does not create a duplicate entry. Registrations, renames and
+removals are recorded in the device history instead (the `device_events` table),
+which the Devices screen will show once it is built; until then they are recorded
+but not listed in the app. Both histories are local SQLite data included in
+database backups; they are not cloud audit storage or a tamper-proof log.
+Migration 65 moves existing devices and their history across and keeps device
+priority.
 
 ## Expiry, downgrades, and recovery
 

@@ -1,4 +1,5 @@
 import { AddonGroupsManager } from "./AddonGroupsManager";
+import { OffersManager } from "./OffersManager";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { priceForTier } from "@masalapos/domain/pricing";
@@ -30,6 +31,8 @@ export function Catalog() {
   const zomato = isEnabled("zomato");
   const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
   const [managingAddons, setManagingAddons] = useState(false);
+  const [managingOffers, setManagingOffers] = useState(false);
+  const offersEnabled = isEnabled("offers");
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [defaultGstRate, setDefaultGstRate] = useState(5);
@@ -62,6 +65,8 @@ export function Catalog() {
   useEffect(() => {
     reload().catch(() => setError("Failed to load catalog"));
   }, []);
+
+  useEffect(() => { if (!offersEnabled) setManagingOffers(false); }, [offersEnabled]);
 
   async function run(action: () => Promise<unknown>, key = "catalog") {
     if (lock.current) return;
@@ -112,6 +117,7 @@ export function Catalog() {
   }
 
   if (managingAddons) return <AddonGroupsManager groups={addonGroups} products={products} onChanged={reload} onClose={() => setManagingAddons(false)} />;
+  if (managingOffers && offersEnabled) return <OffersManager categories={categories} products={products} onClose={() => setManagingOffers(false)} />;
 
   if (editing) {
     return (
@@ -169,6 +175,7 @@ export function Catalog() {
           <h2>Products</h2>
           <div className="catalog-create-actions">
             <button disabled={busy !== null} onClick={() => setManagingAddons(true)}>Add-on groups</button>
+            {offersEnabled && <button disabled={busy !== null} onClick={() => setManagingOffers(true)}>Offers</button>}
             <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null}>
               New combo
             </button>
