@@ -21,6 +21,7 @@ import { perItemPackaging } from "./per-item-packaging.js";
 import { itemAddons } from "./item-addons.js";
 import { offers } from "./offers.js";
 import { serviceSettings } from "./service-settings.js";
+import { devices } from "./devices.js";
 
 /** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 54. */
-export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns, orderSummary, itemTransfers, billSettings, invoiceNumbering, gstExclusive, billCharges, billChargeRounding, perItemPackaging, itemAddons, offers, serviceSettings];
+export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns, orderSummary, itemTransfers, billSettings, invoiceNumbering, gstExclusive, billCharges, billChargeRounding, perItemPackaging, itemAddons, offers, serviceSettings, devices];

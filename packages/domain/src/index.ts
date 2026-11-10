@@ -7,6 +7,7 @@ export { orderItemPackaging } from "./packaging.js";
 export * from "./combos.js";
 export * from "./addons.js";
 export * from "./offers.js";
+export * from "./devices.js";
 export { OPERATIONAL_REPORTS, type OperationalReportKind, type OperationalReport, type ReportTable, type ReportColumn, type ReportCell } from "./operational-reports.js";
 export * from "./custom-reports.js";
 export { ReservationCreate, ReservationUpdate, ReservationVersion, ReservationStatus, type Reservation, type ReservationInput, type ReservationList } from "./reservations.js";
