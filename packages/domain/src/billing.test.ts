@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBill, BillCreate, BillPreview, BillSettle } from "./billing.js";
+import { calculateBill, BillCreate, BillPreview, BillPrint, BillSettle } from "./billing.js";
 import type { RoundOff } from "./round-off.js";
 
 describe("GST billing", () => {
@@ -311,5 +311,16 @@ describe("BillPreview removed offers", () => {
     const ids = (n: number) => Array.from({ length: n }, (_, i) => `offer-${i}`);
     expect(BillPreview.safeParse({ removedOfferIds: ids(50) }).success).toBe(true);
     expect(BillPreview.safeParse({ removedOfferIds: ids(51) }).success).toBe(false);
+  });
+});
+
+describe("the bill printer field", () => {
+  it("tells an absent printer from no printer", () => {
+    const base = { clientRef: "test-ref-1", previewKey: "k" };
+    expect("printerId" in BillCreate.parse(base)).toBe(false);
+    expect(BillCreate.parse({ ...base, printerId: null }).printerId).toBeNull();
+    expect(BillCreate.parse({ ...base, printerId: "p1" }).printerId).toBe("p1");
+    expect(BillPrint.parse({})).toEqual({});
+    expect(BillPrint.parse({ printerId: null })).toEqual({ printerId: null });
   });
 });

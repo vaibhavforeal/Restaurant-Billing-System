@@ -36,3 +36,36 @@ export interface JoinCodeIssued {
 /** What a browser learns about itself before sign-in. `mainPc` is true for a browser on the main POS PC itself. */
 export interface DeviceMe { joined: boolean; kind: DeviceKind | null; mainPc: boolean }
 export interface DeviceJoined { kind: DeviceKind; name: string }
+
+/** Where a new bill's payment starts: on the method this device used last, or always on one method. */
+export const PAYMENT_STARTS = ["last", "cash", "card", "upi"] as const;
+export type PaymentStart = (typeof PAYMENT_STARTS)[number];
+/** What the main PC keeps for each device. `billPrinterId` is null for the browser (A4) receipt. */
+export const DeviceSettings = z.object({
+  billPrinterId: z.string().min(1).nullable().default(null).catch(null),
+  paymentStart: z.enum(PAYMENT_STARTS).default("last").catch("last"),
+});
+export type DeviceSettings = z.infer<typeof DeviceSettings>;
+/** What is stored for a device, with defaults for whatever is missing or unreadable. Unknown keys are dropped. */
+export function deviceSettings(stored: unknown): DeviceSettings {
+  return DeviceSettings.parse(typeof stored === "object" && stored !== null && !Array.isArray(stored) ? stored : {});
+}
+/** A change to some settings, with the device version it was made against. */
+export const DeviceSettingsPatch = z.object({
+  version: z.number().int().positive(),
+  billPrinterId: z.string().min(1).nullable().optional(),
+  paymentStart: z.enum(PAYMENT_STARTS).optional(),
+}).strict();
+export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatch>;
+/** A row of the device list. `settings` is what is saved; `printerInactive` says its printer is switched off. */
+export interface DeviceInfo {
+  id: string; kind: DeviceKind; name: string; isMain: boolean; createdAt: number; lastSeenAt: number | null; version: number;
+  /** The browser asking. */
+  current: boolean;
+  /** Within the licence's device count; always true in builds without one. */
+  allowed: boolean;
+  online: boolean; settings: DeviceSettings; printerInactive: boolean;
+}
+export interface DeviceList { devices: DeviceInfo[]; maxDevices: number | null }
+/** The calling device's own settings, as they apply now. `deviceId` is null for a browser that is not a device. */
+export interface MyDeviceSettings { deviceId: string | null; version: number | null; settings: DeviceSettings }

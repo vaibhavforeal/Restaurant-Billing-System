@@ -34,7 +34,8 @@ export const BillCreate = BillPreview.safeExtend({
   clientRef: Ref,
   // Preview fingerprint prevents charging an order changed on another counter.
   previewKey: z.string().min(1).max(128),
-  printerId: z.string().min(1).nullable().default(null),
+  // Left out: the calling device's bill printer. A printer id: that printer for this bill. null: no thermal print.
+  printerId: z.string().min(1).nullable().optional(),
 });
 export const BillSettle = z.object({
   clientRef: Ref,
@@ -44,7 +45,8 @@ export const BillSettle = z.object({
     refNote: z.string().trim().max(200).default(""),
   })).max(20),
 });
-export const BillPrint = z.object({ printerId: z.string().min(1) });
+/** The printer for one print request, read the same way as `BillCreate.printerId`. */
+export const BillPrint = z.object({ printerId: z.string().min(1).nullable().optional() });
 export type BillCreateInput = z.infer<typeof BillCreate>;
 export type BillSettleInput = z.infer<typeof BillSettle>;
 

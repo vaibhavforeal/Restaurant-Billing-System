@@ -329,6 +329,7 @@ export function registerCreditNotes(app: FastifyInstance): void {
   app.post("/api/credit-notes/:id/print", { preHandler: app.requirePermission("bills.print") }, async (req, reply) => {
     const { note, bill } = loadCreditNote(db, (req.params as { id: string }).id);
     const body = BillPrint.parse(req.body);
+    if (!body.printerId) throw httpError(400, "Choose an active receipt printer");
     const p = db.prepare("SELECT * FROM printers WHERE id = ? AND is_active = 1").get(body.printerId) as
       { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string; paper_width: 58 | 80; receipt_profile: string } | undefined;
     if (!p) throw httpError(400, "Choose an active receipt printer");

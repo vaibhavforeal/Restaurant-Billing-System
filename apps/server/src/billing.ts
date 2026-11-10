@@ -428,6 +428,7 @@ export function registerBilling(app: FastifyInstance): void {
     // Zomato bills are never printed: Zomato issues the customer's invoice.
     if (bill.receipt.orderType === "zomato") throw httpError(409, "Zomato bills are not printed", "zomato_order");
     const body = BillPrint.parse(req.body);
+    if (!body.printerId) throw httpError(400, "Choose an active receipt printer");
     return reply.status(202).send({ job: printBill(bill, printer(body.printerId)) });
   });
   app.get("/api/bills/:id/print-jobs", { preHandler: read }, async (req) => {

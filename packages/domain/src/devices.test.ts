@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JoinCodeCreate, normalizeJoinCode } from "./devices.js";
+import { DeviceSettingsPatch, JoinCodeCreate, deviceSettings, normalizeJoinCode } from "./devices.js";
 
 describe("device join codes", () => {
   it("normalises a typed join code", () => {
@@ -12,5 +12,21 @@ describe("device join codes", () => {
     expect(JoinCodeCreate.safeParse({ replacesDeviceId: crypto.randomUUID() }).success).toBe(true);
     for (const bad of [{ kind: "display", name: "X" }, { kind: "counter", name: " " }, { kind: "counter", name: "x".repeat(81) },
       { kind: "counter", name: "X", replacesDeviceId: crypto.randomUUID() }, {}]) expect(JoinCodeCreate.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe("device settings", () => {
+  it("fills defaults for missing, unknown and unreadable values", () => {
+    expect(deviceSettings({})).toEqual({ billPrinterId: null, paymentStart: "last" });
+    expect(deviceSettings(null)).toEqual({ billPrinterId: null, paymentStart: "last" });
+    expect(deviceSettings({ billPrinterId: "p1", paymentStart: "upi", x: 1 })).toEqual({ billPrinterId: "p1", paymentStart: "upi" });
+    expect(deviceSettings({ billPrinterId: 7, paymentStart: "wallet" })).toEqual({ billPrinterId: null, paymentStart: "last" });
+  });
+  it("a patch needs a version and takes only known keys", () => {
+    expect(DeviceSettingsPatch.parse({ version: 2, paymentStart: "cash" })).toEqual({ version: 2, paymentStart: "cash" });
+    expect(DeviceSettingsPatch.parse({ version: 2, billPrinterId: null })).toEqual({ version: 2, billPrinterId: null });
+    expect(DeviceSettingsPatch.safeParse({ paymentStart: "cash" }).success).toBe(false);
+    expect(DeviceSettingsPatch.safeParse({ version: 1, theme: "dark" }).success).toBe(false);
+    expect(DeviceSettingsPatch.safeParse({ version: 1, paymentStart: "wallet" }).success).toBe(false);
   });
 });
