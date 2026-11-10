@@ -51,7 +51,8 @@ export function registerDevices(app: FastifyInstance): void {
     return app.devices.events(before);
   });
 
-  app.patch("/api/devices/:id/settings", { preHandler: manage }, async (req) => {
+  app.patch("/api/devices/:id/settings", { preHandler: manage }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { version, ...patch } = DeviceSettingsPatch.parse(req.body);
     const saved = app.devices.updateSettings(id, patch, version, req.user.name);

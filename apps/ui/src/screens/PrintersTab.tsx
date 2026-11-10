@@ -5,6 +5,7 @@ import { InfoTip } from "../InfoTip";
 import { useCan } from "../permissions";
 import type { PrinterInfo } from "../types";
 import { useAction } from "../use-action";
+import { connectWs } from "../ws";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 
 type PrinterKind = PrinterInfo["kind"];
@@ -41,6 +42,13 @@ export function PrintersTab() {
     catch { setError("Could not load the printers"); }
   }, [setError]);
   useEffect(() => { void load(); }, [load]);
+  // Used by changes when a device's bill printer does, or when a device is removed.
+  useEffect(() => {
+    const changed = () => { void load(); };
+    window.addEventListener("masalapos:license-changed", changed);
+    const dispose = connectWs({ onEvent: (event) => { if (event === "devices.changed") void load(); }, onStatus: () => {} });
+    return () => { window.removeEventListener("masalapos:license-changed", changed); dispose(); };
+  }, [load]);
 
   /** Runs a change and reloads the list afterwards, also when it failed: the list on screen may be out of date. */
   async function change(action: () => Promise<unknown>, fallback: string) {
@@ -68,7 +76,7 @@ export function PrintersTab() {
 
   return <div className="panel devices-panel">
     <p className="muted devices-note">Printers must be reachable from the main PC: on the network, installed in Windows on the main PC, or paired to it by Bluetooth.</p>
-    {error && <p role="alert" className="devices-error">{error}</p>}
+    {error && <p role="alert" className="devices-error">{error}{printers === null && <> <button type="button" onClick={() => { setError(""); void load(); }}>Retry</button></>}</p>}
     {printers === null && !error && <p role="status">Loading printers…</p>}
     {printers?.length === 0 && <p className="muted">No printers yet.</p>}
     {!!printers?.length && <div className="printer-table-scroll" role="region" aria-label="Configured printers" tabIndex={0}>

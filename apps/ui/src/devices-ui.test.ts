@@ -25,6 +25,19 @@ describe("Settings → Devices", () => {
     // The dialog is drawn from the last list that loaded, not only while the current load succeeded.
     expect(read("screens/DevicesTab.tsx")).toMatch(/adding && lastList\.current && <AddDeviceDialog list=\{list \?\? lastList\.current\}/);
   });
+  it("Add device closes three seconds after a join whatever the list does meanwhile, and looks once more when a code runs out", () => {
+    const dialog = read("screens/AddDeviceDialog.tsx");
+    // The close timer must not depend on a callback that is new on every render of the list.
+    expect(dialog).not.toMatch(/setTimeout\(onClose/);
+    expect(dialog).toMatch(/\}, \[joined\]\);/);
+    // A device may join in the code's last seconds: one more look before saying the code expired.
+    expect(dialog).toMatch(/if \(expired\) \{ void checkJoined\(\); return; \}/);
+  });
+  it("the Printers tab can retry a failed load and follows device changes", () => {
+    const printers = read("screens/PrintersTab.tsx");
+    expect(printers).toMatch(/>Retry<\/button>/);
+    expect(printers).toMatch(/event === "devices\.changed"/);
+  });
   it("Plan and This device hold no device management", () => {
     expect(read("screens/LicenseSettings.tsx")).not.toMatch(/license\/devices|JoinCodePanel|Rename |Remove /);
     expect(read("screens/DeviceSettings.tsx")).not.toMatch(/billPrinterId|paymentStart|api\/devices/);

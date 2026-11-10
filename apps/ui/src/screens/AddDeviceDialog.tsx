@@ -56,16 +56,21 @@ export function AddDeviceDialog({ list, replace, changes, onClose }: { list: Dev
     } catch { /* The next check asks again. */ }
   }, [issued]);
   useEffect(() => {
-    if (!issued || joined || expired) return;
+    if (!issued || joined) return;
+    // A device may have joined in the code's last seconds: look once more before leaving it at "expired".
+    if (expired) { void checkJoined(); return; }
     void checkJoined();
     const timer = setInterval(() => { void checkJoined(); }, JOIN_CHECK_MS);
     return () => clearInterval(timer);
   }, [issued, joined, expired, changes, checkJoined]);
+  // The latest onClose, read when the timer fires: the timer itself must not restart each time the list behind redraws.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!joined) return;
-    const timer = setTimeout(onClose, CLOSE_AFTER_JOIN_MS);
+    const timer = setTimeout(() => close.current(), CLOSE_AFTER_JOIN_MS);
     return () => clearTimeout(timer);
-  }, [joined, onClose]);
+  }, [joined]);
 
   async function create(e: FormEvent) {
     e.preventDefault();

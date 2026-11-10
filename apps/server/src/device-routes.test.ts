@@ -56,6 +56,7 @@ describe("device list and settings over the API", () => {
     const seen = events(await wsAuth(app, cashierToken, B), "devices.changed");
     const res = await patch(d.id, { version: d.version, billPrinterId: printerId, paymentStart: "upi" });
     expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.json().device).toMatchObject({ id: d.id, version: d.version + 1, online: true, settings: { billPrinterId: printerId, paymentStart: "upi" } });
     await settle();
     expect(seen).toEqual([{ deviceId: d.id }]);
