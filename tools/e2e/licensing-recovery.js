@@ -23,8 +23,8 @@
   await click('Apply license'); await wait(() => !document.querySelector('.license-recovery'));
   check((await api('/license')).canOperate && (await api('/license')).revision === 7, 'Renewal restores access with existing device registrations');
   check((await fetch('/api/products', { headers })).status === 200, 'Operational APIs resume after renewal');
-  check((await api('/license/devices')).devices.length === 2, 'Renewal preserves registered devices');
-  // Restoring access remounts Settings on its card grid; reopen Plan and devices.
+  check((await api('/devices')).devices.length === 2, 'Renewal preserves registered devices');
+  // Restoring access remounts Settings on its card grid; reopen Plan.
   await wait(() => document.querySelector('[data-section="plan"]') || document.querySelector('.license-settings'));
   document.querySelector('[data-section="plan"]')?.click(); await wait(() => button('Refresh plan'));
   const originalFetch = window.fetch;

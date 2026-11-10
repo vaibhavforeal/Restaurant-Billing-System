@@ -102,7 +102,7 @@ describe("guest service requests", () => {
     expect(snapshot()).toEqual(before);
     expect(broadcast).toHaveBeenCalledTimes(4);
     for (const call of broadcast.mock.calls) expect(call).toEqual(["service-request.changed", {}]);
-    expect((await f.api("GET", "/api/license/devices")).json().devices).toHaveLength(1);
+    expect((await f.api("GET", "/api/devices")).json().devices).toHaveLength(1);
   });
 
   it("exposes only a guest's own receipt and never uses guest capabilities to authorize staff APIs", async () => {

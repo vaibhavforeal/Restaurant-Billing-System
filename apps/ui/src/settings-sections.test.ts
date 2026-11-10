@@ -18,6 +18,8 @@ describe("settings sections", () => {
     expect(titles).toContain("Devices");
     expect(titles).toContain("Backups");
     expect(titles).not.toContain("Backups & connections");
+    expect(titles).toContain("Plan");
+    expect(titles).not.toContain("Plan & devices");
   });
 
   it("opens on the card grid unless a section is requested", () => {

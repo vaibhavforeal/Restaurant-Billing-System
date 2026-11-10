@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (file: string) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
@@ -20,5 +20,10 @@ describe("Settings → Devices", () => {
   });
   it("Backups no longer explains how to connect devices", () => {
     expect(read("screens/SystemSettings.tsx")).not.toMatch(/system\/connections|Connect your team/);
+  });
+  it("Plan and This device hold no device management", () => {
+    expect(read("screens/LicenseSettings.tsx")).not.toMatch(/license\/devices|JoinCodePanel|Rename |Remove /);
+    expect(read("screens/DeviceSettings.tsx")).not.toMatch(/billPrinterId|paymentStart|api\/devices/);
+    expect(existsSync(new URL("./screens/JoinCodePanel.tsx", import.meta.url))).toBe(false);
   });
 });

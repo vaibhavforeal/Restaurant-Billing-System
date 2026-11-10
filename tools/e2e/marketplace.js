@@ -150,7 +150,7 @@
       await wait(() => document.body.textContent.includes('Kitchen Display is turned off') && !navItem('kitchen'), 'KDS off notice');
       check(window.__marketplaceNoReload === true && [...document.querySelectorAll('.marketplace-empty button')].some(b => b.textContent === 'Open Marketplace'), 'Turning KDS off from another counter hides the board live and offers the Marketplace');
 
-      // ---------- A licence change refreshes the Marketplace live; View licence opens Plan & devices ----------
+      // ---------- A licence change refreshes the Marketplace live; View licence opens Plan ----------
       // The fixture is a development build (always licensed), so the integrations list is rewritten as if the plan lacked KDS.
       let unlicensed = true;
       const countingFetch = window.fetch;
@@ -167,9 +167,9 @@
         await wait(() => pill('Kitchen Display (KDS)') === 'Pro plan', 'KDS locked after a licence change');
         check(sw('Kitchen Display (KDS)').disabled && card('Kitchen Display (KDS)').textContent.includes('Upgrade to Pro to use the Kitchen Display'), 'A licence change refreshes the Marketplace live: KDS is locked without the plan');
         [...card('Kitchen Display (KDS)').querySelectorAll('button')].find(b => b.textContent === 'View licence').click();
-        const plan = () => document.querySelector('.settings-detail-head h3')?.textContent === 'Plan & devices' ? document.querySelector('.settings-detail .license-settings') : null;
-        await wait(() => plan() && plan().getBoundingClientRect().top < innerHeight && plan().getBoundingClientRect().bottom > 0, 'Plan & devices open and in view');
-        check(true, 'View licence opens Plan & devices');
+        const plan = () => document.querySelector('.settings-detail-head h3')?.textContent === 'Plan' ? document.querySelector('.settings-detail .license-settings') : null;
+        await wait(() => plan() && plan().getBoundingClientRect().top < innerHeight && plan().getBoundingClientRect().bottom > 0, 'Plan open and in view');
+        check(true, 'View licence opens Plan');
       } finally { unlicensed = false; window.fetch = countingFetch; }
       window.dispatchEvent(new Event('masalapos:license-changed'));
       await goto('marketplace'); await wait(() => pill('Kitchen Display (KDS)') === 'Disabled' && !sw('Kitchen Display (KDS)').disabled, 'KDS unlocked again');

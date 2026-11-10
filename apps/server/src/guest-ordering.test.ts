@@ -301,7 +301,7 @@ describe("guest QR ordering", () => {
     expect(Object.keys(meal).sort()).toEqual(["categoryId", "description", "gstRate", "id", "isSoldOut", "isVeg", "name", "photoUrl", "pricePaise", "variants"]);
     expect(meal.variants).toEqual([{ id: f.meal.variants[0]!.id, name: f.meal.variants[0]!.name, pricePaise: f.meal.variants[0]!.pricePaise }]);
     expect(JSON.stringify(menu)).not.toContain(f.qrToken);
-    expect((await f.api("GET", "/api/license/devices")).json().devices).toHaveLength(1);
+    expect((await f.api("GET", "/api/devices")).json().devices).toHaveLength(1);
   });
 
   it("does not let a public QR or receipt credential authorize staff APIs or read another guest receipt", async () => {

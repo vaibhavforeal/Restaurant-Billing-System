@@ -61,10 +61,6 @@ export interface LicenseStatus {
   /** Whether this build talks to the licensing service, so it can activate with a Customer ID and Order ID and check for renewals. */
   onlineActivation: boolean;
 }
-export interface LicensedDevice {
-  id: string; name: string; createdAt: number; current: boolean; allowed: boolean;
-  lastSeenAt: number | null; version: number;
-}
 export interface LicensePreview {
   previewKey: string; alreadyInstalled: boolean; currentPlan: Plan | null;
   plan: Plan; revision: number; maxDevices: number; features: LicenseStatus["features"]; modules: ModuleMap;

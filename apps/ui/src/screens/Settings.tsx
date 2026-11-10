@@ -42,7 +42,7 @@ const PROFILE_KEYS = ["restaurantName", "address", "city", "stateCode", "pincode
 
 const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.localeCompare(b));
 
-/** Opens on a grid of section cards; a `section` opens that card directly, e.g. Plan & devices from a Marketplace card that needs a different plan. */
+/** Opens on a grid of section cards; a `section` opens that card directly, e.g. Plan from a Marketplace card that needs a different plan. */
 export function Settings({ section }: { section?: SettingsSectionId | undefined } = {}) {
   const can = useCan();
   const canManage = can("settings.manage");

@@ -403,7 +403,7 @@ The backend exposes JSON REST endpoints under `/api`. The table below maps route
 | Guest service calls | `/api/guest/service-requests`, `/api/qr/service-requests` | [guest-services.ts](apps/server/src/guest-services.ts) |
 | Printers | `/api/printers`, `/api/printers/discover`, `/api/print-jobs` | [printers.ts](apps/server/src/printers.ts) |
 | Settings/system | `/api/settings`, `/api/system/connections`, `/api/system/generation`, `/api/system/backups` | [settings.ts](apps/server/src/settings.ts), [system.ts](apps/server/src/system.ts) |
-| Licensing | `/api/license`, `/api/license/preview`, `/api/license/devices`, `/api/license/history` | [licensing.ts](apps/server/src/licensing.ts) |
+| Licensing | `/api/license`, `/api/license/preview`, `/api/license/history` | [licensing.ts](apps/server/src/licensing.ts) |
 | Cloud backup framework | `/api/system/cloud-backups` and upload/retry/disconnect actions | [cloud-backups.ts](apps/server/src/cloud-backups.ts), [system.ts](apps/server/src/system.ts) |
 | Zomato | `/api/zomato/settings`, `/api/zomato/orders`, `/api/zomato/reconciliation`, `/api/zomato/import/:action` | [zomato.ts](apps/server/src/zomato.ts) |
 | Live events | `/api/ws` | [ws.ts](apps/server/src/ws.ts) |

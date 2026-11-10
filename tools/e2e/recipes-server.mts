@@ -33,7 +33,6 @@ async function post(url: string, payload: object) {
   if (result.statusCode >= 400) throw new Error(result.body);
   return result.json();
 }
-await post("/api/license/devices", { name: "Fixture counter" });
 await post("/api/users", { name: "Cashier", username: "cashier", password: "password-2345", role: "cashier" });
 const { category } = await post("/api/categories", { name: "Main course" });
 for (const name of ["Vegetable biryani", "Jeera rice", "Dal tadka", "Paneer butter masala", "Butter naan", "Masala tea", "Sweet lassi", "Gulab jamun"]) {

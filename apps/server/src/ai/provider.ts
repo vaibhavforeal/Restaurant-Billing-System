@@ -12,7 +12,7 @@ export interface AiProvider { chat(request: AiRequest): Promise<AiReply> }
 export const AI_MESSAGES: Record<AiErrorCode, string> = {
   off: "The AI assistant is switched off, or isn't available on this copy of MasalaPOS. See Settings → AI assistant.",
   offline: "The AI assistant needs internet. Everything else keeps working.",
-  bad_key: "MasalaPOS couldn't verify this counter for the AI assistant. Check the licence in Settings → Plan & devices.",
+  bad_key: "MasalaPOS couldn't verify this counter for the AI assistant. Check the licence in Settings → Plan.",
   limit: "The AI service is busy right now. Try again in a few minutes.",
   model_gone: "The AI service isn't responding right now. Try again in a minute.",
   unavailable: "The AI service isn't responding right now. Try again in a minute.",

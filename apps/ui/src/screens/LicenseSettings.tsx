@@ -1,12 +1,13 @@
 ﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ActivationRequest, LicensedDevice, LicenseHistory, LicensePreview, LicenseStatus } from "@masalapos/domain";
+import type { ActivationRequest, LicenseHistory, LicensePreview, LicenseStatus } from "@masalapos/domain";
 import { moduleSummary } from "../license-features";
 import { apiFetch, type User } from "../api";
 import { isUnreachable, readLicenseCopy, saveLicenseCopy } from "../offline-cache";
 import { downloadText } from "../download";
 import { useNavigationGuard } from "../navigation-guard";
 import { SystemSettings } from "./SystemSettings";
-import { JoinCodePanel } from "./JoinCodePanel";
+import { DevicesTab } from "./DevicesTab";
+import "../devices.css";
 import "../license-settings.css";
 import { userCan } from "../permissions";
 import { timeoutSignal } from "../abort-signal";
@@ -55,7 +56,10 @@ export function LicenseGate({ user, children }: { user: User; children: ReactNod
     {error && <button onClick={() => { void state.refresh(); }}>Retry license check</button>}</main>;
   return <LicenseContext.Provider value={state}>
     {!status.canOperate ? <main className="workspace license-recovery" id="main-content">
-      {userCan(user, "settings.manage") ? <><LicenseSettings /><SystemSettings /></> : <><p role="alert">{status.message}</p><p>Ask your administrator to renew the plan or free a device slot.</p>
+      {userCan(user, "settings.manage") ? <><LicenseSettings />
+        {/* Freeing a device slot is one of the ways back to billing. */}
+        <section className="license-recovery-devices" aria-label="Devices"><h2>Devices</h2><DevicesTab recovery /></section>
+        <SystemSettings /></> : <><p role="alert">{status.message}</p><p>Ask your administrator to renew the plan or free a device slot.</p>
         <button onClick={() => { void state.refresh(); }}>Check again</button>{error && <p role="alert">{error}</p>}</>}
     </main> : <>
       {error && <p className="panel" role="status">Plan status could not refresh: {error} <button onClick={() => { void state.refresh(); }}>Retry</button></p>}
@@ -67,11 +71,9 @@ export function LicenseGate({ user, children }: { user: User; children: ReactNod
 
 export function LicenseSettings() {
   const { status, error: statusError, refresh: refreshStatus } = useLicense();
-  const [devices, setDevices] = useState<LicensedDevice[] | null>(null);
   const [history, setHistory] = useState<LicenseHistory | null>(null);
   const [license, setLicense] = useState("");
   const [preview, setPreview] = useState<LicensePreview | null>(null);
-  const [renaming, setRenaming] = useState<{ device: LicensedDevice; name: string } | null>(null);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
@@ -79,10 +81,10 @@ export function LicenseSettings() {
   const [codes, setCodes] = useState({ customerId: "", orderId: "" });
   const [loading, setLoading] = useState(false);
   const lock = useRef(false), sequence = useRef(0), mounted = useRef(false);
-  const dirty = !!license.trim() || !!codes.customerId.trim() || !!codes.orderId.trim() || (!!renaming && renaming.name !== renaming.device.name);
+  const dirty = !!license.trim() || !!codes.customerId.trim() || !!codes.orderId.trim();
   useNavigationGuard(() => {
-    if (lock.current) { window.alert("Wait for the license or device request to finish before leaving."); return false; }
-    return !dirty || window.confirm("Discard the unsaved license or device changes?");
+    if (lock.current) { window.alert("Wait for the license request to finish before leaving."); return false; }
+    return !dirty || window.confirm("Discard the unsaved license changes?");
   });
   useEffect(() => {
     if (!busy && !dirty) return;
@@ -93,15 +95,15 @@ export function LicenseSettings() {
   const reload = useCallback(async () => {
     const request = ++sequence.current; setLoading(true);
     try {
-      const [deviceList, events] = await Promise.all([apiFetch<{ devices: LicensedDevice[] }>("/api/license/devices"), apiFetch<LicenseHistory>("/api/license/history")]);
-      if (mounted.current && request === sequence.current) { setDevices(deviceList.devices); setHistory(events); setLoadError(""); }
+      const events = await apiFetch<LicenseHistory>("/api/license/history");
+      if (mounted.current && request === sequence.current) { setHistory(events); setLoadError(""); }
     } catch (e) {
-      if (mounted.current && request === sequence.current) { setDevices(null); setHistory(null); setLoadError(e instanceof Error ? e.message : "Could not load devices and history"); }
+      if (mounted.current && request === sequence.current) { setHistory(null); setLoadError(e instanceof Error ? e.message : "Could not load the licence history"); }
     } finally { if (mounted.current && request === sequence.current) setLoading(false); }
   }, []);
-  // Every build has devices, so the list loads in every build; it loads again when a device joins or is replaced.
+  // Only a licensed build has a licence history.
   useEffect(() => {
-    if (!status?.mode) return;
+    if (status?.mode !== "commercial") return;
     void reload();
     const changed = () => { if (!lock.current) void reload(); };
     const timer = setInterval(changed, 30_000);
@@ -138,30 +140,8 @@ export function LicenseSettings() {
     <label>Order ID<input required maxLength={40} placeholder="FO-XXXX-XXX" autoComplete="off" spellCheck={false} value={codes.orderId} disabled={busy}
       onChange={(e) => setCodes({ ...codes, orderId: e.target.value })} /></label>
     <button className="primary" disabled={busy || !codes.customerId.trim() || !codes.orderId.trim()}>Activate</button></form>;
-  const current = devices?.find((d) => d.current);
-  const devicesSection = <div className="license-section"><h3>Devices</h3>
-        <p className="license-help">Each PC, tablet or phone browser uses a slot. Tabs in the same browser share one. Add a device to get a join code for it.</p>
-        {loading && <p role="status">Refreshing devices and history...</p>}
-        {devices?.length === 0 && <p>No devices yet.</p>}
-        <ul className="license-devices">{devices?.map((device) => <li key={device.id}>
-          <div><strong>{device.name}</strong>{device.current && <span className="license-badge">This browser</span>}{status?.maxDevices != null && !device.allowed && <span className="license-badge expired">Over limit</span>}
-            <small>Registered {dateTime(device.createdAt, timezone)}<br />Last active: {dateTime(device.lastSeenAt, timezone)}</small></div>
-          <div className="license-actions"><button disabled={busy || loading} aria-label={`Rename ${device.name}`} onClick={() => { setRenaming({ device, name: device.name }); }}>Rename</button>
-            <button disabled={busy || loading} aria-label={`Remove ${device.name}`} onClick={() => {
-              if (!window.confirm(`Remove ${device.name}? ${device.current ? "You will be signed out of this browser." : "Staff on that device will be signed out."}`)) return;
-              void run(async () => { await apiFetch(`/api/license/devices/${device.id}`, { method: "DELETE", body: JSON.stringify({ version: device.version }) }); setMessage("Device removed."); if (renaming?.device.id === device.id) setRenaming(null); });
-            }}>Remove</button></div>
-        </li>)}</ul>
-        {renaming && <form className="license-device-form" onSubmit={(e) => { e.preventDefault(); void run(async () => {
-          await apiFetch(`/api/license/devices/${renaming.device.id}`, { method: "PATCH", body: JSON.stringify({ name: renaming.name, version: renaming.device.version }) });
-          setRenaming(null); setMessage("Device renamed.");
-        }); }}><label>New device name<input required maxLength={80} disabled={busy} value={renaming.name} onChange={(e) => setRenaming({ ...renaming, name: e.target.value })} /></label>
-          <button disabled={busy || !devices || !renaming.name.trim()}>Save device name</button><button type="button" disabled={busy} onClick={() => setRenaming(null)}>Cancel rename</button></form>}
-        {/* Stays mounted when the list cannot load, so a code already on screen is not lost. */}
-        {status && <JoinCodePanel devices={devices ?? []} disabled={busy || devices === null} atLimit={status.maxDevices !== null && (devices?.length ?? 0) >= status.maxDevices} />}
-      </div>;
-  return <section className="panel license-settings" aria-label="Plan and devices">
-    <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>
+  return <section className="panel license-settings" aria-label="Plan">
+    <div className="license-heading"><div><h2>Plan</h2><p>Activation, renewal and access for this restaurant.</p></div>
       <div className="license-actions">
         {online && <button disabled={busy || loading} onClick={() => { void run(async () => {
           setMessage((await apiFetch<{ message: string }>("/api/license/check", { method: "POST" })).message);
@@ -169,12 +149,12 @@ export function LicenseSettings() {
         <button disabled={busy || loading} onClick={() => { void run(async () => {}, true); }}>Refresh plan</button></div></div>
     {(error || loadError || statusError) && <p role="alert" className="error-message">{error || loadError || statusError}</p>}
     {message && <p role="status" className="license-message">{message}</p>}
-    {status?.mode === "development" && <><p>{status.message}</p>{devicesSection}</>}
+    {status?.mode === "development" && <p>{status.message}</p>}
     {status?.mode === "commercial" && <>
       <div className="license-summary">
         <div><span className="license-label">Current plan</span><strong>{planName(status.plan)}</strong><span className={`license-badge ${status.state}`}>{status.state.replaceAll("_", " ")}</span>
           {status.trial && status.expiresAt !== null && <span>Trial — ends {dateTime(status.expiresAt, timezone)}</span>}</div>
-        <div><span className="license-label">Devices</span><strong>{status.registeredDevices} / {status.maxDevices ?? "-"}</strong><span>{status.deviceRegistered ? "This device has joined" : current ? status.maxDevices !== null ? "This browser is over the limit" : "Registration saved" : "This device has not joined"}</span></div>
+        <div><span className="license-label">Devices</span><strong>{status.registeredDevices} / {status.maxDevices ?? "-"}</strong><span>{status.deviceRegistered ? "This device has joined" : status.maxDevices === null ? "Counted against the plan once it is active" : "This device is over the limit or has not joined"}</span></div>
         <div><span className="license-label">Renewal due</span><strong className="license-date">{status.expiresAt === null ? "Awaiting activation" : dateTime(status.expiresAt, timezone)}</strong><span>{status.revision ? `License revision ${status.revision}` : "Import a license to get started"}</span></div>
       </div>
       <p role={status.canOperate ? "status" : "alert"}>{status.message}</p>
@@ -217,9 +197,8 @@ export function LicenseSettings() {
           }); }}>Apply license</button>}
         </section>}
       </div>
-      {devicesSection}
-      <details className="license-section"><summary>License and device history</summary>
-        <p className="license-help">Successful changes recorded on this restaurant server. Earlier changes are not backfilled.</p>
+      <details className="license-section"><summary>Licence history</summary>
+        <p className="license-help">Licence changes recorded on this restaurant server. What happened to devices is under Settings, Devices.</p>
         {history?.events.length === 0 && <p>No changes recorded yet.</p>}
         <ol className="license-history">{history?.events.map((event) => <li key={event.id}><strong>{event.summary}</strong><small>{dateTime(event.occurredAt, timezone)} / {event.actorName}</small></li>)}</ol>
         {history?.nextBefore !== null && history?.nextBefore !== undefined && <button disabled={busy || loading} onClick={() => { void run(async () => {

@@ -28,30 +28,14 @@
 .license-preview h4 { margin: 0 0 10px; }
 .license-warning { color: #80510b; background: #fff6e1; padding: 10px; border-radius: 6px; font-size: 12px; line-height: 1.6; }
 .license-message { background: #edf7f0; color: #236344; padding: 10px; border-radius: 6px; }
-.license-devices, .license-history { list-style: none; padding: 0; }
-.license-devices > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; }
-.license-devices > li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
-.license-devices small, .license-history small { display: block; color: var(--muted); margin-top: 6px; font-size: 11px; }
-.license-devices .license-badge { margin-left: 8px; }
-.license-devices .license-actions { flex-shrink: 0; }
-.license-device-form { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
-.license-device-form label { flex: 1; margin: 0; min-width: 150px; }
-.join-code-form, .join-code-issued { border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-top: 16px; }
-.join-code-form h4, .join-code-issued h4 { margin: 0 0 10px; }
-.join-code-form .license-actions label { display: flex; align-items: center; gap: 6px; margin: 0; }
-.join-code-form .license-actions input { width: auto; }
-.join-code-form select { min-width: 0; width: 100%; box-sizing: border-box; }
-.join-code-value { font-family: ui-monospace, monospace; font-size: 34px; font-weight: 600; letter-spacing: 0.3em; margin: 6px 0; user-select: all; }
-.join-code-links { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 16px; }
-.join-code-links li { display: grid; gap: 6px; justify-items: start; font-size: 12px; overflow-wrap: anywhere; max-width: 220px; }
+.license-history { list-style: none; padding: 0; }
+.license-history small { display: block; color: var(--muted); margin-top: 6px; font-size: 11px; }
 /* A QR code needs its white quiet zone in the dark theme too. */
-.join-code-links img { background: #fff; padding: 6px; border-radius: 6px; }
 .license-history > li { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
 .license-history strong { font-weight: 500; }
 .license-recovery { width: 100%; }
 @media (max-width: 700px) {
   .license-summary { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .license-summary > div { padding: 12px; }
-  .license-devices > li { flex-direction: column; align-items: stretch; }
   .license-heading { flex-wrap: wrap; }
 }

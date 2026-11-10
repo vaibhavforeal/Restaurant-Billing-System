@@ -36,7 +36,7 @@
   const { category } = await api('/categories', 'POST', { name: 'Flow ' + suffix });
   const { stations } = await api('/kot-stations');
   const { product } = await api('/products', 'POST', { categoryId: category.id, name: 'Flow bowl ' + suffix, pricePaise: 10000, gstRate: 5, description: 'Fresh rice with garden vegetables.', kotStationId: stations[0].id });
-  const devicesBefore = (await api('/license/devices')).devices.length;
+  const devicesBefore = (await api('/devices')).devices.length;
   const billCount = (await api('/bills')).bills.length;
   const frame = document.createElement('iframe');
   frame.id = 'guest-flow-qa'; frame.src = qr.path;
@@ -90,7 +90,7 @@
     await wait(() => guest.querySelector('[aria-label="Your earlier order requests"] .guest-menu-preparation-ready'), 'earlier ready update');
     check(guest.querySelector('.guest-menu-request-pending'), 'Earlier kitchen completion does not change the new pending request');
     check(true, 'Kitchen Done reaches an earlier receipt while a newer request awaits acceptance');
-    check((await api('/license/devices')).devices.length === devicesBefore, 'Guest interactions consume no staff-device slots');
+    check((await api('/devices')).devices.length === devicesBefore, 'Guest interactions consume no staff-device slots');
     check(errors.length === 0, 'Guest flow has no uncaught browser errors');
     window.__m9GuestFlow = { status: 'passed', checks, tableId: table.id, orderId: order.id, guestLink: location.origin + qr.path };
     return window.__m9GuestFlow;

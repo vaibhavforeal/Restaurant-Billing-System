@@ -61,8 +61,8 @@ describe("device list and settings over the API", () => {
     expect(seen).toEqual([{ deviceId: d.id }]);
     expect(await mine(cashier)).toEqual({ deviceId: d.id, version: d.version + 1, printerInactive: false, settings: { billPrinterId: printerId, paymentStart: "upi" } });
     expect((await mine(admin)).settings.billPrinterId).toBeNull();
-    // The old device routes stay until the Devices area replaces them.
-    expect((await app.inject({ method: "GET", url: "/api/license/devices", headers: admin })).statusCode).toBe(200);
+    // The Devices area replaced the device routes that licensing used to have.
+    expect((await app.inject({ method: "GET", url: "/api/license/devices", headers: admin })).statusCode).toBe(404);
   });
   it("saving what a device already has tells nobody", async () => {
     const d = await two();

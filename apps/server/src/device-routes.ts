@@ -4,8 +4,8 @@ import { z } from "zod";
 import type { DeviceRecord } from "./devices.js";
 
 /**
- * The device list and each device's settings. Joining is in device-join.ts. Renaming and removing a device still go
- * through /api/license/devices until the Devices area replaces those routes.
+ * The device list, renaming and removing a device, device history and each device's settings: what Settings → Devices
+ * works with. Joining is in device-join.ts.
  */
 export function registerDevices(app: FastifyInstance): void {
   const manage = app.requirePermission("settings.manage");

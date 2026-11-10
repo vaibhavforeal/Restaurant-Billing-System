@@ -42,7 +42,7 @@
   iframe.style.cssText = 'position:fixed;right:8px;bottom:8px;width:390px;height:500px;z-index:9000;background:white;border:2px solid #bbb';
   window.__m8Report = { status: 'running', checks };
   try {
-    const devicesBefore = (await api('/license/devices')).devices.length;
+    const devicesBefore = (await api('/devices')).devices.length;
     const { table } = await api('/tables', 'POST', { name: 'QR Browser ' + Date.now(), area: 'QA' });
     const { products } = await api('/products');
     const bowl = products.find((p) => p.name === 'Paneer rice bowl');
@@ -111,7 +111,7 @@
     await wait(() => !btn(document, 'Send to kitchen') || btn(document, 'Send to kitchen').disabled, 'kitchen send');
     check((await api('/stock-items')).items.find((s) => s.name === 'Rice').qty === stockBefore - 0.25, 'Normal kitchen send deducts the two portions using the recipe');
     await wait(() => guest.body.innerText.includes('accepted'), 'guest acceptance status');
-    check((await api('/license/devices')).devices.length === devicesBefore, 'Guest browsing, submitting and tracking consume no staff-device slot');
+    check((await api('/devices')).devices.length === devicesBefore, 'Guest browsing, submitting and tracking consume no staff-device slot');
     window.__m8Report = { status: 'passed', checks, tableId: table.id, orderId: order.id, link };
     return window.__m8Report;
   } catch (e) { window.__m8Report = { status: 'failed', checks, error: String(e) }; throw e; }

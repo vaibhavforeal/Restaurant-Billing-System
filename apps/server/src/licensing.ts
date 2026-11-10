@@ -1,5 +1,5 @@
 import { createHash, createPublicKey } from "node:crypto";
-import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type LicenseStatus, type LicensedDevice, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@masalapos/domain";
+import { LicenseClaims, allModules, MODULE_IDS, type ModuleMap, type LicenseStatus, type LicensePreview, type LicenseEvent, type LicenseHistory, type ActivationRequest } from "@masalapos/domain";
 import { parseVendorCode } from "@masalapos/domain/vendor-codes";
 import { verifyLicenseSignature } from "@masalapos/core";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -167,19 +167,6 @@ export class Licensing {
       this.audit(`${claims.plan === "pro" ? "Pro" : "Basic"} license applied: revision ${claims.revision}, ${claims.maxDevices} devices.`, actorName, claims.revision);
     })();
   }
-  devices(credential?: unknown): LicensedDevice[] {
-    const status = this.status(credential);
-    const hash = deviceHash(credential);
-    return this.activeDevices().map((d, index) => ({ id: d.id, name: d.name, createdAt: d.createdAt,
-      lastSeenAt: d.lastSeenAt, version: d.version,
-      current: d.credentialHash === hash, allowed: status.maxDevices !== null && index < status.maxDevices }));
-  }
-  rename(id: string, name: string, version: number, actorName = "Administrator") {
-    this.app.devices.rename(id, name, version, actorName);
-  }
-  revoke(id: string, actorName = "Administrator", version?: number) {
-    this.app.devices.remove(id, actorName, version);
-  }
   /** Licence events only. Device history is `app.devices.events()`. */
   history(before?: number): LicenseHistory {
     const rows = this.app.db.prepare(`SELECT id, occurred_at AS occurredAt, actor_name AS actorName, kind, summary, revision, device_id AS deviceId
@@ -327,7 +314,6 @@ export const enrollBody = z.object({ customerId: z.string().trim().min(1).max(40
 export function registerLicensing(app: FastifyInstance) {
   const manage = app.requirePermission("settings.manage");
   const licenseBody = z.object({ license: z.string().trim().min(1).max(16_384) });
-  const deviceName = z.string().trim().min(1).max(80);
   const licenseChanged = () => app.licensing.announceChange();
   app.get("/api/license", { preHandler: app.requireAuth }, async (req, reply) => {
     reply.header("Cache-Control", "no-store"); return app.licensing.status(req.headers["x-masalapos-device"]);
@@ -359,21 +345,6 @@ export function registerLicensing(app: FastifyInstance) {
   app.get("/api/license/history", { preHandler: manage }, async (req, reply) => {
     const { before } = z.object({ before: z.coerce.number().int().positive().safe().optional() }).parse(req.query);
     reply.header("Cache-Control", "no-store"); return app.licensing.history(before);
-  });
-  app.get("/api/license/devices", { preHandler: manage }, async (req, reply) => {
-    reply.header("Cache-Control", "no-store"); return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
-  });
-  app.patch("/api/license/devices/:id", { preHandler: manage }, async (req) => {
-    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const { name, version } = z.object({ name: deviceName, version: z.number().int().positive() }).parse(req.body);
-    app.licensing.rename(id, name, version, req.user.name); licenseChanged();
-    return { devices: app.licensing.devices(req.headers["x-masalapos-device"]) };
-  });
-  app.delete("/api/license/devices/:id", { preHandler: manage }, async (req, reply) => {
-    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const { version } = z.object({ version: z.number().int().positive().optional() }).parse(req.body ?? {});
-    app.licensing.revoke(id, req.user.name, version); licenseChanged();
-    return reply.status(204).send();
   });
 }
 
