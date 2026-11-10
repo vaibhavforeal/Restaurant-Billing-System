@@ -55,6 +55,7 @@ import { discoverWindowsPrinters, type PrinterDiscovery } from "./print/discover
 import { configureLicensing, registerLicensing, type LicensingOptions } from "./licensing.js";
 import { configureDevices } from "./devices.js";
 import { registerDeviceJoin } from "./device-join.js";
+import { registerDevices } from "./device-routes.js";
 import { registerSupport, type SupportOptions } from "./support.js";
 import { provideModuleAllowances, registerModules } from "./modules.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
@@ -134,6 +135,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerWs(app, opts.authTimeoutMs, opts.licensing?.now);
   registerLicensing(app);
   registerDeviceJoin(app, opts.port, opts.captainHttps, opts.licensing?.now);
+  registerDevices(app);
   registerSupport(app, {
     ...(opts.licensing?.serviceUrl && opts.licensing.installationSecret
       ? { serviceUrl: opts.licensing.serviceUrl, installationId: opts.licensing.installationId, installationSecret: opts.licensing.installationSecret } : {}),
