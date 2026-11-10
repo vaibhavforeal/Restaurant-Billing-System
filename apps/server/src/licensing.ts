@@ -324,6 +324,8 @@ export class Licensing {
     if (path === "/api/me" || path === "/api/logout" || path?.startsWith("/api/license")) return;
     // Support must be reachable exactly when a licence problem stops billing.
     if (path?.startsWith("/api/support/")) return;
+    // The main counter's way back in after its browser storage was cleared; the route itself checks for an administrator on the main PC.
+    if (path === "/api/devices/rejoin-main") return;
     // Never charge for access to backups, even after a subscription expires.
     if (path?.startsWith("/api/system/backups")) return;
     const status = this.status(req.headers["x-masalapos-device"]);

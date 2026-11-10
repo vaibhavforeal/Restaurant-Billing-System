@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type ModuleOverrides, type IntegrationId, type Plan } from "@masalapos/domain";
+import { MIGRATIONS, PLANS, featuresFromModules, migrate, openDb, resolveModules, type DeviceKind, type ModuleOverrides, type IntegrationId, type Plan } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { buildServer, type ServerOptions } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
@@ -92,6 +92,15 @@ export async function wsAuth(app: FastifyInstance, token: string): Promise<impor
   });
 
   return ws;
+}
+
+/** Joins another browser as a device, the way staff do it: an admin (`adminHeaders`) makes a code and the new browser enters it. */
+export async function joinDevice(app: FastifyInstance, adminHeaders: Record<string, string>, credential: string,
+  device: { kind: DeviceKind; name: string } = { kind: "counter", name: "Counter 2" }): Promise<void> {
+  const made = await app.inject({ method: "POST", url: "/api/devices/join-codes", payload: device, headers: adminHeaders });
+  if (made.statusCode !== 201) throw new Error(`joinDevice could not make a code: ${made.body}`);
+  const joined = await app.inject({ method: "POST", url: "/api/devices/join", payload: { code: (made.json() as { code: string }).code }, headers: { "x-masalapos-device": credential } });
+  if (joined.statusCode !== 200) throw new Error(`joinDevice could not join: ${joined.body}`);
 }
 
 /** Turn a Marketplace integration on directly in the database (the first admin is recorded as the actor). */

@@ -1,7 +1,13 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, JOIN_CODE_TTL_MS, normalizeJoinCode, type Database, type DeviceKind, type JoinCodeCreate } from "@masalapos/domain";
+import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, JOIN_CODE_TTL_MS, JoinCodeCreate, normalizeJoinCode, type Database, type DeviceJoined, type DeviceKind, type DeviceMe, type JoinCodeIssued } from "@masalapos/domain";
+import type { FastifyInstance } from "fastify";
+import QRCode from "qrcode";
+import { z } from "zod";
+import type { CaptainHttpsInfo } from "./captain-https.js";
 import { deviceHash, type DeviceRecord, type Devices } from "./devices.js";
+import { guestRateLimiter } from "./guest-rate.js";
 import { httpError } from "./http-error.js";
+import { fromMainPc, lanUrls } from "./system.js";
 
 /** One answer for a wrong, used or expired code, so a code cannot be probed for which of those it is. */
 const INVALID = "That code is not valid or has expired";
@@ -68,4 +74,63 @@ export class JoinCodes {
       return device;
     })();
   }
+}
+
+const DEVICE_HEADER = "x-masalapos-device";
+/** Wrong guesses from one address in a minute. A code has about 887 million possibilities and lasts ten minutes. */
+const JOIN_ATTEMPTS_PER_MINUTE = 10;
+
+/**
+ * How devices join. Joining and "who am I" need no sign-in, since a browser that has not joined cannot sign in to
+ * anything; what protects them is the code itself, the per-address limit, and that a browser only ever learns about itself.
+ */
+export function registerDeviceJoin(app: FastifyInstance, port = 4100, captainHttps?: CaptainHttpsInfo, now?: () => number) {
+  const codes = new JoinCodes(app.db, app.devices, now);
+  const rate = guestRateLimiter();
+  const limit = () => app.licensing.status().maxDevices;
+  const joined = (device: DeviceRecord): DeviceJoined => ({ kind: device.kind, name: device.name });
+  /** Where the new device can open the join screen. A captain tablet works over HTTPS when that is set up, and a browser's credential belongs to one origin. */
+  const origins = (kind: DeviceRecord["kind"]) => {
+    const secure = kind === "captain" && captainHttps?.enabled ? (captainHttps.addresses ?? []).map((address) => `https://${address}:${captainHttps.port}`) : [];
+    return secure.length ? secure : lanUrls(port);
+  };
+
+  app.post("/api/devices/join-codes", { preHandler: app.requirePermission("settings.manage") }, async (req, reply) => {
+    const issued = codes.create(JoinCodeCreate.parse(req.body), req.user.name, limit());
+    const links = await Promise.all(origins(issued.kind).map(async (origin) => {
+      const url = `${origin}/join#${issued.code}`;
+      return { url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) };
+    }));
+    reply.header("Cache-Control", "no-store");
+    return reply.status(201).send({ ...issued, links } satisfies JoinCodeIssued);
+  });
+
+  app.post("/api/devices/join", async (req, reply) => {
+    rate(req, "device-join", JOIN_ATTEMPTS_PER_MINUTE);
+    const { code } = z.object({ code: z.string().max(40) }).parse(req.body);
+    const device = codes.redeem(code, req.headers[DEVICE_HEADER], limit());
+    app.licensing.announceChange();
+    reply.header("Cache-Control", "no-store");
+    return joined(device);
+  });
+
+  app.get("/api/devices/me", async (req, reply) => {
+    const device = app.devices.findByCredential(req.headers[DEVICE_HEADER]);
+    reply.header("Cache-Control", "no-store");
+    return { joined: device !== null, kind: device?.kind ?? null, mainPc: fromMainPc(req) } satisfies DeviceMe;
+  });
+
+  // The way back in when the main counter's browser storage was cleared: no code, but only for an administrator sitting at the main PC.
+  app.post("/api/devices/rejoin-main", { preHandler: app.requireAuth }, async (req, reply) => {
+    if (req.user.role !== "admin") throw httpError(403, "Only an administrator can re-join the main counter.");
+    if (!fromMainPc(req)) throw httpError(403, "Re-join the main counter from the main POS PC.");
+    const hash = deviceHash(req.headers[DEVICE_HEADER]);
+    if (!hash) throw httpError(400, "A device credential is required");
+    const main = app.devices.main();
+    if (!main) throw httpError(409, "There is no main counter to re-join.");
+    const device = app.devices.replaceCredential(main.id, hash, req.user.name, `Re-joined ${main.name} from the main PC.`);
+    app.licensing.announceChange();
+    reply.header("Cache-Control", "no-store");
+    return joined(device);
+  });
 }
