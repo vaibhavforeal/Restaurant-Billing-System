@@ -279,3 +279,71 @@ describe("devices on the server", () => {
     });
   });
 });
+
+describe("device settings in the registry", () => {
+  let db: Database, devices: Devices;
+  beforeEach(() => {
+    db = openDb(":memory:");
+    migrate(db, MIGRATIONS);
+    devices = new Devices(db, () => 100);
+  });
+  const printer = (id: string, active = 1) => db.prepare("INSERT INTO printers (id, name, kind, connection, paper_width, is_active, receipt_profile, kot_profile) VALUES (?, 'Front', 'network', '127.0.0.1:9100', 80, ?, '{}', '{}')").run(id, active);
+  const two = () => devices.add({ credentialHash: deviceHash(A)!, name: "Two", kind: "counter" }, "Asha");
+
+  it("a new device has the defaults", () => {
+    const d = two();
+    expect(devices.settings(d)).toEqual({ billPrinterId: null, paymentStart: "last" });
+    expect(devices.billPrinterId(d)).toBeNull();
+    expect(devices.billPrinterId(null)).toBeNull();
+    expect(devices.printerInactive(d)).toBe(false);
+  });
+  it("saves a change, bumps the version and records it", () => {
+    printer("p1");
+    const d = two();
+    const saved = devices.updateSettings(d.id, { billPrinterId: "p1", paymentStart: "upi" }, d.version, "Asha");
+    expect(saved.version).toBe(d.version + 1);
+    expect(devices.settings(saved)).toEqual({ billPrinterId: "p1", paymentStart: "upi" });
+    expect(devices.billPrinterId(saved)).toBe("p1");
+    expect(devices.events().events[0]).toMatchObject({ kind: "settings_changed", deviceId: d.id, actorName: "Asha",
+      summary: "Bill printer of Two set to Front. Starting payment method of Two set to UPI." });
+  });
+  it("names Browser / A4 and the method used last in the history", () => {
+    printer("p1");
+    const d = two();
+    const saved = devices.updateSettings(d.id, { billPrinterId: "p1", paymentStart: "upi" }, d.version, "Asha");
+    devices.updateSettings(d.id, { billPrinterId: null, paymentStart: "last" }, saved.version, "Asha");
+    expect(devices.events().events[0]!.summary).toBe("Bill printer of Two set to Browser / A4. Starting payment method of Two set to the method used last.");
+  });
+  it("saving the same values changes nothing", () => {
+    const d = two();
+    const before = devices.events().events.length;
+    expect(devices.updateSettings(d.id, { paymentStart: "last" }, d.version, "Asha").version).toBe(d.version);
+    expect(devices.events().events.length).toBe(before);
+  });
+  it("refuses a stale version, an unknown or inactive printer and a removed device", () => {
+    printer("off", 0);
+    const d = two();
+    expect(() => devices.updateSettings(d.id, { paymentStart: "cash" }, d.version + 1, "Asha")).toThrow(/This device changed/);
+    expect(() => devices.updateSettings(d.id, { billPrinterId: "nope" }, d.version, "Asha")).toThrow("Choose an active printer");
+    expect(() => devices.updateSettings(d.id, { billPrinterId: "off" }, d.version, "Asha")).toThrow("Choose an active printer");
+    devices.remove(d.id, "Asha");
+    expect(() => devices.updateSettings(d.id, { paymentStart: "cash" }, d.version + 1, "Asha")).toThrow("Device not found");
+  });
+  it("a printer switched off later is kept but not used", () => {
+    printer("p1");
+    const d = two();
+    let saved = devices.updateSettings(d.id, { billPrinterId: "p1" }, d.version, "Asha");
+    db.prepare("UPDATE printers SET is_active = 0 WHERE id = 'p1'").run();
+    expect(devices.billPrinterId(saved)).toBeNull();
+    expect(devices.printerInactive(saved)).toBe(true);
+    saved = devices.updateSettings(d.id, { paymentStart: "cash" }, saved.version, "Asha");
+    expect(devices.settings(saved)).toEqual({ billPrinterId: "p1", paymentStart: "cash" });
+  });
+  it("a replaced device keeps its settings", () => {
+    printer("p1");
+    const d = two();
+    devices.updateSettings(d.id, { billPrinterId: "p1" }, d.version, "Asha");
+    const moved = devices.replaceCredential(d.id, deviceHash(B)!, "Asha", "Replaced.");
+    expect(devices.settings(moved).billPrinterId).toBe("p1");
+  });
+});

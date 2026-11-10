@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Database, DeviceEvent, DeviceHistory, DeviceKind } from "@masalapos/domain";
+import { deviceSettings, type Database, type DeviceEvent, type DeviceHistory, type DeviceKind, type DeviceSettings, type DeviceSettingsPatch, type PaymentStart } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 
@@ -28,6 +28,7 @@ const record = (r: DeviceRow): DeviceRecord => Object.defineProperty({
 const CHANGED = "This device changed. Refresh the device list and try again.";
 const MAIN_NAME = "Main counter";
 const JOINED = "This device has already joined.";
+const PAYMENT_START_NAMES: Record<PaymentStart, string> = { last: "the method used last", cash: "Cash", card: "Card", upi: "UPI" };
 
 /**
  * The devices of this restaurant: every counter, kitchen display and captain tablet, in every build. The licence counts
@@ -149,6 +150,49 @@ export class Devices {
       }
       if (limit != null && this.active().length >= limit) return null;
       return this.add({ credentialHash: hash, name: MAIN_NAME, kind: "counter", isMain: true }, actorName);
+    })();
+  }
+
+  /** What is saved for the device, with defaults for anything missing. */
+  settings(device: DeviceRecord): DeviceSettings {
+    return deviceSettings(device.settings);
+  }
+  private activePrinter(id: string): { name: string } | undefined {
+    return this.db.prepare("SELECT name FROM printers WHERE id = ? AND is_active = 1").get(id) as { name: string } | undefined;
+  }
+  /** The device's bill printer if one is saved and active, else null. Null for a browser that is not a device. */
+  billPrinterId(device: DeviceRecord | null): string | null {
+    const id = device ? this.settings(device).billPrinterId : null;
+    return id && this.activePrinter(id) ? id : null;
+  }
+  /** True when a printer is saved for the device and that printer is switched off (or gone). */
+  printerInactive(device: DeviceRecord): boolean {
+    return this.settings(device).billPrinterId !== null && this.billPrinterId(device) === null;
+  }
+  /**
+   * Saves the settings given and leaves the others as they are saved, even a printer that has since been switched off.
+   * Saving the values a device already has does nothing.
+   */
+  updateSettings(id: string, patch: Omit<DeviceSettingsPatch, "version">, version: number, actorName: string): DeviceRecord {
+    return this.db.transaction(() => {
+      const device = this.get(id);
+      if (!device || device.removedAt !== null) throw httpError(404, "Device not found");
+      if (device.version !== version) throw httpError(409, CHANGED);
+      const saved = this.settings(device), next = { ...saved }, changes: string[] = [];
+      if (patch.billPrinterId !== undefined && patch.billPrinterId !== saved.billPrinterId) {
+        const printer = patch.billPrinterId === null ? null : this.activePrinter(patch.billPrinterId);
+        if (printer === undefined) throw httpError(400, "Choose an active printer");
+        next.billPrinterId = patch.billPrinterId;
+        changes.push(`Bill printer of ${device.name} set to ${printer?.name ?? "Browser / A4"}.`);
+      }
+      if (patch.paymentStart !== undefined && patch.paymentStart !== saved.paymentStart) {
+        next.paymentStart = patch.paymentStart;
+        changes.push(`Starting payment method of ${device.name} set to ${PAYMENT_START_NAMES[patch.paymentStart]}.`);
+      }
+      if (!changes.length) return device;
+      this.db.prepare("UPDATE devices SET settings = ?, version = version + 1 WHERE id = ?").run(JSON.stringify(next), id);
+      this.record(id, "settings_changed", changes.join(" "), actorName);
+      return this.get(id)!;
     })();
   }
 
