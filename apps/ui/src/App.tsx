@@ -34,6 +34,7 @@ import { listenForAndroidBack } from "./android-back";
 import { StartupScreen } from "./StartupScreen";
 import { KitchenApp } from "./KitchenApp";
 import { DemoBanner } from "./DemoBanner";
+import { DeviceGate } from "./DeviceGate";
 import { RemoteConsent } from "./support";
 import "./compact-workspace.css";
 import { CurrentUserProvider, userCan } from "./permissions";
@@ -61,8 +62,9 @@ export function App() {
   }
   const feedback = /^\/feedback\/([A-Za-z0-9_-]{32})\/?$/.exec(window.location.pathname);
   if (feedback) return <FeedbackPage token={feedback[1]!} />;
-  if (/^\/kitchen\/?$/.test(window.location.pathname)) return <KitchenApp />;
-  return <StaffApp />;
+  // Staff screens are for the restaurant's own devices; guests above need no device.
+  if (/^\/kitchen\/?$/.test(window.location.pathname)) return <DeviceGate><KitchenApp /></DeviceGate>;
+  return <DeviceGate><StaffApp /></DeviceGate>;
 }
 
 /** Admins and cashiers reach the kitchen board only while the Kitchen Display is on. Kitchen staff cannot read the Marketplace, so their board explains a turned-off KDS itself. */
