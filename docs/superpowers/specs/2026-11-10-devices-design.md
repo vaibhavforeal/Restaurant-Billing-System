@@ -1,12 +1,20 @@
 # Devices — design
 
-Date: 2026-11-10 · Branch: `feat/devices` · Status: Phase 1 built (migration 65); Phases 2 to 4 not built
+Date: 2026-11-10 · Branch: `feat/devices` · Status: Phases 1 and 2 built (migrations 65 and 66); Phases 3 and 4 not built
 
-Pick-up point for Phase 2 (join codes): `Devices.add` in `apps/server/src/devices.ts` is where a join code creates a
-device, and `POST /api/license/devices` is the route Phase 2 removes. Two things to settle there: `add` gives a removed
-browser its old row back with its old kind, ignoring the kind asked for, so a join code for a different kind needs that
-changed; and `ensureMain` takes the licence's device limit at sign-in, so it adds no main counter once every slot is
-in use.
+Pick-up point for Phase 3 (device settings, printing, presence): `req.device` is set for every joined device and
+`devices.settings` is still `{}`. Join codes live in `apps/server/src/device-join.ts`; the panel that creates them is
+`apps/ui/src/screens/JoinCodePanel.tsx`, shown under **Plan & devices** until Phase 4 moves it into the Devices area.
+
+How Phase 2 settled what the spec left open (plan: `docs/superpowers/plans/2026-11-10-devices-phase-2.md`):
+
+- Dev and demo servers do not refuse an unjoined browser; the join screen in the UI is what every build shares.
+  Licensed builds refuse unjoined devices in the server, as before.
+- A removed browser that joins again is a new device with the code's name and kind. Its old row stays removed and its
+  credential hash is retired.
+- `ensureMain` keeps its limit. With no main counter and every slot in use, a replace code is the way in.
+- A new-device code entered after the slots filled gets 409 and stays usable.
+- Captain join links use the HTTPS origins when the HTTPS listener is on, because a credential belongs to one origin.
 
 ## Why
 
