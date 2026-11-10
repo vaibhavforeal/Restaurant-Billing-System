@@ -57,6 +57,8 @@ export interface PrinterInfo {
   isActive: boolean;
   receiptProfile: PrintProfile;
   kotProfile: PrintProfile;
+  /** The devices whose bills print here and the active KOT stations routed here, by name. */
+  usedBy: { devices: string[]; stations: string[] };
 }
 
 export interface PrintProfile { copies: number; feedLines: number; autoCut: boolean }

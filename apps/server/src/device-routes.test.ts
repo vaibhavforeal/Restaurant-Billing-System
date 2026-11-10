@@ -119,6 +119,26 @@ describe("device list and settings over the API", () => {
       expect(body.devices.map((d: DeviceInfo) => d.allowed)).toEqual([true, true]);
     } finally { await licensed.close(); licensed.db.close(); }
   });
+  it("lists the devices and stations that print to each printer", async () => {
+    const post = async (url: string, payload: object) => (await app.inject({ method: "POST", url, headers: admin, payload })).json();
+    await post("/api/printers", { name: "Spare", kind: "network", connection: "127.0.0.1:9101", paperWidth: 80 });
+    const d = await two();
+    await patch(d.id, { version: d.version, billPrinterId: printerId });
+    await post("/api/kot-stations", { name: "Grill", printerId });
+    const old = (await post("/api/kot-stations", { name: "Old", printerId })).station.id;
+    await app.inject({ method: "PATCH", url: `/api/kot-stations/${old}`, headers: admin, payload: { isActive: false } });
+    const byName = async () => Object.fromEntries(((await app.inject({ method: "GET", url: "/api/printers", headers: admin })).json().printers as Array<{ name: string; usedBy: unknown }>)
+      .filter((p) => ["Front", "Spare"].includes(p.name)).map((p) => [p.name, p.usedBy]));
+    expect(await byName()).toEqual({ Front: { devices: ["Two"], stations: ["Grill"] }, Spare: { devices: [], stations: [] } });
+    // Switching Front off keeps the names, so the owner sees what stopped printing.
+    const off = await app.inject({ method: "PATCH", url: `/api/printers/${printerId}`, headers: admin, payload: { isActive: false } });
+    expect(off.json().printer.usedBy).toEqual({ devices: ["Two"], stations: ["Grill"] });
+    expect((await byName()).Front).toEqual({ devices: ["Two"], stations: ["Grill"] });
+    // A removed device is no longer listed.
+    await app.inject({ method: "DELETE", url: `/api/devices/${d.id}`, headers: admin });
+    expect((await byName()).Front).toEqual({ devices: [], stations: ["Grill"] });
+  });
+
   describe("renaming, removing and history", () => {
     it("renames a device with a stale-write check", async () => {
       const d = await two();

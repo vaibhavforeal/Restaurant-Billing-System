@@ -66,7 +66,7 @@ export function Settings({ section }: { section?: SettingsSectionId | undefined 
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
   const [editPrinter, setEditPrinter] = useState<Partial<PrinterInfo>>({});
-  const [newPrinter, setNewPrinter] = useState<Omit<PrinterInfo, "id" | "isActive">>(EMPTY_PRINTER);
+  const [newPrinter, setNewPrinter] = useState<Omit<PrinterInfo, "id" | "isActive" | "usedBy">>(EMPTY_PRINTER);
 
   // Stations section
   const [stations, setStations] = useState<StationInfo[]>([]);

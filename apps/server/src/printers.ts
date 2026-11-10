@@ -17,7 +17,8 @@ interface PrinterRow {
   kot_profile: string;
 }
 
-const toPrinterJson = (r: PrinterRow) => ({
+export interface PrinterUsage { devices: string[]; stations: string[] }
+const toPrinterJson = (r: PrinterRow, usedBy: PrinterUsage) => ({
   id: r.id,
   name: r.name,
   kind: r.kind,
@@ -26,11 +27,29 @@ const toPrinterJson = (r: PrinterRow) => ({
   isActive: r.is_active === 1,
   receiptProfile: readProfile(r.receipt_profile),
   kotProfile: readProfile(r.kot_profile),
+  usedBy,
 });
 
 export function registerPrinters(app: FastifyInstance, discover: () => Promise<PrinterDiscovery>): void {
   const read = app.requirePermission("printers.read");
   const manage = app.requirePermission("printers.manage");
+
+  /**
+   * Who prints to each printer: the devices whose bills go to it and the active KOT stations routed to it, by name.
+   * A printer that is switched off still lists them, so it is plain what stopped printing.
+   */
+  const usage = (): ((printerId: string) => PrinterUsage) => {
+    const byPrinter = new Map<string, PrinterUsage>();
+    const entry = (id: string) => byPrinter.get(id) ?? byPrinter.set(id, { devices: [], stations: [] }).get(id)!;
+    for (const device of app.devices.active()) {
+      const id = app.devices.settings(device).billPrinterId;
+      if (id) entry(id).devices.push(device.name);
+    }
+    const stations = app.db.prepare("SELECT name, printer_id FROM kot_stations WHERE is_active = 1 AND printer_id IS NOT NULL").all() as Array<{ name: string; printer_id: string }>;
+    for (const station of stations) entry(station.printer_id).stations.push(station.name);
+    for (const used of byPrinter.values()) { used.devices.sort((a, b) => a.localeCompare(b)); used.stations.sort((a, b) => a.localeCompare(b)); }
+    return (printerId) => byPrinter.get(printerId) ?? { devices: [], stations: [] };
+  };
 
   const getPrinter = (id: string) =>
     app.db.prepare("SELECT * FROM printers WHERE id = ?").get(id) as PrinterRow | undefined;
@@ -42,7 +61,8 @@ export function registerPrinters(app: FastifyInstance, discover: () => Promise<P
 
   app.get("/api/printers", { preHandler: read }, async () => {
     const rows = app.db.prepare("SELECT * FROM printers ORDER BY name").all() as PrinterRow[];
-    return { printers: rows.map(toPrinterJson) };
+    const usedBy = usage();
+    return { printers: rows.map((row) => toPrinterJson(row, usedBy(row.id))) };
   });
 
   app.post("/api/printers", { preHandler: manage }, async (req, reply) => {
@@ -51,7 +71,7 @@ export function registerPrinters(app: FastifyInstance, discover: () => Promise<P
     app.db
       .prepare("INSERT INTO printers (id, name, kind, connection, paper_width, receipt_profile, kot_profile) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(id, body.name, body.kind, body.connection, body.paperWidth, JSON.stringify(body.receiptProfile), JSON.stringify(body.kotProfile));
-    return reply.status(201).send({ printer: toPrinterJson(getPrinter(id)!) });
+    return reply.status(201).send({ printer: toPrinterJson(getPrinter(id)!, usage()(id)) });
   });
 
   app.patch("/api/printers/:id", { preHandler: manage }, async (req) => {
@@ -80,7 +100,7 @@ export function registerPrinters(app: FastifyInstance, discover: () => Promise<P
     const saved = getPrinter(id)!;
     // Devices that print bills here gain or lose their printer, so their screens re-read their settings.
     if (saved.is_active !== row.is_active) app.broadcast("devices.changed", {});
-    return { printer: toPrinterJson(saved) };
+    return { printer: toPrinterJson(saved, usage()(id)) };
   });
 
   app.post("/api/printers/:id/test-print", { preHandler: manage }, async (req, reply) => {
