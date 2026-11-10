@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DEVICES_TABS, devicesTabs, type DevicesTabId } from "../devices-model";
 import { useCan } from "../permissions";
+import { DevicesTab } from "./DevicesTab";
 import { PrintersTab } from "./PrintersTab";
 import { PrintJobsTab } from "./PrintJobsTab";
 import { StationsTab } from "./StationsTab";
@@ -22,6 +23,7 @@ export function DevicesSettings({ initialTab }: { initialTab?: DevicesTabId | un
       {DEVICES_TABS.filter(({ id }) => tabs.includes(id)).map(({ id, label }) =>
         <button key={id} type="button" className={tab === id ? "selected" : ""} aria-pressed={tab === id} onClick={() => setChosen(id)}>{label}</button>)}
     </div>
+    {tab === "devices" && <DevicesTab />}
     {tab === "printers" && <PrintersTab />}
     {tab === "stations" && <StationsTab />}
     {tab === "jobs" && <PrintJobsTab />}
