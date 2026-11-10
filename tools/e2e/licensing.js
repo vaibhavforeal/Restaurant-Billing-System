@@ -8,7 +8,7 @@
   const panel = () => document.querySelector('.license-settings');
   const button = (name) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === name || b.getAttribute('aria-label') === name);
   const click = async (name) => { await wait(() => button(name) && !button(name).disabled); button(name).click(); await tick(); };
-  const input = (name) => [...panel().querySelectorAll('label')].find((l) => l.textContent.startsWith(name))?.querySelector('input,textarea');
+  const input = (name) => [...(panel()?.querySelectorAll('label') ?? [])].find((l) => l.textContent.startsWith(name))?.querySelector('input,textarea');
   const set = async (el, value) => { Object.getOwnPropertyDescriptor(el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })); await tick(); };
   const choose = async (text, name = 'license.txt') => { const el = document.querySelector('[aria-label="License file"]'), transfer = new DataTransfer(); transfer.items.add(new File([text], name, { type: 'text/plain' })); el.files = transfer.files; el.dispatchEvent(new Event('change', { bubbles: true })); await tick(); };
   const link = (name) => [...panel().querySelectorAll('a')].find((a) => a.textContent.trim() === name);
@@ -24,6 +24,8 @@
   const devicesCard = () => document.querySelector('.devices-settings');
   const devicesTable = () => document.querySelector('.devices-settings .devices-table');
   const dialogInput = (name) => [...document.querySelectorAll('dialog[open] label')].find((l) => l.textContent.startsWith(name))?.querySelector('input,select');
+  /** Tables is the "Table View" tab in the header, on every screen an administrator sees. */
+  const tablesTab = () => [...document.querySelectorAll('nav.sales-tabs button')].find((b) => b.textContent.trim() === 'Table View');
   const alertHas = (text) => [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes(text));
   const originalFetch = window.fetch, originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click, originalConfirm = window.confirm, originalAlert = window.alert;
   const headers = () => ({ authorization: 'Bearer ' + localStorage.getItem('masalapos.token'), 'x-masalapos-device': localStorage.getItem('masalapos.device.v1'), 'content-type': 'application/json' });
@@ -74,11 +76,12 @@
     };
     await click('Apply license'); await wait(() => requested);
     check(button('Apply license').disabled && button('Preview license').disabled, 'Applying a license blocks duplicate changes');
-    document.querySelector('nav button[aria-label="tables"]').click();
+    tablesTab().click();
     check(alerts === 1, 'Navigation waits for an in-flight activation');
     release(); await wait(() => alertHas('Simulated lost activation acknowledgement'));
     window.fetch = originalFetch; await click('Apply license');
-    await wait(() => !input('Signed license').value && !button('Refresh plan').disabled);
+    // Activation opens the workspace on the main counter, so the Plan screen may already be gone.
+    await wait(() => !input('Signed license')?.value && !button('Refresh plan')?.disabled);
     check((await api('/license/history')).events.filter((e) => e.kind === 'license_activated').length === 1, 'Retry after a lost acknowledgement records activation once');
     // The browser that set the restaurant up is its main counter already, so activation alone opens the workspace.
     await wait(() => document.body.innerText.includes('Dashboard'));
@@ -150,7 +153,7 @@
     check((await post('/__fake-service/stop', {})).ok, 'The fake licensing service can be stopped');
     await click('Check for renewal'); await wait(() => messageIs("Couldn't reach the licensing service. Billing continues on your current licence."));
     check((await api('/license')).canOperate && (await originalFetch('/api/products', { headers: headers() })).status === 200, 'An unreachable service leaves billing on the current licence');
-    document.querySelector('nav button[aria-label="tables"]').click(); await wait(() => !panel() && !document.querySelector('.license-recovery'));
+    tablesTab().click(); await wait(() => !panel() && !document.querySelector('.license-recovery'));
     check(document.body.innerText.trim().length > 0 && !document.body.innerText.includes('Checking your plan'), 'Billing pages still load while the licensing service is unreachable');
     document.querySelector('nav button[aria-label="settings"]').click(); await wait(() => document.querySelector('[data-section="plan"]')); document.querySelector('[data-section="plan"]').click(); await wait(() => panel() && !button('Refresh plan').disabled);
     window.__licenseChecks = { status: 'passed', checks };

@@ -13,7 +13,7 @@
   check((await api('/license')).state === 'expired', 'Expired license opens the recovery screen');
   check((await fetch('/api/products', { headers })).status === 403, 'Operational APIs pause after offline grace ends');
   check(document.documentElement.scrollWidth <= innerWidth && document.querySelector('.license-settings').getBoundingClientRect().width <= innerWidth, 'Recovery screen fits a phone viewport without horizontal overflow');
-  await click('Back up now'); await wait(() => document.body.innerText.includes('Verified local backup saved'));
+  await click('Back up now'); await wait(() => document.body.innerText.includes('Backup saved on this PC.'));
   check((await api('/system/backups')).backups.length > 0, 'Admin can create a verified database backup after expiry');
   check((await api('/license/history')).events.length > 0, 'Change history remains available during expiry recovery');
   const file = document.querySelector('[aria-label="License file"]'), transfer = new DataTransfer();
