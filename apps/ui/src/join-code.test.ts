@@ -12,6 +12,15 @@ describe("joining a device", () => {
     expect(codeFromLocation({ pathname: "/join", hash: "" })).toBe("");
     expect(codeFromLocation({ pathname: "/", hash: "#K7M2QP" })).toBe("");
   });
+  it("reads the code the Android Captain app passes on any page", () => {
+    expect(codeFromLocation({ pathname: "/captain/", hash: "#join=k7m2qp" })).toBe("K7M2QP");
+    expect(codeFromLocation({ pathname: "/", hash: "#join=K7M2QP" })).toBe("K7M2QP");
+    expect(codeFromLocation({ pathname: "/captain/", hash: "#join=nope" })).toBe("");
+    expect(codeFromLocation({ pathname: "/captain/", hash: "#K7M2QP" })).toBe("");
+  });
+  it("a tablet that has already joined and scans a code again just opens Captain", () => {
+    expect(gateDecision(me(true, "captain"), false, "/captain/")).toEqual({ show: "app" });
+  });
   it("sends each kind of device to its screen", () => {
     expect([homeForKind("counter"), homeForKind("kitchen"), homeForKind("captain")]).toEqual(["/", "/kitchen/", "/captain/"]);
   });

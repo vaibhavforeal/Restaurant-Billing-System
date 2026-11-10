@@ -7,7 +7,7 @@ import type { CaptainHttpsInfo } from "./captain-https.js";
 import { deviceHash, type DeviceRecord, type Devices } from "./devices.js";
 import { guestRateLimiter } from "./guest-rate.js";
 import { httpError } from "./http-error.js";
-import { fromMainPc, lanUrls } from "./system.js";
+import { captainPairingUri, fromMainPc, lanUrls } from "./system.js";
 
 /** One answer for a wrong, used or expired code, so a code cannot be probed for which of those it is. */
 const INVALID = "That code is not valid or has expired";
@@ -93,17 +93,22 @@ export function registerDeviceJoin(app: FastifyInstance, port = 4100, captainHtt
   /** Where the new device can open the join screen. A captain tablet works over HTTPS when that is set up, and a browser's credential belongs to one origin. */
   const origins = (kind: DeviceRecord["kind"]) => {
     const secure = kind === "captain" && captainHttps?.enabled ? (captainHttps.addresses ?? []).map((address) => `https://${address}:${captainHttps.port}`) : [];
-    return secure.length ? secure : lanUrls(port);
+    return { list: secure.length ? secure : lanUrls(port), secure: secure.length > 0 };
   };
+  const qr = (text: string) => QRCode.toDataURL(text, { width: 220, margin: 2 });
 
   app.post("/api/devices/join-codes", { preHandler: app.requirePermission("settings.manage") }, async (req, reply) => {
     const issued = codes.create(JoinCodeCreate.parse(req.body), req.user.name, limit());
-    const links = await Promise.all(origins(issued.kind).map(async (origin) => {
+    const { list, secure } = origins(issued.kind);
+    const links = await Promise.all(list.map(async (origin) => {
       const url = `${origin}/join#${issued.code}`;
-      return { url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) };
+      return { url, qr: await qr(url) };
     }));
+    // The Android Captain app pairs with the POS and joins with this code from one scan.
+    const pairings = issued.kind !== "captain" ? [] : await Promise.all(list.map(async (origin) =>
+      ({ origin, secure, qr: await qr(captainPairingUri(origin, secure ? captainHttps?.fingerprint : undefined, issued.code)) })));
     reply.header("Cache-Control", "no-store");
-    return reply.status(201).send({ ...issued, links } satisfies JoinCodeIssued);
+    return reply.status(201).send({ ...issued, links, pairings } satisfies JoinCodeIssued);
   });
 
   app.post("/api/devices/join", async (req, reply) => {

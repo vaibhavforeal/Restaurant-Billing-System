@@ -52,4 +52,8 @@ it("encodes the Android Captain pairing address with the pinned restaurant CA", 
   expect(uri.searchParams.get("server")).toBe("https://192.168.1.50:4443");
   expect(uri.searchParams.get("ca")).toBe("ABCD01");
   expect(new URL(captainPairingUri("http://192.168.1.50:4100")).searchParams.has("ca")).toBe(false);
+  const withCode = new URL(captainPairingUri("https://192.168.1.50:4443", "ab:cd:01", "K7M2QP"));
+  expect(withCode.searchParams.get("code")).toBe("K7M2QP");
+  expect(withCode.searchParams.get("ca")).toBe("ABCD01");
+  expect(new URL(captainPairingUri("http://192.168.1.50:4100")).searchParams.has("code")).toBe(false);
 });

@@ -28,10 +28,15 @@ export const JoinCodeCreate = z.union([
   z.object({ replacesDeviceId: z.string().uuid() }).strict(),
 ]);
 export type JoinCodeCreate = z.infer<typeof JoinCodeCreate>;
-/** A fresh join code. `links` open the join screen with the code filled in, one for each address the device can use. */
+/**
+ * A fresh join code. `links` open the join screen with the code filled in, one for each address the device can use.
+ * `pairings` are for the Android Captain app, one for each of the same addresses: scanning one connects the tablet to
+ * the POS and joins it with this code. Empty for a device that is not a captain.
+ */
 export interface JoinCodeIssued {
   code: string; expiresAt: number; kind: DeviceKind; name: string; replacesDeviceId: string | null;
   links: { url: string; qr: string }[];
+  pairings: { origin: string; secure: boolean; qr: string }[];
 }
 /** What a browser learns about itself before sign-in. `mainPc` is true for a browser on the main POS PC itself. */
 export interface DeviceMe { joined: boolean; kind: DeviceKind | null; mainPc: boolean }

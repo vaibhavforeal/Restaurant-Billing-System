@@ -3,8 +3,14 @@ import { normalizeJoinCode } from "@masalapos/domain/devices";
 
 const JOIN_PATH = /^\/join\/?$/;
 
-/** The code in a join link (`/join#K7M2QP`), ready for the field; "" on any other page or when the link carries no code. */
+const JOIN_HASH = "#join=";
+
+/**
+ * The code a page was opened with, ready for the field: from a join link (`/join#K7M2QP`), or from `#join=K7M2QP` on
+ * any page, which is how the Android Captain app passes the code it scanned. "" when there is no well-formed code.
+ */
 export function codeFromLocation(location: { pathname: string; hash: string }): string {
+  if (location.hash.startsWith(JOIN_HASH)) return normalizeJoinCode(location.hash.slice(JOIN_HASH.length)) ?? "";
   return JOIN_PATH.test(location.pathname) ? normalizeJoinCode(location.hash.slice(1)) ?? "" : "";
 }
 

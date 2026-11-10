@@ -66,6 +66,21 @@ describe("joining over the API", () => {
     expect(captain.links.map((l: { url: string }) => l.url)).toEqual([`https://192.168.1.5:4443/join#${captain.code}`]);
     const kitchen = (await app.inject({ method: "POST", url: "/api/devices/join-codes", headers, payload: { kind: "kitchen", name: "Pass" } })).json();
     for (const link of kitchen.links) expect(link.url).toMatch(/^http:\/\//);
+    // A captain code also pairs the Android app: one pairing code for each address, and none for other kinds of device.
+    expect(captain.pairings).toMatchObject([{ origin: "https://192.168.1.5:4443", secure: true }]);
+    expect(captain.pairings[0].qr).toMatch(/^data:image\/png/);
+    expect(kitchen.pairings).toEqual([]);
+  });
+
+  it("a captain code on plain HTTP pairs unencrypted, one pairing for each join link", async () => {
+    const { app, headers } = await dev();
+    const captain = (await app.inject({ method: "POST", url: "/api/devices/join-codes", headers, payload: { kind: "captain", name: "Tab 1" } })).json();
+    expect(captain.pairings).toHaveLength(captain.links.length);
+    captain.pairings.forEach((pairing: { origin: string; secure: boolean; qr: string }, i: number) => {
+      expect(pairing.secure).toBe(false);
+      expect(captain.links[i].url.startsWith(`${pairing.origin}/join#`)).toBe(true);
+      expect(pairing.qr).toMatch(/^data:image\/png/);
+    });
   });
 
   it("only someone who manages settings can make a code", async () => {

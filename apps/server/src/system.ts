@@ -34,10 +34,14 @@ export function edgeShortcut(url: string): string {
 }
 /** Copied into the UI build by tools/build-desktop.mjs when the Android app has been built. */
 const CAPTAIN_APK_PATH = "/captain/android/MasalaPOS-Captain.apk";
-/** QR payload for the Android Captain app: the POS origin and, for HTTPS, the restaurant CA it must pin. */
-export function captainPairingUri(origin: string, fingerprint?: string): string {
+/**
+ * QR payload for the Android Captain app: the POS origin and, for HTTPS, the restaurant CA it must pin. With a join
+ * `code` the tablet also joins as a device once it has paired.
+ */
+export function captainPairingUri(origin: string, fingerprint?: string, code?: string): string {
   const params = new URLSearchParams({ server: origin });
   if (fingerprint) params.set("ca", fingerprint.replaceAll(":", "").toUpperCase());
+  if (code) params.set("code", code);
   return `masalapos-captain://pair?${params}`;
 }
 export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4100, generation = "initial", captainHttps?: CaptainHttpsInfo, cloudBackups?: CloudBackups,
