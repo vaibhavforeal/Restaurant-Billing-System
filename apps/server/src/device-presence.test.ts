@@ -70,6 +70,21 @@ describe("device presence on the hub", () => {
     expect(seen).toEqual([{ deviceId: main.id, online: true }, { deviceId: main.id, online: false }]);
     expect(app.devices.main()!.lastSeenAt).not.toBeNull();
   });
+  it("shutting down with a device connected does not write to the closed database", async () => {
+    const app = freshApp();
+    // As the real server does: the database closes when the app does, before the sockets report that they closed.
+    app.addHook("onClose", async () => { app.db.close(); });
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": A } });
+    await browserSocket(app, setup.json().token as string, A);
+    const thrown: unknown[] = [];
+    const note = (error: unknown) => { thrown.push(error); };
+    process.on("uncaughtException", note);
+    try {
+      await app.close();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally { process.off("uncaughtException", note); }
+    expect(thrown).toEqual([]);
+  });
   it("signing out takes the device offline once", async () => {
     const { app, token, headers } = await dev();
     const main = app.devices.main()!;

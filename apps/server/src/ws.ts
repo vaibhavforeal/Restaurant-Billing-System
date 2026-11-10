@@ -19,7 +19,12 @@ export const HEARTBEAT_MS = 20_000;
 
 export function registerWs(app: FastifyInstance, authTimeoutMs: number = 5000, now: () => number = Date.now): void {
   const clients = new Map<WebSocket, ClientInfo>();
+  // Sockets report that they closed after the server, and with it the database, has shut down. Nobody is left to tell
+  // by then, and "last seen" cannot be written.
+  let closing = false;
+  app.addHook("preClose", async () => { closing = true; });
   const presence = new DevicePresence((deviceId, online) => {
+    if (closing) return;
     // Builds without licensing never note when a device was last used, so going offline does.
     if (!online) app.devices.touch(deviceId, now());
     app.broadcast("devices.presence", { deviceId, online });
