@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { DeviceJoined, DeviceKind, DeviceMe } from "@masalapos/domain";
 import { normalizeJoinCode } from "@masalapos/domain/devices";
 import { ApiError, apiFetch, session, type User } from "../api";
-import { codeFromLocation } from "../join-code";
+import { codeFromLocation, redeemJoinCode } from "../join-code";
 import { AuthLayout } from "./AuthLayout";
 import { Login } from "./Login";
 
@@ -29,7 +29,7 @@ export function JoinScreen({ me, onJoined }: { me: DeviceMe; onJoined: (kind: De
   }
   function join(e: FormEvent) {
     e.preventDefault();
-    void run(async () => onJoined((await apiFetch<DeviceJoined>("/api/devices/join", { method: "POST", body: JSON.stringify({ code }) })).kind));
+    void run(async () => onJoined(await redeemJoinCode(code, apiFetch)));
   }
   function signedIn(user: User) {
     if (user.role !== "admin") {

@@ -76,6 +76,8 @@ function connect() {
     if (e.code === 4401) {
       socketToken = null;
       notify((h) => h.onAuthFail?.());
+      // The session may be gone because this device was removed or moved to another browser: have the device gate ask.
+      window.dispatchEvent(new Event("masalapos:license-changed"));
       return; // No reconnect
     }
     notify((h) => h.onStatus(false));

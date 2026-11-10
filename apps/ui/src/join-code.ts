@@ -1,4 +1,4 @@
-import type { DeviceKind, DeviceMe } from "@masalapos/domain";
+import type { DeviceJoined, DeviceKind, DeviceMe } from "@masalapos/domain";
 import { normalizeJoinCode } from "@masalapos/domain/devices";
 
 const JOIN_PATH = /^\/join\/?$/;
@@ -23,6 +23,21 @@ export function gateDecision(me: DeviceMe | "unreachable", needsSetup: boolean |
   if (me === "unreachable" || needsSetup === "unreachable" || needsSetup) return { show: "app" };
   if (!me.joined) return { show: "join", me };
   return me.kind && JOIN_PATH.test(pathname) ? { redirect: homeForKind(me.kind) } : { show: "app" };
+}
+
+/**
+ * Enters a join code and returns what kind of device this browser now is. A join can succeed on the hub while its reply
+ * is lost on weak Wi-Fi; the retry is then refused as "already joined", which for this browser means it worked.
+ */
+export async function redeemJoinCode(code: string, api: <T>(path: string, init?: RequestInit) => Promise<T>): Promise<DeviceKind> {
+  try {
+    return (await api<DeviceJoined>("/api/devices/join", { method: "POST", body: JSON.stringify({ code }) })).kind;
+  } catch (error) {
+    if ((error as { status?: unknown } | null)?.status !== 409) throw error;
+    const now = await api<DeviceMe>("/api/devices/me");
+    if (now.joined && now.kind) return now.kind;
+    throw error;
+  }
 }
 
 /** Time left on a join code, e.g. "9:05". */
