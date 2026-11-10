@@ -5,6 +5,7 @@ import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequ
 import { orderSettings } from "./order-settings.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
+import { receiptPrinter, type ReceiptPrinterRow } from "./print/target.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
 import { readBillingSettings } from "./gst-settings.js";
 import { loadOrderJson } from "./mappers.js";
@@ -31,7 +32,7 @@ interface BillRow {
   cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number;
   created_at: number; client_ref: string | null; request_json: string | null; receipt_json: string | null;
 }
-interface PrinterRow { id: string; name: string; kind: "network" | "windows" | "bluetooth"; connection: string; paper_width: 58 | 80; receipt_profile: string }
+type PrinterRow = ReceiptPrinterRow;
 
 const feedbackOf = (db: Database, id: string) => { const url = billFeedbackUrl(db, id); return url ? { feedbackUrl: url } : {}; };
 
@@ -286,11 +287,6 @@ export function registerBilling(app: FastifyInstance): void {
   const read = app.requirePermission("bills.read");
   const create = app.requirePermission("bills.create");
   const getBill = (id: string): Bill => loadBill(db, id);
-  function printer(id: string): PrinterRow {
-    const p = db.prepare("SELECT * FROM printers WHERE id = ? AND is_active = 1").get(id) as PrinterRow | undefined;
-    if (!p) throw httpError(400, "Choose an active receipt printer");
-    return p;
-  }
   function printBill(bill: Bill, p: PrinterRow) {
     const profile = readProfile(p.receipt_profile);
     return app.printQueue.enqueue(p, "receipt", `Bill #${bill.billNo}`, receiptSlip(bill, p.paper_width, profile), profile.copies);
@@ -371,7 +367,8 @@ export function registerBilling(app: FastifyInstance): void {
       const now = Date.now();
       const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy }, now);
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
-      const target = body.printerId ? printer(body.printerId) : null;
+      // No printer field: this device's bill printer. A printer in the request is the cashier's choice for this bill.
+      const target = receiptPrinter(app, req.device, body.printerId);
       const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, removedOfferIds: body.removedOfferIds, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge, now });
       changedStockIds.push(...issued.changedStockIds);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
@@ -427,9 +424,10 @@ export function registerBilling(app: FastifyInstance): void {
     const bill = getBill((req.params as { id: string }).id);
     // Zomato bills are never printed: Zomato issues the customer's invoice.
     if (bill.receipt.orderType === "zomato") throw httpError(409, "Zomato bills are not printed", "zomato_order");
-    const body = BillPrint.parse(req.body);
-    if (!body.printerId) throw httpError(400, "Choose an active receipt printer");
-    return reply.status(202).send({ job: printBill(bill, printer(body.printerId)) });
+    const target = receiptPrinter(app, req.device, BillPrint.parse(req.body ?? {}).printerId);
+    // Asked to print with nowhere to print to: say so, where issuing a bill would simply not print.
+    if (!target) throw httpError(400, "Choose an active receipt printer");
+    return reply.status(202).send({ job: printBill(bill, target) });
   });
   app.get("/api/bills/:id/print-jobs", { preHandler: read }, async (req) => {
     const bill = getBill((req.params as { id: string }).id);
