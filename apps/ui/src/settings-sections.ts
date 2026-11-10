@@ -12,7 +12,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId; title: st
   { id: "order-types", title: "Order types", blurb: "Takeaway and delivery types", icon: "bag" },
   { id: "devices", title: "Devices", blurb: "Devices, printers, kitchen stations and print jobs", icon: "printer" },
   { id: "device", title: "This device", blurb: "Theme, alerts, bill printer and payment method here", icon: "monitor" },
-  { id: "backups", title: "Backups & connections", blurb: "Backups, devices and cloud", icon: "cloud" },
+  { id: "backups", title: "Backups", blurb: "Backups and cloud", icon: "cloud" },
   { id: "plan", title: "Plan & devices", blurb: "Licence, plan and registered devices", icon: "badge" },
   { id: "updates", title: "Updates", blurb: "Version, update channel and installing", icon: "refresh" },
   { id: "shortcuts", title: "Keyboard shortcuts", blurb: "Counter hotkeys", icon: "keyboard" },

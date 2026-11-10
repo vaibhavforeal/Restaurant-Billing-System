@@ -55,7 +55,7 @@ export function LicenseGate({ user, children }: { user: User; children: ReactNod
     {error && <button onClick={() => { void state.refresh(); }}>Retry license check</button>}</main>;
   return <LicenseContext.Provider value={state}>
     {!status.canOperate ? <main className="workspace license-recovery" id="main-content">
-      {userCan(user, "settings.manage") ? <><LicenseSettings /><SystemSettings backupOnly /></> : <><p role="alert">{status.message}</p><p>Ask your administrator to renew the plan or free a device slot.</p>
+      {userCan(user, "settings.manage") ? <><LicenseSettings /><SystemSettings /></> : <><p role="alert">{status.message}</p><p>Ask your administrator to renew the plan or free a device slot.</p>
         <button onClick={() => { void state.refresh(); }}>Check again</button>{error && <p role="alert">{error}</p>}</>}
     </main> : <>
       {error && <p className="panel" role="status">Plan status could not refresh: {error} <button onClick={() => { void state.refresh(); }}>Retry</button></p>}

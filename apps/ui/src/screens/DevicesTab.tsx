@@ -3,6 +3,7 @@ import type { DeviceHistory, DeviceInfo, DeviceList } from "@masalapos/domain/de
 import { apiFetch } from "../api";
 import { KIND_LABELS, billPrinterText, deviceBadges, presenceText, slotsText, withPresence } from "../devices-model";
 import { connectWs } from "../ws";
+import { AddDeviceDialog } from "./AddDeviceDialog";
 import { DeviceDialog } from "./DeviceDialog";
 import { useLicense } from "./LicenseSettings";
 
@@ -23,6 +24,10 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
   const [notice, setNotice] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  /** The Add device dialog: closed, open for a new device, or open on replacing one. */
+  const [adding, setAdding] = useState<{ replace?: DeviceInfo } | null>(null);
+  /** Goes up each time the list is read again, so the Add device dialog looks for the device it is waiting for. */
+  const [changes, setChanges] = useState(0);
   const sequence = useRef(0);
 
   const load = useCallback(async () => {
@@ -35,7 +40,7 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
         recovery ? { printers: [] } : apiFetch<{ printers: ActivePrinter[] }>("/api/billing-printers").catch(() => ({ printers: [] })),
       ]);
       if (request !== sequence.current) return;
-      setList(devices); setHistory(events); setPrinters(active.printers); setError("");
+      setList(devices); setHistory(events); setPrinters(active.printers); setError(""); setChanges((n) => n + 1);
     } catch (e) {
       if (request !== sequence.current) return;
       setList(null); setHistory(null); setError(e instanceof Error ? e.message : "Could not load the devices");
@@ -72,11 +77,14 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load older changes"); }
     finally { setLoadingOlder(false); }
   }
-  const replaceDevice = (device: DeviceInfo) => { setOpenId(null); setNotice(`To replace ${device.name}, use Add device.`); };
+  const replaceDevice = (device: DeviceInfo) => { setOpenId(null); setNotice(""); setAdding({ replace: device }); };
   const slots = list ? slotsText(list) : null;
 
   return <div className="panel devices-panel">
-    {slots && <p className="devices-note">{slots}</p>}
+    <div className="devices-toolbar">
+      <p className="devices-note">{slots ?? "Every counter, kitchen display and captain tablet joins with a code from here."}</p>
+      {!recovery && <button type="button" className="primary" disabled={list === null} onClick={() => { setNotice(""); setAdding({}); }}>Add device</button>}
+    </div>
     {error && <p role="alert" className="devices-error">{error} <button type="button" onClick={() => void load()}>Retry</button></p>}
     {notice && <p role="status" className="devices-note">{notice}</p>}
     {list === null && !error && <p role="status">Loading devices…</p>}
@@ -107,5 +115,6 @@ export function DevicesTab({ recovery = false }: { recovery?: boolean }) {
       onChanged={(device) => { setList((current) => current && { ...current, devices: current.devices.map((d) => d.id === device.id ? device : d) }); void load(); }}
       onRemoved={() => { setOpenId(null); setNotice("Device removed."); void load(); }}
       onReplace={replaceDevice} onFailed={() => void load()} onClose={() => setOpenId(null)} />}
+    {adding && list && <AddDeviceDialog list={list} replace={adding.replace} changes={changes} onClose={() => { setAdding(null); void load(); }} />}
   </div>;
 }

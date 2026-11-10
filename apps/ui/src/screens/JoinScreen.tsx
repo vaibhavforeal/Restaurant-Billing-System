@@ -64,7 +64,7 @@ export function JoinScreen({ me, onJoined }: { me: DeviceMe; onJoined: (kind: De
       <button type="button" disabled={busy} onClick={() => { void signOut(); setMainPc("closed"); setError(""); }}>Cancel</button>
     </div> : <form className="auth-form" onSubmit={join}>
       <h2>Enter join code</h2>
-      <p className="muted">Ask an administrator for a code. On the main counter: Settings, Plan &amp; devices, Add a device.</p>
+      <p className="muted">Ask an administrator for a code. On the main counter: Settings, Devices, Add device.</p>
       <label>Join code<input aria-label="Join code" name="join-code" autoComplete="off" autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoFocus maxLength={12}
         value={code} disabled={busy} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(""); }} /></label>
       <div className="error-message" role="alert">{error || joinCodeHint(code)}</div>

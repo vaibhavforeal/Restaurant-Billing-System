@@ -13,10 +13,11 @@ describe("settings sections", () => {
     }
   });
 
-  it("keeps the section names the Marketplace and e2e checks rely on", () => {
+  it("names the cards as the Devices area left them", () => {
     const titles = SETTINGS_SECTIONS.map((section) => section.title);
-    expect(titles).toContain("Backups & connections");
-    expect(titles).toContain("Plan & devices");
+    expect(titles).toContain("Devices");
+    expect(titles).toContain("Backups");
+    expect(titles).not.toContain("Backups & connections");
   });
 
   it("opens on the card grid unless a section is requested", () => {
