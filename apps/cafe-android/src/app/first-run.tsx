@@ -7,6 +7,7 @@ import { hashPin, isValidPin } from "../security/pin";
 import { color, radius, space, type } from "../theme/tokens";
 import { Banner, Button, Field, Screen } from "../ui";
 import { Choice } from "../ui/Choice";
+import { PrinterSetup } from "../print/PrinterSetup";
 
 type Step = "cafe" | "menu" | "printer";
 type FieldErrors = Partial<Record<keyof CafeSettings | "pin" | "pinAgain", string>>;
@@ -109,10 +110,11 @@ export default function FirstRun() {
         <View style={styles.form}>
           <Text style={[type.title, { color: color.onSurface }]}>Receipt printer</Text>
           <Text style={[type.body, { color: color.onSurfaceMuted }]}>You can add a printer later in More, Printers. Bills are saved either way.</Text>
+          {saved ? <PrinterSetup /> : <Button label="Set up a printer now" variant="secondary" busy={saving} onPress={() => void save()} />}
           {failure ? <Banner tone="error" text={failure} /> : null}
           <View style={styles.actions}>
-            <Button label="Back" variant="secondary" onPress={() => setStep("menu")} />
-            <Button label="Skip and start billing" size="lg" busy={saving} onPress={() => void finish()} style={styles.grow} />
+            {saved ? null : <Button label="Back" variant="secondary" onPress={() => setStep("menu")} />}
+            <Button label={saved ? "Start billing" : "Skip and start billing"} size="lg" busy={saving} onPress={() => void finish()} style={styles.grow} />
           </View>
         </View>
       )}

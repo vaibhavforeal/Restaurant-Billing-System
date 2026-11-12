@@ -17,3 +17,4 @@ export {
 } from "./bills.js";
 export { voidBill } from "./bills.js";
 export { daySummary, type DaySummary } from "./reports.js";
+export { listPrinters, savePrinter, deletePrinter, printerFor, printTarget, type Printer, type PrintTarget } from "./printers.js";
