@@ -39,7 +39,8 @@
     "./id": "./src/id.ts",
     "./bill-print": "./src/bill-print.ts",
     "./printer-schemas": "./src/printer-schemas.ts",
-    "./settings-schemas": "./src/settings-schemas.ts"
+    "./settings-schemas": "./src/settings-schemas.ts",
+    "./gstin-schema": "./src/gstin-schema.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

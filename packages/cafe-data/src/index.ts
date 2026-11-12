@@ -4,3 +4,10 @@ export { MIGRATIONS } from "./migrations/index.js";
 export { nextSequence } from "./sequences.js";
 export { businessDate, cafeFinancialYear } from "./time.js";
 export { onDataChanged, dataChanged } from "./events.js";
+export {
+  CafeSettingsInput, getCafe, saveCafe, getDevice, ownerPinHash, setOwnerPinHash, type CafeSettings, type Device,
+} from "./cafe.js";
+export {
+  MenuError, listMenu, saveCategory, deleteCategory, saveItem, setItemAvailable, deleteItem, moveInList, seedSampleMenu,
+  type Category, type Variant, type Item, type ItemInput,
+} from "./menu.js";
