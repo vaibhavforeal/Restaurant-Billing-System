@@ -1,29 +1,27 @@
-import { useEffect, useReducer } from "react";
+import { useSyncExternalStore } from "react";
 import { BillError, previewBill, type SqlDriver } from "@masalapos/cafe-data";
 import type { BillTotals } from "@masalapos/domain/billing";
-import { createCartStore, type CartStore } from "./cart-store";
+import { createCartStore, discountPaiseFor, linesForBill, type CartSnapshot, type CartStore } from "./cart-store";
 
 /** The counter's one cart. It lives in memory; a bill is only written when it is paid. */
 export const cart: CartStore = createCartStore();
 
-/** Re-renders whenever the cart changes. */
-export function useCart(): CartStore {
-  const [, bump] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => cart.subscribe(bump), []);
-  return cart;
+/** The cart's current snapshot; the screen re-renders with a new one on every change. */
+export function useCart(): CartSnapshot {
+  return useSyncExternalStore(cart.subscribe, cart.snapshot);
 }
 
 export type CartTotals =
   | { ok: true; totals: BillTotals; discountPaise: number }
   | { ok: false; error: BillError | Error; lineIndex: number | null };
 
-/** The cart priced from the menu as it is now, with its discount; or the reason it cannot be billed. */
-export function cartTotals(db: SqlDriver, store: CartStore = cart): CartTotals | null {
-  const lines = store.toLines();
+/** A cart snapshot priced from the menu as it is now, with its discount; or the reason it cannot be billed. */
+export function cartTotals(db: SqlDriver, snap: CartSnapshot): CartTotals | null {
+  const lines = linesForBill(snap.lines);
   if (!lines.length) return null;
   try {
     const subtotal = previewBill(db, { lines, discountPaise: 0 }).subtotalPaise;
-    const discountPaise = store.discountPaise(subtotal);
+    const discountPaise = discountPaiseFor(snap.discount, subtotal);
     return { ok: true, totals: previewBill(db, { lines, discountPaise }), discountPaise };
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));

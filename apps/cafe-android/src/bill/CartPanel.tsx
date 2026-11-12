@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { CafeSettings } from "@masalapos/cafe-data";
-import { billErrorMessage, type CartTotals, useCart } from "../cart/cart";
+import { billErrorMessage, cart, type CartTotals, useCart } from "../cart/cart";
 import type { Discount } from "../cart/cart-store";
 import { parseRupees } from "../money";
 import { color, radius, space, touch, type } from "../theme/tokens";
@@ -18,8 +18,8 @@ function Row({ label, paise, strong = false }: { label: string; paise: number; s
 
 /** Discount as an amount in rupees or a percent, with an optional note. */
 function DiscountSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const cart = useCart();
-  const current = cart.discount();
+  const snap = useCart();
+  const current = { value: snap.discount, note: snap.note };
   const [kind, setKind] = useState<Discount["kind"]>(current.value?.kind ?? "amount");
   const [text, setText] = useState("");
   const [note, setNote] = useState(current.note);
@@ -46,12 +46,12 @@ function DiscountSheet({ visible, onClose }: { visible: boolean; onClose: () => 
 
 /** The cart: lines with quantity steppers, a discount, totals from the menu, and Charge. */
 export function CartPanel({ cafe, priced, onCharge, compact = false }: { cafe: CafeSettings; priced: CartTotals | null; onCharge: () => void; compact?: boolean }) {
-  const cart = useCart();
+  const snap = useCart();
   const [discountOpen, setDiscountOpen] = useState(false);
-  const lines = cart.entries();
+  const lines = snap.lines;
   const badLine = priced && !priced.ok ? priced.lineIndex : null;
   const t = priced?.ok ? priced.totals : null;
-  const { value: discount, note } = cart.discount();
+  const { discount, note } = snap;
 
   return (
     <View style={styles.panel}>

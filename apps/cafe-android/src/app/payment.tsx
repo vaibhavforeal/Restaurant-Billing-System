@@ -21,9 +21,9 @@ const SINGLE = [{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }
 /** Takes payment for the cart and saves the bill. The bill id is made once, so a second tap on Paid finds the same bill. */
 export default function PaymentScreen() {
   const db = useDb();
-  useCart();
+  const snap = useCart();
   const cafe = useData(getCafe)!;
-  const priced = useData((d) => cartTotals(d));
+  const priced = useData((d) => cartTotals(d, snap));
   const [billId] = useState(uuidv7);
   const [mode, setMode] = useState<Mode>("cash");
   const [tendered, setTendered] = useState<number | null>(null);

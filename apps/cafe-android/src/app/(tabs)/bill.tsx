@@ -17,12 +17,12 @@ const lowest = (item: Item) => (item.variants.length ? Math.min(...item.variants
 /** Billing: categories, item tiles and search on one side, the cart on the other (or in a sheet on a phone). */
 export default function BillScreen() {
   const db = useDb();
-  useCart();
+  const snap = useCart();
   const { tablet, width } = useLayout();
   const cafe = useData(getCafe)!;
   const menu = useData(listMenu);
   const lastAt = useData(lastBillAt);
-  const priced = useData((d) => cartTotals(d));
+  const priced = useData((d) => cartTotals(d, snap));
   const [categoryId, setCategoryId] = useState(ALL);
   const [search, setSearch] = useState("");
   const [variantItem, setVariantItem] = useState<Item | null>(null);
@@ -33,7 +33,7 @@ export default function BillScreen() {
   const items = menu.items.filter((i) => (categoryId === ALL || i.categoryId === categoryId) && (!query || i.name.toLowerCase().includes(query)));
   const columns = Math.max(2, Math.floor(((tablet ? width - 380 - 96 : width) - space.md * 2) / 150));
   const tileWidth = `${100 / columns}%` as const;
-  const lineCount = cart.entries().reduce((n, l) => n + l.qty, 0);
+  const lineCount = snap.lines.reduce((n, l) => n + l.qty, 0);
 
   function tap(item: Item) {
     if (item.variants.length) return setVariantItem(item);

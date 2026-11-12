@@ -33,7 +33,7 @@
       "./plugins/with-short-cmake-object-paths"
     ],
     "experiments": {
-      "reactCompiler": true
+      "reactCompiler": false
     }
   }
 }

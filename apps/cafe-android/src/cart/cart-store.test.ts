@@ -59,3 +59,18 @@ describe("cart store", () => {
     expect(changes).toBe(before + 1);
   });
 });
+
+describe("cart snapshot", () => {
+  it("is the same object until the cart changes, then a new one with the change", () => {
+    const store = createCartStore();
+    const first = store.snapshot();
+    expect(store.snapshot()).toBe(first);
+    store.add({ itemId: "tea", variantId: null, name: "Tea", pricePaise: 1500, gstRate: null });
+    const second = store.snapshot();
+    expect(second).not.toBe(first);
+    expect(second.lines.map((l) => l.name)).toEqual(["Tea"]);
+    store.setDiscount({ kind: "amount", paise: 100 }, "Staff");
+    expect(store.snapshot()).toMatchObject({ discount: { kind: "amount", paise: 100 }, note: "Staff" });
+    expect(first.lines).toEqual([]);
+  });
+});
