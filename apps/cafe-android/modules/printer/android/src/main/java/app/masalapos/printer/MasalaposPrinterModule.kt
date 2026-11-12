@@ -13,6 +13,7 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.Closeable
 import java.io.IOException
 import java.io.OutputStream
 import java.net.InetSocketAddress
@@ -91,7 +92,7 @@ class MasalaposPrinterModule : Module() {
     }
     var socket: BluetoothSocket? = null
     try {
-      socket = connectWithOneRetry { device.createRfcommSocketToServiceRecord(SPP).also { it.connect() } }
+      socket = connectWithOneRetry("Could not connect to the printer", { device.createRfcommSocketToServiceRecord(SPP) }) { it.connect() }
       write(socket.outputStream, bytes)
       // Low-cost printers drop the end of a job if the socket closes straight after the last byte.
       Thread.sleep(300)
@@ -101,24 +102,33 @@ class MasalaposPrinterModule : Module() {
   }
 
   private fun printNetwork(host: String, port: Int, bytes: ByteArray) {
-    val socket = Socket()
+    var socket: Socket? = null
     try {
-      try { socket.connect(InetSocketAddress(host, port), 4_000) } catch (e: IOException) {
-        throw PrintFailure("PRINTER_UNREACHABLE", "Could not reach $host:$port", e)
-      }
+      socket = connectWithOneRetry("Could not reach $host:$port", { Socket() }) { it.connect(InetSocketAddress(host, port), 4_000) }
       write(socket.getOutputStream(), bytes)
     } finally {
-      try { socket.close() } catch (_: IOException) {}
+      try { socket?.close() } catch (_: IOException) {}
     }
   }
 
-  private fun connectWithOneRetry(connect: () -> BluetoothSocket): BluetoothSocket {
-    return try { connect() } catch (first: IOException) {
-      Thread.sleep(500)
-      try { connect() } catch (second: IOException) {
-        throw PrintFailure("PRINTER_UNREACHABLE", "Could not connect to the printer", second)
+  /**
+   * Opens and connects a socket, and once more after 500 ms if that fails. A socket whose connect failed is closed
+   * before the retry: many Bluetooth stacks refuse a new RFCOMM connection while the old one is still open.
+   */
+  private fun <T : Closeable> connectWithOneRetry(failure: String, open: () -> T, connect: (T) -> Unit): T {
+    var last: IOException? = null
+    for (attempt in 0..1) {
+      if (attempt > 0) Thread.sleep(500)
+      val socket = try { open() } catch (e: IOException) { last = e; continue }
+      try {
+        connect(socket)
+        return socket
+      } catch (e: IOException) {
+        last = e
+        try { socket.close() } catch (_: IOException) {}
       }
     }
+    throw PrintFailure("PRINTER_UNREACHABLE", failure, last)
   }
 
   private fun write(out: OutputStream, bytes: ByteArray) {
