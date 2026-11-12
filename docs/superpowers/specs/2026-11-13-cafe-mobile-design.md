@@ -57,8 +57,9 @@ Sources: `support.google.com/googleplay/android-developer/answer/10281818` and `
 - Bill arithmetic: `calculateBill` and the `Bill`, `BillTotals` and `ReceiptSnapshot` types in
   `packages/domain/src/billing.ts`. It is pure integer-paise code.
 - GST modes and rates: `packages/domain/src/gst.ts`. Rounding: `round-off.ts`.
-- Invoice number format and financial year: `financialYear`, `formatInvoiceNo` and `formatCreditNoteNo` in
-  `packages/domain/src/invoice-numbers.ts`.
+- Invoice number format: `formatInvoiceNo` and `formatCreditNoteNo` in `packages/domain/src/invoice-numbers.ts`.
+  The financial year comes from `cafeFinancialYear` in `packages/cafe-data/src/time.ts`, which takes the device's
+  time-zone offset instead of reading the machine's, as the domain's `financialYear` does.
 - Add-ons: `packages/domain/src/addons.ts`. Offers: `packages/domain/src/offers.ts` (`applyOffers`).
 - Permissions: `packages/core/src/rbac.ts` and `packages/domain/src/staff-permissions.ts`.
 - Ids: `uuidv7` in `packages/domain/src/id.ts`.
@@ -143,8 +144,9 @@ built and tested with APKs installed directly on a phone and need no Play accoun
    queue turns the bytes into a `Buffer` where it stores them.
 3. `ReceiptSnapshot` gains an optional `token?: number`. `receiptSlip` prints it in double size under the header
    when it is set. Windows POS bills do not set it, so their output is unchanged, and a test proves that.
-4. A guard test in `apps/cafe-android`, in the style of `apps/ui/src/domain-imports.test.ts`, fails if the app or
-   `packages/cafe-data` imports the `@masalapos/domain` root, `db.ts`, or any `node:` module.
+4. A guard test, `tools/phone-safe-imports.test.ts`, walks every import the phone can reach (the domain subpaths,
+   `packages/print`, `packages/cafe-data` and every non-test file in `apps/cafe-android/src`) and fails on a `node:`
+   module, `better-sqlite3`, `db.ts` or a workspace import that is not exported.
 
 ### `packages/cafe-data`
 
@@ -178,6 +180,7 @@ Tables. Money is integer paise. Times are epoch milliseconds. "Synced" tables ca
 | `bill_voids` | yes | bill_id, credit_note_no, reason, created_at |
 | `sequences` | no | name, value |
 | `printers` | no | name, transport (`bluetooth`, `network`), address, paper_width, role (`receipt`, `kitchen`), profile_json |
+| `local_state` | no | name, value: numbers the device keeps for itself, such as the owner PIN's wrong-try count and lock (migration 2) |
 
 Notes on the schema:
 
@@ -201,13 +204,17 @@ Notes on the schema:
 The bill flow is one function and one transaction:
 
 ```ts
-createBill(db, { lines, discountPaise, discountNote, payments, now }): Bill
+createBill(db, { id, lines, discountPaise, discountNote, payments, now, tzOffsetMinutes }): CafeBill
 ```
+
+`id` is made by the payment screen when it opens, so a second tap on **Paid** returns the same bill instead of making
+a second one. `tzOffsetMinutes` (minutes east of UTC, from the phone) decides the bill's business date and financial
+year, so they follow the device's clock and not the machine running the code.
 
 It reads the cafe settings, resolves each line's price and GST rate, calls `calculateBill`, rejects payments that
 do not add up to the total, takes the next invoice number and token, freezes the receipt snapshot, writes the bill,
 its lines and its payments, and returns a domain `Bill`. Cash tendered and change are worked out on screen and are
-not stored. `voidBill(db, { billId, reason, now })` writes the void row and returns the updated `Bill`.
+not stored. `voidBill(db, { billId, reason, now, tzOffsetMinutes })` writes the void row and returns the updated bill.
 
 Reports are queries in `cafe-data`: for a date, the bill count, gross sales, discounts, tax by rate, totals by
 payment mode, item-wise quantities and amounts, and voids.
