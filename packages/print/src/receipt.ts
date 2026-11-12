@@ -129,6 +129,11 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   line(heading.thermal);
   if (heading.declaration) { pos.bold(false); line(heading.declaration); }
   if (style !== "compact") pos.line();
+  if (r.token !== undefined) {
+    pos.align("center").bold(true).size(2, 2);
+    line(`TOKEN ${r.token}`);
+    pos.size(1, 1).bold(false);
+  }
   pos.bold(false).align("left");
   line(`Date: ${dateTime(bill.createdAt)}`);
   pair(`Bill ${bill.invoiceNo}`, statusLabel(bill));

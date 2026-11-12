@@ -113,6 +113,8 @@ export interface ReceiptSnapshot {
   items: Array<{ name: string; pricePaise: number; qty: number; gstRate: number; contents?: string[]; addon?: boolean }>;
   /** The offers that took money off this bill, by name; absent when none applied. */
   offers?: Array<{ name: string; discountPaise: number }>;
+  /** The cafe app's order token; absent on Windows POS bills. */
+  token?: number;
 }
 export interface ReceiptBuyer {
   gstin: string; name: string; address: string;

@@ -464,4 +464,19 @@ describe("receipts", () => {
       expect(fits(thermal(sample, width), width)).toBe(true);
     });
   });
+  describe("order token", () => {
+    it("prints the token in large type when the bill has one", () => {
+      const text = renderBytes(receiptSlip({ ...bill, receipt: { ...bill.receipt, token: 27 } }, 58));
+      expect(text).toContain("TOKEN 27");
+      expect(text.indexOf("TOKEN 27")).toBeLessThan(text.indexOf("Date:"));
+    });
+    it("prints a bill without a token exactly as before", () => {
+      expect(renderBytes(receiptSlip(bill, 58))).not.toContain("TOKEN");
+    });
+    it("prints ? for characters a thermal printer cannot show", () => {
+      const odd = { ...bill, receipt: { ...bill.receipt, items: [{ name: "चाय ☕ Tea", pricePaise: 2000, qty: 1, gstRate: 5 }] } };
+      const out = receiptSlip(odd, 58);
+      expect(renderBytes(out)).toContain("??? ? Tea"); // three Devanagari code units, a space, the cup, a space, then Tea
+    });
+  });
 });
