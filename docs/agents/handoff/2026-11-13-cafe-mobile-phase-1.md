@@ -56,6 +56,30 @@ Run `node tools/build-cafe-android.mjs --install`, `adb reverse tcp:8081 tcp:808
 
 Record each result in this note.
 
+## Whole-branch review (one reviewer, Opus) and fixes
+
+Fixed, each with a test that failed first where code allowed it:
+- The template's React Compiler cached reads of the cart store, so the cart never updated on screen. It is off
+  (`src/app-config.test.ts` pins that), and screens price an explicit cart snapshot (`useSyncExternalStore`).
+- Saving and printing are separate (`src/payment/complete.ts`): a receipt problem never hides a saved bill, and a
+  repeated Paid prints one receipt.
+- With no printer the token screen shows the receipt on screen.
+- The printer module closes a failed socket before its one retry, and network printing retries too.
+- From the automated security review: first run cannot reopen after setup; the owner PIN lock persists; saving
+  Cafe details, Tax or Receipt needs the owner PIN.
+
+Deferred (minor), for a later phase:
+- An unparseable "Another amount" leaves Paid enabled (it pays the exact total).
+- An amount discount above the bill is capped at 100% without a message.
+- Split payment covers two ways to pay, not three.
+- Finished print jobs stay in memory until the app restarts.
+- Bills and Reports keep yesterday's date if the app stays open past midnight.
+- The unprintable-character warning covers item and variant names only.
+- Retrying a multi-copy job reprints copies that already printed.
+- A crash between saving the cafe and its PIN in first run leaves no PIN and no way to set one.
+- Credit-note numbers carry no device letter; fix in the Phase 3 sync design before two devices bill.
+- The owner PIN hash (SHA-256 with the device id) is to be replaced with the Phase 2 staff-PIN hash.
+
 ## Next
 
 The Phase 2 spec addendum, then its plan, in a new session on Opus 5.5.
