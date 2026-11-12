@@ -10,6 +10,7 @@ import { billErrorMessage, cart, cartTotals, useCart } from "../cart/cart";
 import { linesForBill } from "../cart/cart-store";
 import { deviceOffset } from "../dates";
 import { completePayment } from "../payment/complete";
+import { recordError } from "../errors/capture";
 import { useDb, useData } from "../db/provider";
 import { formatRupees, parseRupees } from "../money";
 import { cashSuggestions, changeDue, remaining } from "../payment/tender";
@@ -82,6 +83,7 @@ export default function PaymentScreen() {
       setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,
         printError: result.printError });
     } catch (e) {
+      recordError(e, `payment ${mode}: ${snap.lines.map((l) => `${l.name} x${l.qty}${l.variantId ? " [variant]" : ""}`).join(", ")}`);
       const index = typeof e === "object" && e && "lineIndex" in e && typeof e.lineIndex === "number" ? e.lineIndex : undefined;
       setProblem(billErrorMessage(e, index !== undefined ? snap.lines[index]?.name : undefined));
       setSaving(false);

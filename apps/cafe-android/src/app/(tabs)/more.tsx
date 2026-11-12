@@ -8,6 +8,7 @@ const ROWS: Array<{ title: string; subtitle: string; href: Href }> = [
   { title: "Printers", subtitle: "Receipt printer, paper width, test print", href: "/more/printers" },
   { title: "Owner PIN", subtitle: "Needed to void a bill", href: "/more/pin" },
   { title: "About", subtitle: "App version and this device", href: "/more/about" },
+  { title: "Error log", subtitle: "Problems the app met, to share with MasalaPOS", href: "/more/errors" },
 ];
 
 export default function MoreScreen() {

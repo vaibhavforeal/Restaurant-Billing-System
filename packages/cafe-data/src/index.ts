@@ -19,3 +19,4 @@ export { voidBill } from "./bills.js";
 export { daySummary, type DaySummary } from "./reports.js";
 export { listPrinters, savePrinter, deletePrinter, printerFor, printTarget, type Printer, type PrintTarget } from "./printers.js";
 export { getLocalState, setLocalState } from "./local-state.js";
+export { logError, listErrors, clearErrors, type ErrorEntry } from "./error-log.js";

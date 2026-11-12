@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text } from "react-native";
 import { openDatabaseSync, type SQLiteBindParams } from "expo-sqlite";
 import { migrate, onDataChanged, type SqlDriver } from "@masalapos/cafe-data";
 import { expoDriver } from "./expo-driver";
+import { startErrorCapture } from "../errors/capture";
 import { color, space, type } from "../theme/tokens";
 
 const DbContext = createContext<SqlDriver | null>(null);
@@ -22,6 +23,7 @@ function open(): Opened {
       withTransactionSync: (task) => raw.withTransactionSync(task),
     });
     migrate(db);
+    startErrorCapture(db);
     return { db, error: null };
   } catch (e) {
     return { db: null, error: e instanceof Error ? e.message : String(e) };

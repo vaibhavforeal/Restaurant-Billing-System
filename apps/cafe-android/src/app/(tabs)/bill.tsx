@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getCafe, lastBillAt, listMenu, type Item } from "@masalapos/cafe-data";
+import { getCafe, getLocalState, lastBillAt, listErrors, listMenu, type Item } from "@masalapos/cafe-data";
 import { CartPanel } from "../../bill/CartPanel";
 import { CustomItemSheet } from "../../bill/CustomItemSheet";
 import { VariantSheet } from "../../bill/VariantSheet";
 import { cart, cartTotals, useCart } from "../../cart/cart";
+import { ERRORS_SEEN_KEY } from "../../errors/capture";
 import { useDb, useData } from "../../db/provider";
 import { color, radius, space, touch, type } from "../../theme/tokens";
 import { Banner, Button, Icon, Money, Tile, useLayout } from "../../ui";
@@ -22,6 +23,7 @@ export default function BillScreen() {
   const cafe = useData(getCafe)!;
   const menu = useData(listMenu);
   const lastAt = useData(lastBillAt);
+  const newError = useData((d) => (listErrors(d)[0]?.at ?? 0) > (getLocalState(d, ERRORS_SEEN_KEY) ?? 0));
   const priced = useData((d) => cartTotals(d, snap));
   const [categoryId, setCategoryId] = useState(ALL);
   const [search, setSearch] = useState("");
@@ -51,6 +53,10 @@ export default function BillScreen() {
         </View>
         <Button label="Custom item" icon="plus" variant="secondary" onPress={() => setCustomOpen(true)} />
       </View>
+      {newError ? (
+        <Banner tone="warning" text="MasalaPOS Cafe recorded an error. Please share it from More, Error log."
+          action={{ label: "View", onPress: () => router.push("/more/errors") }} />
+      ) : null}
       {lastAt !== null && lastAt > Date.now() ? (
         <Banner tone="warning" text="This phone's clock is behind your last bill. Check the date and time." />
       ) : null}
