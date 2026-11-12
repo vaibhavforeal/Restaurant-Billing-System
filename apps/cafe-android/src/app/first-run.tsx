@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
-import { CafeSettingsInput, getDevice, saveCafe, seedSampleMenu, setOwnerPinHash, type CafeSettings } from "@masalapos/cafe-data";
+import { Redirect, router } from "expo-router";
+import { CafeSettingsInput, getCafe, getDevice, saveCafe, seedSampleMenu, setOwnerPinHash, type CafeSettings } from "@masalapos/cafe-data";
 import { useDb } from "../db/provider";
 import { hashPin, isValidPin } from "../security/pin";
 import { color, radius, space, type } from "../theme/tokens";
@@ -31,6 +31,8 @@ export default function FirstRun() {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Set-up happens once. Reaching this screen again (a link, a back gesture) must not reset the cafe or its owner PIN.
+  const [alreadySetUp] = useState(() => getCafe(db) !== null);
 
   const settings = () => ({ ...form, fssai: "", roundOff: "rupee", invoicePrefix: "", receiptHeader: "", receiptFooter: "", receiptStyle: "classic", upiId: "" });
 
@@ -67,6 +69,8 @@ export default function FirstRun() {
   async function finish() {
     if (await save()) router.replace("/bill");
   }
+
+  if (alreadySetUp) return <Redirect href="/bill" />;
 
   const set = (key: keyof typeof form) => (value: string | number) => setForm((f) => ({ ...f, [key]: value }));
 
