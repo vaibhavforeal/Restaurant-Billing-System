@@ -14,7 +14,9 @@ export default function RootLayout() {
     <ThemeProvider value={theme}>
       <StatusBar style="dark" />
       <DbProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.background } }} />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.background } }}>
+          <Stack.Screen name="payment" options={{ presentation: "modal" }} />
+        </Stack>
       </DbProvider>
     </ThemeProvider>
   );
