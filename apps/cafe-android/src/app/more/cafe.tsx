@@ -1,9 +1,11 @@
+import { useOwnerConfirm } from "../../security/useOwnerConfirm";
 import { useCafeDraft } from "../../settings/useCafeDraft";
 import { Banner, Button, Field, Screen } from "../../ui";
 
 /** Name, address, phone, GSTIN, FSSAI and UPI ID. Changes apply to new bills only. */
 export default function CafeDetails() {
   const { draft, set, errors, save, saved } = useCafeDraft();
+  const { confirm, prompt } = useOwnerConfirm("Save cafe details");
   return (
     <Screen title="Cafe details" edges={["top", "bottom"]}>
       <Field label="Cafe name" value={draft.name} onChangeText={set("name")} error={errors.name ?? null} maxLength={60} autoCapitalize="words" />
@@ -15,7 +17,8 @@ export default function CafeDetails() {
       <Field label="UPI ID" value={draft.upiId} onChangeText={set("upiId")} error={errors.upiId ?? null} autoCapitalize="none" autoCorrect={false}
         placeholder="cafe@bank" help="Shows a QR code for the exact amount on the payment screen." />
       {saved ? <Banner tone="success" text="Saved. New bills use these details; old bills keep theirs." /> : null}
-      <Button label="Save" size="lg" onPress={save} />
+      <Button label="Save" size="lg" onPress={() => confirm(save)} accessibilityHint="Asks for the owner PIN" />
+      {prompt}
     </Screen>
   );
 }

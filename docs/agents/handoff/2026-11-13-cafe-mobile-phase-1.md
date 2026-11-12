@@ -52,6 +52,7 @@ Run `node tools/build-cafe-android.mjs --install`, `adb reverse tcp:8081 tcp:808
    items, three-tap bill, variant, discount, split, UPI QR, reprint, void, report, summary print, printer off
    mid-sale then Try again), and a tablet or wide window shows the side rail and the cart panel.
 7. Opening `masalapos-cafe://first-run` after setup lands on Bill.
+8. Saving More, Cafe details (for example a new UPI ID), Tax or Receipt asks for the owner PIN first.
 
 Record each result in this note.
 
