@@ -15,3 +15,5 @@ export {
   BillError, previewBill, createBill, getBill, listBills, lastBillAt,
   type BillErrorCode, type CartLine, type PaymentInput, type CreateBillInput, type CafeBill,
 } from "./bills.js";
+export { voidBill } from "./bills.js";
+export { daySummary, type DaySummary } from "./reports.js";

@@ -1,7 +1,7 @@
 import { uuidv7 } from "@masalapos/domain/id";
 import { calculateBill, type Bill, type BillTotals, type ReceiptSnapshot } from "@masalapos/domain/billing";
 import { effectiveGstRate } from "@masalapos/domain/gst";
-import { formatInvoiceNo, INVOICE_COUNTER_MAX } from "@masalapos/domain/invoice-numbers";
+import { formatCreditNoteNo, formatInvoiceNo, INVOICE_COUNTER_MAX } from "@masalapos/domain/invoice-numbers";
 import { DEFAULT_BILL_SHOW } from "@masalapos/domain/bill-print";
 import { getCafe, getDevice, type CafeSettings } from "./cafe.js";
 import type { SqlDriver } from "./driver.js";
@@ -10,7 +10,7 @@ import { nextSequence } from "./sequences.js";
 import { businessDate, cafeFinancialYear } from "./time.js";
 
 export type BillErrorCode = "no_cafe" | "empty" | "invalid_line" | "item_unavailable" | "discount_too_large"
-  | "payments_mismatch" | "counter_exhausted" | "not_found" | "already_void";
+  | "payments_mismatch" | "counter_exhausted" | "not_found" | "already_void" | "invalid_reason";
 
 export class BillError extends Error {
   constructor(readonly code: BillErrorCode, message: string, readonly lineIndex?: number) {
@@ -151,13 +151,16 @@ interface BillRow {
 function toBill(db: SqlDriver, row: BillRow): CafeBill {
   const payments = db.all<{ mode: PaymentInput["mode"]; amount_paise: number; ref_note: string | null; created_at: number }>(
     "SELECT mode, amount_paise, ref_note, created_at FROM payments WHERE bill_id = ? AND deleted_at IS NULL ORDER BY rowid", [row.id]);
+  const voided = db.get<{ credit_note_no: string; reason: string; created_at: number }>(
+    "SELECT credit_note_no, reason, created_at FROM bill_voids WHERE bill_id = ? AND deleted_at IS NULL", [row.id]);
   return {
     ...(JSON.parse(row.totals_json) as BillTotals),
-    id: row.id, billNo: row.bill_no, invoiceNo: row.invoice_no, orderId: row.id, status: "paid",
+    id: row.id, billNo: row.bill_no, invoiceNo: row.invoice_no, orderId: row.id, status: voided ? "void" : "paid",
     discountNote: row.discount_note, createdAt: row.created_at, receipt: JSON.parse(row.receipt_json) as ReceiptSnapshot,
     payments: payments.map((p) => ({ mode: p.mode, amountPaise: p.amount_paise, refNote: p.ref_note, createdAt: p.created_at })),
     refundState: "none", creditNotes: [], refundedQty: {},
-    token: row.token, businessDate: row.business_date, voided: null,
+    token: row.token, businessDate: row.business_date,
+    voided: voided ? { creditNoteNo: voided.credit_note_no, reason: voided.reason, at: voided.created_at } : null,
   };
 }
 
@@ -180,6 +183,27 @@ export function listBills(db: SqlDriver, day: string, search?: string): CafeBill
       : db.all<BillRow>("SELECT * FROM bills WHERE business_date = ? AND deleted_at IS NULL AND instr(lower(invoice_no), lower(?)) > 0 ORDER BY created_at DESC, id DESC",
         [day, q]);
   return rows.map((r) => toBill(db, r));
+}
+
+/**
+ * Cancels a paid bill with a credit-note number and a reason. The bill row is not changed: the void is its own row,
+ * and the bill stays in its own day's report under voids.
+ */
+export function voidBill(db: SqlDriver, input: { billId: string; reason: string; now: number; tzOffsetMinutes: number }): CafeBill {
+  const reason = input.reason.trim();
+  const bill = db.transaction(() => {
+    const bill = getBill(db, input.billId);
+    if (!bill) throw new BillError("not_found", "This bill could not be found");
+    if (bill.voided) throw new BillError("already_void", "This bill is already void");
+    if (reason.length < 1 || reason.length > 120) throw new BillError("invalid_reason", "Give a reason of up to 120 characters");
+    const fy = cafeFinancialYear(input.now, input.tzOffsetMinutes);
+    const creditNoteNo = formatCreditNoteNo(fy.short, nextSequence(db, `cn:${fy.key}`));
+    db.run("INSERT INTO bill_voids (id, bill_id, credit_note_no, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [uuidv7(), input.billId, creditNoteNo, reason, input.now, input.now]);
+    return getBill(db, input.billId)!;
+  });
+  dataChanged();
+  return bill;
 }
 
 /** When the newest bill was made, to warn when the phone's clock is behind it. */

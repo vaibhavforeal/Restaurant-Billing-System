@@ -12,6 +12,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@masalapos/print": "*",
     "@types/better-sqlite3": "^9.6.0",
     "better-sqlite3": "^13.0.3"
   }
