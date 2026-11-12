@@ -11,3 +11,4 @@ export { Sheet } from "./Sheet";
 export { Tile } from "./Tile";
 export { useLayout } from "./layout";
 export { Choice } from "./Choice";
+export { DateControl } from "./DateControl";
