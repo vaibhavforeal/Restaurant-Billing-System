@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "MasalaPOS Cafe",
+    "slug": "masalapos-cafe",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "masalapos-cafe",
+    "userInterfaceStyle": "light",
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "app.masalapos.cafe",
+      "adaptiveIcon": {
+        "backgroundColor": "#F58A07",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F58A07",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 96
+        }
+      ],
+      "expo-sqlite",
+      "./plugins/with-short-cmake-object-paths"
+    ],
+    "experiments": {
+      "reactCompiler": true
+    }
+  }
+}

@@ -15,5 +15,5 @@
     }
   },
   "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts"],
-  "exclude": ["apps/ui", "apps/portal", "apps/desktop/src/remote/agent-page.ts", "packages/remote-agent/src/agent-page.ts", "apps/connector/src/renderer"]
+  "exclude": ["apps/ui", "apps/portal", "apps/cafe-android", "apps/desktop/src/remote/agent-page.ts", "packages/remote-agent/src/agent-page.ts", "apps/connector/src/renderer"]
 }

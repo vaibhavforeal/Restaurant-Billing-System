@@ -1,15 +1,22 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { workspaceExports } from "./workspace-exports.mjs";
 
 const root = resolve(__dirname, "..");
+/** Every non-test .ts/.tsx file under a folder of the phone app, relative to the repository root. */
+function appSources(dir: string): string[] {
+  return readdirSync(join(root, dir), { recursive: true, encoding: "utf8" })
+    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+    .map((f) => `${dir}/${f.replaceAll("\\", "/")}`);
+}
 /** Everything the phone bundle starts from. Later tasks append to this list. */
 export const PHONE_ENTRIES: string[] = [
   "@masalapos/domain/id", "@masalapos/domain/billing", "@masalapos/domain/gst", "@masalapos/domain/round-off",
   "@masalapos/domain/invoice-numbers", "@masalapos/domain/receipt-styles", "@masalapos/domain/bill-print",
   "@masalapos/domain/printer-schemas", "@masalapos/domain/settings-schemas",
   "packages/print/src/index.ts", "packages/cafe-data/src/index.ts",
+  ...appSources("apps/cafe-android/src"),
 ];
 const DENIED = /^(node:.*|better-sqlite3|fs|path|crypto|os|net|http|https|child_process|worker_threads)$/;
 const FROM = /^[ \t]*(?:import|export)\s+(type\s+)?[^;'"]*?from\s+["']([^"']+)["']/gm;
