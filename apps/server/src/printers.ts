@@ -2,8 +2,7 @@ import { PrinterCreate, PrinterUpdate, uuidv7 } from "@masalapos/domain";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
-import { EscPos } from "./print/escpos.js";
-import { readProfile, finishSlip } from "./print/profile.js";
+import { EscPos, readProfile, finishSlip } from "@masalapos/print";
 import type { PrinterDiscovery } from "./print/discovery.js";
 
 interface PrinterRow {

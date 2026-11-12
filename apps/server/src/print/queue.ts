@@ -1,5 +1,6 @@
 import { uuidv7, openDb, migrate, MIGRATIONS, type Database } from "@masalapos/domain";
 import { PrintOutcomeUnknown, type SinkSend, type PrinterTarget } from "./sinks.js";
+import { toBuffer } from "./to-buffer.js";
 
 export interface PrintJobJson {
   id: string;
@@ -49,14 +50,14 @@ export class PrintQueue {
   }
 
   enqueue(printer: { id: string; name: string; kind: PrinterTarget["kind"]; connection: string },
-    kind: PrintJobJson["kind"], label: string, bytes: Buffer, copies = 1): PrintJobJson {
+    kind: PrintJobJson["kind"], label: string, bytes: Uint8Array, copies = 1): PrintJobJson {
     if (this.stopped) throw new Error("Print queue is stopping");
     if (!Number.isInteger(copies) || copies < 1 || copies > 5) throw new Error("Copies must be between 1 and 5");
     const jobs = this.db.transaction(() => Array.from({ length: copies }, (_, index) => {
       const job: PrintJobJson = { id: uuidv7(), printerId: printer.id, printerName: printer.name, kind, label,
         status: "queued", error: null, createdAt: Date.now(), attempts: 0, copyNumber: index + 1, copyCount: copies };
       this.db.prepare("INSERT INTO print_jobs (id, printer_id, status, job_json, target_json, payload) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(job.id, printer.id, job.status, JSON.stringify(job), JSON.stringify({ kind: printer.kind, connection: printer.connection }), bytes);
+        .run(job.id, printer.id, job.status, JSON.stringify(job), JSON.stringify({ kind: printer.kind, connection: printer.connection }), toBuffer(bytes));
       return job;
     }))();
     // I/O waits for the caller's surrounding synchronous transaction to commit.

@@ -135,10 +135,12 @@ built and tested with APKs installed directly on a phone and need no Play accoun
 
 1. `packages/domain/src/id.ts` takes its random bytes from `globalThis.crypto.getRandomValues`. Its tests stay as
    they are.
-2. `packages/print` is created with `escpos.ts`, `profile.ts`, `templates.ts`, `upi.ts` and the slip half of
-   `receipt.ts` (`money`, `dateTime`, `clean`, `buyerLines`, `slipWriter`, `receiptSlip`). Their tests move with
-   them. `receiptHtml` and the CSS files stay in `apps/server`. All builders return `Uint8Array`.
-   `apps/server/src/print/` imports from `@masalapos/print`; the queue, sinks and HTML preview do not move.
+2. `packages/print` is created with every pure print file: `escpos.ts`, `profile.ts`, `templates.ts`, `upi.ts`,
+   `render-bytes.ts`, `restaurant-receipt-style.ts` and all of `receipt.ts`, including `receiptHtml` (it shares
+   private helpers with the slip, and the phone can use it later for sharing a bill). Their tests and snapshots move
+   with them. `receipt-style.ts` (used by credit notes) stays in `apps/server`. All builders return `Uint8Array`.
+   `apps/server/src/print/` imports from `@masalapos/print`; the queue, sinks and HTML preview do not move, and the
+   queue turns the bytes into a `Buffer` where it stores them.
 3. `ReceiptSnapshot` gains an optional `token?: number`. `receiptSlip` prints it in double size under the header
    when it is set. Windows POS bills do not set it, so their output is unchanged, and a test proves that.
 4. A guard test in `apps/cafe-android`, in the style of `apps/ui/src/domain-imports.test.ts`, fails if the app or

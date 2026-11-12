@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateBill } from "@masalapos/domain";
 import { sampleBill } from "./bill-preview.js";
-import { receiptHtml } from "./receipt.js";
+import { receiptHtml } from "@masalapos/print";
 
 const settings = { restaurantName: "Cafe", address: "", gstin: "", fssai: "", receiptHeader: "", receiptFooter: "", stateCode: "29", city: "Bengaluru", pincode: "560001", phone: "9876543210" };
 

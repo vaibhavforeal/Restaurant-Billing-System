@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { saveReportLines, uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
-import { billUpiPayment } from "./print/upi.js";
+import { billUpiPayment } from "@masalapos/print";
 import { setModuleEnabled } from "./modules.js";
 import { activityEvents } from "./staff-activity.js";
 

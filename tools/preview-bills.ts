@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
-import { receiptHtml, receiptSlip } from "../apps/server/src/print/receipt.js";
+import { receiptHtml, receiptSlip } from "@masalapos/print";
 import { billStyleGallery } from "./bill-style-gallery.js";
 
 const output = resolve(".e2e-scratch/bill-design");

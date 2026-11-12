@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { bestEffortPrint } from "./best-effort.js";
-import { readProfile } from "./profile.js";
-import { contextLine } from "./templates.js";
+import { readProfile, contextLine } from "@masalapos/print";
 import { kdsActive } from "../kds.js";
 
 /** What a station slip's template needs to know about where it prints. */
@@ -19,7 +18,7 @@ export interface StationTarget {
  * its print job.
  */
 export function printStationSlip(app: FastifyInstance, stationId: string, kind: "kot" | "cancel" | "edit" | "table", label: string,
-  render: (target: StationTarget) => Buffer): { queued: boolean; error: string | null } {
+  render: (target: StationTarget) => Uint8Array): { queued: boolean; error: string | null } {
   if (!kitchenSlipsPrint(app)) return { queued: false, error: null };
   const station = app.db.prepare("SELECT name, printer_id, is_active FROM kot_stations WHERE id = ?").get(stationId) as
     { name: string; printer_id: string | null; is_active: number } | undefined;

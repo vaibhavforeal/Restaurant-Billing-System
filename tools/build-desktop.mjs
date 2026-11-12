@@ -19,7 +19,7 @@ rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: t
 const pkg = JSON.parse(readFileSync(join(root, "package.json")));
 // electron-updater runs in the Electron main process; it is copied like the server's runtime dependencies.
 const deps = { ...JSON.parse(readFileSync(join(root, "apps/server/package.json"))).dependencies, "better-sqlite3": "*", "electron-updater": "*" };
-delete deps["@masalapos/core"]; delete deps["@masalapos/domain"];
+delete deps["@masalapos/core"]; delete deps["@masalapos/domain"]; delete deps["@masalapos/print"];
 const installed = new Map();
 function locate(name, from) {
   const lookup = createRequire(join(from, "package.json"));
@@ -52,7 +52,7 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
     // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
     __MASALAPOS_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __MASALAPOS_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
   // Workspace packages are bundled from source, including subpath imports (@masalapos/domain/vendor-codes): the installer ships no copy of them.
-  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core)(\/[a-z0-9-]+)?$/ }, (args) => ({ path: resolveWorkspace(root, args.path) })); } }],
+  plugins: [{ name: "workspace-source", setup(b) { b.onResolve({ filter: /^@masalapos\/(domain|core|print)(\/[a-z0-9-]+)?$/ }, (args) => ({ path: resolveWorkspace(root, args.path) })); } }],
 });
 // The installer has no workspace packages: an import of one left in the bundle means a server that cannot start.
 const leftover = readFileSync(join(stage, "server/main.mjs"), "utf8").match(/from\s*["']@masalapos\/[^"']*["']/g);

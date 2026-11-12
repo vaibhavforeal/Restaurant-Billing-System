@@ -4,7 +4,7 @@ import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { kotWithContextJson, loadOrderJson, type KotRow, type OrderItemRow, type OrderRow } from "./mappers.js";
 import { jobContext, printStationSlip } from "./print/station-slip.js";
-import { contextLine, editSlip } from "./print/templates.js";
+import { contextLine, editSlip } from "@masalapos/print";
 import { publishStock } from "./stock.js";
 import { orderTableLabel } from "./table-label.js";
 import { userCan } from "./auth.js";

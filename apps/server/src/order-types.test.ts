@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
-import { receiptHtml, receiptSlip } from "./print/receipt.js";
+import { receiptHtml, receiptSlip } from "@masalapos/print";
 
 describe("order types", () => {
   let app: FastifyInstance; let token: string; let productId: string;
@@ -59,7 +59,7 @@ describe("order types", () => {
     expect(job.label).toContain("Home delivery");
     const issued = await bill(order.id);
     expect(issued.receipt.orderTypeName).toBe("Home delivery");
-    expect(receiptSlip(issued, 80).toString("latin1")).toContain("HOME DELIVERY");
+    expect(Buffer.from(receiptSlip(issued, 80)).toString("latin1")).toContain("HOME DELIVERY");
     expect(receiptHtml(issued)).toContain("Home delivery");
 
     const plain = await parcel();

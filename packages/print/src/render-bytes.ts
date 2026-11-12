@@ -5,7 +5,7 @@
  * - Everything else becomes <XX> uppercase hex
  * - After escape bytes (0x1B/0x1D), renders command byte + parameter bytes as hex based on command vocabulary
  */
-export function renderBytes(buf: Buffer): string {
+export function renderBytes(buf: Uint8Array): string {
   // Command -> parameter byte count map
   const escParamCounts: Record<number, number> = {
     0x40: 0, // ESC @ (init)

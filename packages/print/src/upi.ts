@@ -1,23 +1,30 @@
-import { UpiId, type Bill } from "@masalapos/domain";
+import type { Bill } from "@masalapos/domain/billing";
+import { UpiId } from "@masalapos/domain/settings-schemas";
 import QRCode from "qrcode";
+
+/** A UPI payment link for an exact amount, or null when there is no UPI id or nothing to pay. */
+export function upiPaymentUri(p: { upiId: string; payeeName: string; amountPaise: number; ref: string; note: string }): string | null {
+  const parsed = UpiId.safeParse(p.upiId);
+  if (!parsed.success || !parsed.data || !Number.isSafeInteger(p.amountPaise) || p.amountPaise <= 0) return null;
+  const params = {
+    pa: parsed.data,
+    pn: Array.from(p.payeeName.replace(/[\x00-\x1f\x7f]/g, " ").trim()).slice(0, 50).join(""),
+    am: (p.amountPaise / 100).toFixed(2),
+    cu: "INR",
+    tr: p.ref.replace(/[^a-zA-Z0-9]/g, "").slice(0, 35),
+    tn: p.note,
+  };
+  // Percent-encode values (including spaces) for UPI app compatibility.
+  return `upi://pay?${Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;
+}
 
 /** A payment request, never evidence that a payment was received. */
 export function billUpiPayment(bill: Bill) {
-  const parsed = UpiId.safeParse(bill.receipt.upiId);
-  if (bill.status !== "unpaid" || !parsed.success || !parsed.data) return null;
+  if (bill.status !== "unpaid") return null;
   const amountPaise = bill.totalPaise - bill.payments.reduce((sum, p) => sum + p.amountPaise, 0);
-  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) return null;
-  const params = {
-    pa: parsed.data,
-    pn: Array.from(bill.receipt.restaurantName.replace(/[\x00-\x1f\x7f]/g, " ").trim()).slice(0, 50).join(""),
-    am: (amountPaise / 100).toFixed(2),
-    cu: "INR",
-    tr: bill.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 35),
-    tn: `Bill ${bill.invoiceNo}`,
-  };
-  // Percent-encode values (including spaces) for UPI app compatibility.
-  const uri = `upi://pay?${Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;
-  return { upiId: parsed.data, amountPaise, uri };
+  const uri = upiPaymentUri({ upiId: bill.receipt.upiId ?? "", payeeName: bill.receipt.restaurantName, amountPaise, ref: bill.id, note: `Bill ${bill.invoiceNo}` });
+  if (!uri) return null;
+  return { upiId: UpiId.parse(bill.receipt.upiId), amountPaise, uri };
 }
 
 /** Locally generated black/white SVG with the required four-module quiet zone. */
@@ -41,7 +48,7 @@ export function upiQrRaster(uri: string, paperWidth: 58 | 80) {
   const height = (modules.size + 8) * scale;
   const left = Math.floor((width - height) / 2) + 4 * scale;
   const widthBytes = width / 8;
-  const data = Buffer.alloc(widthBytes * height);
+  const data = new Uint8Array(widthBytes * height);
   for (let y = 0; y < modules.size; y++) {
     for (let x = 0; x < modules.size; x++) {
       if (!modules.get(y, x)) continue;

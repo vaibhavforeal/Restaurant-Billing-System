@@ -1,7 +1,7 @@
 import { COUNTER_PAYMENT_MODES, GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, type GstMode, type ReceiptStyle, type RoundOff } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { sampleBill } from "./print/bill-preview.js";
-import { receiptHtml } from "./print/receipt.js";
+import { receiptHtml } from "@masalapos/print";
 
 interface SettingsRow {
   gst_mode: GstMode;

@@ -1,4 +1,8 @@
-import { billChargesGst, billShowOf, chargeLabel, billTextLines, resolveReceiptStyle, type Bill, type PrintProfileInput } from "@masalapos/domain";
+import { chargeLabel, type Bill } from "@masalapos/domain/billing";
+import { billChargesGst } from "@masalapos/domain/gst";
+import { billShowOf, billTextLines } from "@masalapos/domain/bill-print";
+import { resolveReceiptStyle } from "@masalapos/domain/receipt-styles";
+import type { PrintProfileInput } from "@masalapos/domain/printer-schemas";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { contextLine } from "./templates.js";
@@ -93,7 +97,7 @@ export function slipWriter(pos: EscPos, width: number): { line: (value: string) 
   return { line, pair };
 }
 
-export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
   const pos = new EscPos().init();
   const width = CHARS_PER_LINE[paperWidth];
   const { line, pair } = slipWriter(pos, width);

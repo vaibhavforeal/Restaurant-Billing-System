@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { assertKdsActive } from "./kds.js";
 import { loadOrderJson, kotJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
-import { kotSlip } from "./print/templates.js";
+import { kotSlip } from "@masalapos/print";
 import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { orderTableLabel } from "./table-label.js";
 import { dayStartHour } from "./business-day.js";

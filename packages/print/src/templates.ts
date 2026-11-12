@@ -1,6 +1,6 @@
 import { EscPos, CHARS_PER_LINE } from "./escpos.js";
 import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
-import type { PrintProfileInput } from "@masalapos/domain";
+import type { PrintProfileInput } from "@masalapos/domain/printer-schemas";
 
 export interface KotSlipCtx {
   kotNo: number;
@@ -50,7 +50,7 @@ export function contextLine(orderType: "dine_in" | "parcel" | "zomato", tableNam
   return `${tableName ?? "Table"} / ${splitLabel}`;
 }
 
-export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
   const pos = new EscPos();
   const width = CHARS_PER_LINE[paperWidth];
 
@@ -89,7 +89,7 @@ export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProf
   return finishSlip(pos, profile);
 }
 
-export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
   const pos = new EscPos();
   const width = CHARS_PER_LINE[paperWidth];
 
@@ -126,7 +126,7 @@ export interface EditSlipCtx {
 }
 
 /** A sent item was changed: the kitchen sees the old and new quantity and note side by side. */
-export function editSlip(ctx: EditSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+export function editSlip(ctx: EditSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
   const pos = new EscPos();
   const width = CHARS_PER_LINE[paperWidth];
 
@@ -163,7 +163,7 @@ export interface TableChangeSlipCtx {
   atMs: number;
 }
 
-export function tableChangeSlip(ctx: TableChangeSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+export function tableChangeSlip(ctx: TableChangeSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
   const pos = new EscPos();
   const width = CHARS_PER_LINE[paperWidth];
 

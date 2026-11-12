@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { calculateBill, RECEIPT_STYLES, type Bill } from "@masalapos/domain";
-import { billUpiPayment } from "./upi.js";
+import { billUpiPayment, upiPaymentUri } from "./upi.js";
 import { receiptHtml, receiptSlip } from "./receipt.js";
 
 // jsQR's CommonJS function export and declaration default differ under NodeNext.
@@ -28,7 +28,7 @@ describe("bill UPI QR", () => {
 
   it.each(RECEIPT_STYLES.flatMap((style) => ([58, 80] as const).map((width) => [style, width] as const)))("independently decodes the %s %imm ESC/POS bitmap to the payment request", (receiptStyle, paperWidth) => {
     // Parse the printer output, not the QR encoder's internal matrix.
-    const bytes = receiptSlip({ ...bill, receipt: { ...bill.receipt, receiptStyle } }, paperWidth);
+    const bytes = Buffer.from(receiptSlip({ ...bill, receipt: { ...bill.receipt, receiptStyle } }, paperWidth));
     const offset = bytes.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0x00]));
     expect(offset).toBeGreaterThan(0);
     const widthBytes = bytes.readUInt16LE(offset + 4), height = bytes.readUInt16LE(offset + 6);
@@ -55,7 +55,7 @@ describe("bill UPI QR", () => {
     for (const value of variants) {
       expect(billUpiPayment(value)).toBeNull();
       expect(receiptHtml(value)).not.toContain('<section class="upi-payment"');
-      expect(receiptSlip(value, 58).includes(Buffer.from([0x1d, 0x76, 0x30, 0]))).toBe(false);
+      expect(Buffer.from(receiptSlip(value, 58)).includes(Buffer.from([0x1d, 0x76, 0x30, 0]))).toBe(false);
     }
   });
 
@@ -71,5 +71,14 @@ describe("bill UPI QR", () => {
     expect(html).toContain('viewBox="0 0 ');
     expect(html).toContain("₹235.00"); expect(html).toContain("cafe.123@bank");
     expect(html).not.toContain("<script>"); expect(html).not.toContain("<img");
+  });
+});
+
+describe("upiPaymentUri", () => {
+  it("builds a UPI payment link for an amount", () => {
+    expect(upiPaymentUri({ upiId: "cafe@upi", payeeName: "Chai Point", amountPaise: 12050, ref: "abc123", note: "Bill MPA/26-27/0001" }))
+      .toBe("upi://pay?pa=cafe%40upi&pn=Chai%20Point&am=120.50&cu=INR&tr=abc123&tn=Bill%20MPA%2F26-27%2F0001");
+    expect(upiPaymentUri({ upiId: "", payeeName: "x", amountPaise: 100, ref: "a", note: "n" })).toBeNull();
+    expect(upiPaymentUri({ upiId: "cafe@upi", payeeName: "x", amountPaise: 0, ref: "a", note: "n" })).toBeNull();
   });
 });

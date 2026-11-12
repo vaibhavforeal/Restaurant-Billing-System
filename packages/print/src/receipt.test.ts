@@ -186,7 +186,7 @@ describe("receipts", () => {
     const html = receiptHtml(changed);
     expect(html).not.toContain('<script>'); expect(html).toContain("&lt;script&gt;");
     const bytes = receiptSlip(changed, 58);
-    expect(bytes.indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
+    expect(Buffer.from(bytes).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
   });
   it("wraps long text at the paper width", () => {
     const changed = { ...bill, receipt: { ...bill.receipt, restaurantName: "A".repeat(100) } };
@@ -455,7 +455,7 @@ describe("receipts", () => {
       const sample = withReceipt({ receiptHeader: "<b>x</b>\x1b@", receiptFooter: "<i>y</i>\x1b@" });
       const html = receiptHtml(sample);
       expect(html).toContain("&lt;b&gt;x&lt;/b&gt;"); expect(html).not.toContain("<b>x</b>"); expect(html).not.toContain("<i>y</i>");
-      for (const width of [58, 80] as const) expect(receiptSlip(sample, width).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
+      for (const width of [58, 80] as const) expect(Buffer.from(receiptSlip(sample, width)).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
     });
     it.each([58, 80] as const)("keeps every %imm line within the paper width with header, footer and item GST", (width) => {
       const long = "H".repeat(48);

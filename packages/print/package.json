@@ -1,0 +1,14 @@
+{
+  "name": "@masalapos/print",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Receipt, slip and UPI QR byte builders shared by the Windows POS server and MasalaPOS Cafe. No I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@masalapos/domain": "*",
+    "qrcode": "^1.5.4"
+  }
+}

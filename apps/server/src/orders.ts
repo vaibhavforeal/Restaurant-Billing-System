@@ -7,7 +7,7 @@ import type { FastifyInstance } from "fastify";
 import { httpError } from "./http-error.js";
 import { reverseStock } from "@masalapos/domain";
 import { publishStock } from "./stock.js";
-import { cancelSlip } from "./print/templates.js";
+import { cancelSlip } from "@masalapos/print";
 import { jobContext, printStationSlip } from "./print/station-slip.js";
 import { loadOrderJson, kotWithContextJson, type OrderRow, type OrderItemRow, type KotRow } from "./mappers.js";
 import { linkedTableIds, orderTableLabel } from "./table-label.js";
