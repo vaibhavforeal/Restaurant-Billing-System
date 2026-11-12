@@ -9,7 +9,7 @@ export const PHONE_ENTRIES: string[] = [
   "@masalapos/domain/id", "@masalapos/domain/billing", "@masalapos/domain/gst", "@masalapos/domain/round-off",
   "@masalapos/domain/invoice-numbers", "@masalapos/domain/receipt-styles", "@masalapos/domain/bill-print",
   "@masalapos/domain/printer-schemas", "@masalapos/domain/settings-schemas",
-  "packages/print/src/index.ts",
+  "packages/print/src/index.ts", "packages/cafe-data/src/index.ts",
 ];
 const DENIED = /^(node:.*|better-sqlite3|fs|path|crypto|os|net|http|https|child_process|worker_threads)$/;
 const FROM = /^[ \t]*(?:import|export)\s+(type\s+)?[^;'"]*?from\s+["']([^"']+)["']/gm;

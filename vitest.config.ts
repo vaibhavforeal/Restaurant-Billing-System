@@ -16,6 +16,7 @@ export default defineConfig({
       { find: "@masalapos/domain", replacement: pkg("domain") },
       { find: "@masalapos/core", replacement: pkg("core") },
       { find: "@masalapos/print", replacement: pkg("print") },
+      { find: "@masalapos/cafe-data", replacement: pkg("cafe-data") },
       { find: "@masalapos/license-issuer", replacement: pkg("license-issuer") },
     ],
   },

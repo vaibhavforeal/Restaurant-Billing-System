@@ -172,7 +172,7 @@ Tables. Money is integer paise. Times are epoch milliseconds. "Synced" tables ca
 | `categories` | yes | name, sort |
 | `items` | yes | category_id, name, price_paise, gst_rate (null means the cafe default), available, sort |
 | `item_variants` | yes | item_id, name, price_paise, sort |
-| `bills` | yes | device_id, bill_no, invoice_no, token, business_date, created_at, discount_paise, discount_note, totals_json, receipt_json |
+| `bills` | yes | device_id, bill_no, invoice_no, token, business_date, created_at, discount_paise, discount_note, total_paise (so reports can sum in SQL), totals_json, receipt_json |
 | `bill_lines` | yes | bill_id, item_id, variant_id, name, price_paise, qty, gst_rate, offer_discount_paise, sort |
 | `payments` | yes | bill_id, mode (`cash`, `upi`, `card`), amount_paise, ref_note, created_at |
 | `bill_voids` | yes | bill_id, credit_note_no, reason, created_at |
