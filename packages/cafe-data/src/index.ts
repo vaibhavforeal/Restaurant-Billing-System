@@ -11,3 +11,7 @@ export {
   MenuError, listMenu, saveCategory, deleteCategory, saveItem, setItemAvailable, deleteItem, moveInList, seedSampleMenu,
   type Category, type Variant, type Item, type ItemInput,
 } from "./menu.js";
+export {
+  BillError, previewBill, createBill, getBill, listBills, lastBillAt,
+  type BillErrorCode, type CartLine, type PaymentInput, type CreateBillInput, type CafeBill,
+} from "./bills.js";
