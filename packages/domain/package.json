@@ -35,7 +35,11 @@
     "./restaurant-profile": "./src/restaurant-profile.ts",
     "./gstin": "./src/gstin.ts",
     "./gst-returns": "./src/gst-returns/index.ts",
-    "./ai-wire": "./src/ai-wire.ts"
+    "./ai-wire": "./src/ai-wire.ts",
+    "./id": "./src/id.ts",
+    "./bill-print": "./src/bill-print.ts",
+    "./printer-schemas": "./src/printer-schemas.ts",
+    "./settings-schemas": "./src/settings-schemas.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
