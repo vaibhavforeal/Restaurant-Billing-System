@@ -25,7 +25,7 @@ describe("expoDriver", () => {
   // This proves the adapter, not expo.
   it("passes cafe-data's own flow through the adapter", () => {
     const db = expoDriver(fakeSyncSqlite());
-    expect(migrate(db)).toBe(1);
+    expect(migrate(db)).toBe(2);
     saveCafe(db, base, 1);
     expect(getCafe(db)!.name).toBe("Chai Point");
     expect(db.get("SELECT 1 AS one WHERE 1 = 0")).toBeUndefined(); // null from expo becomes undefined

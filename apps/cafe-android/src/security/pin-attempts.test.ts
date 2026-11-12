@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createPinAttempts } from "./pin-attempts";
+import { createPinAttempts, memoryPinStore } from "./pin-attempts";
 
 describe("owner PIN attempts", () => {
   it("allows five wrong tries, then locks for 30 seconds", () => {
@@ -22,5 +22,18 @@ describe("owner PIN attempts", () => {
     a.succeed();
     expect(a.fail(0)).toEqual({ locked: false, triesLeft: 4 });
     expect(a.waitMs(0)).toBe(0);
+  });
+  it("survives an app restart when the count is kept in a store", () => {
+    const store = memoryPinStore();
+    const before = createPinAttempts(store);
+    for (let i = 0; i < 5; i++) before.fail(0);
+    const afterRestart = createPinAttempts(store);
+    expect(afterRestart.waitMs(10_000)).toBe(20_000);
+    expect(afterRestart.fail(40_000)).toEqual({ locked: false, triesLeft: 4 });
+  });
+  it("stays locked when the phone's clock is moved back", () => {
+    const a = createPinAttempts();
+    for (let i = 0; i < 5; i++) a.fail(1_000_000);
+    expect(a.waitMs(500_000)).toBe(30_000);
   });
 });

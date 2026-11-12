@@ -20,23 +20,23 @@ export function PinPrompt({ visible, title, onSuccess, onClose }: { visible: boo
 
   useEffect(() => {
     if (!visible) return;
-    const tick = () => setWaitMs(ownerPinAttempts.waitMs(Date.now()));
+    const tick = () => setWaitMs(ownerPinAttempts(db).waitMs(Date.now()));
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [visible]);
+  }, [visible, db]);
 
   function close() { setPin(""); setTriesLeft(null); onClose(); }
 
   async function check(entered: string) {
-    if (ownerPinAttempts.waitMs(Date.now()) > 0) return;
+    if (ownerPinAttempts(db).waitMs(Date.now()) > 0) return;
     setChecking(true);
     const device = getDevice(db);
     const ok = device !== null && (await hashPin(entered, device.id)) === ownerPinHash(db);
     setChecking(false);
     setPin("");
-    if (ok) { ownerPinAttempts.succeed(); setTriesLeft(null); onSuccess(); return; }
-    const result = ownerPinAttempts.fail(Date.now());
+    if (ok) { ownerPinAttempts(db).succeed(); setTriesLeft(null); onSuccess(); return; }
+    const result = ownerPinAttempts(db).fail(Date.now());
     if (result.locked) { close(); return; }
     setTriesLeft(result.triesLeft);
   }
