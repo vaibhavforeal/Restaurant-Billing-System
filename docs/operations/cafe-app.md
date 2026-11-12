@@ -27,6 +27,19 @@ adb reverse tcp:8081 tcp:8081
 npm run dev:cafe
 ```
 
+When the phone cannot reach this computer over USB or adb (this build machine is a VM, and a phone sharing a hotspot
+cannot turn on Wireless debugging), build a standalone test APK instead. It has the JavaScript inside, needs no
+computer while it runs, and works in flight mode. It is signed with the debug key: for testing only.
+
+```
+node tools/build-cafe-android.mjs --standalone
+"C:\Program Files\Tailscale\tailscale.exe" file cp apps/cafe-android/android/app/build/outputs/apk/release/app-release.apk <phone-name>:
+```
+
+The second line sends it over Tailscale (Taildrop; the phone must be signed in to the same tailnet). Accept the file
+in the Tailscale app on the phone, open it and allow installing from Tailscale. Installing over a different build
+type (debug over standalone or the reverse) needs the old app uninstalled first, which deletes its data.
+
 Rebuild the APK after changing native code (the printer module, a new native package, `app.json` plugins). JS-only
 changes reload from Metro. Release signing, Play listing and subscriptions are Phase 5.
 
