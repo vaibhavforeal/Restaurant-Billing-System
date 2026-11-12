@@ -1,12 +1,15 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
 import { SvgXml } from "react-native-svg";
 import { uuidv7 } from "@masalapos/domain/id";
-import { createBill, getCafe, printerFor, printTarget, type CafeBill, type PaymentInput } from "@masalapos/cafe-data";
-import { receiptSlip, upiPaymentUri, upiQrSvg } from "@masalapos/print";
+import { getCafe, printerFor, type CafeBill, type PaymentInput } from "@masalapos/cafe-data";
+import { upiPaymentUri, upiQrSvg } from "@masalapos/print";
 import { TokenScreen } from "../bill/TokenScreen";
 import { billErrorMessage, cart, cartTotals, useCart } from "../cart/cart";
+import { linesForBill } from "../cart/cart-store";
+import { deviceOffset } from "../dates";
+import { completePayment } from "../payment/complete";
 import { useDb, useData } from "../db/provider";
 import { formatRupees, parseRupees } from "../money";
 import { cashSuggestions, changeDue, remaining } from "../payment/tender";
@@ -33,11 +36,12 @@ export default function PaymentScreen() {
   const [splitAmount, setSplitAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [done, setDone] = useState<{ bill: CafeBill; change: number; jobId: string | null; hasPrinter: boolean } | null>(null);
+  const [done, setDone] = useState<{ bill: CafeBill; change: number; jobId: string | null; hasPrinter: boolean; printError: string | null } | null>(null);
+  const paying = useRef(false);
   const finish = useCallback(() => router.back(), []);
 
   if (done) return <><Stack.Screen options={{ presentation: "fullScreenModal", animation: "fade" }} />
-    <TokenScreen bill={done.bill} changePaise={done.change} printJobId={done.jobId} hasPrinter={done.hasPrinter} onDone={finish} /></>;
+    <TokenScreen bill={done.bill} changePaise={done.change} printJobId={done.jobId} hasPrinter={done.hasPrinter} printError={done.printError} onDone={finish} /></>;
 
   if (!priced || !priced.ok) {
     return (
@@ -63,26 +67,25 @@ export default function PaymentScreen() {
   const showsUpi = mode === "upi" || (mode === "split" && (splitFirst === "upi" || splitSecond === "upi"));
 
   function paid() {
-    if (saving || !coversTotal) return;
+    // A ref, not state: two taps in the same frame both see the state before React re-renders.
+    if (paying.current || !coversTotal || !priced?.ok) return;
+    paying.current = true;
     setSaving(true);
     setProblem(null);
+    const now = Date.now();
     try {
-      const now = Date.now();
-      const { value, note } = cart.discount();
-      const bill = createBill(db, { id: billId, lines: cart.toLines(), discountPaise: priced!.ok ? priced!.discountPaise : 0,
-        discountNote: value ? note || null : null, payments, now, tzOffsetMinutes: -new Date(now).getTimezoneOffset() });
-      const printer = printerFor(db, "receipt");
-      let jobId: string | null = null;
-      if (printer) {
-        jobId = uuidv7();
-        printQueue.enqueue({ id: jobId, label: `Bill ${bill.invoiceNo}`, target: printTarget(printer), bytes: receiptSlip(bill, printer.paperWidth, printer.profile), copies: printer.profile.copies });
-      }
+      const result = completePayment(db, {
+        id: billId, lines: linesForBill(snap.lines), discountPaise: priced.discountPaise, discountNote: snap.discount ? snap.note || null : null,
+        payments, now, tzOffsetMinutes: deviceOffset(now),
+      }, { printer: printerFor(db, "receipt"), enqueue: printQueue.enqueue, newId: uuidv7 });
       cart.clear();
-      setDone({ bill, change: mode === "cash" ? change ?? 0 : 0, jobId, hasPrinter: printer !== null });
+      setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,
+        printError: result.printError });
     } catch (e) {
       const index = typeof e === "object" && e && "lineIndex" in e && typeof e.lineIndex === "number" ? e.lineIndex : undefined;
-      setProblem(billErrorMessage(e, index !== undefined ? cart.entries()[index]?.name : undefined));
+      setProblem(billErrorMessage(e, index !== undefined ? snap.lines[index]?.name : undefined));
       setSaving(false);
+      paying.current = false;
     }
   }
 
