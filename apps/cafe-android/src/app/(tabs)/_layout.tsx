@@ -3,6 +3,7 @@ import { Tabs } from "expo-router/js-tabs";
 import { getCafe, hasActiveOwner } from "@masalapos/cafe-data";
 import { useData } from "../../db/provider";
 import { useCurrentStaff } from "../../staff/session";
+import { gates } from "../../staff/useApproval";
 import { color, type } from "../../theme/tokens";
 import { Icon, useLayout, type IconName } from "../../ui";
 
@@ -25,6 +26,7 @@ export default function TabsLayout() {
   if (!signedIn) return <Redirect href="/lock" />;
   return (
     <Tabs
+      screenListeners={({ route }) => ({ focus: () => gates.tabFocused(route.name) })}
       screenOptions={{
         headerShown: false,
         tabBarPosition: tablet ? "left" : "bottom",

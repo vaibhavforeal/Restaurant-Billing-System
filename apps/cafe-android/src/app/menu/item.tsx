@@ -8,13 +8,14 @@ import { hasUnprintable } from "../../menu/printable";
 import { parseRupees } from "../../money";
 import { color, space, touch, type } from "../../theme/tokens";
 import { Banner, Button, Choice, Field, Icon, Screen } from "../../ui";
+import { useScreenGate } from "../../staff/useApproval";
 
 const RATES = [{ value: "default", label: "Cafe default" }, ...[0, 5, 12, 18, 28].map((r) => ({ value: String(r), label: `${r}%` }))];
 const rupees = (paise: number) => (paise / 100).toFixed(2).replace(/\.00$/, "");
 const UNPRINTABLE = "Receipts print English letters and numbers only. Other characters will print as ?";
 
 /** Add or edit one item: name, category, price or variants, and GST rate. */
-export default function ItemScreen() {
+function ItemScreen() {
   const db = useDb();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const menu = useData(listMenu);
@@ -91,3 +92,9 @@ const styles = StyleSheet.create({
   price: { width: 112 },
   iconKey: { width: touch.min, height: touch.min, alignItems: "center", justifyContent: "center" },
 });
+
+/** Adding or editing an item needs a manager or the owner, like the Menu tab; an approval given there carries over. */
+export default function ItemRoute() {
+  const { allowed, sheet } = useScreenGate("catalog.manage", "Edit the menu");
+  return <>{allowed ? <ItemScreen /> : <Screen title="Item"><></></Screen>}{sheet}</>;
+}

@@ -2,7 +2,12 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { cafeCan, type CafePermission } from "@masalapos/cafe-data";
 import { ApproveSheet } from "./ApproveSheet";
+import { createGateMemory } from "./gate-memory";
 import { session } from "./session";
+
+/** The app's approvals given on entry to protected screens; see createGateMemory. */
+export const gates = createGateMemory();
+session.subscribe(() => gates.clear());
 
 interface Pending { permission: CafePermission; title: string; resolve: (id: string | null) => void }
 
@@ -26,25 +31,34 @@ export function useApproval(): { approve(permission: CafePermission, opts: { tit
 }
 
 /**
- * Asks once when a screen gains focus (Menu, Reports, the protected parts of More) and keeps it open until the screen
- * is left. A cancelled approval goes back to Bill.
+ * Asks once on entry to a protected screen (Menu, a menu item, Reports, Printers, Staff). The approval lasts while the
+ * same tab stays in front, so coming back from a screen pushed on top does not ask again; switching tabs or staff does.
+ * A cancelled approval goes back to Bill.
  */
 export function useScreenGate(permission: CafePermission, title: string): { allowed: boolean; sheet: ReactNode } {
   const { approve, sheet } = useApproval();
-  const [allowed, setAllowed] = useState(false);
+  const remembered = () => {
+    const staff = session.get().staff;
+    return staff !== null && gates.allowed(permission, staff.id);
+  };
+  const [allowed, setAllowed] = useState(remembered);
   const asking = useRef(false);
   useFocusEffect(useCallback(() => {
     let live = true;
-    if (!asking.current) {
+    const ok = remembered();
+    setAllowed(ok);
+    if (!ok && !asking.current) {
       asking.current = true;
       void approve(permission, { title }).then((id) => {
         asking.current = false;
         if (!live) return;
-        if (id) setAllowed(true);
+        const staff = session.get().staff;
+        if (id && staff) { gates.remember(permission, staff.id); setAllowed(true); }
         else router.navigate("/bill");
       });
     }
-    return () => { live = false; asking.current = false; setAllowed(false); };
+    return () => { live = false; asking.current = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remembered reads the live session and gate memory
   }, [approve, permission, title]));
   return { allowed, sheet };
 }

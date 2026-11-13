@@ -1,6 +1,7 @@
 import { router, type Href } from "expo-router";
 import type { CafePermission } from "@masalapos/cafe-data";
-import { session, useCan, useCurrentStaff } from "../../staff/session";
+import { useCan, useCurrentStaff } from "../../staff/session";
+import { lockNow } from "../../staff/lock-now";
 import { ROLE_NAMES } from "../../staff/StaffPicker";
 import { Button, ListRow, Screen } from "../../ui";
 
@@ -16,16 +17,11 @@ const ROWS: Array<{ title: string; subtitle: string; href: Href; needs?: CafePer
   { title: "Error log", subtitle: "Problems the app met, to share with MasalaPOS", href: "/more/errors" },
 ];
 
-function switchStaff() {
-  session.signOut();
-  router.replace("/lock");
-}
-
 export default function MoreScreen() {
   const staff = useCurrentStaff();
   const canManageStaff = useCan("staff.manage");
   return (
-    <Screen title="More" actions={<Button label="Switch staff" variant="secondary" onPress={switchStaff} />}>
+    <Screen title="More" actions={<Button label="Switch staff" variant="secondary" onPress={lockNow} />}>
       {staff ? <ListRow title={staff.name} subtitle={`Signed in as ${ROLE_NAMES[staff.role]}`} /> : null}
       {ROWS.filter((r) => r.needs !== "staff.manage" || canManageStaff)
         .map((r) => <ListRow key={r.title} title={r.title} subtitle={r.subtitle} onPress={() => router.push(r.href)} />)}

@@ -33,3 +33,12 @@ describe("cafe roles", () => {
     expect(discountAllowed("owner", 10000, 10000, 0)).toBe(true);
   });
 });
+
+describe("discount limit rounding", () => {
+  it("lets a cashier give exactly their limit as the cart rounds it", () => {
+    // 5% of ₹33.33 rounds half up to 167 paise in the cart, which is 5.01% as a float.
+    expect(discountAllowed("cashier", 167, 3333, 500)).toBe(true);
+    expect(discountAllowed("cashier", 168, 3333, 500)).toBe(false);
+    expect(discountAllowed("cashier", 28, 1100, 250)).toBe(true);
+  });
+});

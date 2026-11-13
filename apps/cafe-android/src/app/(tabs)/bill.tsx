@@ -11,7 +11,8 @@ import { VariantSheet } from "../../bill/VariantSheet";
 import { cart, cartTotals, useCart } from "../../cart/cart";
 import { ERRORS_SEEN_KEY } from "../../errors/capture";
 import { useDb, useData } from "../../db/provider";
-import { session, useCurrentStaff } from "../../staff/session";
+import { useCurrentStaff } from "../../staff/session";
+import { lockNow } from "../../staff/lock-now";
 import { color, radius, space, touch, type } from "../../theme/tokens";
 import { Banner, Button, Icon, Money, Tile, useLayout } from "../../ui";
 
@@ -62,7 +63,7 @@ export default function BillScreen() {
         </View>
         <Button label="Custom item" icon="plus" variant="secondary" onPress={() => setCustomOpen(true)} />
         <Button label={staff ? staff.name : "Switch staff"} variant="quiet" accessibilityHint="Switch staff: shows the lock screen"
-          onPress={() => { session.signOut(); router.replace("/lock"); }} />
+          onPress={lockNow} />
       </View>
       {heldCount || heldNotice ? (
         <View style={styles.heldRow}>
