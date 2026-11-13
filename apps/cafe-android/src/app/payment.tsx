@@ -78,8 +78,8 @@ export default function PaymentScreen() {
     try {
       const result = completePayment(db, {
         id: billId, lines: linesForBill(snap.lines), discountPaise: priced.discountPaise, discountNote: snap.discount ? snap.note || null : null,
-        payments, now, tzOffsetMinutes: deviceOffset(now), staffId: session.get().staff?.id ?? "", approvedBy: null, customerId: null,
-        orderKind: "takeaway", deliveryNote: null,
+        payments, now, tzOffsetMinutes: deviceOffset(now), staffId: session.get().staff?.id ?? "", approvedBy: snap.approvedBy,
+        customerId: snap.customer?.id ?? null, orderKind: snap.orderKind, deliveryNote: snap.orderKind === "delivery" ? snap.deliveryNote : null,
       }, { printer: printerFor(db, "receipt"), enqueue: printQueue.enqueue, newId: uuidv7 });
       cart.clear();
       setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,

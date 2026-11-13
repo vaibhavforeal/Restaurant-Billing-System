@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, clockTime, monthGrid } from "./dates";
+import { addDays, clockTime, heldAge, monthGrid } from "./dates";
 
 describe("dates on screen", () => {
   it("moves a business date by whole days across months and years", () => {
@@ -16,5 +16,19 @@ describe("dates on screen", () => {
     expect(grid.slice(0, 7)).toEqual([null, null, null, null, null, null, "2026-11-01"]);
     expect(grid.filter(Boolean)).toHaveLength(30);
     expect(grid.length % 7).toBe(0);
+  });
+});
+
+describe("heldAge", () => {
+  const IST = 330;
+  const at = (iso: string) => Date.parse(`${iso}+05:30`);
+  it("shows minutes, then hours, then yesterday, then the date", () => {
+    const now = at("2026-11-13T18:00:00");
+    expect(heldAge(at("2026-11-13T17:59:40"), now, IST)).toBe("1 min");
+    expect(heldAge(at("2026-11-13T17:48:00"), now, IST)).toBe("12 min");
+    expect(heldAge(at("2026-11-13T15:30:00"), now, IST)).toBe("2 h");
+    expect(heldAge(at("2026-11-13T00:10:00"), now, IST)).toBe("17 h");
+    expect(heldAge(at("2026-11-12T23:50:00"), now, IST)).toBe("yesterday");
+    expect(heldAge(at("2026-11-10T12:00:00"), now, IST)).toBe("10 Nov 2026");
   });
 });

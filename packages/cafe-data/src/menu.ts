@@ -191,3 +191,8 @@ export function seedSampleMenu(db: SqlDriver, now: number): void {
     });
   });
 }
+
+/** An item's name even after it was deleted, so a held cart can say what is gone; null when there never was one. */
+export function getItemName(db: SqlDriver, id: string): string | null {
+  return db.get<{ name: string }>("SELECT name FROM items WHERE id = ?", [id])?.name ?? null;
+}

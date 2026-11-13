@@ -277,6 +277,12 @@ export function voidBill(
   return bill;
 }
 
+/** Every bill made for a customer, newest first, including after the customer was deleted. */
+export function listBillsForCustomer(db: SqlDriver, customerId: string): CafeBill[] {
+  return db.all<BillRow>("SELECT * FROM bills WHERE customer_id = ? AND deleted_at IS NULL ORDER BY created_at DESC, id DESC", [customerId])
+    .map((r) => toBill(db, r));
+}
+
 /** When the newest bill was made, to warn when the phone's clock is behind it. */
 export function lastBillAt(db: SqlDriver): number | null {
   return db.get<{ at: number | null }>("SELECT MAX(created_at) AS at FROM bills")?.at ?? null;

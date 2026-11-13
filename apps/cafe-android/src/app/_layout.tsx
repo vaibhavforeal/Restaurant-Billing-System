@@ -20,20 +20,21 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 /**
- * Every touch restarts the idle time. Coming back to the foreground after the cafe's lock time without a touch signs
- * the person out and shows the lock screen.
+ * Every touch restarts the idle time. After the cafe's lock time without a touch the person is signed out and the
+ * lock screen shows: checked when the app comes back to the foreground, and every 30 seconds while it stays open, so a
+ * till left on the counter locks too.
  */
 function IdleLock({ children }: { children: ReactNode }) {
   const db = useDb();
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      if (session.shouldLock(getCounterSettings(db).lockAfterMinutes)) {
-        session.signOut();
-        router.replace("/lock");
-      }
-    });
-    return () => sub.remove();
+    const check = () => {
+      if (!session.shouldLock(getCounterSettings(db).lockAfterMinutes)) return;
+      session.signOut();
+      router.replace("/lock");
+    };
+    const sub = AppState.addEventListener("change", (state) => { if (state === "active") check(); });
+    const timer = setInterval(() => { if (AppState.currentState === "active") check(); }, 30_000);
+    return () => { sub.remove(); clearInterval(timer); };
   }, [db]);
   return <View style={{ flex: 1 }} onTouchStart={() => session.touch()}>{children}</View>;
 }

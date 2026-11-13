@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { BillError, createBill, getBill, kitchenLines, previewBill, type CreateBillInput, type PaymentInput } from "./bills.js";
+import {
+  BillError, createBill, getBill, kitchenLines, listBillsForCustomer, previewBill, type CreateBillInput, type PaymentInput,
+} from "./bills.js";
 import { getCounterSettings, saveCounterSettings } from "./counter-settings.js";
 import { deleteCustomer, saveCustomer } from "./customers.js";
 import type { SqlDriver } from "./driver.js";
@@ -106,5 +108,21 @@ describe("createBill: staff, approvals, customers, order kind and notes", () => 
       { name: "Cake", qty: 1, note: null, addonOf: null },
     ]);
     expect(JSON.stringify(getBill(db, "b1")!.receipt)).not.toContain("less sugar");
+  });
+});
+
+describe("listBillsForCustomer", () => {
+  beforeEach(() => { ({ db, samosa, cashier } = menuCafe()); });
+
+  it("lists a customer's bills newest first", () => {
+    const asha = saveCustomer(db, { name: "Asha", phone: "9876543210" }, 1);
+    const ravi = saveCustomer(db, { name: "Ravi", phone: "9123456789" }, 1);
+    createBill(db, bill("b1", { customerId: asha.id }));
+    createBill(db, bill("b2", { customerId: ravi.id, now: T0 + 1000 }));
+    createBill(db, bill("b3", { customerId: asha.id, now: T0 + 86_400_000 }));
+    createBill(db, bill("b4", { now: T0 + 2000 }));
+    expect(listBillsForCustomer(db, asha.id).map((b) => b.id)).toEqual(["b3", "b1"]);
+    deleteCustomer(db, asha.id, 2);
+    expect(listBillsForCustomer(db, asha.id).map((b) => b.id)).toEqual(["b3", "b1"]);
   });
 });

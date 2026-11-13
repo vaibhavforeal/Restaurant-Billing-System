@@ -6,6 +6,7 @@ import { Button, ListRow, Screen } from "../../ui";
 
 const ROWS: Array<{ title: string; subtitle: string; href: Href; needs?: CafePermission }> = [
   { title: "Staff", subtitle: "People, roles and PINs", href: "/more/staff", needs: "staff.manage" },
+  { title: "Customers", subtitle: "Saved customers and their bills", href: "/more/customers" },
   { title: "Cafe details", subtitle: "Name, address, phone, GSTIN, FSSAI, UPI ID", href: "/more/cafe" },
   { title: "Tax", subtitle: "GST mode, usual rate, rounding", href: "/more/tax" },
   { title: "Receipt", subtitle: "Bill prefix, header, footer, style", href: "/more/receipt" },

@@ -8,11 +8,11 @@ export {
   CafeSettingsInput, getCafe, saveCafe, getDevice, type CafeSettings, type Device,
 } from "./cafe.js";
 export {
-  MenuError, listMenu, saveCategory, deleteCategory, saveItem, setItemAvailable, deleteItem, moveInList, seedSampleMenu,
+  MenuError, listMenu, getItemName, saveCategory, deleteCategory, saveItem, setItemAvailable, deleteItem, moveInList, seedSampleMenu,
   type Category, type Variant, type Item, type ItemInput,
 } from "./menu.js";
 export {
-  BillError, previewBill, createBill, getBill, listBills, lastBillAt, kitchenLines,
+  BillError, previewBill, createBill, getBill, listBills, listBillsForCustomer, lastBillAt, kitchenLines,
   type BillErrorCode, type CartLine, type PaymentInput, type CreateBillInput, type CafeBill, type KitchenLine, type OrderKind,
 } from "./bills.js";
 export { voidBill } from "./bills.js";

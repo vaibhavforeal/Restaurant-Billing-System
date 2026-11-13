@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getCafe, getLocalState, lastBillAt, listErrors, listMenu, type Item } from "@masalapos/cafe-data";
+import { getCafe, getLocalState, lastBillAt, listErrors, listHeld, listMenu, type Item } from "@masalapos/cafe-data";
 import { CartPanel } from "../../bill/CartPanel";
 import { CustomItemSheet } from "../../bill/CustomItemSheet";
+import { HeldList } from "../../bill/HeldList";
+import { HoldSheet } from "../../bill/HoldSheet";
 import { VariantSheet } from "../../bill/VariantSheet";
 import { cart, cartTotals, useCart } from "../../cart/cart";
 import { ERRORS_SEEN_KEY } from "../../errors/capture";
@@ -32,6 +34,10 @@ export default function BillScreen() {
   const [customOpen, setCustomOpen] = useState(menu.items.length === 0);
   const [cartOpen, setCartOpen] = useState(false);
   const staff = useCurrentStaff();
+  const heldCount = useData((d) => listHeld(d).length);
+  const [holdOpen, setHoldOpen] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [heldNotice, setHeldNotice] = useState<string | null>(null);
 
   const query = search.trim().toLowerCase();
   const items = menu.items.filter((i) => (categoryId === ALL || i.categoryId === categoryId) && (!query || i.name.toLowerCase().includes(query)));
@@ -44,6 +50,7 @@ export default function BillScreen() {
     cart.add({ itemId: item.id, variantId: null, name: item.name, pricePaise: item.pricePaise, gstRate: item.gstRate });
   }
   const charge = () => { setCartOpen(false); router.push("/payment"); };
+  const hold = () => { setCartOpen(false); setHoldOpen(true); };
 
   const menuArea = (
     <View style={styles.menu}>
@@ -57,6 +64,12 @@ export default function BillScreen() {
         <Button label={staff ? staff.name : "Switch staff"} variant="quiet" accessibilityHint="Switch staff: shows the lock screen"
           onPress={() => { session.signOut(); router.replace("/lock"); }} />
       </View>
+      {heldCount || heldNotice ? (
+        <View style={styles.heldRow}>
+          {heldCount ? <Button label={`Held (${heldCount})`} variant="secondary" onPress={() => setHeldOpen(true)} /> : null}
+          {heldNotice ? <View style={styles.grow}><Banner tone="warning" text={heldNotice} action={{ label: "OK", onPress: () => setHeldNotice(null) }} /></View> : null}
+        </View>
+      ) : null}
       {newError ? (
         <Banner tone="warning" text="MasalaPOS Cafe recorded an error. Please share it from More, Error log."
           action={{ label: "View", onPress: () => router.push("/more/errors") }} />
@@ -94,7 +107,7 @@ export default function BillScreen() {
       {tablet ? (
         <View style={styles.split}>
           {menuArea}
-          <View style={styles.side}><CartPanel cafe={cafe} priced={priced} onCharge={charge} /></View>
+          <View style={styles.side}><CartPanel cafe={cafe} priced={priced} onCharge={charge} onHold={hold} /></View>
         </View>
       ) : (
         <>
@@ -114,7 +127,7 @@ export default function BillScreen() {
                 {lineCount ? <Button label="Clear" variant="quiet" onPress={() => cart.clear()} /> : null}
                 <Pressable accessibilityRole="button" accessibilityLabel="Close cart" onPress={() => setCartOpen(false)} style={styles.close}><Icon name="close" /></Pressable>
               </View>
-              <CartPanel cafe={cafe} priced={priced} onCharge={charge} compact />
+              <CartPanel cafe={cafe} priced={priced} onCharge={charge} onHold={hold} compact />
             </View>
           </Modal>
         </>
@@ -125,6 +138,8 @@ export default function BillScreen() {
           cart.add({ itemId: item.id, variantId, name: `${item.name} (${v.name})`, pricePaise: v.pricePaise, gstRate: item.gstRate });
           setVariantItem(null);
         }} />
+      <HoldSheet visible={holdOpen} onClose={() => setHoldOpen(false)} />
+      <HeldList visible={heldOpen} onClose={() => setHeldOpen(false)} onOpened={setHeldNotice} />
       <CustomItemSheet visible={customOpen} cafe={cafe} onClose={() => setCustomOpen(false)}
         {...(menu.items.length === 0 ? { intro: "No menu yet. Enter a price to make your first bill." } : {})} />
     </SafeAreaView>
@@ -137,6 +152,8 @@ const styles = StyleSheet.create({
   side: { width: 380, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: color.outlineVariant },
   menu: { flex: 1, paddingTop: space.sm, gap: space.xs },
   searchRow: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.md },
+  heldRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md },
+  grow: { flex: 1 },
   search: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.xs, minHeight: touch.min, paddingHorizontal: space.sm,
     borderRadius: radius.pill, backgroundColor: color.surface, borderWidth: 1, borderColor: color.outlineVariant },
   searchInput: { flex: 1, color: color.onSurface, paddingVertical: 0 },

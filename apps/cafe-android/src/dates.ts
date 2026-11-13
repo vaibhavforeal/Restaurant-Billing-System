@@ -35,3 +35,15 @@ export function longDate(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   return `${d} ${MONTHS[(m ?? 1) - 1]} ${y}`;
 }
+
+/** How long ago a cart was held: "12 min" or "2 h" today, "yesterday", else the date. Calendar days in the device's zone. */
+export function heldAge(createdAt: number, now: number, tzOffsetMinutes: number): string {
+  const day = (ms: number) => new Date(ms + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+  const today = day(now);
+  const held = day(createdAt);
+  if (held === today) {
+    const minutes = Math.max(1, Math.floor((now - createdAt) / 60_000));
+    return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h`;
+  }
+  return held === addDays(today, -1) ? "yesterday" : longDate(held);
+}
