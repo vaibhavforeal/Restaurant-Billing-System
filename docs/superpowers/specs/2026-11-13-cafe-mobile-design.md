@@ -314,6 +314,8 @@ report, and its totals equal `calculateBill`'s for the same items, because they 
 
 ## Phase 2 in outline: counter extras
 
+Detailed in `2026-11-13-cafe-mobile-phase-2-design.md`, which replaces this outline where they differ.
+
 - **Add-ons.** Tables for add-on groups and options matching `AddonGroup` and `AddonOption`; a picker after an item
   is tapped; `resolveAddonPicks` validates; add-on lines print under their dish as the Windows POS prints them.
 - **Offers.** A table matching `Offer`; an editor; `applyOffers` runs on the cart and its discounts go to
