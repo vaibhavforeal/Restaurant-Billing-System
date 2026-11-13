@@ -7,6 +7,7 @@ import { menuErrorMessage } from "../../menu/errors";
 import { formatRupees } from "../../money";
 import { color, radius, space, touch, type } from "../../theme/tokens";
 import { Banner, Button, Field, Icon, Screen, Sheet } from "../../ui";
+import { useScreenGate } from "../../staff/useApproval";
 
 const priceText = (item: Item) =>
   item.variants.length ? `from ${formatRupees(Math.min(...item.variants.map((v) => v.pricePaise)))}` : formatRupees(item.pricePaise);
@@ -21,7 +22,7 @@ function MoveButtons({ onUp, onDown, label }: { onUp: () => void; onDown: () => 
 }
 
 /** Categories and items: add, edit, reorder, and the quick "not available today" switch. */
-export default function MenuScreen() {
+function MenuScreen() {
   const db = useDb();
   const menu = useData(listMenu);
   const [ordering, setOrdering] = useState(false);
@@ -126,3 +127,9 @@ const styles = StyleSheet.create({
   moveKey: { width: touch.min, height: touch.min, alignItems: "center", justifyContent: "center" },
   emptyCategory: { color: color.onSurfaceMuted, padding: space.md },
 });
+
+/** The menu needs a manager or the owner, asked once on entry. */
+export default function MenuTab() {
+  const { allowed, sheet } = useScreenGate("catalog.manage", "Open the menu");
+  return <>{allowed ? <MenuScreen /> : <Screen title="Menu"><></></Screen>}{sheet}</>;
+}

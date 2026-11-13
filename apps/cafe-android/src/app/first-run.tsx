@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Redirect, router } from "expo-router";
-import { CafeSettingsInput, getCafe, getDevice, saveCafe, seedSampleMenu, setOwnerPinHash, type CafeSettings } from "@masalapos/cafe-data";
+import {
+  CafeSettingsInput, addStaff, getCafe, hasActiveOwner, hashPin, isValidPin, saveCafe, seedSampleMenu, type CafeSettings,
+} from "@masalapos/cafe-data";
 import { useDb } from "../db/provider";
-import { hashPin, isValidPin } from "../security/pin";
+import { session } from "../staff/session";
 import { color, radius, space, type } from "../theme/tokens";
 import { Banner, Button, Field, Screen } from "../ui";
 import { Choice } from "../ui/Choice";
 import { PrinterSetup } from "../print/PrinterSetup";
 
 type Step = "cafe" | "menu" | "printer";
-type FieldErrors = Partial<Record<keyof CafeSettings | "pin" | "pinAgain", string>>;
+type FieldErrors = Partial<Record<keyof CafeSettings | "ownerName" | "pin" | "pinAgain", string>>;
 
 const GST_MODE_OPTIONS = [
   { value: "included", label: "Prices include GST" },
@@ -19,11 +21,12 @@ const GST_MODE_OPTIONS = [
 ] as const;
 const RATE_OPTIONS = [0, 5, 12, 18, 28].map((r) => ({ value: r, label: `${r}%` }));
 
-/** Three steps: the cafe and owner PIN, an empty or sample menu, then a printer (which can be skipped). */
+/** Three steps: the cafe and its owner (name and PIN), an empty or sample menu, then a printer (which can be skipped). */
 export default function FirstRun() {
   const db = useDb();
   const [step, setStep] = useState<Step>("cafe");
   const [form, setForm] = useState({ name: "", address: "", phone: "", gstin: "", gstMode: "included" as CafeSettings["gstMode"], defaultGstRate: 5 });
+  const [ownerName, setOwnerName] = useState("Owner");
   const [pin, setPin] = useState("");
   const [pinAgain, setPinAgain] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -40,21 +43,24 @@ export default function FirstRun() {
     const parsed = CafeSettingsInput.safeParse(settings());
     const next: FieldErrors = {};
     if (!parsed.success) for (const issue of parsed.error.issues) next[issue.path[0] as keyof CafeSettings] ??= issue.message;
+    if (!ownerName.trim() || ownerName.trim().length > 30) next.ownerName = "Enter a name of up to 30 characters";
     if (!isValidPin(pin)) next.pin = "Use 4 to 6 digits";
     else if (pin !== pinAgain) next.pinAgain = "The two PINs are different";
     setErrors(next);
     if (Object.keys(next).length === 0) setStep("menu");
   }
 
-  /** Saves the cafe, PIN and menu choice once; the printer step needs the cafe saved to print its name. */
+  /** Saves the cafe, the owner and the menu choice once, and signs the owner in; the printer step needs the cafe saved to print its name. */
   async function save(): Promise<boolean> {
     if (saved) return true;
     setSaving(true);
     setFailure(null);
     try {
       const now = Date.now();
+      const pinHash = await hashPin(pin);
       saveCafe(db, settings(), now);
-      setOwnerPinHash(db, await hashPin(pin, getDevice(db)!.id), now);
+      // A crash between these two leaves a cafe with no owner; the start route then opens Set owner PIN.
+      if (!hasActiveOwner(db)) session.signIn(addStaff(db, { name: ownerName, role: "owner", pinHash }, now));
       if (sampleMenu) seedSampleMenu(db, now);
       setSaved(true);
       return true;
@@ -85,7 +91,8 @@ export default function FirstRun() {
           <Field label="GSTIN (optional)" value={form.gstin} onChangeText={set("gstin")} error={errors.gstin ?? null} autoCapitalize="characters" maxLength={15} />
           <Choice label="Tax" options={GST_MODE_OPTIONS} value={form.gstMode} onChange={set("gstMode")} />
           {form.gstMode !== "none" && <Choice label="Usual GST rate" options={RATE_OPTIONS} value={form.defaultGstRate} onChange={set("defaultGstRate")} />}
-          <Field label="Owner PIN" help="4 to 6 digits. You need it to void a bill." value={pin} onChangeText={setPin} error={errors.pin ?? null}
+          <Field label="Your name" value={ownerName} onChangeText={setOwnerName} error={errors.ownerName ?? null} autoCapitalize="words" maxLength={30} />
+          <Field label="Owner PIN" help="4 to 6 digits. You sign in with it, add staff and approve voids and discounts." value={pin} onChangeText={setPin} error={errors.pin ?? null}
             keyboardType="number-pad" secureTextEntry maxLength={6} />
           <Field label="Owner PIN again" value={pinAgain} onChangeText={setPinAgain} error={errors.pinAgain ?? null} keyboardType="number-pad" secureTextEntry maxLength={6} />
           <Button label="Next" size="lg" onPress={checkCafe} />

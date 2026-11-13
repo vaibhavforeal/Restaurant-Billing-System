@@ -13,10 +13,10 @@ export function memoryPinStore(): PinAttemptStore {
   return { load: () => state, save: (s) => { state = s; } };
 }
 
-const KEYS = { wrong: "pin.wrong", locks: "pin.locks", lockedAt: "pin.lockedAt", lockedUntil: "pin.lockedUntil" } as const;
-
-/** Keeps the count in the phone's database, so restarting the app does not clear a lock. */
-export function databasePinStore(db: SqlDriver): PinAttemptStore {
+/** Keeps one person's count in the phone's database (`pin:<staffId>:*`), so restarting the app does not clear a lock. */
+export function databasePinStore(db: SqlDriver, staffId: string): PinAttemptStore {
+  const KEYS = { wrong: `pin:${staffId}:wrong`, locks: `pin:${staffId}:locks`, lockedAt: `pin:${staffId}:lockedAt`,
+    lockedUntil: `pin:${staffId}:lockedUntil` };
   return {
     load: () => ({
       wrong: getLocalState(db, KEYS.wrong) ?? 0, locks: getLocalState(db, KEYS.locks) ?? 0,
@@ -27,7 +27,7 @@ export function databasePinStore(db: SqlDriver): PinAttemptStore {
 }
 
 /**
- * Counts wrong owner PINs. After five wrong tries, entry is locked for 30 seconds, then 60, then 120... until the right
+ * Counts wrong PINs. After five wrong tries, entry is locked for 30 seconds, then 60, then 120... until the right
  * PIN is entered. A clock moved back to before the lock began keeps the whole lock in force.
  */
 export function createPinAttempts(store: PinAttemptStore = memoryPinStore()) {
@@ -53,5 +53,5 @@ export function createPinAttempts(store: PinAttemptStore = memoryPinStore()) {
   };
 }
 
-/** The owner PIN's counter, kept in this phone's database. */
-export const ownerPinAttempts = (db: SqlDriver) => createPinAttempts(databasePinStore(db));
+/** One staff member's wrong-PIN counter, kept in this phone's database. Each person locks on their own. */
+export const staffPinAttempts = (db: SqlDriver, staffId: string) => createPinAttempts(databasePinStore(db, staffId));

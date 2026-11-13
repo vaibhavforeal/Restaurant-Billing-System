@@ -10,6 +10,7 @@ import { printQueue } from "../../print/printer";
 import { usePrintJob } from "../../print/usePrintJobs";
 import { color, radius, space, type } from "../../theme/tokens";
 import { Banner, Button, DateControl, Money, Screen, useLayout } from "../../ui";
+import { useScreenGate } from "../../staff/useApproval";
 
 function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -42,7 +43,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** The day report: sales, payment modes, tax by rate, items sold and voids; printable as a slip. */
-export default function ReportsScreen() {
+function ReportsScreen() {
   const [date, setDate] = useState(today);
   const s = useData((db) => daySummary(db, date));
   const cafeName = useData((db) => getCafe(db)?.name ?? "");
@@ -118,3 +119,9 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 32 },
   grow: { flex: 1 },
 });
+
+/** Reports need a manager or the owner, asked once on entry. */
+export default function ReportsTab() {
+  const { allowed, sheet } = useScreenGate("reports.read", "Open reports");
+  return <>{allowed ? <ReportsScreen /> : <Screen title="Reports"><></></Screen>}{sheet}</>;
+}

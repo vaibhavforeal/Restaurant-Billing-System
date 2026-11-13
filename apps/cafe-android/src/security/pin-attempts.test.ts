@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { createPinAttempts, memoryPinStore } from "./pin-attempts";
+import { memoryCafeDb } from "../../../../packages/cafe-data/src/testing/sqlite-driver";
+import { createPinAttempts, memoryPinStore, staffPinAttempts } from "./pin-attempts";
 
-describe("owner PIN attempts", () => {
+describe("staff PIN attempts", () => {
+  it("keeps each person's wrong tries apart", () => {
+    const db = memoryCafeDb();
+    const a = staffPinAttempts(db, "a");
+    for (let i = 0; i < 5; i++) a.fail(1000);
+    expect(a.waitMs(1000)).toBe(30_000);
+    expect(staffPinAttempts(db, "b").waitMs(1000)).toBe(0);
+    expect(staffPinAttempts(db, "a").waitMs(1000)).toBe(30_000); // a new instance reads the same rows, as after a restart
+    expect(staffPinAttempts(db, "b").fail(1000)).toEqual({ locked: false, triesLeft: 4 });
+  });
+});
+
+describe("PIN attempts", () => {
   it("allows five wrong tries, then locks for 30 seconds", () => {
     const a = createPinAttempts();
     for (let i = 0; i < 4; i++) expect(a.fail(1000)).toEqual({ locked: false, triesLeft: 4 - i });

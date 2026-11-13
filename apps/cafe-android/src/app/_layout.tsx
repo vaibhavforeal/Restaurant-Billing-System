@@ -1,8 +1,12 @@
 import "../polyfills";
-import { DefaultTheme, Stack, ThemeProvider, type ErrorBoundaryProps } from "expo-router";
+import { useEffect, type ReactNode } from "react";
+import { AppState, View } from "react-native";
+import { DefaultTheme, Stack, ThemeProvider, router, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { DbProvider } from "../db/provider";
+import { getCounterSettings } from "@masalapos/cafe-data";
+import { DbProvider, useDb } from "../db/provider";
 import { ErrorScreen } from "../errors/ErrorScreen";
+import { session } from "../staff/session";
 import { color } from "../theme/tokens";
 
 const theme = {
@@ -15,14 +19,35 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return <ErrorScreen error={error} retry={() => void retry()} />;
 }
 
+/**
+ * Every touch restarts the idle time. Coming back to the foreground after the cafe's lock time without a touch signs
+ * the person out and shows the lock screen.
+ */
+function IdleLock({ children }: { children: ReactNode }) {
+  const db = useDb();
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      if (session.shouldLock(getCounterSettings(db).lockAfterMinutes)) {
+        session.signOut();
+        router.replace("/lock");
+      }
+    });
+    return () => sub.remove();
+  }, [db]);
+  return <View style={{ flex: 1 }} onTouchStart={() => session.touch()}>{children}</View>;
+}
+
 export default function RootLayout() {
   return (
     <ThemeProvider value={theme}>
       <StatusBar style="dark" />
       <DbProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.background } }}>
-          <Stack.Screen name="payment" options={{ presentation: "modal" }} />
-        </Stack>
+        <IdleLock>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.background } }}>
+            <Stack.Screen name="payment" options={{ presentation: "modal" }} />
+          </Stack>
+        </IdleLock>
       </DbProvider>
     </ThemeProvider>
   );

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { Redirect } from "expo-router";
 import { SvgXml } from "react-native-svg";
 import { uuidv7 } from "@masalapos/domain/id";
 import { calculateBill, type Bill } from "@masalapos/domain/billing";
 import { dateTime, receiptSlip, upiQrSvg } from "@masalapos/print";
+import { hashPin, PIN_HASH_ITERATIONS } from "@masalapos/cafe-data";
 import { color, space, type } from "../theme/tokens";
 import { Screen } from "../ui";
 
@@ -37,6 +38,11 @@ export default function SelfCheck() {
       date: run(() => dateTime(Date.now())),
     };
   });
+  const [pinMs, setPinMs] = useState("measuring…");
+  useEffect(() => {
+    const start = Date.now();
+    hashPin("1234").then(() => setPinMs(`${Date.now() - start} ms at ${PIN_HASH_ITERATIONS} rounds`), (e: unknown) => setPinMs(`FAILED: ${String(e)}`));
+  }, []);
   if (!__DEV__) return <Redirect href="/more" />;
   return (
     <Screen title="Self-check" edges={["top", "bottom"]}>
@@ -44,6 +50,7 @@ export default function SelfCheck() {
       <Row label="calculateBill total (expect 3600)" value={checks.total} />
       <Row label="receiptSlip bytes (expect above 0)" value={checks.bytes} />
       <Row label="dateTime(now)" value={checks.date} />
+      <Row label="PIN check (aim for 300 ms or less)" value={pinMs} />
       <Text style={[type.label, { color: color.onSurfaceMuted }]}>UPI QR (scan it; do not pay)</Text>
       {checks.qr.startsWith("<svg") ? <View style={{ padding: space.md, backgroundColor: color.surface, alignSelf: "flex-start" }}><SvgXml xml={checks.qr} width={220} height={220} /></View>
         : <Text style={[type.body, { color: color.error }]}>{checks.qr}</Text>}

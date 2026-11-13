@@ -1,5 +1,5 @@
 import { RECEIPT_STYLES } from "@masalapos/domain/receipt-styles";
-import { useOwnerConfirm } from "../../security/useOwnerConfirm";
+import { useApproval } from "../../staff/useApproval";
 import { useCafeDraft } from "../../settings/useCafeDraft";
 import { Banner, Button, Choice, Field, Screen } from "../../ui";
 
@@ -8,7 +8,7 @@ const STYLE_LABELS: Record<(typeof RECEIPT_STYLES)[number], string> = { classic:
 /** Bill prefix, header, footer and receipt style. Changes apply to new bills only. */
 export default function ReceiptSettings() {
   const { draft, set, errors, save, saved } = useCafeDraft();
-  const { confirm, prompt } = useOwnerConfirm("Save receipt settings");
+  const { approve, sheet } = useApproval();
   return (
     <Screen title="Receipt" edges={["top", "bottom"]}>
       <Field label="Bill prefix" value={draft.invoicePrefix} onChangeText={(t) => set("invoicePrefix")(t.toUpperCase())} error={errors.invoicePrefix ?? null}
@@ -20,8 +20,9 @@ export default function ReceiptSettings() {
         placeholder="Thank you for visiting. Please come again." />
       <Choice label="Receipt style" options={RECEIPT_STYLES.map((s) => ({ value: s, label: STYLE_LABELS[s] }))} value={draft.receiptStyle} onChange={set("receiptStyle")} />
       {saved ? <Banner tone="success" text="Saved. New bills use these settings; old bills keep theirs." /> : null}
-      <Button label="Save" size="lg" onPress={() => confirm(save)} accessibilityHint="Asks for the owner PIN" />
-      {prompt}
+      <Button label="Save" size="lg" onPress={() => void approve("settings.manage", { title: "Save receipt settings", always: true }).then((id) => { if (id) save(); })}
+        accessibilityHint="Asks for the owner PIN" />
+      {sheet}
     </Screen>
   );
 }

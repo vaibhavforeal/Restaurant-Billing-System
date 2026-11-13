@@ -9,6 +9,7 @@ import { VariantSheet } from "../../bill/VariantSheet";
 import { cart, cartTotals, useCart } from "../../cart/cart";
 import { ERRORS_SEEN_KEY } from "../../errors/capture";
 import { useDb, useData } from "../../db/provider";
+import { session, useCurrentStaff } from "../../staff/session";
 import { color, radius, space, touch, type } from "../../theme/tokens";
 import { Banner, Button, Icon, Money, Tile, useLayout } from "../../ui";
 
@@ -30,6 +31,7 @@ export default function BillScreen() {
   const [variantItem, setVariantItem] = useState<Item | null>(null);
   const [customOpen, setCustomOpen] = useState(menu.items.length === 0);
   const [cartOpen, setCartOpen] = useState(false);
+  const staff = useCurrentStaff();
 
   const query = search.trim().toLowerCase();
   const items = menu.items.filter((i) => (categoryId === ALL || i.categoryId === categoryId) && (!query || i.name.toLowerCase().includes(query)));
@@ -52,6 +54,8 @@ export default function BillScreen() {
             style={[type.body, styles.searchInput]} accessibilityLabel="Search items" />
         </View>
         <Button label="Custom item" icon="plus" variant="secondary" onPress={() => setCustomOpen(true)} />
+        <Button label={staff ? staff.name : "Switch staff"} variant="quiet" accessibilityHint="Switch staff: shows the lock screen"
+          onPress={() => { session.signOut(); router.replace("/lock"); }} />
       </View>
       {newError ? (
         <Banner tone="warning" text="MasalaPOS Cafe recorded an error. Please share it from More, Error log."

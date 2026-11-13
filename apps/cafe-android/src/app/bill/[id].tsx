@@ -9,11 +9,11 @@ import { useDb, useData } from "../../db/provider";
 import { deviceOffset } from "../../dates";
 import { printQueue } from "../../print/printer";
 import { usePrintJob } from "../../print/usePrintJobs";
-import { PinPrompt } from "../../security/PinPrompt";
+import { useApproval } from "../../staff/useApproval";
 import { space, touch } from "../../theme/tokens";
 import { Banner, Button, Field, Icon, Screen, Sheet } from "../../ui";
 
-/** One saved bill: its receipt, Reprint, and Void with the owner PIN and a reason. */
+/** One saved bill: its receipt, Reprint, and Void by a manager or the owner, with a reason. */
 export default function BillDetail() {
   const db = useDb();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,7 +21,8 @@ export default function BillDetail() {
   const printer = useData((d) => printerFor(d, "receipt"));
   const [jobId, setJobId] = useState<string | null>(null);
   const job = usePrintJob(jobId);
-  const [pinOpen, setPinOpen] = useState(false);
+  const { approve, sheet } = useApproval();
+  const [voidBy, setVoidBy] = useState<string | null>(null);
   const [reasonOpen, setReasonOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
@@ -38,16 +39,26 @@ export default function BillDetail() {
     setJobId(next);
   }
 
+  async function startVoid() {
+    setProblem(null);
+    const by = await approve("bills.refund", { title: "Void this bill" });
+    if (!by) return;
+    setVoidBy(by);
+    setReasonOpen(true);
+  }
+
   function confirmVoid() {
     try {
       const now = Date.now();
-      voidBill(db, { billId: id, reason, now, tzOffsetMinutes: deviceOffset(now) });
+      if (!voidBy) return;
+      voidBill(db, { billId: id, reason, staffId: voidBy, now, tzOffsetMinutes: deviceOffset(now) });
       setReasonOpen(false);
       setReason("");
       setJustVoided(true);
     } catch (e) {
       setProblem(e instanceof BillError && e.code === "invalid_reason" ? "Give a reason of up to 120 characters."
-        : e instanceof BillError && e.code === "already_void" ? "This bill is already void." : "The bill could not be voided. Try again.");
+        : e instanceof BillError && e.code === "already_void" ? "This bill is already void."
+        : e instanceof BillError && e.code === "not_allowed" ? "A manager or the owner must void a bill." : "The bill could not be voided. Try again.");
     }
   }
 
@@ -62,10 +73,10 @@ export default function BillDetail() {
       {justVoided ? <Banner tone="success" text="Bill voided. It no longer counts in the day's sales." {...(printer ? { action: { label: "Print void receipt", onPress: reprint } } : {})} /> : null}
       <View style={styles.actions}>
         <Button label="Reprint" icon="printer" size="lg" disabled={!printer} onPress={reprint} style={styles.grow} />
-        {!bill.voided ? <Button label="Void" variant="danger" size="lg" onPress={() => { setProblem(null); setPinOpen(true); }} /> : null}
+        {!bill.voided ? <Button label="Void" variant="danger" size="lg" onPress={() => void startVoid()} /> : null}
       </View>
 
-      <PinPrompt visible={pinOpen} title="Void this bill" onClose={() => setPinOpen(false)} onSuccess={() => { setPinOpen(false); setReasonOpen(true); }} />
+      {sheet}
       <Sheet visible={reasonOpen} title="Why void this bill?" onClose={() => setReasonOpen(false)}
         footer={<Button label="Void bill" variant="danger" size="lg" disabled={!reason.trim()} onPress={confirmVoid} />}>
         <Field label="Reason" value={reason} onChangeText={setReason} placeholder="Wrong order" maxLength={120} autoFocus error={problem} />

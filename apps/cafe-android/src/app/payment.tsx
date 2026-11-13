@@ -15,6 +15,7 @@ import { useDb, useData } from "../db/provider";
 import { formatRupees, parseRupees } from "../money";
 import { cashSuggestions, changeDue, remaining } from "../payment/tender";
 import { printQueue } from "../print/printer";
+import { session } from "../staff/session";
 import { color, radius, space, touch, type } from "../theme/tokens";
 import { Banner, Button, Choice, Field, Icon, Money, Screen } from "../ui";
 
@@ -77,7 +78,8 @@ export default function PaymentScreen() {
     try {
       const result = completePayment(db, {
         id: billId, lines: linesForBill(snap.lines), discountPaise: priced.discountPaise, discountNote: snap.discount ? snap.note || null : null,
-        payments, now, tzOffsetMinutes: deviceOffset(now),
+        payments, now, tzOffsetMinutes: deviceOffset(now), staffId: session.get().staff?.id ?? "", approvedBy: null, customerId: null,
+        orderKind: "takeaway", deliveryNote: null,
       }, { printer: printerFor(db, "receipt"), enqueue: printQueue.enqueue, newId: uuidv7 });
       cart.clear();
       setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,

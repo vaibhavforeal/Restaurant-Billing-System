@@ -1,7 +1,8 @@
 import { Redirect } from "expo-router";
 import { Tabs } from "expo-router/js-tabs";
-import { getCafe } from "@masalapos/cafe-data";
+import { getCafe, hasActiveOwner } from "@masalapos/cafe-data";
 import { useData } from "../../db/provider";
+import { useCurrentStaff } from "../../staff/session";
 import { color, type } from "../../theme/tokens";
 import { Icon, useLayout, type IconName } from "../../ui";
 
@@ -16,8 +17,12 @@ const TABS: Array<{ name: string; title: string; icon: IconName }> = [
 /** Bottom tabs on a phone, a side rail from 840 dp. */
 export default function TabsLayout() {
   const hasCafe = useData((db) => getCafe(db) !== null);
+  const hasOwner = useData(hasActiveOwner);
+  const signedIn = useCurrentStaff() !== null;
   const { tablet } = useLayout();
   if (!hasCafe) return <Redirect href="/first-run" />;
+  if (!hasOwner) return <Redirect href="/set-owner" />;
+  if (!signedIn) return <Redirect href="/lock" />;
   return (
     <Tabs
       screenOptions={{
