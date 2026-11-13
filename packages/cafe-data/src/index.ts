@@ -12,8 +12,8 @@ export {
   type Category, type Variant, type Item, type ItemInput,
 } from "./menu.js";
 export {
-  BillError, previewBill, createBill, getBill, listBills, lastBillAt,
-  type BillErrorCode, type CartLine, type PaymentInput, type CreateBillInput, type CafeBill,
+  BillError, previewBill, createBill, getBill, listBills, lastBillAt, kitchenLines,
+  type BillErrorCode, type CartLine, type PaymentInput, type CreateBillInput, type CafeBill, type KitchenLine, type OrderKind,
 } from "./bills.js";
 export { voidBill } from "./bills.js";
 export { daySummary, type DaySummary } from "./reports.js";

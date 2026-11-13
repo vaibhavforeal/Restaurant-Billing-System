@@ -4,13 +4,18 @@ import { effectiveGstRate } from "@masalapos/domain/gst";
 import { formatCreditNoteNo, formatInvoiceNo, INVOICE_COUNTER_MAX } from "@masalapos/domain/invoice-numbers";
 import { DEFAULT_BILL_SHOW } from "@masalapos/domain/bill-print";
 import { getCafe, getDevice, type CafeSettings } from "./cafe.js";
+import { getCounterSettings } from "./counter-settings.js";
+import { getCustomer, maskPhone } from "./customers.js";
 import type { SqlDriver } from "./driver.js";
 import { dataChanged } from "./events.js";
 import { nextSequence } from "./sequences.js";
+import { cafeCan, discountAllowed } from "./roles.js";
+import { getStaff } from "./staff.js";
 import { businessDate, cafeFinancialYear } from "./time.js";
 
 export type BillErrorCode = "no_cafe" | "empty" | "invalid_line" | "item_unavailable" | "discount_too_large"
-  | "payments_mismatch" | "counter_exhausted" | "not_found" | "already_void" | "invalid_reason";
+  | "payments_mismatch" | "counter_exhausted" | "not_found" | "already_void" | "invalid_reason"
+  | "unknown_staff" | "unknown_customer" | "approval_needed" | "not_allowed";
 
 export class BillError extends Error {
   constructor(readonly code: BillErrorCode, message: string, readonly lineIndex?: number) {
@@ -19,8 +24,15 @@ export class BillError extends Error {
   }
 }
 
-/** A cart line: a menu item (with its variant, if it has variants) or a custom line typed in at the counter. */
-export interface CartLine { itemId: string | null; variantId: string | null; qty: number; custom?: { name: string; pricePaise: number; gstRate: number | null } }
+/**
+ * A cart line: a menu item (with its variant, if it has variants) or a custom line typed in at the counter. `note` is
+ * for the kitchen ("less sugar"); it never prints on the receipt.
+ */
+export interface CartLine {
+  itemId: string | null; variantId: string | null; qty: number; custom?: { name: string; pricePaise: number; gstRate: number | null };
+  note?: string | null;
+}
+export type OrderKind = "takeaway" | "delivery";
 export interface PaymentInput { mode: "cash" | "upi" | "card"; amountPaise: number; refNote: string | null }
 export interface CreateBillInput {
   /** Made by the caller when payment opens, so a repeated Paid returns the same bill. */
@@ -29,13 +41,31 @@ export interface CreateBillInput {
   payments: PaymentInput[]; now: number;
   /** Minutes east of UTC on the device; decides the bill's day and financial year. */
   tzOffsetMinutes: number;
+  /** Who is making the bill: an active staff member. */
+  staffId: string;
+  /** The manager or owner who approved a discount above the cashier's limit; null when none was needed. */
+  approvedBy: string | null;
+  customerId: string | null;
+  orderKind: OrderKind;
+  /** Kept only on a delivery bill, trimmed and cut to 200 characters. */
+  deliveryNote: string | null;
 }
 export interface CafeBill extends Bill {
   token: number; businessDate: string;
   voided: { creditNoteNo: string; reason: string; at: number } | null;
+  staffId: string | null;
+  /** The name as it is now on the staff list, inactive people included; the receipt keeps the name frozen at billing. */
+  staffName: string | null;
+  approvedBy: string | null; customerId: string | null; orderKind: OrderKind; deliveryNote: string | null;
+}
+/** A bill line as the kitchen slip shows it. `addonOf` is the index of the dish line an add-on belongs to (Phase 2B). */
+export interface KitchenLine { name: string; qty: number; note: string | null; addonOf: number | null }
+
+interface ResolvedLine {
+  itemId: string | null; variantId: string | null; name: string; pricePaise: number; qty: number; gstRate: number; note: string | null;
 }
 
-interface ResolvedLine { itemId: string | null; variantId: string | null; name: string; pricePaise: number; qty: number; gstRate: number }
+const cleanNote = (note: string | null | undefined, max: number): string | null => note?.trim().slice(0, max) || null;
 
 const GST_RATES = [0, 5, 12, 18, 28];
 const MAX_PRICE_PAISE = 10_000_000;
@@ -52,7 +82,7 @@ function resolveLines(db: SqlDriver, cafe: CafeSettings, lines: readonly CartLin
         throw new BillError("invalid_line", "Check this item's price", index);
       }
       return { itemId: null, variantId: null, name: c.name.trim().slice(0, 60) || "Item", pricePaise: c.pricePaise, qty: line.qty,
-        gstRate: effectiveGstRate(c.gstRate, cafe.defaultGstRate) };
+        gstRate: effectiveGstRate(c.gstRate, cafe.defaultGstRate), note: cleanNote(line.note, 60) };
     }
     const item = db.get<{ name: string; price_paise: number; gst_rate: number | null }>(
       "SELECT name, price_paise, gst_rate FROM items WHERE id = ? AND deleted_at IS NULL AND available = 1", [line.itemId]);
@@ -62,12 +92,14 @@ function resolveLines(db: SqlDriver, cafe: CafeSettings, lines: readonly CartLin
       if (db.get("SELECT id FROM item_variants WHERE item_id = ? AND deleted_at IS NULL", [line.itemId])) {
         throw new BillError("invalid_line", "Choose a size or variant", index);
       }
-      return { itemId: line.itemId, variantId: null, name: item.name, pricePaise: item.price_paise, qty: line.qty, gstRate };
+      return { itemId: line.itemId, variantId: null, name: item.name, pricePaise: item.price_paise, qty: line.qty, gstRate,
+        note: cleanNote(line.note, 60) };
     }
     const variant = db.get<{ name: string; price_paise: number }>(
       "SELECT name, price_paise FROM item_variants WHERE id = ? AND item_id = ? AND deleted_at IS NULL", [line.variantId, line.itemId]);
     if (!variant) throw new BillError("item_unavailable", "This item is no longer available", index);
-    return { itemId: line.itemId, variantId: line.variantId, name: `${item.name} (${variant.name})`, pricePaise: variant.price_paise, qty: line.qty, gstRate };
+    return { itemId: line.itemId, variantId: line.variantId, name: `${item.name} (${variant.name})`, pricePaise: variant.price_paise, qty: line.qty,
+      gstRate, note: cleanNote(line.note, 60) };
   });
 }
 
@@ -105,6 +137,24 @@ export function createBill(db: SqlDriver, input: CreateBillInput): CafeBill {
     // Every check comes before any number is taken, so a refused bill never uses one.
     const lines = resolveLines(db, cafe, input.lines);
     const totals = totalsFor(cafe, lines, input.discountPaise);
+    const staff = getStaff(db, input.staffId);
+    if (!staff?.active) throw new BillError("unknown_staff", "Sign in again: this staff member is not on the active list");
+    const counterSettings = getCounterSettings(db);
+    const subtotal = lines.reduce((sum, l) => sum + l.pricePaise * l.qty, 0);
+    let approvedBy: string | null = null;
+    if (input.approvedBy !== null) {
+      const approver = getStaff(db, input.approvedBy);
+      if (!approver?.active || !cafeCan(approver.role, "bills.discount")) {
+        throw new BillError("approval_needed", "A manager or the owner must approve this discount");
+      }
+      approvedBy = approver.id;
+    }
+    if (!approvedBy && !discountAllowed(staff.role, input.discountPaise, subtotal, counterSettings.cashierDiscountBp)) {
+      throw new BillError("approval_needed", "A manager or the owner must approve this discount");
+    }
+    const customer = input.customerId === null ? null : getCustomer(db, input.customerId);
+    if (input.customerId !== null && !customer) throw new BillError("unknown_customer", "This customer was deleted");
+    const deliveryNote = input.orderKind === "delivery" ? cleanNote(input.deliveryNote, 200) : null;
     const paid = input.payments.reduce((sum, p) => sum + p.amountPaise, 0);
     if (input.payments.some((p) => !Number.isInteger(p.amountPaise) || p.amountPaise <= 0) || paid !== totals.totalPaise) {
       throw new BillError("payments_mismatch", "The payments do not add up to the total");
@@ -122,17 +172,24 @@ export function createBill(db: SqlDriver, input: CreateBillInput): CafeBill {
       restaurantName: cafe.name, address: cafe.address, phone: cafe.phone, gstin: cafe.gstin, fssai: cafe.fssai,
       receiptHeader: cafe.receiptHeader, receiptFooter: cafe.receiptFooter, receiptStyle: cafe.receiptStyle,
       ...(cafe.upiId ? { upiId: cafe.upiId } : {}),
-      gstMode: cafe.gstMode, orderType: "parcel", orderTypeKind: "takeaway", tableName: null, splitLabel: null,
-      token, billShow: DEFAULT_BILL_SHOW,
+      gstMode: cafe.gstMode, orderType: "parcel", orderTypeKind: input.orderKind,
+      orderTypeName: input.orderKind === "delivery" ? "Delivery" : "Takeaway",
+      ...(deliveryNote ? { deliveryNote } : {}),
+      ...(customer ? { customer: { name: customer.name, phone: maskPhone(customer.phone) } } : {}),
+      tableName: null, splitLabel: null, servedBy: staff.name,
+      token, billShow: { ...DEFAULT_BILL_SHOW, servedBy: counterSettings.showServedBy },
       items: lines.map((l) => ({ name: l.name, pricePaise: l.pricePaise, qty: l.qty, gstRate: l.gstRate })),
     };
     const now = input.now;
     db.run(`INSERT INTO bills (id, device_id, bill_no, invoice_no, token, business_date, created_at, discount_paise, discount_note,
-      total_paise, totals_json, receipt_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      total_paise, totals_json, receipt_json, updated_at, staff_id, approved_by, customer_id, order_kind, delivery_note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [input.id, device.id, billNo, invoiceNo, token, day, now, input.discountPaise, input.discountNote?.trim() || null,
-        totals.totalPaise, JSON.stringify(totals), JSON.stringify(receipt), now]);
-    lines.forEach((l, i) => db.run(`INSERT INTO bill_lines (id, bill_id, item_id, variant_id, name, price_paise, qty, gst_rate, sort, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [uuidv7(), input.id, l.itemId, l.variantId, l.name, l.pricePaise, l.qty, l.gstRate, i + 1, now]));
+        totals.totalPaise, JSON.stringify(totals), JSON.stringify(receipt), now, staff.id, approvedBy, customer?.id ?? null,
+        input.orderKind, deliveryNote]);
+    lines.forEach((l, i) => db.run(`INSERT INTO bill_lines (id, bill_id, item_id, variant_id, name, price_paise, qty, gst_rate, note, sort,
+      updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv7(), input.id, l.itemId, l.variantId, l.name, l.pricePaise, l.qty, l.gstRate, l.note, i + 1, now]));
     for (const p of input.payments) {
       db.run("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [uuidv7(), input.id, p.mode, p.amountPaise, p.refNote, now, now]);
@@ -146,6 +203,7 @@ export function createBill(db: SqlDriver, input: CreateBillInput): CafeBill {
 interface BillRow {
   id: string; bill_no: number; invoice_no: string; token: number; business_date: string; created_at: number;
   discount_note: string | null; totals_json: string; receipt_json: string;
+  staff_id: string | null; approved_by: string | null; customer_id: string | null; order_kind: OrderKind; delivery_note: string | null;
 }
 
 function toBill(db: SqlDriver, row: BillRow): CafeBill {
@@ -161,7 +219,16 @@ function toBill(db: SqlDriver, row: BillRow): CafeBill {
     refundState: "none", creditNotes: [], refundedQty: {},
     token: row.token, businessDate: row.business_date,
     voided: voided ? { creditNoteNo: voided.credit_note_no, reason: voided.reason, at: voided.created_at } : null,
+    staffId: row.staff_id, staffName: row.staff_id ? getStaff(db, row.staff_id)?.name ?? null : null,
+    approvedBy: row.approved_by, customerId: row.customer_id, orderKind: row.order_kind, deliveryNote: row.delivery_note,
   };
+}
+
+/** A bill's lines for the kitchen slip, in bill order, with their notes. */
+export function kitchenLines(db: SqlDriver, billId: string): KitchenLine[] {
+  return db.all<{ name: string; qty: number; note: string | null }>(
+    "SELECT name, qty, note FROM bill_lines WHERE bill_id = ? AND deleted_at IS NULL ORDER BY sort", [billId])
+    .map((l) => ({ name: l.name, qty: l.qty, note: l.note, addonOf: null }));
 }
 
 export function getBill(db: SqlDriver, id: string): CafeBill | null {
@@ -189,17 +256,21 @@ export function listBills(db: SqlDriver, day: string, search?: string): CafeBill
  * Cancels a paid bill with a credit-note number and a reason. The bill row is not changed: the void is its own row,
  * and the bill stays in its own day's report under voids.
  */
-export function voidBill(db: SqlDriver, input: { billId: string; reason: string; now: number; tzOffsetMinutes: number }): CafeBill {
+export function voidBill(
+  db: SqlDriver, input: { billId: string; reason: string; staffId: string; now: number; tzOffsetMinutes: number },
+): CafeBill {
   const reason = input.reason.trim();
   const bill = db.transaction(() => {
+    const staff = getStaff(db, input.staffId);
+    if (!staff?.active || !cafeCan(staff.role, "bills.refund")) throw new BillError("not_allowed", "A manager or the owner must void a bill");
     const bill = getBill(db, input.billId);
     if (!bill) throw new BillError("not_found", "This bill could not be found");
     if (bill.voided) throw new BillError("already_void", "This bill is already void");
     if (reason.length < 1 || reason.length > 120) throw new BillError("invalid_reason", "Give a reason of up to 120 characters");
     const fy = cafeFinancialYear(input.now, input.tzOffsetMinutes);
     const creditNoteNo = formatCreditNoteNo(fy.short, nextSequence(db, `cn:${fy.key}`));
-    db.run("INSERT INTO bill_voids (id, bill_id, credit_note_no, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [uuidv7(), input.billId, creditNoteNo, reason, input.now, input.now]);
+    db.run("INSERT INTO bill_voids (id, bill_id, credit_note_no, reason, created_at, updated_at, staff_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [uuidv7(), input.billId, creditNoteNo, reason, input.now, input.now, staff.id]);
     return getBill(db, input.billId)!;
   });
   dataChanged();

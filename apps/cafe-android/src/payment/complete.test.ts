@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { getBill, savePrinter, type CreateBillInput } from "@masalapos/cafe-data";
-import { menuCafe, T0 } from "../../../../packages/cafe-data/src/testing/fixtures";
+import { menuCafe, T0, walkIn } from "../../../../packages/cafe-data/src/testing/fixtures";
 import type { PrintJob } from "../print/print-queue";
 import { completePayment } from "./complete";
 
 function setup(withPrinter = true) {
-  const { db, samosa } = menuCafe();
+  const { db, samosa, owner } = menuCafe();
   const printer = withPrinter ? savePrinter(db, { name: "BT", transport: "bluetooth", address: "AA:BB:CC:DD:EE:FF", paperWidth: 58, role: "receipt" }) : null;
   const input: CreateBillInput = { id: "b1", lines: [{ itemId: samosa.id, variantId: null, qty: 2 }], discountPaise: 0, discountNote: null,
-    payments: [{ mode: "cash", amountPaise: 3600, refNote: null }], now: T0, tzOffsetMinutes: 330 };
+    payments: [{ mode: "cash", amountPaise: 3600, refNote: null }], now: T0, tzOffsetMinutes: 330, ...walkIn(owner.id) };
   return { db, printer, input };
 }
 

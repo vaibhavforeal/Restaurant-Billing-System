@@ -15,6 +15,9 @@ export interface DaySummary {
   /** By amount, largest first, then name. Custom lines with the same name add together. */
   items: Array<{ name: string; qty: number; amountPaise: number }>;
   voids: Array<{ invoiceNo: string; token: number; totalPaise: number; reason: string }>;
+  /** Live bills by who made them, largest total first, then name. */
+  byStaff: Array<{ staffId: string | null; name: string; billCount: number; totalPaise: number }>;
+  byOrderKind: { takeaway: { billCount: number; totalPaise: number }; delivery: { billCount: number; totalPaise: number } };
 }
 
 /** One day's figures. A voided bill counts under the day it was billed, in `voids` only. */
@@ -24,7 +27,13 @@ export function daySummary(db: SqlDriver, businessDate: string): DaySummary {
   const taxes = new Map<number, TaxLine>();
   const byMode = { cash: 0, upi: 0, card: 0 };
   const items = new Map<string, { name: string; qty: number; amountPaise: number }>();
+  const byStaff = new Map<string | null, { staffId: string | null; name: string; billCount: number; totalPaise: number }>();
+  const byOrderKind = { takeaway: { billCount: 0, totalPaise: 0 }, delivery: { billCount: 0, totalPaise: 0 } };
   for (const bill of live) {
+    const who = byStaff.get(bill.staffId) ?? { staffId: bill.staffId, name: bill.staffName ?? bill.receipt.servedBy ?? "Unknown", billCount: 0, totalPaise: 0 };
+    byStaff.set(bill.staffId, { ...who, billCount: who.billCount + 1, totalPaise: who.totalPaise + bill.totalPaise });
+    byOrderKind[bill.orderKind].billCount += 1;
+    byOrderKind[bill.orderKind].totalPaise += bill.totalPaise;
     for (const t of bill.taxes) {
       const sum = taxes.get(t.gstRate) ?? { gstRate: t.gstRate, taxablePaise: 0, cgstPaise: 0, sgstPaise: 0 };
       taxes.set(t.gstRate, { gstRate: t.gstRate, taxablePaise: sum.taxablePaise + t.taxablePaise, cgstPaise: sum.cgstPaise + t.cgstPaise,
@@ -45,5 +54,7 @@ export function daySummary(db: SqlDriver, businessDate: string): DaySummary {
     byMode,
     items: [...items.values()].sort((a, b) => b.amountPaise - a.amountPaise || a.name.localeCompare(b.name)),
     voids: bills.filter((b) => b.voided).map((b) => ({ invoiceNo: b.invoiceNo, token: b.token, totalPaise: b.totalPaise, reason: b.voided!.reason })),
+    byStaff: [...byStaff.values()].sort((a, b) => b.totalPaise - a.totalPaise || a.name.localeCompare(b.name)),
+    byOrderKind,
   };
 }

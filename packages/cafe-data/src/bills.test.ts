@@ -4,12 +4,13 @@ import { BillError, createBill, getBill, lastBillAt, listBills, previewBill, typ
 import { saveCafe } from "./cafe.js";
 import type { SqlDriver } from "./driver.js";
 import { deleteItem, saveCategory, saveItem, setItemAvailable, type Item } from "./menu.js";
+import { addStaff } from "./staff.js";
 import { base } from "./testing/fixtures.js";
 import { memoryCafeDb } from "./testing/sqlite-driver.js";
 
 const T0 = Date.UTC(2026, 10, 13, 6, 0); // 13 Nov 2026, 11:30 IST
 const DAY = 24 * 60 * 60 * 1000;
-let db: SqlDriver, chai: Item, samosa: Item;
+let db: SqlDriver, chai: Item, samosa: Item, ownerId: string;
 
 function setup() {
   db = memoryCafeDb();
@@ -18,11 +19,13 @@ function setup() {
   chai = saveItem(db, { categoryId: category.id, name: "Masala Chai", pricePaise: 2000, gstRate: null,
     variants: [{ name: "Small", pricePaise: 1500 }, { name: "Large", pricePaise: 2500 }] }, 1);
   samosa = saveItem(db, { categoryId: category.id, name: "Samosa", pricePaise: 1800, gstRate: 5, variants: [] }, 1);
+  ownerId = addStaff(db, { name: "Asha", role: "owner", pinHash: "x" }, 1).id;
 }
 const variant = (name: string) => chai.variants.find((v) => v.name === name)!.id;
 const cash = (amountPaise: number): PaymentInput[] => [{ mode: "cash", amountPaise, refNote: null }];
 const input = (id: string, lines: CartLine[], payments: PaymentInput[], extra: Partial<CreateBillInput> = {}): CreateBillInput =>
-  ({ id, lines, discountPaise: 0, discountNote: null, payments, now: T0, tzOffsetMinutes: 330, ...extra });
+  ({ id, lines, discountPaise: 0, discountNote: null, payments, now: T0, tzOffsetMinutes: 330, staffId: ownerId, approvedBy: null,
+    customerId: null, orderKind: "takeaway", deliveryNote: null, ...extra });
 const samosas = (qty: number): CartLine[] => [{ itemId: samosa.id, variantId: null, qty }];
 const count = (table: string) => db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`)!.n;
 function billError(fn: () => unknown): { code: string; lineIndex?: number | undefined } {
@@ -35,7 +38,8 @@ describe("createBill", () => {
 
   it("makes a paid bill with a number, a token and a frozen receipt", () => {
     const bill = createBill(db, { id: "b1", lines: [{ itemId: samosa.id, variantId: null, qty: 2 }], discountPaise: 0, discountNote: null,
-      payments: [{ mode: "cash", amountPaise: 3600, refNote: null }], now: T0, tzOffsetMinutes: 330 });
+      payments: [{ mode: "cash", amountPaise: 3600, refNote: null }], now: T0, tzOffsetMinutes: 330,
+      staffId: ownerId, approvedBy: null, customerId: null, orderKind: "takeaway", deliveryNote: null });
     expect(bill).toMatchObject({ id: "b1", status: "paid", invoiceNo: "CPA/26-27/0001", billNo: 1, token: 1, businessDate: "2026-11-13", totalPaise: 3600, voided: null });
     expect(bill.receipt).toMatchObject({ restaurantName: "Chai Point", orderType: "parcel", orderTypeKind: "takeaway", token: 1,
       items: [{ name: "Samosa", pricePaise: 1800, qty: 2, gstRate: 5 }] });

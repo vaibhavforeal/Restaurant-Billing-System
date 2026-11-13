@@ -115,6 +115,8 @@ export interface ReceiptSnapshot {
   offers?: Array<{ name: string; discountPaise: number }>;
   /** The cafe app's order token; absent on Windows POS bills. */
   token?: number;
+  /** Where a cafe app delivery goes ("Flat 4, ring twice"); printed under the order line. Absent on Windows POS bills. */
+  deliveryNote?: string;
 }
 export interface ReceiptBuyer {
   gstin: string; name: string; address: string;
