@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getCafe, getDevice, ownerPinHash, saveCafe, setOwnerPinHash } from "./cafe.js";
+import { getCafe, getDevice, saveCafe } from "./cafe.js";
 import { base } from "./testing/fixtures.js";
 import { memoryCafeDb } from "./testing/sqlite-driver.js";
 
@@ -16,10 +16,5 @@ describe("cafe settings", () => {
   });
   it.each([["ABCD"], ["CN"], ["a-b"]])("rejects the invoice prefix %s", (invoicePrefix) => {
     expect(() => saveCafe(memoryCafeDb(), { ...base, invoicePrefix }, 1)).toThrow();
-  });
-  it("keeps the owner PIN hash apart from the settings", () => {
-    const db = memoryCafeDb(); saveCafe(db, base, 1);
-    setOwnerPinHash(db, "h1", 2); saveCafe(db, { ...base, name: "New" }, 3);
-    expect(ownerPinHash(db)).toBe("h1");
   });
 });

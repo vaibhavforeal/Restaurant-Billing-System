@@ -76,12 +76,3 @@ export function getDevice(db: SqlDriver): Device | null {
   const r = db.get<{ id: string; name: string; series_letter: string }>("SELECT id, name, series_letter FROM device LIMIT 1");
   return r ? { id: r.id, name: r.name, seriesLetter: r.series_letter } : null;
 }
-
-export function ownerPinHash(db: SqlDriver): string | null {
-  return db.get<{ owner_pin_hash: string | null }>("SELECT owner_pin_hash FROM cafe WHERE deleted_at IS NULL LIMIT 1")?.owner_pin_hash ?? null;
-}
-
-export function setOwnerPinHash(db: SqlDriver, hash: string | null, now: number): void {
-  db.transaction(() => db.run("UPDATE cafe SET owner_pin_hash = ?, updated_at = ? WHERE deleted_at IS NULL", [hash, now]));
-  dataChanged();
-}
