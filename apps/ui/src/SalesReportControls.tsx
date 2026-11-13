@@ -1,8 +1,8 @@
 import { InfoTip } from "./InfoTip";
 import { useEffect, useState, type CSSProperties } from "react";
-import { localDay, recentPeriod, salesMetrics, type ReportPeriod, type SalesReport } from "./sales-report";
+import { businessToday, recentPeriod, salesMetrics, type ReportPeriod, type SalesReport } from "./sales-report";
 
-export function SalesPeriodControls({ period, today = localDay(), loading, onChange, onRefresh }: {
+export function SalesPeriodControls({ period, today = businessToday(), loading, onChange, onRefresh }: {
   period: ReportPeriod; today?: string | undefined; loading: boolean; onChange: (period: ReportPeriod) => void; onRefresh: () => void;
 }) {
   const [draft, setDraft] = useState(() => ({ from: period.from, to: period.to }));

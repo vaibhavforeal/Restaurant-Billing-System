@@ -8,10 +8,10 @@ import { useAiStatus } from "../ai-status";
 import { summaryClipboardText } from "../ai-buttons";
 import { aiErrorText, aiRequestInit } from "../ask-chat";
 import { AiAnswerCard, AiThinking } from "./AskMasalaPOS";
-function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+import { businessToday } from "../sales-report";
 const money = (n: number) => `₹${paiseToRupees(n)}`;
 export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
-  const [date, setDate] = useState(() => initialDate ?? today());
+  const [date, setDate] = useState(() => initialDate ?? businessToday());
   const [report, setReport] = useState<DayEndReport | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");

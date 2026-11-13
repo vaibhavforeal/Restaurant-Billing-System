@@ -1,8 +1,6 @@
 import { billChargesGst, type Bill, type BillCreditNote, type PrintProfileInput, type TaxLine } from "@masalapos/domain";
-import { DEFAULT_PROFILE, finishSlip } from "./profile.js";
-import { EscPos, CHARS_PER_LINE } from "./escpos.js";
+import { DEFAULT_PROFILE, finishSlip, EscPos, CHARS_PER_LINE, buyerLines, dateTime, escape, money, slipWriter } from "@masalapos/print";
 import { RECEIPT_CSS } from "./receipt-style.js";
-import { buyerLines, dateTime, escape, money, slipWriter } from "./receipt.js";
 
 /** A credit note as printed: the bill JSON's credit note plus its per-rate taxes (which the bill JSON does not carry). */
 export interface CreditNoteView extends BillCreditNote { taxes: TaxLine[] }
@@ -12,7 +10,7 @@ const cnLabel = (note: CreditNoteView) => note.creditNoteRef;
 const isUnpaidVoid = (note: CreditNoteView) => note.kind === "void" && note.refunds.length === 0;
 const roundingOf = (note: CreditNoteView) => note.totalPaise - note.taxablePaise - note.cgstPaise - note.sgstPaise;
 
-export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Buffer {
+export function creditNoteSlip(note: CreditNoteView, bill: Bill, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
   const pos = new EscPos().init();
   const width = CHARS_PER_LINE[paperWidth];
   const { line, pair } = slipWriter(pos, width);

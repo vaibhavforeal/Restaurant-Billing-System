@@ -1,4 +1,4 @@
-import { CashMovementCreate, DayClose, ShiftClose, ShiftOpen, localDateKey, uuidv7, type Database } from "@masalapos/domain";
+import { CashMovementCreate, DayClose, ShiftClose, ShiftOpen, uuidv7, type Database } from "@masalapos/domain";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { priorRequest } from "./client-ref.js";
@@ -6,6 +6,7 @@ import { httpError } from "./http-error.js";
 import { dayBounds, dayEndReport } from "./reports.js";
 import { reportRange } from "./sales-reports.js";
 import { userCan } from "./auth.js";
+import { businessToday, dayStartHour } from "./business-day.js";
 
 interface ShiftRow {
   id: string; cashier_id: string; opened_at: number; opening_float_paise: number; open_client_ref: string;
@@ -47,7 +48,7 @@ function shiftJson(db: Database, row: ShiftRow) {
 
 /** What stops a business date from closing: open drawers, and orders opened that day that are still open or unpaid. */
 function dayBlockers(db: Database, date: string) {
-  const [, end] = dayBounds(date);
+  const [, end] = dayBounds(db, date);
   const openShifts = (db.prepare(`SELECT u.name FROM shifts s JOIN users u ON u.id = s.cashier_id WHERE s.closed_at IS NULL AND s.opened_at < ? ORDER BY u.name`)
     .all(end) as Array<{ name: string }>).map((r) => r.name);
   const count = (status: string) => (db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = ? AND opened_at < ?").get(status, end) as { n: number }).n;
@@ -121,14 +122,14 @@ export function registerShifts(app: FastifyInstance): void {
   });
 
   app.get("/api/shifts", { preHandler: app.requirePermission("reports.read") }, async (req) => {
-    const { from, to, bounds } = reportRange(req.query);
+    const { from, to, bounds } = reportRange(req.query, dayStartHour(db));
     const rows = db.prepare("SELECT * FROM shifts WHERE opened_at >= ? AND opened_at < ? ORDER BY opened_at DESC").all(...bounds) as ShiftRow[];
     return { from, to, shifts: rows.map((row) => shiftJson(db, row)) };
   });
 
   app.get("/api/day-close", { preHandler: app.requirePermission("reports.read") }, async (req) => {
-    const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(localDateKey(Date.now())) }).parse(req.query);
-    return dayCloseState(date);
+    const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(req.query);
+    return dayCloseState(date ?? businessToday(db));
   });
 
   app.post("/api/day-close", { preHandler: app.requirePermission("reports.close_day") }, async (req, reply) => {
@@ -139,7 +140,7 @@ export function registerShifts(app: FastifyInstance): void {
         if (replay.business_date !== body.date) throw httpError(409, "Day close reference already used for a different date");
         return false;
       }
-      if (body.date > localDateKey(Date.now())) throw httpError(400, "A future date cannot be closed");
+      if (body.date > businessToday(db)) throw httpError(400, "A future date cannot be closed");
       if (db.prepare("SELECT 1 FROM day_closes WHERE business_date = ?").get(body.date)) throw httpError(409, `${body.date} is already closed`);
       const blockers = dayBlockers(db, body.date);
       const problems = [
@@ -148,7 +149,7 @@ export function registerShifts(app: FastifyInstance): void {
         ...(blockers.unpaidBills ? [`settle ${blockers.unpaidBills} unpaid bill${blockers.unpaidBills > 1 ? "s" : ""}`] : []),
       ];
       if (problems.length) throw httpError(409, `Before closing ${body.date}: ${problems.join("; ")}.`, "day_open");
-      const [start, end] = dayBounds(body.date);
+      const [start, end] = dayBounds(db, body.date);
       const shifts = (db.prepare("SELECT * FROM shifts WHERE opened_at >= ? AND opened_at < ? ORDER BY opened_at").all(start, end) as ShiftRow[]).map((row) => shiftJson(db, row));
       db.prepare("INSERT INTO day_closes (business_date, closed_at, closed_by, note, report_json, client_ref) VALUES (?, ?, ?, ?, ?, ?)")
         .run(body.date, Date.now(), req.user.id, body.note || null, JSON.stringify({ dayEnd: dayEndReport(db, body.date), shifts }), body.clientRef);

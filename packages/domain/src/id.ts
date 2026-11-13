@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-
 const RAND_BITS = 74n; // rand_a (12) + rand_b (62)
 const RAND_MAX = (1n << RAND_BITS) - 1n;
 const RAND_B_MASK = (1n << 62n) - 1n;
@@ -7,8 +5,12 @@ const RAND_B_MASK = (1n << 62n) - 1n;
 let lastMs = -1;
 let lastRand = 0n;
 
+/** 80 random bits from Web Crypto (Node and, with the Expo polyfill, the phone), masked to the 74 we use. */
 function randomTail(): bigint {
-  return BigInt(`0x${randomBytes(10).toString("hex")}`) & RAND_MAX;
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(10));
+  let value = 0n;
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
+  return value & RAND_MAX;
 }
 
 /**

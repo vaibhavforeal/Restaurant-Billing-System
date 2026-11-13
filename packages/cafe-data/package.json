@@ -1,0 +1,19 @@
+{
+  "name": "@masalapos/cafe-data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MasalaPOS Cafe's data layer on the phone: schema, migrations, menu and the bill flow, behind a small synchronous SqlDriver.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@masalapos/domain": "*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@masalapos/print": "*",
+    "@types/better-sqlite3": "^9.6.0",
+    "better-sqlite3": "^13.0.3"
+  }
+}

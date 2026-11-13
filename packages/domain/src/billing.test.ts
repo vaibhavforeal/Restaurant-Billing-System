@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBill, BillCreate, BillSettle } from "./billing.js";
+import { calculateBill, BillCreate, BillPreview, BillSettle } from "./billing.js";
 import type { RoundOff } from "./round-off.js";
 
 describe("GST billing", () => {
@@ -232,5 +232,84 @@ describe("calculateBill charges", () => {
       const bill = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 0 }], 0, "none", mode, [pack]);
       expect({ total: bill.totalPaise, rounding: bill.roundingPaise }, mode).toEqual({ total, rounding });
     }
+  });
+});
+
+describe("calculateBill offer discounts", () => {
+  // A 5% line and an 18% line at 10000 each; the offer takes 2000 off the 18% line.
+  const items = [{ pricePaise: 10000, qty: 1, gstRate: 5 }, { pricePaise: 10000, qty: 1, gstRate: 18, offerDiscountPaise: 2000 }];
+  const sumTaxes = (taxes: Array<{ taxablePaise: number; cgstPaise: number; sgstPaise: number }>) =>
+    taxes.reduce((s, t) => s + t.taxablePaise + t.cgstPaise + t.sgstPaise, 0);
+
+  it("counts the offer in the discount and taxes the offered line on its reduced amount", () => {
+    const bill = calculateBill(items);
+    expect(bill).toMatchObject({ subtotalPaise: 20000, discountPaise: 2000, offerDiscountPaise: 2000, totalPaise: 18000, roundingPaise: 0 });
+    // The 5% row is on the full 10000 and the 18% row on 8000, exactly as if those were the line prices.
+    const same = calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 5 }, { pricePaise: 8000, qty: 1, gstRate: 18 }]);
+    expect(bill.taxes).toEqual(same.taxes);
+    expect(bill.taxes.map((t) => t.taxablePaise + t.cgstPaise + t.sgstPaise)).toEqual([10000, 8000]);
+    expect(bill.cgstPaise).toBe(same.cgstPaise);
+  });
+
+  it("spreads the bill discount over the amounts left after offers", () => {
+    const bill = calculateBill(items, 1800, "none", "off");
+    expect(bill).toMatchObject({ discountPaise: 3800, offerDiscountPaise: 2000, totalPaise: 16200 });
+    // 1800 over 10000 and 8000 is 1000 and 800.
+    expect(bill.taxes.map((t) => [t.gstRate, t.taxablePaise])).toEqual([[5, 9000], [18, 7200]]);
+  });
+
+  it("spreads the bill discount the same way when GST is included", () => {
+    const bill = calculateBill(items, 1800);
+    const same = calculateBill([{ pricePaise: 9000, qty: 1, gstRate: 5 }, { pricePaise: 7200, qty: 1, gstRate: 18 }]);
+    expect(bill.taxes).toEqual(same.taxes);
+    expect(sumTaxes(bill.taxes)).toBe(16200);
+    expect(bill.totalPaise).toBe(16200);
+  });
+
+  it("exclusive: adds tax on the reduced amounts", () => {
+    const bill = calculateBill(items, 0, "exclusive", "off");
+    expect(bill.taxes).toEqual([
+      { gstRate: 5, taxablePaise: 10000, cgstPaise: 250, sgstPaise: 250 },
+      { gstRate: 18, taxablePaise: 8000, cgstPaise: 720, sgstPaise: 720 },
+    ]);
+    expect(bill.discountPaise).toBe(2000);
+    expect(bill.totalPaise).toBe(18000 + 500 + 1440);
+  });
+
+  it("works the service charge out on the subtotal less offers and the bill discount", () => {
+    const service = { kind: "service" as const, label: "Service charge", gstRate: 5, bp: 1000 };
+    const bill = calculateBill(items, 1800, "none", "off", [service]);
+    expect(bill.charges![0]!.amountPaise).toBe(1620);
+    expect(bill.totalPaise).toBe(20000 - 3800 + 1620);
+  });
+
+  it("rejects a bill discount that, with the offers, exceeds the subtotal", () => {
+    const offered = [{ pricePaise: 10000, qty: 1, gstRate: 5, offerDiscountPaise: 7500 }, { pricePaise: 10000, qty: 1, gstRate: 18, offerDiscountPaise: 7500 }];
+    expect(() => calculateBill(offered, 6000)).toThrow("Discount exceeds subtotal");
+    // Exactly what is left after the offers is allowed and gives a zero bill.
+    expect(calculateBill(offered, 5000)).toMatchObject({ discountPaise: 20000, offerDiscountPaise: 15000, totalPaise: 0 });
+  });
+
+  it("rejects an offer discount that is more than the line, negative or fractional", () => {
+    const line = { pricePaise: 10000, qty: 2, gstRate: 5 };
+    for (const offerDiscountPaise of [20001, -1, 0.5]) expect(() => calculateBill([{ ...line, offerDiscountPaise }])).toThrow("Invalid bill item");
+    // The whole line amount (price times qty) can be taken off.
+    expect(calculateBill([{ ...line, offerDiscountPaise: 20000 }])).toMatchObject({ discountPaise: 20000, offerDiscountPaise: 20000, totalPaise: 0 });
+  });
+
+  it("leaves offerDiscountPaise out of the totals when no offer applied", () => {
+    expect(calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 5 }], 500)).not.toHaveProperty("offerDiscountPaise");
+    expect(calculateBill([{ pricePaise: 10000, qty: 1, gstRate: 5, offerDiscountPaise: 0 }])).not.toHaveProperty("offerDiscountPaise");
+  });
+});
+
+describe("BillPreview removed offers", () => {
+  it("defaults removedOfferIds to an empty list", () => {
+    expect(BillPreview.parse({}).removedOfferIds).toEqual([]);
+  });
+  it("accepts up to 50 ids and rejects 51", () => {
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `offer-${i}`);
+    expect(BillPreview.safeParse({ removedOfferIds: ids(50) }).success).toBe(true);
+    expect(BillPreview.safeParse({ removedOfferIds: ids(51) }).success).toBe(false);
   });
 });

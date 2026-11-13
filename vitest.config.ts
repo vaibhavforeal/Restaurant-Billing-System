@@ -15,6 +15,8 @@ export default defineConfig({
       { find: /^@board\//, replacement: fileURLToPath(new URL("./apps/ui/src/dynamic-dashboard/boardui/", import.meta.url)) },
       { find: "@masalapos/domain", replacement: pkg("domain") },
       { find: "@masalapos/core", replacement: pkg("core") },
+      { find: "@masalapos/print", replacement: pkg("print") },
+      { find: "@masalapos/cafe-data", replacement: pkg("cafe-data") },
       { find: "@masalapos/license-issuer", replacement: pkg("license-issuer") },
     ],
   },

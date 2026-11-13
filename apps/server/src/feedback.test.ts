@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
-import { receiptHtml } from "./print/receipt.js";
+import { receiptHtml } from "@masalapos/print";
 
 describe("bill feedback", () => {
   let app: FastifyInstance; let token: string; let productId: string;

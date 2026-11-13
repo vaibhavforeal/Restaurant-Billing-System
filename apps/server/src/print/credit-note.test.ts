@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill, type BillCreditNote } from "@masalapos/domain";
 import { auth, freshAppWithFakeSink, setupAdmin } from "../test-helpers.js";
 import { creditNoteHtml, creditNoteSlip, type CreditNoteView } from "./credit-note.js";
-import { renderBytes } from "./render-bytes.js";
+import { renderBytes } from "@masalapos/print";
 
 describe("credit note slip", () => {
   let app: FastifyInstance;
@@ -117,7 +117,7 @@ describe("credit note slip", () => {
     expect(html).toContain("&lt;script&gt;");
     expect(html).toContain(note.creditNoteRef);
     expect(html).toContain(`<dd>Bill ${bill.invoiceNo}</dd>`);
-    expect(creditNoteSlip(note, bill, 58).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
+    expect(Buffer.from(creditNoteSlip(note, bill, 58)).indexOf(Buffer.from([27, 64]), 2)).toBe(-1);
   });
 
   it("serves the credit note receipt with the bill receipt's headers, loading per-rate taxes", async () => {

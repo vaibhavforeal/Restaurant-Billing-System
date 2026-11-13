@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { calculateBill, uuidv7, type Bill } from "@masalapos/domain";
-import { receiptSlip } from "./print/receipt.js";
-import { renderBytes } from "./print/render-bytes.js";
+import { receiptSlip, renderBytes } from "@masalapos/print";
 import { auth, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
 
 type Item = { id: string; productId: string; name: string; qty: number; pricePaise: number; gstRate: number; status: string; kotId: string | null;

@@ -15,6 +15,7 @@ import { BillingPanel } from "./BillingPanel";
 import { mergeBlockedReason, mergeRoles } from "../table-transfer";
 import { MergeOrderDialog, MoveTableDialog, orderLabel, type MergeChoice } from "./TableTransferDialogs";
 import { Icon } from "../Icon";
+import { OrderProductPhoto } from "../OrderProductPhoto";
 import { zomatoLabel } from "../zomato-desk";
 import { OverflowMenu, QtyStepper, TerminalClock } from "../PosControls";
 import { WorkspaceDialog } from "../WorkspaceDialog";
@@ -104,7 +105,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const cartItems = useRef<HTMLDivElement>(null);
   const menuSearch = useRef<HTMLInputElement>(null);
   const menuResults = useRef<HTMLDivElement>(null);
-  const [removed, setRemoved] = useState<DraftItem | null>(null);
   const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string; savedItemId?: string } | null>(null);
   /** The combo whose slots staff are choosing before it goes in the cart. */
   const [addonGroupsByProduct, setAddonGroupsByProduct] = useState<Record<string, AddonPickerGroup[]>>({});
@@ -115,7 +115,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [transferError, setTransferError] = useState("");
   const [transferSignal, setTransferSignal] = useState(0);
   const transferRefs = useRef(new Map<string, string>());
-  useEffect(() => { if (order) savePreference("masalapos.order-type", order.type); }, [order?.type]);
   useEffect(() => {
     if (order?.type !== "parcel" || order.status !== "open") return;
     let active = true;
@@ -404,8 +403,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current || billingLock.current) return;
     if (!queuedRefs.has(clientRef)) {
       const current = readDraft();
-      const item = current.find((row) => row.clientRef === clientRef);
-      if (saveDraft(current.filter((row) => row.clientRef !== clientRef))) setRemoved(item ?? null);
+      saveDraft(current.filter((row) => row.clientRef !== clientRef));
     }
   }
 
@@ -841,9 +839,9 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         <div className="menu-results" ref={menuResults} role="region" tabIndex={0} aria-label="Menu items"><div className="menu-grid">{activeProducts.flatMap((p) => {
           const variants = p.variants.filter((v) => v.isActive);
           const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{popular.has(p.id) && <span className="menu-popular-label">Popular</span>}{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
-          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
-          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
-          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<OrderProductPhoto src={p.photoUrl} /><div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<OrderProductPhoto src={p.photoUrl} /><div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
+          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<OrderProductPhoto src={p.photoUrl} /><div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
         })}</div>
         {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3><p>Try another name or category.</p></div>}</div>
       </section>}
@@ -890,7 +888,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           <div>{suggestions.map((dish) => <button key={dish.productId} disabled={locked} aria-label={`Also add ${dish.name}, ₹${paiseToRupees(dish.pricePaise)}`} onClick={() => addToDraft(dish.productId, dish.variantId, dish.name, dish.pricePaise)}><Icon name="plus" size={14} />{dish.name}<span className="pos-money">₹{paiseToRupees(dish.pricePaise)}</span></button>)}</div>
         </div>}
         {message && <p className="captain-message" role="status"><Icon name="check" size={16} />{message}</p>}
-        {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total">{useOrderControls && <p className="order-total-count">Total number of items <strong>{itemCount}</strong></p>}<div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
         {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">
           {(useOrderControls || (!isQuick && draft.length > 0)) && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked || !draft.length}>{shortcut("save_items", useOrderControls ? "Save order" : "Punch")}</button>}

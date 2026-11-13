@@ -1,7 +1,7 @@
-import { GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, type GstMode, type ReceiptStyle, type RoundOff } from "@masalapos/domain";
+import { COUNTER_PAYMENT_MODES, GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, type GstMode, type ReceiptStyle, type RoundOff } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { sampleBill } from "./print/bill-preview.js";
-import { receiptHtml } from "./print/receipt.js";
+import { receiptHtml } from "@masalapos/print";
 
 interface SettingsRow {
   gst_mode: GstMode;
@@ -38,6 +38,14 @@ interface SettingsRow {
   service_charge_label: string;
   packaging_charge_label: string;
   packaging_per_item: number;
+  order_warn_minutes: number;
+  order_late_minutes: number;
+  kot_print_with_kds: number;
+  pay_cash_enabled: number;
+  pay_card_enabled: number;
+  pay_upi_enabled: number;
+  qr_auto_accept: number;
+  day_start_hour: number;
 }
 
 const DEFAULT_SERVICE_LABEL = "Service charge";
@@ -47,9 +55,12 @@ const previewLabel = (label: string | undefined, saved: string, fallback: string
 /** The label to save: not sent (null) keeps the saved label; blank saves the default name. */
 const chargeLabel = (label: string | undefined, fallback: string) => (label === undefined ? null : label === "" ? fallback : label);
 
+/** A switch to save: not sent (null) keeps the saved value. */
+const flagValue = (value: boolean | undefined) => (value === undefined ? null : value ? 1 : 0);
+
 export function readSettings(db: Database) {
   const r = db
-    .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, receipt_header, bill_show_fssai, bill_show_customer, bill_show_table, bill_show_served_by, bill_show_item_gst, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled, sac_code, zomato_gstin, invoice_prefix, round_off, service_charge_bp, packaging_charge_paise, service_charge_label, packaging_charge_label, packaging_per_item FROM settings WHERE id = 1")
+    .prepare("SELECT restaurant_name, address, city, state_code, pincode, phone, gstin, fssai, receipt_footer, receipt_header, bill_show_fssai, bill_show_customer, bill_show_table, bill_show_served_by, bill_show_item_gst, upi_id, receipt_style, gst_mode, gst_rate, kot_edit_print, hold_orders_enabled, popular_items_enabled, popular_by_time_enabled, ordered_together_enabled, customer_usual_enabled, sac_code, zomato_gstin, invoice_prefix, round_off, service_charge_bp, packaging_charge_paise, service_charge_label, packaging_charge_label, packaging_per_item, order_warn_minutes, order_late_minutes, kot_print_with_kds, pay_cash_enabled, pay_card_enabled, pay_upi_enabled, qr_auto_accept, day_start_hour FROM settings WHERE id = 1")
     .get() as SettingsRow;
   return {
     gstMode: r.gst_mode,
@@ -86,6 +97,12 @@ export function readSettings(db: Database) {
     serviceChargeLabel: r.service_charge_label,
     packagingChargeLabel: r.packaging_charge_label,
     packagingPerItem: r.packaging_per_item === 1,
+    orderWarnMinutes: r.order_warn_minutes,
+    orderLateMinutes: r.order_late_minutes,
+    kotPrintWithKds: r.kot_print_with_kds === 1,
+    paymentModes: COUNTER_PAYMENT_MODES.filter((mode) => r[`pay_${mode}_enabled`] === 1),
+    qrAutoAccept: r.qr_auto_accept === 1,
+    dayStartHour: r.day_start_hour,
   };
 }
 
@@ -117,8 +134,10 @@ export function registerSettings(app: FastifyInstance): void {
     if ((body.gstMode ?? saved.gstMode) === "exclusive" && !body.gstin.trim()) return reply.status(400).send({ error: "Add your GSTIN before adding GST to bills" });
     if (stateCode && !gstinMatchesState(body.gstin, stateCode)) return reply.status(400).send({ error: GSTIN_STATE_MESSAGE });
     if (stateCode && body.zomatoGstin && !gstinMatchesState(body.zomatoGstin, stateCode)) return reply.status(400).send({ error: "Use Zomato's GSTIN for your state" });
+    // Amber and red are checked as a pair, with the saved value standing in for the one not sent.
+    if ((body.orderLateMinutes ?? saved.orderLateMinutes) <= (body.orderWarnMinutes ?? saved.orderWarnMinutes)) return reply.status(400).send({ error: "Red must be later than amber" });
     app.db
-      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin), invoice_prefix = COALESCE(?, invoice_prefix), round_off = COALESCE(?, round_off), service_charge_bp = COALESCE(?, service_charge_bp), packaging_charge_paise = COALESCE(?, packaging_charge_paise), service_charge_label = COALESCE(?, service_charge_label), packaging_charge_label = COALESCE(?, packaging_charge_label), packaging_per_item = COALESCE(?, packaging_per_item) WHERE id = 1")
+      .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin), invoice_prefix = COALESCE(?, invoice_prefix), round_off = COALESCE(?, round_off), service_charge_bp = COALESCE(?, service_charge_bp), packaging_charge_paise = COALESCE(?, packaging_charge_paise), service_charge_label = COALESCE(?, service_charge_label), packaging_charge_label = COALESCE(?, packaging_charge_label), packaging_per_item = COALESCE(?, packaging_per_item), order_warn_minutes = COALESCE(?, order_warn_minutes), order_late_minutes = COALESCE(?, order_late_minutes), kot_print_with_kds = COALESCE(?, kot_print_with_kds), pay_cash_enabled = COALESCE(?, pay_cash_enabled), pay_card_enabled = COALESCE(?, pay_card_enabled), pay_upi_enabled = COALESCE(?, pay_upi_enabled), qr_auto_accept = COALESCE(?, qr_auto_accept), day_start_hour = COALESCE(?, day_start_hour) WHERE id = 1")
       .run(body.restaurantName, body.address, body.city ?? null, body.stateCode ?? null, body.pincode ?? null, body.phone ?? null, body.gstin, body.fssai, body.receiptFooter, body.receiptHeader,
         ...[body.billShowFssai, body.billShowCustomer, body.billShowTable, body.billShowServedBy, body.billShowItemGst].map((v) => (v === undefined ? null : v ? 1 : 0)),
         body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
@@ -130,7 +149,13 @@ export function registerSettings(app: FastifyInstance): void {
         body.sacCode ?? null, body.zomatoGstin ?? null, body.invoicePrefix ?? null, body.roundOff ?? null,
         body.serviceChargeBp ?? null, body.packagingChargePaise ?? null,
         chargeLabel(body.serviceChargeLabel, DEFAULT_SERVICE_LABEL), chargeLabel(body.packagingChargeLabel, DEFAULT_PACKAGING_LABEL),
-        body.packagingPerItem === undefined ? null : body.packagingPerItem ? 1 : 0);
+        flagValue(body.packagingPerItem),
+        body.orderWarnMinutes ?? null, body.orderLateMinutes ?? null, flagValue(body.kotPrintWithKds),
+        ...COUNTER_PAYMENT_MODES.map((mode) => body.paymentModes === undefined ? null : body.paymentModes.includes(mode) ? 1 : 0),
+        flagValue(body.qrAutoAccept), body.dayStartHour ?? null);
+    // Auto-accepted QR orders are recorded under the admin who switched auto-accept on; off clears that.
+    if (body.qrAutoAccept === false) app.db.prepare("UPDATE settings SET qr_auto_accept_by = NULL WHERE id = 1").run();
+    if (body.qrAutoAccept === true && !saved.qrAutoAccept) app.db.prepare("UPDATE settings SET qr_auto_accept_by = ? WHERE id = 1").run(req.user.id);
     // Order screens and captain tablets show or hide Hold, the Popular badges and the ordered-together suggestions from these settings.
     app.broadcast("settings.changed", {});
     return { settings: readSettings(app.db) };

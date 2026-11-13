@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
 import { auth, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
-import { receiptSlip } from "./print/receipt.js";
+import { receiptSlip } from "@masalapos/print";
 import { creditNoteSlip } from "./print/credit-note.js";
 
 const OWN = "29AAPFU0939F1ZR";
@@ -51,7 +51,7 @@ describe("GST invoice for a business buyer", () => {
     const bill = (await issue(orderId, { buyer: ACME, previewKey: shown.json().preview.previewKey })).json().bill as Bill;
     const html = (await app.inject({ url: `/api/bills/${bill.id}/receipt`, headers: auth(token) })).body;
     for (const text of ["Billed to", "Acme Pvt Ltd", `GSTIN: ${ACME.gstin}`, "MG Road, Bengaluru", "Place of supply", "Karnataka (29)", "996331"]) expect(html).toContain(text);
-    const slip = receiptSlip(bill, 80).toString("latin1");
+    const slip = Buffer.from(receiptSlip(bill, 80)).toString("latin1");
     for (const text of ["Billed to: Acme Pvt Ltd", `GSTIN: ${ACME.gstin}`, "Place of supply: Karnataka (29)", "SAC: 996331"]) expect(slip).toContain(text);
     const voided = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(token), payload: { clientRef: uuidv7(), reason: "Wrong buyer", refunds: [] } });
     expect(voided.statusCode, voided.body).toBe(201);
@@ -59,7 +59,7 @@ describe("GST invoice for a business buyer", () => {
     const note = after.creditNotes[0]!;
     const noteHtml = (await app.inject({ url: `/api/credit-notes/${note.id}/receipt`, headers: auth(token) })).body;
     expect(noteHtml).toContain(`GSTIN: ${ACME.gstin}`);
-    expect(creditNoteSlip({ ...note, taxes: [] }, after, 80).toString("latin1")).toContain("Billed to: Acme Pvt Ltd");
+    expect(Buffer.from(creditNoteSlip({ ...note, taxes: [] }, after, 80)).toString("latin1")).toContain("Billed to: Acme Pvt Ltd");
   });
 
   it("leaves walk-in bills without a buyer", async () => {

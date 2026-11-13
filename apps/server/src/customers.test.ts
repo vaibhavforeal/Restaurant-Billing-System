@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
 import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
-import { receiptHtml, receiptSlip } from "./print/receipt.js";
+import { receiptHtml, receiptSlip } from "@masalapos/print";
 
 describe("customers and loyalty", () => {
   let app: FastifyInstance; let token: string; let productId: string;
@@ -78,7 +78,7 @@ describe("customers and loyalty", () => {
     expect(second.discountNote).toBe("15 loyalty points");
     // ₹500 − ₹15 = ₹485 → 4 × 2 points.
     expect(second.receipt.customer).toMatchObject({ pointsRedeemed: 15, pointsValuePaise: 1500, pointsEarned: 8, pointsBalance: 13 });
-    expect(receiptSlip(second, 80).toString("latin1")).toContain("Points earned: 8 | Balance: 13");
+    expect(Buffer.from(receiptSlip(second, 80)).toString("latin1")).toContain("Points earned: 8 | Balance: 13");
     expect(receiptHtml(second)).toContain("Points redeemed: 15");
     await loyalty({ minRedeemPoints: 50 });
     expect((await request("POST", `/api/orders/${await order(priya.id)}/bill-preview`, { redeemPoints: 10 })).statusCode).toBe(400);

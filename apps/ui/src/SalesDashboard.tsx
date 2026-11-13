@@ -9,13 +9,13 @@ import { channelCards, orderStats, slotBars } from "./dashboard-data";
 import { useIntegrations } from "./integrations";
 import type { Page } from "./NavBar";
 import { useAggregatorOrders } from "./useAggregatorOrders";
-import { localDay } from "./sales-report";
+import { businessToday } from "./sales-report";
 import { useDashboard, useNow } from "./useDashboard";
 import "./sales-dashboard.css";
 import "./dashboard.css";
 
 export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: Page) => void; canManage: boolean }) {
-  const today = localDay(new Date(useNow(60_000)));
+  const today = businessToday(new Date(useNow(60_000)));
   const [date, setDate] = useState(today);
   // Left open past midnight, a dashboard that was showing "today" moves on to the new day; a picked date stays.
   const shownToday = useRef(today);

@@ -1,18 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7 } from "@masalapos/domain";
-import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, commercialApp, createUser, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { setModuleEnabled } from "./modules.js";
 
 describe("sales and collection reports", () => {
-  let app: FastifyInstance, token: string, productId: string;
+  let app: FastifyInstance, token: string, adminId: string, productId: string, categoryId: string;
   const post = async (url: string, payload: unknown) => {
     const response = await app.inject({ method: "POST", url, payload: payload as object, headers: auth(token) });
     if (response.statusCode >= 400) throw new Error(response.body); return response.json();
   };
   const at = (day: number, hour = 12) => new Date(2026, 8, day, hour).getTime();
-  async function issue(day: number, discountPaise = 0) {
+  async function issue(day: number, discountPaise = 0, qty = 1) {
     const { order } = await post("/api/orders", { clientRef: uuidv7(), type: "parcel" });
-    await post(`/api/orders/${order.id}/items`, { items: [{ clientRef: uuidv7(), productId, qty: 1 }] });
+    await post(`/api/orders/${order.id}/items`, { items: [{ clientRef: uuidv7(), productId, qty }] });
     const options = { discountPaise, ...(discountPaise ? { discountNote: "Test discount" } : {}) };
     const { preview } = await post(`/api/orders/${order.id}/bill-preview`, options);
     const { bill } = await post(`/api/orders/${order.id}/bill`, { ...options, clientRef: uuidv7(), previewKey: preview.previewKey });
@@ -26,9 +27,9 @@ describe("sales and collection reports", () => {
   }
   const report = async (from = "2026-09-27", to = "2026-09-29") => (await app.inject({ url: `/api/reports/sales?from=${from}&to=${to}`, headers: auth(token) })).json().report;
   beforeEach(async () => {
-    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app));
+    ({ app } = freshAppWithFakeSink()); let admin; ({ token, user: admin } = await setupAdmin(app)); adminId = admin.id;
     const { category } = await post("/api/categories", { name: "Meals" });
-    const { product } = await post("/api/products", { name: "Meal", categoryId: category.id, pricePaise: 10001, gstRate: 5, kotStationId: null }); productId = product.id;
+    const { product } = await post("/api/products", { name: "Meal", categoryId: category.id, pricePaise: 10001, gstRate: 5, kotStationId: null }); productId = product.id; categoryId = category.id;
   });
   afterEach(async () => { await app.close(); app.db.close(); });
   it("matches existing day-end values, includes empty days, and never rewrites bills", async () => {
@@ -93,5 +94,66 @@ describe("sales and collection reports", () => {
       expect((await app.inject({ url: "/api/reports/sales", headers: auth(user.token) })).statusCode).toBe(status);
     }
     expect((await app.inject("/api/reports/sales")).statusCode).toBe(401);
+  });
+  describe("offers report", () => {
+    const offersReport = (query = "from=2026-09-27&to=2026-09-29", headers: Record<string, string> = auth(token)) => app.inject({ url: `/api/reports/offers?${query}`, headers });
+    let mealOff: string, flatOff: string;
+    beforeEach(async () => {
+      enableIntegration(app, "offers");
+      // 10% off each Meal (₹100.01 → ₹10.00 a unit), and ₹50 off a bill of ₹250 or more once the item offers are taken.
+      mealOff = (await post("/api/offers", { name: "Meal 10%", kind: "item_off", percentBp: 1000, categoryIds: [categoryId] })).offer.id;
+      flatOff = (await post("/api/offers", { name: "Flat 50", kind: "bill_off", amountPaise: 5000, minBillPaise: 25000 })).offer.id;
+    });
+    it("counts the bills each offer was on and sums its discount, biggest first, leaving out void bills and other dates", async () => {
+      const one = await issue(27), three = await issue(28, 0, 3), voided = await issue(29, 0, 3), outside = await issue(30);
+      expect(one.offerDiscountPaise).toBe(1000);
+      expect(three.offerDiscountPaise).toBe(3000 + 5000);
+      app.db.prepare("UPDATE bills SET status = 'void' WHERE id = ?").run(voided.id);
+      expect(outside.offerDiscountPaise).toBe(1000);
+      const res = await offersReport();
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json()).toEqual({ rows: [
+        { offerId: flatOff, name: "Flat 50", bills: 1, discountPaise: 5000 },
+        { offerId: mealOff, name: "Meal 10%", bills: 2, discountPaise: 1000 + 3000 },
+      ] });
+    });
+    it("shows an offer's current name, and has no rows for a range without offers", async () => {
+      await issue(27);
+      const renamed = await app.inject({ method: "PUT", url: `/api/offers/${mealOff}`, headers: auth(token), payload: { name: "Lunch 10%", kind: "item_off", percentBp: 1000, categoryIds: [categoryId] } });
+      expect(renamed.statusCode, renamed.body).toBe(200);
+      expect((await offersReport()).json().rows).toEqual([{ offerId: mealOff, name: "Lunch 10%", bills: 1, discountPaise: 1000 }]);
+      expect((await offersReport("from=2026-09-28&to=2026-09-29")).json()).toEqual({ rows: [] });
+    });
+    it("takes the same date range as the sales report", async () => {
+      await issue(27);
+      expect((await offersReport("from=2026-09-27&to=2026-09-27")).json().rows).toHaveLength(1);
+      expect((await app.inject({ url: "/api/reports/offers", headers: auth(token) })).statusCode).toBe(200);
+      for (const query of ["from=2026-02-30&to=2026-03-01", "from=2026-09-30&to=2026-09-27", "from=2025-01-01&to=2026-12-31", "from=bad&to=2026-09-27"]) {
+        expect((await offersReport(query)).statusCode, query).toBe(400);
+      }
+    });
+    it("allows cashiers, denies waiter, kitchen and anonymous access, and follows the Offers and Reports modules", async () => {
+      for (const [role, pin, status] of [["cashier", "2345", 200], ["waiter", "3456", 403], ["kitchen", "4567", 403]] as const) {
+        const user = await createUser(app, token, { name: role, role, pin });
+        expect((await offersReport(undefined, auth(user.token))).statusCode, role).toBe(status);
+      }
+      expect((await app.inject("/api/reports/offers")).statusCode).toBe(401);
+      for (const id of ["offers", "reports"] as const) {
+        setModuleEnabled(app, id, false, adminId);
+        const res = await offersReport();
+        expect(res.statusCode, id).toBe(409);
+        expect(res.json().code).toBe("module_off");
+        setModuleEnabled(app, id, true, adminId);
+      }
+      expect((await offersReport()).statusCode).toBe(200);
+    });
+    it("refuses the report when the licence leaves Offers out", async () => {
+      const f = await commercialApp("basic", { offers: false });
+      try {
+        const res = await f.app.inject({ url: "/api/reports/offers", headers: f.headers });
+        expect(res.statusCode, res.body).toBe(403);
+        expect(res.json().code).toBe("module_off");
+      } finally { await f.app.close(); f.app.db.close(); }
+    });
   });
 });

@@ -40,4 +40,10 @@ describe("modules", () => {
     const states = resolveModuleStates(allModules(), (id) => id !== "dashboard");
     expect(states.find((s) => s.id === "dynamicReports")).toMatchObject({ active: false, reason: "Needs Sales dashboard" });
   });
+
+  it("offers is a standalone add-on on every plan", () => {
+    expect(moduleDef("offers")).toMatchObject({ name: "Offers", group: "addon", dependsOn: [], plans: { basic: true, pro: true } });
+    expect(planModules("basic").offers).toBe(true);
+    expect(planModules("pro").offers).toBe(true);
+  });
 });

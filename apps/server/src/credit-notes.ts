@@ -7,7 +7,7 @@ import { loadBill } from "./billing.js";
 import { httpError } from "./http-error.js";
 import { loadOrderJson } from "./mappers.js";
 import { creditNoteHtml, creditNoteSlip, type CreditNoteView } from "./print/credit-note.js";
-import { readProfile } from "./print/profile.js";
+import { readProfile } from "@masalapos/print";
 
 interface MoneyRow { taxable_paise: number; cgst_paise: number; sgst_paise: number; rounding_paise: number; total_paise: number }
 const money = (r: MoneyRow): Money => ({ taxablePaise: r.taxable_paise, cgstPaise: r.cgst_paise, sgstPaise: r.sgst_paise, roundingPaise: r.rounding_paise, totalPaise: r.total_paise });
