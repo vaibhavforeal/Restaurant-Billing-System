@@ -27,5 +27,12 @@ export {
 export {
   CounterSettingsInput, LOCK_MINUTES, getCounterSettings, saveCounterSettings, type CounterSettings,
 } from "./counter-settings.js";
+export {
+  CustomerError, normalisePhone, maskPhone, getCustomer, saveCustomer, findCustomers, deleteCustomer,
+  type Customer, type CustomerErrorCode,
+} from "./customers.js";
+export {
+  HeldCartSchema, holdCart, listHeld, takeHeld, deleteHeld, type HeldCart, type HeldLine, type HeldSummary,
+} from "./held.js";
 export { getLocalState, setLocalState } from "./local-state.js";
 export { logError, listErrors, clearErrors, type ErrorEntry } from "./error-log.js";
