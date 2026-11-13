@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { getCafe, migrate, saveCafe } from "@masalapos/cafe-data";
+import { MIGRATIONS, getCafe, migrate, saveCafe } from "@masalapos/cafe-data";
 import { expoDriver, type SyncSqlite } from "./expo-driver";
 
 const base = { name: " Chai Point ", address: "", phone: "", gstin: "", fssai: "", gstMode: "included", defaultGstRate: 5, roundOff: "rupee",
@@ -25,7 +25,7 @@ describe("expoDriver", () => {
   // This proves the adapter, not expo.
   it("passes cafe-data's own flow through the adapter", () => {
     const db = expoDriver(fakeSyncSqlite());
-    expect(migrate(db)).toBe(3);
+    expect(migrate(db)).toBe(MIGRATIONS.at(-1)!.version);
     saveCafe(db, base, 1);
     expect(getCafe(db)!.name).toBe("Chai Point");
     expect(db.get("SELECT 1 AS one WHERE 1 = 0")).toBeUndefined(); // null from expo becomes undefined

@@ -13,6 +13,7 @@
     "@masalapos/cafe-data": "*",
     "@masalapos/domain": "*",
     "@masalapos/print": "*",
+    "@noble/hashes": "^2.4.0",
     "expo": "~58.0.25",
     "expo-constants": "~58.0.16",
     "expo-crypto": "~58.0.8",

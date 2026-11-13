@@ -8,7 +8,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@masalapos/core": "*",
     "@masalapos/domain": "*",
+    "@noble/hashes": "^2.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

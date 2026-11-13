@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Shared domain logic: authentication, RBAC permission checks.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rbac": "./src/rbac.ts"
   }
 }

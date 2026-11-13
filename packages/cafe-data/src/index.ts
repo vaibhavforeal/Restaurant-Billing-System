@@ -18,5 +18,7 @@ export {
 export { voidBill } from "./bills.js";
 export { daySummary, type DaySummary } from "./reports.js";
 export { listPrinters, savePrinter, deletePrinter, printerFor, printTarget, type Printer, type PrintTarget } from "./printers.js";
+export { PIN_HASH_ITERATIONS, isValidPin, hashPin, verifyPin } from "./pin-hash.js";
+export { CAFE_ROLES, cafeCan, discountAllowed, type CafeRole, type CafePermission } from "./roles.js";
 export { getLocalState, setLocalState } from "./local-state.js";
 export { logError, listErrors, clearErrors, type ErrorEntry } from "./error-log.js";
