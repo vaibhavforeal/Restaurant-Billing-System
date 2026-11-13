@@ -34,7 +34,15 @@ Branch `feat/cafe-mobile`, worktree `E:\Softwares\masalapos-cafe`. Not pushed.
 - `expo export --platform android`: the whole app bundles and compiles to Hermes bytecode; the bundle has exactly one
   React (the app's 19.3), includes `qrcode`, and contains no `better-sqlite3` or `db.ts`.
 
-## Pending: needs a real phone and a thermal printer (none attached in this session)
+## Phone test, 2026-11-13
+
+The build machine is a VM, so the phone was reached over Tailscale and the standalone test APK
+(`node tools/build-cafe-android.mjs --standalone`) was sent with Taildrop. The owner tried the app and found it good.
+They once saw a problem checking out a bill with a variant but could not capture the message; the error log
+(More, Error log, with Share) was added, and the problem did not come back. Not yet run on a phone: a thermal
+printer, flight mode and the tablet layout.
+
+## Pending: needs a real phone and a thermal printer (still to do)
 
 Run `node tools/build-cafe-android.mjs --install`, `adb reverse tcp:8081 tcp:8081`, `npm run dev:cafe`, then:
 
