@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { BillError, getBill, printerFor, printTarget, voidBill } from "@masalapos/cafe-data";
+import { BillError, getBill, getCounterSettings, printerFor, printTarget, voidBill } from "@masalapos/cafe-data";
 import { uuidv7 } from "@masalapos/domain/id";
 import { receiptSlip } from "@masalapos/print";
 import { ReceiptView } from "../../bill/ReceiptView";
@@ -9,6 +9,7 @@ import { useDb, useData } from "../../db/provider";
 import { deviceOffset } from "../../dates";
 import { printQueue } from "../../print/printer";
 import { usePrintJob } from "../../print/usePrintJobs";
+import { queueKitchenSlip } from "../../payment/complete";
 import { useApproval } from "../../staff/useApproval";
 import { space, touch } from "../../theme/tokens";
 import { Banner, Button, Field, Icon, Screen, Sheet } from "../../ui";
@@ -21,6 +22,10 @@ export default function BillDetail() {
   const printer = useData((d) => printerFor(d, "receipt"));
   const [jobId, setJobId] = useState<string | null>(null);
   const job = usePrintJob(jobId);
+  const kitchenOn = useData((d) => getCounterSettings(d).kitchenSlip !== "off");
+  const [kitchenJobId, setKitchenJobId] = useState<string | null>(null);
+  const [kitchenProblem, setKitchenProblem] = useState<string | null>(null);
+  const kitchenJob = usePrintJob(kitchenJobId);
   const { approve, sheet } = useApproval();
   const [voidBy, setVoidBy] = useState<string | null>(null);
   const [reasonOpen, setReasonOpen] = useState(false);
@@ -47,6 +52,13 @@ export default function BillDetail() {
     setReasonOpen(true);
   }
 
+  function reprintKitchen() {
+    if (!bill) return;
+    const result = queueKitchenSlip(db, bill, { enqueue: printQueue.enqueue, newId: uuidv7 });
+    setKitchenJobId(result.kitchenJobId);
+    setKitchenProblem(result.kitchenProblem);
+  }
+
   function confirmVoid() {
     try {
       const now = Date.now();
@@ -69,10 +81,15 @@ export default function BillDetail() {
       {job && (job.state === "queued" || job.state === "printing") ? <Banner text="Printing…" /> : null}
       {job?.state === "done" ? <Banner tone="success" text="Receipt printed." /> : null}
       {job?.state === "failed" ? <Banner tone="error" text={job.error ?? "The receipt did not print."} action={{ label: "Try again", onPress: () => printQueue.retry(job.id) }} /> : null}
+      {kitchenProblem ? <Banner tone="warning" text={kitchenProblem} /> : null}
+      {kitchenJob?.state === "done" ? <Banner tone="success" text="Kitchen slip printed." /> : null}
+      {kitchenJob?.state === "failed" ? <Banner tone="error" text={`Kitchen slip: ${kitchenJob.error ?? "it did not print."}`}
+        action={{ label: "Try again", onPress: () => printQueue.retry(kitchenJob.id) }} /> : null}
       {!printer ? <Banner text="No printer set up. Add one in More, Printers." action={{ label: "Printers", onPress: () => router.push("/more/printers") }} /> : null}
       {justVoided ? <Banner tone="success" text="Bill voided. It no longer counts in the day's sales." {...(printer ? { action: { label: "Print void receipt", onPress: reprint } } : {})} /> : null}
       <View style={styles.actions}>
         <Button label="Reprint" icon="printer" size="lg" disabled={!printer} onPress={reprint} style={styles.grow} />
+        {kitchenOn ? <Button label="Reprint kitchen slip" variant="secondary" size="lg" onPress={reprintKitchen} /> : null}
         {!bill.voided ? <Button label="Void" variant="danger" size="lg" onPress={() => void startVoid()} /> : null}
       </View>
 

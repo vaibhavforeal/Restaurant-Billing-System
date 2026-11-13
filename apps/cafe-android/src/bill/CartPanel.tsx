@@ -70,6 +70,17 @@ export function CartPanel({ cafe, priced, onCharge, onHold, compact = false }: {
   const t = priced?.ok ? priced.totals : null;
   const { discount, note } = snap;
 
+  const staffNow = session.get().staff;
+  const subtotalNow = priced?.ok ? priced.totals.subtotalPaise : 0;
+  const needsApproval = discount !== null && snap.approvedBy === null && staffNow !== null && priced?.ok === true
+    && !discountAllowed(staffNow.role, priced.discountPaise, subtotalNow, getCounterSettings(db).cashierDiscountBp);
+
+  async function askAgain() {
+    if (!discount) return;
+    const by = await approve("bills.discount", { title: "Approve discount" });
+    if (by) cart.setApproval(by);
+  }
+
   async function applyDiscount(d: Discount, discountNote: string) {
     setDiscountProblem(null);
     const subtotal = priced?.ok ? priced.totals.subtotalPaise : lines.reduce((n, l) => n + l.pricePaise * l.qty, 0);
@@ -132,6 +143,10 @@ export function CartPanel({ cafe, priced, onCharge, onHold, compact = false }: {
       </ScrollView>
       <View style={styles.footer}>
         {discountProblem ? <Banner tone="warning" text={discountProblem} /> : null}
+        {needsApproval ? (
+          <Banner tone="warning" text="The items changed, so this discount needs approval again."
+            action={{ label: "Approve", onPress: () => void askAgain() }} />
+        ) : null}
         {priced && !priced.ok ? (
           <Banner tone="error" text={billErrorMessage(priced.error, badLine !== null ? lines[badLine]?.name : undefined)} />
         ) : null}
@@ -153,7 +168,7 @@ export function CartPanel({ cafe, priced, onCharge, onHold, compact = false }: {
         <View style={styles.actions}>
           {compact && lines.length ? <Button label="Discount" variant="secondary" onPress={() => setDiscountOpen(true)} /> : null}
           {lines.length ? <Button label="Hold" variant="secondary" onPress={onHold} /> : null}
-          <Button label={t ? `Charge ₹${(t.totalPaise / 100).toFixed(2)}` : "Charge"} size="lg" disabled={!t} onPress={onCharge} style={styles.grow} />
+          <Button label={t ? `Charge ₹${(t.totalPaise / 100).toFixed(2)}` : "Charge"} size="lg" disabled={!t || needsApproval} onPress={onCharge} style={styles.grow} />
         </View>
       </View>
       <DiscountSheet key={discountOpen ? "open" : "closed"} visible={discountOpen} onClose={() => setDiscountOpen(false)}

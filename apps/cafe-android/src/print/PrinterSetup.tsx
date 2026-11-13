@@ -15,10 +15,10 @@ type Mode = { kind: "idle" } | { kind: "bluetooth"; devices: Array<{ name: strin
 
 const PAPER = [{ value: 58, label: "58 mm" }, { value: 80, label: "80 mm" }] as const;
 
-/** The receipt printer: add one over Bluetooth or the network, choose the paper width, print a test slip. */
-export function PrinterSetup() {
+/** The receipt (or kitchen) printer: add one over Bluetooth or the network, choose the paper width, print a test slip. */
+export function PrinterSetup({ role = "receipt" }: { role?: "receipt" | "kitchen" }) {
   const db = useDb();
-  const printer = useData((d) => printerFor(d, "receipt"));
+  const printer = useData((d) => printerFor(d, role));
   const cafeName = useData((d) => getCafe(d)?.name ?? "MasalaPOS Cafe");
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [paper, setPaper] = useState<58 | 80>(58);
@@ -43,7 +43,7 @@ export function PrinterSetup() {
 
   function save(input: Pick<Printer, "name" | "transport" | "address">) {
     try {
-      const saved = savePrinter(db, { ...input, paperWidth: paper, role: "receipt" });
+      const saved = savePrinter(db, { ...input, paperWidth: paper, role });
       setMode({ kind: "idle" });
       setProblem(null);
       testPrint(saved);

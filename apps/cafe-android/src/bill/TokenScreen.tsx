@@ -9,15 +9,18 @@ import { Banner, Button, Money } from "../ui";
 import { ReceiptView } from "./ReceiptView";
 
 /**
- * After Paid: the token in very large type, the total, change to give and how the receipt is printing.
+ * After Paid: the token in very large type, the total, change to give and how the receipt and kitchen slip are printing,
+ * each with its own Try again.
  * Tapping, or three seconds, returns to an empty bill. A failed print waits for Try again or a tap. With no printer the
  * receipt is shown on screen instead, and the screen waits for Next bill.
  */
-export function TokenScreen({ bill, changePaise, printJobId, hasPrinter, printError, onDone }: {
-  bill: CafeBill; changePaise: number; printJobId: string | null; hasPrinter: boolean; printError: string | null; onDone: () => void;
+export function TokenScreen({ bill, changePaise, printJobId, hasPrinter, printError, kitchenJobId, kitchenProblem, onDone }: {
+  bill: CafeBill; changePaise: number; printJobId: string | null; hasPrinter: boolean; printError: string | null;
+  kitchenJobId: string | null; kitchenProblem: string | null; onDone: () => void;
 }) {
   const job = usePrintJob(printJobId);
-  const failed = job?.state === "failed" || printError !== null;
+  const kitchenJob = usePrintJob(kitchenJobId);
+  const failed = job?.state === "failed" || printError !== null || kitchenJob?.state === "failed" || kitchenProblem !== null;
   useEffect(() => {
     if (failed || !hasPrinter) return;
     const timer = setTimeout(onDone, 3000);
@@ -38,6 +41,12 @@ export function TokenScreen({ bill, changePaise, printJobId, hasPrinter, printEr
           {job && (job.state === "queued" || job.state === "printing") ? <Banner text="Printing the receipt…" /> : null}
           {job?.state === "done" ? <Banner tone="success" text="Receipt printed." /> : null}
           {job?.state === "failed" ? <Banner tone="error" text={job.error ?? "The receipt did not print."} action={{ label: "Try again", onPress: () => printQueue.retry(job.id) }} /> : null}
+          {kitchenProblem ? <Banner tone="warning" text={kitchenProblem} /> : null}
+          {kitchenJob && (kitchenJob.state === "queued" || kitchenJob.state === "printing") ? <Banner text="Printing the kitchen slip…" /> : null}
+          {kitchenJob?.state === "done" ? <Banner tone="success" text="Kitchen slip printed." /> : null}
+          {kitchenJob?.state === "failed" ? (
+            <Banner tone="error" text={`Kitchen slip: ${kitchenJob.error ?? "it did not print."}`} action={{ label: "Try again", onPress: () => printQueue.retry(kitchenJob.id) }} />
+          ) : null}
         </View>
         {!hasPrinter ? <ScrollView style={styles.receipt}><ReceiptView bill={bill} /></ScrollView> : null}
         <Button label="Next bill" size="lg" variant="secondary" onPress={onDone} style={styles.next} />

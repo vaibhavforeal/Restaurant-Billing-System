@@ -162,3 +162,27 @@ describe("cart: order kind, customer, notes, approval and hold", () => {
     expect(other.toHeld()).toEqual(held);
   });
 });
+
+describe("discount approval and line changes", () => {
+  beforeEach(() => { cart = createCartStore(); });
+
+  it("drops an approval of an amount discount when the lines change, since its share of the bill changes", () => {
+    cart.add(smallChai); cart.add(largeChai);
+    cart.setDiscount({ kind: "amount", paise: 1000 });
+    cart.setApproval("m1");
+    cart.setQty(cart.entries()[1]!.key, 0);
+    expect(cart.snapshot().approvedBy).toBeNull();
+    cart.setApproval("m1");
+    cart.add(largeChai);
+    expect(cart.snapshot().approvedBy).toBeNull();
+  });
+
+  it("keeps an approval of a percent discount when the lines change, since its share stays the same", () => {
+    cart.add(smallChai); cart.add(largeChai);
+    cart.setDiscount({ kind: "percent", bp: 1000 });
+    cart.setApproval("m1");
+    cart.setQty(cart.entries()[1]!.key, 0);
+    cart.add(smallChai);
+    expect(cart.snapshot().approvedBy).toBe("m1");
+  });
+});

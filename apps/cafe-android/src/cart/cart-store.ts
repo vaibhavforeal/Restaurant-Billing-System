@@ -48,6 +48,12 @@ export function createCartStore() {
     snap = { ...snap, ...next };
     for (const fn of [...listeners]) fn();
   };
+  /**
+   * New lines for the cart. An approved amount discount is a different share of a different subtotal, so its approval
+   * goes; a percent discount keeps its share, so its approval stays.
+   */
+  const changeLines = (lines: CartEntry[]) =>
+    change(snap.discount?.kind === "amount" ? { lines, approvedBy: null } : { lines });
   const filledNote = (kind: OrderKind, note: string) => (kind === "delivery" && !note.trim() ? customerAddress.slice(0, 200) : note);
 
   return {
@@ -58,14 +64,14 @@ export function createCartStore() {
     add(e: Omit<CartEntry, "key" | "qty" | "note">) {
       const same = e.itemId === null ? undefined
         : snap.lines.find((l) => l.itemId === e.itemId && l.variantId === e.variantId && l.note === null);
-      change({ lines: same
+      changeLines(same
         ? snap.lines.map((l) => (l === same ? { ...l, qty: Math.min(MAX_QTY, l.qty + 1) } : l))
-        : [...snap.lines, { ...e, key: `line-${nextKey++}`, qty: 1, note: null }] });
+        : [...snap.lines, { ...e, key: `line-${nextKey++}`, qty: 1, note: null }]);
     },
     /** 0 removes the line; quantities stop at 999. */
     setQty(key: string, qty: number) {
       const q = Math.min(MAX_QTY, Math.max(0, Math.trunc(qty)));
-      change({ lines: q === 0 ? snap.lines.filter((l) => l.key !== key) : snap.lines.map((l) => (l.key === key ? { ...l, qty: q } : l)) });
+      changeLines(q === 0 ? snap.lines.filter((l) => l.key !== key) : snap.lines.map((l) => (l.key === key ? { ...l, qty: q } : l)));
     },
     /** Up to 60 characters; blank removes it. */
     setLineNote(key: string, note: string | null) {

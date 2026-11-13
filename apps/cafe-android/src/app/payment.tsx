@@ -38,12 +38,14 @@ export default function PaymentScreen() {
   const [splitAmount, setSplitAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [done, setDone] = useState<{ bill: CafeBill; change: number; jobId: string | null; hasPrinter: boolean; printError: string | null } | null>(null);
+  const [done, setDone] = useState<{ bill: CafeBill; change: number; jobId: string | null; hasPrinter: boolean; printError: string | null;
+    kitchenJobId: string | null; kitchenProblem: string | null } | null>(null);
   const paying = useRef(false);
   const finish = useCallback(() => router.back(), []);
 
   if (done) return <><Stack.Screen options={{ presentation: "fullScreenModal", animation: "fade" }} />
-    <TokenScreen bill={done.bill} changePaise={done.change} printJobId={done.jobId} hasPrinter={done.hasPrinter} printError={done.printError} onDone={finish} /></>;
+    <TokenScreen bill={done.bill} changePaise={done.change} printJobId={done.jobId} hasPrinter={done.hasPrinter} printError={done.printError}
+      kitchenJobId={done.kitchenJobId} kitchenProblem={done.kitchenProblem} onDone={finish} /></>;
 
   if (!priced || !priced.ok) {
     return (
@@ -83,7 +85,7 @@ export default function PaymentScreen() {
       }, { printer: printerFor(db, "receipt"), enqueue: printQueue.enqueue, newId: uuidv7 });
       cart.clear();
       setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,
-        printError: result.printError });
+        printError: result.printError, kitchenJobId: result.kitchenJobId, kitchenProblem: result.kitchenProblem });
     } catch (e) {
       recordError(e, `payment ${mode}: ${snap.lines.map((l) => `${l.name} x${l.qty}${l.variantId ? " [variant]" : ""}`).join(", ")}`);
       const index = typeof e === "object" && e && "lineIndex" in e && typeof e.lineIndex === "number" ? e.lineIndex : undefined;
