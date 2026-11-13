@@ -29,15 +29,30 @@ Plan: `docs/superpowers/plans/2026-11-13-cafe-mobile-phase-2.md` (Tasks 1-9). Sp
 
 ## Verified here
 
-- `npx vitest run packages/cafe-data packages/print apps/cafe-android tools/phone-safe-imports.test.ts`: 378 passed.
-- `npm test`: 2693 passed. `npm run typecheck`: clean. `npm run build:desktop`: builds.
+- `npx vitest run packages/cafe-data packages/print apps/cafe-android tools/phone-safe-imports.test.ts`: 385 passed.
+- `npm test`: 2700 passed. `npm run typecheck`: clean. `npm run build:desktop`: builds.
 - `npx expo export --platform android` (in `apps/cafe-android`): bundles to Hermes, including `@noble/hashes`.
+
+## Whole-branch review (one reviewer, Opus) and fixes
+
+No Critical findings. Fixed, each with a test that failed first: screens outside the tabs were reachable with Back
+after the lock or by a deep link (now a root guard, and locking clears the stack), `/menu/item` had no
+`catalog.manage` gate, a gated tab asked again on return from a pushed screen (approvals now last while the same tab
+is in front), and a cashier giving exactly their limit on an odd price was asked for a PIN (now compared in paise).
+Three earlier automated security-review findings were fixed during the build (idle lock on a timer while open,
+an amount discount's approval cleared when the lines change, REPRINT on reprinted kitchen slips).
+
+Deferred (minor): "Discount is more than the bill" still sends the discount note and approver; the re-approval banner
+wording after opening a held cart or Switch staff; a double tap on the PIN pad's OK can count two wrong tries; an
+unreadable "Cash received" in a split can keep Paid disabled after the cash part is cleared; REPRINT only at the foot
+of the kitchen slip; the customer screen shows the old name after Save.
 
 ## PIN iteration count
 
 `PIN_HASH_ITERATIONS` is 50,000, not yet measured on the phone. More, About shows "PIN check: <ms> ms at <n> rounds".
 Set it to the largest multiple of 10,000 that keeps one check at or under 300 ms (never below 20,000), rebuild, and
-record the phone model, count and time here.
+record the phone model, count and time here. The reviewer warns that pure-JS PBKDF2 on Hermes may exceed 300 ms even at
+20,000 rounds; if so the plan's floor and the spec's ceiling conflict, and a native PBKDF2 may be needed.
 
 ## Device checks (pending: need the phone and a thermal printer)
 
@@ -58,6 +73,9 @@ install over adb. Record each result here.
    limit at 5%, holds a second cart and opens it; receipt and `TOKEN n` kitchen slip print; the app locks after the
    idle time; Reports shows staff and order-kind figures. Also: Bills left open across midnight moves to the new day;
    a three-way split; the tablet layout of the new sheets; a fresh install going through first run into billing.
+5. From the review: lock on a customer screen, then Back from the lock screen stays on the lock screen; as a cashier,
+   a manager approves Menu, then edit an item and come back without being asked again; sheets opened from the phone's
+   cart sheet (discount then approve, Hold) open and close cleanly.
 
 ## Next
 
