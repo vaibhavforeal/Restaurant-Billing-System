@@ -139,6 +139,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   pair(`Bill ${bill.invoiceNo}`, statusLabel(bill));
   line(r.orderType === "zomato" ? contextLine(r.orderType, null, null, r.zomatoOrderId) :
     r.orderType === "parcel" ? (r.orderTypeName ? r.orderTypeName.toUpperCase() : "TAKEAWAY / Parcel") : show.table ? `DINE-IN: ${contextLine(r.orderType, r.tableName, r.splitLabel)}` : "DINE-IN");
+  if (r.deliveryNote) line(`Deliver to: ${r.deliveryNote}`);
   if (show.servedBy && r.servedBy) line(`Served by: ${r.servedBy}`);
   if (bill.payments.length) line(`Payment mode: ${paymentModes(bill)}`);
   for (const text of buyerLines(r)) line(text);
@@ -249,6 +250,7 @@ export function receiptHtml(bill: Bill): string {
     ${show.servedBy && r.servedBy ? `<div><dt>Served by</dt><dd>${e(r.servedBy)}</dd></div>` : ""}
     ${bill.payments.length ? `<div><dt>Payment mode</dt><dd>${e(paymentModes(bill))}</dd></div>` : ""}
     ${r.sacCode ? `<div><dt>SAC</dt><dd>${e(r.sacCode)}</dd></div>` : ""}</dl>
+  ${r.deliveryNote ? `<p class="delivery-note">Deliver to: ${e(r.deliveryNote)}</p>` : ""}
   ${r.buyer ? `<section class="buyer" aria-label="Billed to">${buyerLines(r).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}</section>` : ""}
   <p class="currency-note">All amounts in INR (₹)</p>
   <table class="items${itemGst ? " items--gst" : ""}" aria-label="Bill items"><thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Rate</th>${itemGst ? `<th scope="col">GST</th>` : ""}<th scope="col">Amount</th></tr></thead><tbody>

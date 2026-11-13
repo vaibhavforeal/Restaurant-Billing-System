@@ -14,6 +14,10 @@ export interface KotSlipCtx {
   /** `addon`: picked under the dish above it; `forItem`: the dish's name when the dish is on another ticket. */
   items: Array<{ qty: number; name: string; note: string | null; cancelled: boolean; addon?: boolean; forItem?: string }>;
   atMs: number;
+  /** The cafe app's order token: when set, the heading reads `TOKEN n` in place of `KOT #n`. */
+  token?: number;
+  /** A note for the whole order (the cafe app's delivery note), printed after the items. */
+  note?: string | null;
 }
 
 export interface CancelSlipCtx {
@@ -59,7 +63,7 @@ export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProf
     .align("center")
     .bold(true)
     .size(2, 2)
-    .line(`KOT #${ctx.kotNo}`)
+    .line(ctx.token !== undefined ? `TOKEN ${ctx.token}` : `KOT #${ctx.kotNo}`)
     .size(1, 1)
     .line(contextLine(ctx.orderType, ctx.tableName, ctx.splitLabel, ctx.zomatoOrderId, ctx.orderTypeName ?? null))
     .line(formatTime(ctx.atMs))
@@ -85,8 +89,27 @@ export function kotSlip(ctx: KotSlipCtx, paperWidth: 58 | 80, profile: PrintProf
     }
   }
 
+  const note = ctx.note?.trim();
+  if (note) {
+    pos.hr(width);
+    for (const part of wrapWords(`Note: ${note}`, width)) pos.line(part);
+  }
+
   pos.hr(width).align("center").line(ctx.stationName);
   return finishSlip(pos, profile);
+}
+
+/** Splits text into lines of at most `width` characters, at spaces where it can; control bytes become spaces. */
+function wrapWords(text: string, width: number): string[] {
+  let rest = text.replace(/[\x00-\x1f\x7f]/g, " ");
+  const lines: string[] = [];
+  while (rest.length > width) {
+    const space = rest.lastIndexOf(" ", width);
+    const end = space > 0 ? space : width;
+    lines.push(rest.slice(0, end).trimEnd());
+    rest = rest.slice(end).trimStart();
+  }
+  return [...lines, rest];
 }
 
 export function cancelSlip(ctx: CancelSlipCtx, paperWidth: 58 | 80, profile: PrintProfileInput = DEFAULT_PROFILE): Uint8Array {
