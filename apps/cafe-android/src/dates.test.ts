@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, clockTime, heldAge, monthGrid } from "./dates";
+import { addDays, clockTime, heldAge, monthGrid, msUntilNextLocalMidnight } from "./dates";
 
 describe("dates on screen", () => {
   it("moves a business date by whole days across months and years", () => {
@@ -30,5 +30,13 @@ describe("heldAge", () => {
     expect(heldAge(at("2026-11-13T00:10:00"), now, IST)).toBe("17 h");
     expect(heldAge(at("2026-11-12T23:50:00"), now, IST)).toBe("yesterday");
     expect(heldAge(at("2026-11-10T12:00:00"), now, IST)).toBe("10 Nov 2026");
+  });
+});
+
+describe("midnight", () => {
+  it("counts to the next local midnight in IST", () => {
+    expect(msUntilNextLocalMidnight(Date.parse("2026-11-13T23:59:30+05:30"), 330)).toBe(30_000);
+    expect(msUntilNextLocalMidnight(Date.parse("2026-11-14T00:00:00+05:30"), 330)).toBe(24 * 60 * 60 * 1000);
+    expect(msUntilNextLocalMidnight(Date.parse("2026-11-13T12:00:00+05:30"), 330)).toBe(12 * 60 * 60 * 1000);
   });
 });

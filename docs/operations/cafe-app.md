@@ -53,8 +53,33 @@ Windows notes:
 
 ## First run
 
-The owner enters the cafe name, optional address, phone and GSTIN, how GST is charged and the usual rate, and a 4-6
-digit owner PIN (needed to void a bill). Then an empty menu or a small sample menu, then a printer (can be skipped).
+The owner enters the cafe name, optional address, phone and GSTIN, how GST is charged and the usual rate, their name
+and a 4-6 digit owner PIN. Then an empty menu or a small sample menu, then a printer (can be skipped). The owner is
+signed in at the end. If set-up stopped after the cafe was saved but before the owner was, the app opens on
+**Set owner PIN** next time.
+
+## Staff, PINs and the lock
+
+- **Roles.** Owner (everything), Manager (bills, discounts above the cashier limit, voids, reports, menu, printers,
+  customers) and Cashier (bills, reprints, customers). The owner adds people in More, Staff: name, role and a 4-6
+  digit PIN entered twice; Reset PIN and Deactivate are there too. The last active owner cannot be demoted or
+  deactivated. Deactivated staff stay on their old bills.
+- **Lock screen.** The app opens on it: pick a name, enter that person's PIN. It comes back after the idle time set in
+  More, Counter (default 5 minutes, or Never), checked when the app returns to the foreground and every 30 seconds
+  while it stays open, and on **Switch staff** (the name button on the Bill screen, and More).
+- **Wrong PINs.** After five wrong PINs that person's entry locks for 30 seconds, then 60, 120... The lock is kept on
+  the phone, so restarting the app does not clear it.
+- **Approvals.** When the signed-in person may not do something (a cashier's discount above the limit, a void, Reports,
+  Menu, Printers), a sheet asks a manager or the owner to pick their name and enter their PIN, for that one action. The
+  bill records who approved a discount; a void records who voided. Cafe details, Tax, Receipt, Counter and the kitchen
+  slip setting always ask for the owner PIN on save.
+- **Every owner has forgotten their PIN.** There is no reset yet. If every owner forgets their PIN, the app must be
+  reinstalled until Phase 3 adds Google sign-in. Data on the phone is lost.
+
+## Counter settings (More, Counter)
+
+Cashier discount limit (percent of the bill a cashier may take off without approval; 0 means every discount needs
+approval), lock after (Never, 1, 2, 5, 10, 15 or 30 minutes without a touch) and whether receipts print who served.
 
 ## Pair and add a printer
 
@@ -71,16 +96,37 @@ A network printer takes its IP address (`192.168.1.50`, or `192.168.1.50:9101` f
 A bill is always saved before its receipt is printed. If the printer is off, out of range or out of paper, the
 payment screen says so with Try again, and any bill can be reprinted from Bills.
 
+## Kitchen slip
+
+More, Printers, Kitchen slip: **No kitchen slip**, **Kitchen printer** (a second printer added under Kitchen printer)
+or **Receipt printer** (the slip prints on the counter printer after the receipt). The slip shows `TOKEN n`, Takeaway
+or Delivery, each item with its note (long press a cart line to add one) and the delivery note. It is queued after the
+receipt; the token screen shows each with its own Try again, and a failed slip never affects the saved bill. A bill's
+screen has **Reprint kitchen slip**; a reprint says REPRINT at the foot, and a void bill cannot be reprinted to the
+kitchen.
+
+## Customers, Delivery and held orders
+
+- The cart switches between Takeaway and Delivery. Delivery has a "Deliver to" note that prints on the receipt and
+  the kitchen slip; choosing a customer with an address fills an empty note.
+- **Customer** on the cart finds a customer by phone or name, or adds one. A phone is stored as 10 digits (+91, 0 and
+  spaces are dropped) and belongs to one customer. More, Customers lists them with their bills. The receipt shows the
+  customer's name and the last four digits of the phone.
+- **Hold** saves the cart (with an optional note) to serve the next customer; **Held (n)** on the Bill screen opens it
+  again, priced from the menu as it is then. Items deleted meanwhile are named and left out. Held orders stay on this
+  phone and do not expire.
+
 ## What works offline
 
-Everything in this phase: the menu, billing with cash, UPI QR (generated on the phone) and card, split payments,
-discounts, custom items, receipts and tokens, reprints, voids with the owner PIN, and the day report. Data lives in
+Everything: the menu, billing with cash, UPI QR (generated on the phone) and card, split payments across cash, UPI
+and card, discounts, custom items, receipts and tokens, the kitchen slip, staff PINs and approvals, customers, held
+orders, reprints, voids by a manager or the owner, and the day report with sales by staff and by Takeaway or
+Delivery. Data lives in
 `cafe.db` on the phone. There is no backup yet: uninstalling the app deletes its bills.
 
 ## Not built yet
 
-- Phase 2: add-ons, offers, kitchen slip, staff PINs and roles, customers and bill sharing, hold order,
-  Takeaway or Delivery.
+- Phase 2B: add-ons, offers and sharing a bill as an image.
 - Phase 3: Google sign-in, cloud backup and restore, owner view on a second device, bill link.
 - Phase 4: free trial and signed entitlement, cafes in the Portal, menu from a photo.
 - Phase 5: Play subscription, release signing, store listing and production release.

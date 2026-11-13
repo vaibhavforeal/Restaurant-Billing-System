@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { businessDate } from "@masalapos/cafe-data";
 
 /** Minutes east of UTC on this phone right now (India is 330). Bills use the same rule. */
@@ -46,4 +47,24 @@ export function heldAge(createdAt: number, now: number, tzOffsetMinutes: number)
     return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h`;
   }
   return held === addDays(today, -1) ? "yesterday" : longDate(held);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Milliseconds from `now` to the next midnight in the device's zone; a full day when `now` is exactly midnight. */
+export function msUntilNextLocalMidnight(now: number, tzOffsetMinutes: number): number {
+  const local = now + tzOffsetMinutes * 60_000;
+  return DAY_MS - (((local % DAY_MS) + DAY_MS) % DAY_MS);
+}
+
+/** Today's business date, re-rendering at local midnight so a screen left open moves to the new day. */
+export function useToday(): string {
+  const [date, setDate] = useState(today);
+  useEffect(() => {
+    const now = Date.now();
+    // A second past midnight, so the new date is certainly in force when the timer fires.
+    const timer = setTimeout(() => setDate(today()), msUntilNextLocalMidnight(now, deviceOffset(now)) + 1000);
+    return () => clearTimeout(timer);
+  }, [date]);
+  return date;
 }

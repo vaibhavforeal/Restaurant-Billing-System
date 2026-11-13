@@ -20,11 +20,16 @@ const MAX_QTY = 999;
 const EMPTY: CartSnapshot = { lines: [], discount: null, note: "", orderKind: "takeaway", deliveryNote: "", customer: null, approvedBy: null };
 const cleanLineNote = (note: string | null) => note?.trim().slice(0, 60) || null;
 
-/** A discount in paise for a subtotal: a percent rounds half up, and it never exceeds the subtotal. */
+/** A discount in paise for a subtotal: a percent rounds half up. An amount above the subtotal is not capped; see discountProblem. */
 export function discountPaiseFor(discount: Discount | null, subtotalPaise: number): number {
   if (!discount) return 0;
   const raw = discount.kind === "amount" ? discount.paise : Math.floor((subtotalPaise * discount.bp + 5000) / 10000);
-  return Math.max(0, Math.min(subtotalPaise, Math.trunc(raw)));
+  return Math.max(0, Math.trunc(raw));
+}
+
+/** Why a discount cannot apply to this subtotal, or null. While it stands the cart is priced without the discount. */
+export function discountProblem(discount: Discount | null, subtotalPaise: number): string | null {
+  return discountPaiseFor(discount, subtotalPaise) > subtotalPaise ? "The discount is more than the bill" : null;
 }
 
 /** Cart lines as createBill takes them. */

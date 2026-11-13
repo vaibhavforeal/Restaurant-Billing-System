@@ -35,9 +35,9 @@ export function completePayment(db: SqlDriver, input: CreateBillInput, deps: {
   return { bill, jobId, printError, ...queueKitchenSlip(db, bill, deps) };
 }
 
-/** Queues one kitchen slip for a saved bill (after Paid, or Reprint kitchen slip). Never throws. */
-export function queueKitchenSlip(db: SqlDriver, bill: CafeBill, deps: { enqueue: (job: PrintJob) => void; newId: () => string }):
-  { kitchenJobId: string | null; kitchenProblem: string | null } {
+/** Queues one kitchen slip for a saved bill (after Paid, or Reprint kitchen slip, marked REPRINT). Never throws. */
+export function queueKitchenSlip(db: SqlDriver, bill: CafeBill, deps: { enqueue: (job: PrintJob) => void; newId: () => string },
+  opts: { reprint?: boolean } = {}): { kitchenJobId: string | null; kitchenProblem: string | null } {
   try {
     const target = kitchenTarget(db);
     if (!("printer" in target)) {
@@ -46,7 +46,7 @@ export function queueKitchenSlip(db: SqlDriver, bill: CafeBill, deps: { enqueue:
     const p = target.printer;
     const id = deps.newId();
     deps.enqueue({ id, label: `Kitchen slip, token ${bill.token}`, target: printTarget(p),
-      bytes: kitchenSlipBytes(bill, kitchenLines(db, bill.id), p.paperWidth, p.profile), copies: 1 });
+      bytes: kitchenSlipBytes(bill, kitchenLines(db, bill.id), p.paperWidth, p.profile, opts), copies: 1 });
     return { kitchenJobId: id, kitchenProblem: null };
   } catch {
     return { kitchenJobId: null, kitchenProblem: "The kitchen slip could not be sent to the printer. Reprint it from Bills." };

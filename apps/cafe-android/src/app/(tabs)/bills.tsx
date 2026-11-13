@@ -3,19 +3,22 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { listBills } from "@masalapos/cafe-data";
 import { useData } from "../../db/provider";
-import { clockTime, deviceOffset, today } from "../../dates";
+import { clockTime, deviceOffset, useToday } from "../../dates";
 import { color, radius, space, touch, type } from "../../theme/tokens";
 import { DateControl, Icon, Money, Screen } from "../../ui";
 
 /** A day's bills, newest first, found by token or invoice number. */
 export default function BillsScreen() {
-  const [date, setDate] = useState(today);
+  // Follows today across midnight unless another day was picked.
+  const [picked, setPicked] = useState<string | null>(null);
+  const todayNow = useToday();
+  const date = picked ?? todayNow;
   const [search, setSearch] = useState("");
   const bills = useData((db) => listBills(db, date, search));
 
   return (
     <Screen title="Bills">
-      <DateControl value={date} onChange={setDate} />
+      <DateControl value={date} onChange={(d) => setPicked(d === todayNow ? null : d)} />
       <View style={styles.search}>
         <Icon name="search" size={20} tint={color.onSurfaceMuted} />
         <TextInput value={search} onChangeText={setSearch} placeholder="Token or bill number" placeholderTextColor={color.onSurfaceMuted}

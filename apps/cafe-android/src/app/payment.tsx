@@ -12,8 +12,8 @@ import { deviceOffset } from "../dates";
 import { completePayment } from "../payment/complete";
 import { recordError } from "../errors/capture";
 import { useDb, useData } from "../db/provider";
-import { formatRupees, parseRupees } from "../money";
-import { cashSuggestions, changeDue, remaining } from "../payment/tender";
+import { formatRupees } from "../money";
+import { cashSuggestions, changeDue, parseAmountPaise, splitComplete } from "../payment/tender";
 import { printQueue } from "../print/printer";
 import { session } from "../staff/session";
 import { color, radius, space, touch, type } from "../theme/tokens";
@@ -22,6 +22,7 @@ import { Banner, Button, Choice, Field, Icon, Money, Screen } from "../ui";
 type Mode = PaymentInput["mode"] | "split";
 const MODES = [{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }, { value: "card", label: "Card" }, { value: "split", label: "Split" }] as const;
 const SINGLE = [{ value: "cash", label: "Cash" }, { value: "upi", label: "UPI" }, { value: "card", label: "Card" }] as const;
+const SPLIT_MODES = ["cash", "upi", "card"] as const;
 
 /** Takes payment for the cart and saves the bill. The bill id is made once, so a second tap on Paid finds the same bill. */
 export default function PaymentScreen() {
@@ -33,9 +34,8 @@ export default function PaymentScreen() {
   const [mode, setMode] = useState<Mode>("cash");
   const [tendered, setTendered] = useState<number | null>(null);
   const [other, setOther] = useState("");
-  const [splitFirst, setSplitFirst] = useState<PaymentInput["mode"]>("cash");
-  const [splitSecond, setSplitSecond] = useState<PaymentInput["mode"]>("upi");
-  const [splitAmount, setSplitAmount] = useState("");
+  const [split, setSplit] = useState<Record<PaymentInput["mode"], string>>({ cash: "", upi: "", card: "" });
+  const [splitTendered, setSplitTendered] = useState("");
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState<{ bill: CafeBill; change: number; jobId: string | null; hasPrinter: boolean; printError: string | null;
@@ -58,17 +58,28 @@ export default function PaymentScreen() {
 
   const total = priced.totals.totalPaise;
   const suggestions = cashSuggestions(total);
-  const cashGiven = other ? parseRupees(other) : tendered ?? total;
+  // "Another amount" that cannot be read never counts as the exact total: Paid stays off and says why.
+  const otherUnreadable = other.trim() !== "" && parseAmountPaise(other) === null;
+  const cashGiven = other.trim() ? parseAmountPaise(other) : tendered ?? total;
   const change = mode === "cash" && cashGiven !== null ? changeDue(total, cashGiven) : 0;
-  const firstPart = parseRupees(splitAmount);
-  const splitOk = firstPart !== null && firstPart > 0 && firstPart < total && splitFirst !== splitSecond;
+  // A split is up to three parts, one per way to pay; only the cash part can be tendered with change.
+  const splitParts = SPLIT_MODES.filter((m) => split[m].trim() !== "").map((m) => ({ mode: m, amountPaise: parseAmountPaise(split[m]) ?? -1 }));
+  const splitUnreadable = SPLIT_MODES.some((m) => split[m].trim() !== "" && parseAmountPaise(split[m]) === null);
+  const splitOk = !splitUnreadable && splitComplete(total, splitParts);
+  const splitLeft = total - splitParts.reduce((n, p) => n + Math.max(0, p.amountPaise), 0);
+  const cashPart = splitParts.find((p) => p.mode === "cash")?.amountPaise ?? 0;
+  const splitCashGiven = splitTendered.trim() ? parseAmountPaise(splitTendered) : null;
+  const splitChange = splitCashGiven !== null && cashPart > 0 ? changeDue(cashPart, splitCashGiven) : 0;
   const payments: PaymentInput[] = total === 0 ? []
-    : mode === "split" ? (splitOk ? [{ mode: splitFirst, amountPaise: firstPart, refNote: null }, { mode: splitSecond, amountPaise: remaining(total, [firstPart]), refNote: null }] : [])
+    : mode === "split" ? (splitOk ? splitParts.map((p) => ({ mode: p.mode, amountPaise: p.amountPaise, refNote: null })) : [])
     : [{ mode, amountPaise: total, refNote: null }];
-  const coversTotal = payments.reduce((n, p) => n + p.amountPaise, 0) === total && (mode !== "cash" || change !== null);
-  const upiUri = cafe.upiId ? upiPaymentUri({ upiId: cafe.upiId, payeeName: cafe.name, amountPaise: mode === "split" && splitFirst === "upi" && firstPart ? firstPart
-    : mode === "split" && splitSecond === "upi" && firstPart ? remaining(total, [firstPart]) : total, ref: billId.replace(/-/g, ""), note: "MasalaPOS Cafe" }) : null;
-  const showsUpi = mode === "upi" || (mode === "split" && (splitFirst === "upi" || splitSecond === "upi"));
+  const coversTotal = payments.reduce((n, p) => n + p.amountPaise, 0) === total
+    && (mode !== "cash" || (change !== null && !otherUnreadable))
+    && (mode !== "split" || (splitChange !== null && !(splitTendered.trim() && splitCashGiven === null)));
+  const upiPart = splitParts.find((p) => p.mode === "upi")?.amountPaise ?? 0;
+  const upiUri = cafe.upiId ? upiPaymentUri({ upiId: cafe.upiId, payeeName: cafe.name, amountPaise: mode === "split" ? Math.max(0, upiPart) : total,
+    ref: billId.replace(/-/g, ""), note: "MasalaPOS Cafe" }) : null;
+  const showsUpi = mode === "upi" || (mode === "split" && upiPart > 0);
 
   function paid() {
     // A ref, not state: two taps in the same frame both see the state before React re-renders.
@@ -84,7 +95,7 @@ export default function PaymentScreen() {
         customerId: snap.customer?.id ?? null, orderKind: snap.orderKind, deliveryNote: snap.orderKind === "delivery" ? snap.deliveryNote : null,
       }, { printer: printerFor(db, "receipt"), enqueue: printQueue.enqueue, newId: uuidv7 });
       cart.clear();
-      setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,
+      setDone({ bill: result.bill, change: mode === "cash" ? change ?? 0 : mode === "split" ? splitChange ?? 0 : 0, jobId: result.jobId, hasPrinter: printerFor(db, "receipt") !== null,
         printError: result.printError, kitchenJobId: result.kitchenJobId, kitchenProblem: result.kitchenProblem });
     } catch (e) {
       recordError(e, `payment ${mode}: ${snap.lines.map((l) => `${l.name} x${l.qty}${l.variantId ? " [variant]" : ""}`).join(", ")}`);
@@ -119,7 +130,7 @@ export default function PaymentScreen() {
             })}
           </View>
           <Field label="Another amount (₹)" value={other} onChangeText={setOther} keyboardType="decimal-pad" placeholder="500"
-            error={other && change === null ? "That is less than the total." : null} />
+            error={otherUnreadable ? "Enter an amount like 120 or 120.50" : other && change === null ? "That is less than the total." : null} />
           {change !== null && change > 0 ? (
             <View style={styles.change}><Text style={[type.title, { color: color.onSuccessContainer }]}>Change to give</Text><Money paise={change} size="headline" tone={color.onSuccessContainer} /></View>
           ) : null}
@@ -128,13 +139,37 @@ export default function PaymentScreen() {
 
       {total > 0 && mode === "split" && (
         <View style={styles.block}>
-          <Choice label="First part" options={SINGLE} value={splitFirst} onChange={setSplitFirst} />
-          <Field label="First part amount (₹)" value={splitAmount} onChangeText={setSplitAmount} keyboardType="decimal-pad"
-            error={splitAmount && !(firstPart !== null && firstPart > 0 && firstPart < total) ? `Enter less than ${formatRupees(total)}` : null} />
-          <Choice label="Rest by" options={SINGLE} value={splitSecond} onChange={setSplitSecond} />
-          {splitFirst === splitSecond ? <Banner tone="warning" text="Choose two different ways to pay." /> : null}
-          {firstPart !== null && firstPart > 0 && firstPart < total ? (
-            <Text style={[type.body, { color: color.onSurface }]}>{SINGLE.find((s) => s.value === splitSecond)!.label} pays {formatRupees(remaining(total, [firstPart]))}</Text>
+          <Text style={[type.body, { color: color.onSurfaceMuted }]}>Fill two or three ways to pay. Leave the others empty.</Text>
+          {SINGLE.map((m) => {
+            const text = split[m.value];
+            const bad = text.trim() !== "" && parseAmountPaise(text) === null;
+            return (
+              <View key={m.value} style={styles.splitRow}>
+                <View style={styles.grow}>
+                  <Field label={`${m.label} (₹)`} value={text} onChangeText={(t) => setSplit({ ...split, [m.value]: t })} keyboardType="decimal-pad"
+                    placeholder={splitLeft > 0 ? (splitLeft / 100).toFixed(2) : "0"} error={bad ? "Enter an amount like 120 or 120.50" : null} />
+                </View>
+                {!text.trim() && splitLeft > 0 ? (
+                  <Button label="Rest" variant="quiet" onPress={() => setSplit({ ...split, [m.value]: (splitLeft / 100).toFixed(2) })} />
+                ) : null}
+              </View>
+            );
+          })}
+          {cashPart > 0 ? (
+            <Field label="Cash received (optional, ₹)" value={splitTendered} onChangeText={setSplitTendered} keyboardType="decimal-pad"
+              error={splitTendered.trim() && splitCashGiven === null ? "Enter an amount like 120 or 120.50"
+                : splitChange === null ? "That is less than the cash part." : null} />
+          ) : null}
+          {splitChange !== null && splitChange > 0 ? (
+            <View style={styles.change}><Text style={[type.title, { color: color.onSuccessContainer }]}>Change to give</Text><Money paise={splitChange} size="headline" tone={color.onSuccessContainer} /></View>
+          ) : null}
+          {!splitUnreadable && splitParts.length > 0 && splitLeft !== 0 ? (
+            <Text style={[type.body, { color: color.onSurface }]}>
+              {splitLeft > 0 ? `${formatRupees(splitLeft)} still to cover` : `${formatRupees(-splitLeft)} more than the total`}
+            </Text>
+          ) : null}
+          {new Set(splitParts.map((p) => p.mode)).size === 1 && splitParts.length > 0 && splitLeft === 0 ? (
+            <Banner text="One way pays it all: choose that instead of Split." />
           ) : null}
         </View>
       )}
@@ -164,5 +199,7 @@ const styles = StyleSheet.create({
   change: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: space.md, borderRadius: radius.md, backgroundColor: color.successContainer },
   qr: { alignItems: "center", gap: space.xs, padding: space.md, backgroundColor: color.surface, borderRadius: radius.md },
   paid: { minHeight: 64 },
+  splitRow: { flexDirection: "row", alignItems: "flex-end", gap: space.xs },
+  grow: { flex: 1 },
   iconKey: { width: touch.min, height: touch.min, alignItems: "center", justifyContent: "center" },
 });

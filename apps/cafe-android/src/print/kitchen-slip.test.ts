@@ -48,3 +48,14 @@ describe("kitchen slip", () => {
     expect("printer" in target ? target.printer.name : target.reason).toBe(expected);
   });
 });
+
+describe("reprinted kitchen slip", () => {
+  it("is marked REPRINT so the kitchen does not make the order twice", () => {
+    const { db, samosa, cashier } = menuCafe();
+    const bill = createBill(db, { id: "b1", lines: [{ itemId: samosa.id, variantId: null, qty: 1 }], discountPaise: 0, discountNote: null,
+      payments: [{ mode: "cash", amountPaise: 1800, refNote: null }], now: T0, tzOffsetMinutes: 330, ...walkIn(cashier.id) });
+    const lines: KitchenLine[] = [{ name: "Samosa", qty: 1, note: null, addonOf: null }];
+    expect(renderBytes(kitchenSlipBytes(bill, lines, 58, undefined, { reprint: true }))).toContain("REPRINT");
+    expect(renderBytes(kitchenSlipBytes(bill, lines, 58))).not.toContain("REPRINT");
+  });
+});

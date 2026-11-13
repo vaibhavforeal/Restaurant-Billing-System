@@ -64,3 +64,16 @@ describe("billErrorMessage for Phase 2 refusals", () => {
     expect(billErrorMessage(new BillError(code, "x"))).toContain(text);
   });
 });
+
+describe("cartTotals with a discount above the bill", () => {
+  it("prices the cart without the discount and says why", () => {
+    const { db, samosa } = menuCafe();
+    const store = createCartStore();
+    store.add({ itemId: samosa.id, variantId: null, name: "Samosa", pricePaise: 1800, gstRate: 5 });
+    store.setDiscount({ kind: "amount", paise: 5000 });
+    expect(cartTotals(db, store.snapshot())).toMatchObject({ ok: true, discountPaise: 0, discountProblem: "The discount is more than the bill",
+      totals: { totalPaise: 1800 } });
+    store.setDiscount({ kind: "amount", paise: 500 });
+    expect(cartTotals(db, store.snapshot())).toMatchObject({ ok: true, discountPaise: 500, discountProblem: null });
+  });
+});

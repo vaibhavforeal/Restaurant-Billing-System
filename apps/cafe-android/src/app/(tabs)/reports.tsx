@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { daySummary, getCafe, printerFor, printTarget } from "@masalapos/cafe-data";
 import { uuidv7 } from "@masalapos/domain/id";
 import { useData } from "../../db/provider";
-import { today } from "../../dates";
+import { useToday } from "../../dates";
 import { daySummarySlip } from "../../print/day-summary-slip";
 import { printQueue } from "../../print/printer";
 import { usePrintJob } from "../../print/usePrintJobs";
@@ -44,7 +44,10 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 
 /** The day report: sales, payment modes, tax by rate, items sold and voids; printable as a slip. */
 function ReportsScreen() {
-  const [date, setDate] = useState(today);
+  // Follows today across midnight unless another day was picked.
+  const [picked, setPicked] = useState<string | null>(null);
+  const todayNow = useToday();
+  const date = picked ?? todayNow;
   const s = useData((db) => daySummary(db, date));
   const cafeName = useData((db) => getCafe(db)?.name ?? "");
   const printer = useData((db) => printerFor(db, "receipt"));
@@ -62,7 +65,7 @@ function ReportsScreen() {
   const empty = s.billCount === 0 && s.voidCount === 0;
   return (
     <Screen title="Reports" actions={!empty && printer ? <Button label="Print summary" icon="printer" variant="secondary" onPress={print} /> : null}>
-      <DateControl value={date} onChange={setDate} />
+      <DateControl value={date} onChange={(d) => setPicked(d === todayNow ? null : d)} />
       {job && job.state !== "done" && job.state !== "failed" ? <Banner text="Printing the summary…" /> : null}
       {job?.state === "done" ? <Banner tone="success" text="Summary printed." /> : null}
       {job?.state === "failed" ? <Banner tone="error" text={job.error ?? "The summary did not print."} action={{ label: "Try again", onPress: () => printQueue.retry(job.id) }} /> : null}
@@ -86,6 +89,15 @@ function ReportsScreen() {
             {s.roundingPaise ? <Line label="Round off" paise={s.roundingPaise} /> : null}
             <Line label="Net sales" paise={s.netPaise} />
           </Card>
+          <Card title="Takeaway and Delivery">
+            <Line label="Takeaway" paise={s.byOrderKind.takeaway.totalPaise} note={`${s.byOrderKind.takeaway.billCount} bills`} />
+            <Line label="Delivery" paise={s.byOrderKind.delivery.totalPaise} note={`${s.byOrderKind.delivery.billCount} bills`} />
+          </Card>
+          {s.byStaff.length ? (
+            <Card title="By staff">
+              {s.byStaff.map((p) => <Line key={p.staffId ?? p.name} label={p.name} paise={p.totalPaise} note={`${p.billCount} ${p.billCount === 1 ? "bill" : "bills"}`} />)}
+            </Card>
+          ) : null}
           {s.taxes.some((t) => t.cgstPaise || t.sgstPaise) ? (
             <Card title="Tax by rate">
               {s.taxes.map((t) => (

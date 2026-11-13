@@ -143,6 +143,9 @@ export function CartPanel({ cafe, priced, onCharge, onHold, compact = false }: {
       </ScrollView>
       <View style={styles.footer}>
         {discountProblem ? <Banner tone="warning" text={discountProblem} /> : null}
+        {priced?.ok && priced.discountProblem ? (
+          <Banner tone="warning" text={`${priced.discountProblem}. It is not applied.`} action={{ label: "Change", onPress: () => setDiscountOpen(true) }} />
+        ) : null}
         {needsApproval ? (
           <Banner tone="warning" text="The items changed, so this discount needs approval again."
             action={{ label: "Approve", onPress: () => void askAgain() }} />

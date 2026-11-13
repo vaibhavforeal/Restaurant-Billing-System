@@ -4,11 +4,13 @@ import { kotSlip } from "@masalapos/print";
 
 /**
  * The kitchen's copy of a bill: `TOKEN n` in large type, Takeaway or Delivery, each line with its note, add-ons under
- * their dish, and the delivery note at the end. Prices never print on it.
+ * their dish, and the delivery note at the end. Prices never print on it. A reprint says REPRINT at the foot, so the
+ * kitchen does not make the order twice.
  */
-export function kitchenSlipBytes(bill: CafeBill, lines: readonly KitchenLine[], paperWidth: 58 | 80, profile?: PrintProfileInput): Uint8Array {
+export function kitchenSlipBytes(bill: CafeBill, lines: readonly KitchenLine[], paperWidth: 58 | 80, profile?: PrintProfileInput,
+  opts: { reprint?: boolean } = {}): Uint8Array {
   return kotSlip({
-    kotNo: bill.token, token: bill.token, stationName: "Kitchen", orderType: "parcel",
+    kotNo: bill.token, token: bill.token, stationName: opts.reprint ? "Kitchen - REPRINT" : "Kitchen", orderType: "parcel",
     orderTypeName: bill.orderKind === "delivery" ? "Delivery" : "Takeaway", tableName: null, splitLabel: null,
     note: bill.deliveryNote, atMs: bill.createdAt,
     items: lines.map((l) => ({ qty: l.qty, name: l.name, note: l.note, cancelled: false, ...(l.addonOf !== null ? { addon: true } : {}) })),

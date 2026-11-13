@@ -10,7 +10,8 @@ const ROWS: Array<{ title: string; subtitle: string; href: Href; needs?: CafePer
   { title: "Cafe details", subtitle: "Name, address, phone, GSTIN, FSSAI, UPI ID", href: "/more/cafe" },
   { title: "Tax", subtitle: "GST mode, usual rate, rounding", href: "/more/tax" },
   { title: "Receipt", subtitle: "Bill prefix, header, footer, style", href: "/more/receipt" },
-  { title: "Printers", subtitle: "Receipt printer, paper width, test print", href: "/more/printers" },
+  { title: "Counter", subtitle: "Cashier discount limit, lock time, who served", href: "/more/counter" },
+  { title: "Printers", subtitle: "Receipt and kitchen printers, kitchen slip", href: "/more/printers" },
   { title: "About", subtitle: "App version and this device", href: "/more/about" },
   { title: "Error log", subtitle: "Problems the app met, to share with MasalaPOS", href: "/more/errors" },
 ];

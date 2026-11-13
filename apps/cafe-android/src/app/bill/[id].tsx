@@ -54,7 +54,7 @@ export default function BillDetail() {
 
   function reprintKitchen() {
     if (!bill) return;
-    const result = queueKitchenSlip(db, bill, { enqueue: printQueue.enqueue, newId: uuidv7 });
+    const result = queueKitchenSlip(db, bill, { enqueue: printQueue.enqueue, newId: uuidv7 }, { reprint: true });
     setKitchenJobId(result.kitchenJobId);
     setKitchenProblem(result.kitchenProblem);
   }
@@ -89,7 +89,7 @@ export default function BillDetail() {
       {justVoided ? <Banner tone="success" text="Bill voided. It no longer counts in the day's sales." {...(printer ? { action: { label: "Print void receipt", onPress: reprint } } : {})} /> : null}
       <View style={styles.actions}>
         <Button label="Reprint" icon="printer" size="lg" disabled={!printer} onPress={reprint} style={styles.grow} />
-        {kitchenOn ? <Button label="Reprint kitchen slip" variant="secondary" size="lg" onPress={reprintKitchen} /> : null}
+        {kitchenOn && !bill.voided ? <Button label="Reprint kitchen slip" variant="secondary" size="lg" onPress={reprintKitchen} /> : null}
         {!bill.voided ? <Button label="Void" variant="danger" size="lg" onPress={() => void startVoid()} /> : null}
       </View>
 

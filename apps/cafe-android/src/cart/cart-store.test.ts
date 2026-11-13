@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createCartStore } from "./cart-store";
+import { createCartStore, discountPaiseFor, discountProblem } from "./cart-store";
 
 let cart: ReturnType<typeof createCartStore>;
 const smallChai = { itemId: "chai", variantId: "small", name: "Masala Chai (Small)", pricePaise: 1500, gstRate: null };
@@ -32,9 +32,9 @@ describe("cart store", () => {
     expect(cart.entries()).toEqual([]);
   });
 
-  it("turns a percent discount into paise, rounding half up, never above the subtotal", () => {
+  it("turns a percent discount into paise, rounding half up", () => {
     cart.setDiscount({ kind: "percent", bp: 1250 }); expect(cart.discountPaise(3333)).toBe(417);
-    cart.setDiscount({ kind: "amount", paise: 9999 }); expect(cart.discountPaise(3333)).toBe(3333);
+    cart.setDiscount({ kind: "amount", paise: 2000 }); expect(cart.discountPaise(3333)).toBe(2000);
     cart.setDiscount({ kind: "percent", bp: 1000 }, "Regular"); expect(cart.discountPaise(3600)).toBe(360);
     expect(cart.discount()).toEqual({ value: { kind: "percent", bp: 1000 }, note: "Regular" });
     cart.setDiscount(null); expect(cart.discountPaise(3600)).toBe(0);
@@ -184,5 +184,15 @@ describe("discount approval and line changes", () => {
     cart.setQty(cart.entries()[1]!.key, 0);
     cart.add(smallChai);
     expect(cart.snapshot().approvedBy).toBe("m1");
+  });
+});
+
+describe("a discount above the bill", () => {
+  it("reports a discount above the bill and does not cap it", () => {
+    expect(discountProblem({ kind: "amount", paise: 5000 }, 3000)).toBe("The discount is more than the bill");
+    expect(discountPaiseFor({ kind: "amount", paise: 5000 }, 3000)).toBe(5000);
+    expect(discountProblem({ kind: "amount", paise: 3000 }, 3000)).toBeNull();
+    expect(discountProblem({ kind: "percent", bp: 10000 }, 3000)).toBeNull();
+    expect(discountProblem(null, 3000)).toBeNull();
   });
 });

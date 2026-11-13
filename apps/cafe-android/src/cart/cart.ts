@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { BillError, getCustomer, getItemName, listMenu, previewBill, type HeldCart, type SqlDriver } from "@masalapos/cafe-data";
 import type { BillTotals } from "@masalapos/domain/billing";
-import { createCartStore, discountPaiseFor, linesForBill, type CartEntry, type CartSnapshot, type CartStore } from "./cart-store";
+import { createCartStore, discountPaiseFor, discountProblem, linesForBill, type CartEntry, type CartSnapshot, type CartStore } from "./cart-store";
 
 /** The counter's one cart. It lives in memory; a bill is only written when it is paid. */
 export const cart: CartStore = createCartStore();
@@ -12,17 +12,21 @@ export function useCart(): CartSnapshot {
 }
 
 export type CartTotals =
-  | { ok: true; totals: BillTotals; discountPaise: number }
+  | { ok: true; totals: BillTotals; discountPaise: number; discountProblem: string | null }
   | { ok: false; error: BillError | Error; lineIndex: number | null };
 
-/** A cart snapshot priced from the menu as it is now, with its discount; or the reason it cannot be billed. */
+/**
+ * A cart snapshot priced from the menu as it is now, with its discount; or the reason it cannot be billed. A discount
+ * above the bill is left out and named in `discountProblem`.
+ */
 export function cartTotals(db: SqlDriver, snap: CartSnapshot): CartTotals | null {
   const lines = linesForBill(snap.lines);
   if (!lines.length) return null;
   try {
     const subtotal = previewBill(db, { lines, discountPaise: 0 }).subtotalPaise;
-    const discountPaise = discountPaiseFor(snap.discount, subtotal);
-    return { ok: true, totals: previewBill(db, { lines, discountPaise }), discountPaise };
+    const problem = discountProblem(snap.discount, subtotal);
+    const discountPaise = problem ? 0 : discountPaiseFor(snap.discount, subtotal);
+    return { ok: true, totals: previewBill(db, { lines, discountPaise }), discountPaise, discountProblem: problem };
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     return { ok: false, error, lineIndex: e instanceof BillError ? e.lineIndex ?? null : null };
