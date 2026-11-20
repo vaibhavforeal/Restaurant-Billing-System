@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Feature } from "./licensing.js";
 
 /** Static registry of integrations and add-ons the Marketplace can turn on or off. Only on/off state is stored (integration_state). */
-export type IntegrationId = "zomato" | "swiggy" | "kds" | "crm" | "dynamicReports";
+export type IntegrationId = "zomato" | "swiggy" | "kds" | "crm" | "dynamicReports" | "offers";
 export type IntegrationStatus = "available" | "coming_soon";
 
 export interface IntegrationDef {
@@ -66,6 +66,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     status: "available",
     setupPage: null,
   },
+  { id: "offers", name: "Offers", description: "Create automatic bill discounts and buy-X-get-Y deals.", category: "customers", status: "available", setupPage: null },
 ];
 
 export const IntegrationToggle = z.object({ enabled: z.boolean() }).strict();

@@ -72,6 +72,7 @@ export interface BillTotals {
   charges?: ChargeLine[];
 }
 export interface ReceiptSnapshot {
+  offer?: import("./offers.js").AppliedOffer;
   /** Missing on older bills, which continue to use the Classic layout. */
   receiptStyle?: ReceiptStyle;
   /** Absent on bills issued before UPI configuration was supported. */
@@ -173,25 +174,29 @@ function taxGroup(gross: number, rate: number, mode: GstMode): Omit<TaxLine, "gs
 }
 
 /** All financial arithmetic uses integer paise / BigInt. */
-export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee", charges: ChargeInput[] = []): BillTotals {
+export function calculateBill(items: Array<{ pricePaise: number; qty: number; gstRate: number; offerPaise?: number }>, discountPaise = 0, mode: GstMode = "included", roundOff: RoundOff = "rupee", charges: ChargeInput[] = []): BillTotals {
   if (!items.length) throw new Error("Bill must contain at least one item");
   const groups = new Map<number, number>();
   let subtotalPaise = 0;
+  let offerTotal = 0;
   for (const item of items) {
     if (!Number.isSafeInteger(item.pricePaise) || item.pricePaise < 0 || !Number.isSafeInteger(item.qty) || item.qty < 1 ||
         ![0, 5, 12, 18, 28].includes(item.gstRate)) throw new Error("Invalid bill item");
     const amount = item.pricePaise * item.qty;
+    const offer = item.offerPaise ?? 0;
+    if (!Number.isSafeInteger(offer) || offer < 0 || offer > amount) throw new Error("Invalid offer allocation");
+    offerTotal += offer;
     subtotalPaise += amount;
     if (!Number.isSafeInteger(subtotalPaise) || subtotalPaise > 1_000_000_000) throw new Error("Bill exceeds supported amount");
-    groups.set(item.gstRate, (groups.get(item.gstRate) ?? 0) + amount);
+    groups.set(item.gstRate, (groups.get(item.gstRate) ?? 0) + amount - offer);
   }
-  if (!Number.isSafeInteger(discountPaise) || discountPaise < 0 || discountPaise > subtotalPaise) throw new Error("Discount exceeds subtotal");
+  if (!Number.isSafeInteger(discountPaise) || discountPaise < offerTotal || discountPaise > subtotalPaise) throw new Error("Discount exceeds subtotal");
   const allocation = [...groups.entries()].sort(([a], [b]) => a - b).map(([rate, amount]) => {
-    const product = BigInt(amount) * BigInt(discountPaise);
-    const denominator = BigInt(subtotalPaise || 1);
+    const product = BigInt(amount) * BigInt(discountPaise - offerTotal);
+    const denominator = BigInt((subtotalPaise - offerTotal) || 1);
     return { rate, amount, discount: Number(product / denominator), remainder: product % denominator };
   });
-  let remaining = discountPaise - allocation.reduce((sum, row) => sum + row.discount, 0);
+  let remaining = discountPaise - offerTotal - allocation.reduce((sum, row) => sum + row.discount, 0);
   const byRemainder = [...allocation].sort((a, b) => a.remainder === b.remainder ? a.rate - b.rate : a.remainder > b.remainder ? -1 : 1);
   for (const row of byRemainder) { if (remaining-- > 0) row.discount++; }
   const taxes: TaxLine[] = allocation.map(({ rate, amount, discount }) => ({ gstRate: rate, ...taxGroup(amount - discount, rate, mode) }));

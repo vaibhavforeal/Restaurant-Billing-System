@@ -30,6 +30,8 @@ describe("modules", () => {
 
   it("requires a complete module map in the licence", () => {
     expect(ModuleMapSchema.parse(allModules())).toEqual(allModules());
+    const { offers: _offers, ...legacy } = allModules();
+    expect(ModuleMapSchema.parse(legacy).offers).toBe(true);
     const { crm: _missing, ...partial } = allModules();
     expect(() => ModuleMapSchema.parse(partial)).toThrow();
     expect(() => ModuleMapSchema.parse({ ...allModules(), payroll: true })).toThrow();

@@ -55,6 +55,7 @@ import { configureLicensing, registerLicensing, type LicensingOptions } from "./
 import { registerSupport, type SupportOptions } from "./support.js";
 import { provideModuleAllowances, registerModules } from "./modules.js";
 import type { CaptainHttpsInfo } from "./captain-https.js";
+import { registerOffers } from "./offers.js";
 import { registerIntegrations } from "./integrations.js";
 import { registerZomato, type ZomatoProvider } from "./zomato.js";
 
@@ -183,6 +184,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerGuestServices(app);
   registerModules(app);
   registerIntegrations(app);
+  registerOffers(app);
   registerZomato(app, opts.zomatoProvider);
   const cloudBackups = opts.backups ? new CloudBackups(opts.backups, opts.cloudBackupProvider) : undefined;
   if (cloudBackups) {

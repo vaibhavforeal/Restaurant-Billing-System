@@ -8,7 +8,7 @@ import { z } from "zod";
 export const MODULE_IDS = [
   "takeaway", "reservations", "qrOrdering", "guestServices",
   "inventory", "recipes", "costing", "reports", "dashboard",
-  "zomato", "kds", "crm", "dynamicReports",
+  "zomato", "kds", "crm", "dynamicReports", "offers",
 ] as const;
 export type ModuleId = typeof MODULE_IDS[number];
 export type ModuleGroup = "addon" | "service" | "backoffice";
@@ -51,6 +51,8 @@ export const MODULES: readonly ModuleDef[] = [
     description: "Customer profiles, loyalty points and tiers, customer-type discounts, feedback, segments and insights." },
   { id: "dynamicReports", name: "Dynamic Reports", group: "addon", dependsOn: ["reports", "dashboard"], plans: { basic: false, pro: true },
     description: "Build your own Home dashboard: drag, resize and choose the sales, item and live service widgets you want." },
+  { id: "offers", name: "Offers", group: "addon", dependsOn: [], plans: { basic: true, pro: true },
+    description: "Scheduled bill discounts and buy-X-get-Y deals." },
 ];
 
 export const isModuleId = (id: string): id is ModuleId => (MODULE_IDS as readonly string[]).includes(id);
@@ -61,8 +63,8 @@ export type ModuleMap = Record<ModuleId, boolean>;
 /** The owner's per-restaurant choices; a module left out follows the plan. */
 export type ModuleOverrides = { [K in ModuleId]?: boolean | undefined };
 
-/** Every module, as the licence carries it: all keys present. */
-export const ModuleMapSchema = z.object(Object.fromEntries(MODULE_IDS.map((id) => [id, z.boolean()])) as Record<ModuleId, z.ZodBoolean>).strict();
+/** Older signed licences predate Offers. Both plans include it, and the local switch starts off. */
+export const ModuleMapSchema = z.object(Object.fromEntries(MODULE_IDS.map((id) => [id, z.boolean()])) as Record<ModuleId, z.ZodBoolean>).extend({ offers: z.boolean().default(true) }).strict();
 export const ModuleOverridesSchema = z.object(Object.fromEntries(MODULE_IDS.map((id) => [id, z.boolean().optional()])) as Record<ModuleId, z.ZodOptional<z.ZodBoolean>>).strict();
 
 export function planModules(plan: "basic" | "pro"): ModuleMap {

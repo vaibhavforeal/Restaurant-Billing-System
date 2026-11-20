@@ -151,7 +151,9 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   });
   rule();
   pair(`Subtotal (${quantity(bill)} qty)`, money(bill.subtotalPaise));
-  if (bill.discountPaise) pair("Discount", `-${money(bill.discountPaise)}`);
+  const otherDiscount = bill.discountPaise - (r.offer?.savingPaise ?? 0);
+  if (r.offer) pair(clean(r.offer.name), `-${money(r.offer.savingPaise)}`);
+  if (otherDiscount) pair("Discount", `-${money(otherDiscount)}`);
   for (const c of bill.charges ?? []) pair(clean(chargeLabel(c)), money(c.amountPaise));
   if (zomatoGst) line("GST paid by Zomato (section 9(5))");
   for (const t of addedGst(bill)) {
@@ -241,7 +243,8 @@ export function receiptHtml(bill: Bill): string {
   </tbody></table>
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
-    ${bill.discountPaise ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise)}</td></tr>` : ""}
+    ${r.offer ? `<tr><td>${e(r.offer.name)}</td><td class="amount">-₹${money(r.offer.savingPaise)}</td></tr>` : ""}
+    ${bill.discountPaise > (r.offer?.savingPaise ?? 0) ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise - (r.offer?.savingPaise ?? 0))}</td></tr>` : ""}
     ${(bill.charges ?? []).map((c) => `<tr><td>${e(chargeLabel(c))}</td><td class="amount">₹${money(c.amountPaise)}</td></tr>`).join("")}
     ${zomatoGst ? `<tr><td colspan="2" class="tax-note">GST paid by Zomato (section 9(5))</td></tr>` : ""}
     ${addedGst(bill).map((t) => `<tr class="tax"><td>CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.cgstPaise)}</td></tr>

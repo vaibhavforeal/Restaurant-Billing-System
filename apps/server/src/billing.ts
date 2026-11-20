@@ -19,7 +19,9 @@ import { resolveApprover } from "./credit-notes.js";
 import { customerSlab } from "./customers.js";
 import { earnExpiry, loyaltySettings, sweepExpiry } from "./loyalty.js";
 import { billFeedbackUrl } from "./feedback.js";
-import { crmEnabled } from "./integrations.js";
+import { bestOffer, type AppliedOffer } from "@masalapos/domain/offers";
+import { readOffers } from "./offers.js";
+import { crmEnabled, integrationEnabled } from "./integrations.js";
 import { pointsBalance } from "./mappers.js";
 
 interface BillRow {
@@ -56,7 +58,7 @@ interface BillDiscount { manualPaise: number; redeemPoints?: number }
 const isDiscountCapError = (err: unknown) => typeof err === "object" && err !== null && "code" in err && err.code === "discount_cap";
 
 /** Validates an order for billing and prices it. Shared by the preview and by `issueBill` so both see the same bill. */
-function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>, buyer: BuyerDetailsInput | null = null, serviceCharge = true) {
+function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor: BillActor, gstMode: GstMode | undefined, receiptExtra?: Partial<ReceiptSnapshot>, buyer: BuyerDetailsInput | null = null, serviceCharge = true, time = Date.now()) {
   const order = loadOrderJson(db, orderId);
   if (!order) throw httpError(404, "order not found");
   if (order.status !== "open") throw httpError(409, "order is not open");
@@ -74,9 +76,13 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   const mode = gstMode ?? settings.gstMode;
   // With CRM & Loyalty off in the Marketplace a customer left on the order gives no discount, points or receipt line.
   const customer = crmEnabled(db) ? order.customer : null;
-  const loyalty = customerDiscounts(db, customer, items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0), discount);
   // Service applies to dine-in; packaging to takeaway and delivery parcels. Zomato orders get neither.
   const { type: orderType, kind: orderTypeKind } = db.prepare("SELECT o.type, t.kind FROM orders o LEFT JOIN order_types t ON t.id = COALESCE(o.order_type_id, o.type) WHERE o.id = ?").get(orderId) as { type: string; kind: NonNullable<ReceiptSnapshot["orderTypeKind"]> | null };
+  const candidate = orderTypeKind && orderTypeKind !== "aggregator" && orderType !== "zomato" && integrationEnabled(db, "offers")
+    ? bestOffer(readOffers(db, true), items, orderTypeKind, time) : null;
+  const subtotal = items.reduce((sum, item) => sum + item.pricePaise * item.qty, 0);
+  const loyalty = customerDiscounts(db, customer, subtotal, discount, candidate, time);
+  const offer = loyalty.offer;
   const serviceDue = orderType === "dine_in" && settings.serviceChargeBp > 0;
   const charges: ChargeInput[] = [];
   if (serviceDue && serviceCharge) charges.push({ kind: "service", label: settings.serviceChargeLabel, gstRate: settings.gstRate, bp: settings.serviceChargeBp });
@@ -85,7 +91,7 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
     const perItem = [...orderItemPackaging(db, orderId).values()].reduce((sum, paise) => sum + paise, 0);
     charges.push({ kind: "packaging", label: settings.packagingChargeLabel, gstRate: settings.gstRate, amountPaise: settings.packagingChargePaise + perItem });
   }
-  try { totals = calculateBill(items, discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff, charges); }
+  try { totals = calculateBill(items.map(i => ({ ...i, offerPaise: offer?.allocations[i.id] ?? 0 })), (offer?.savingPaise ?? 0) + discount.manualPaise + loyalty.customerDiscountPaise + loyalty.pointsValuePaise, mode, settings.roundOff, charges); }
   catch (err) { throw httpError(400, err instanceof Error ? err.message.replace("Discount exceeds subtotal", "The discounts are more than the bill") : "Invalid bill"); }
   // The limit is on what staff choose to give; slab discounts are set by an admin and points were earned.
   const limit = effectiveDiscountCap(db, actor);
@@ -99,7 +105,7 @@ function priceOrder(db: Database, orderId: string, discount: BillDiscount, actor
   // The bill keeps the address as one printed line, so later changes to the restaurant's details never alter an issued bill.
   profile.address = formatRestaurantAddress({ address: profile.address, city, stateCode, pincode });
   const gst = gstInvoiceDetails(db, profile.gstin, mode, stateCode, buyer);
-  const receipt: ReceiptSnapshot = { ...profile, ...gst, gstMode: mode, billShow, ...(order.soldByName ? { servedBy: order.soldByName } : {}), orderType: order.type, ...(orderTypeKind ? { orderTypeKind } : {}), ...(serviceDue && !serviceCharge ? { serviceChargeRemoved: true as const } : {}), tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
+  const receipt: ReceiptSnapshot = { ...profile, ...gst, ...(offer ? { offer } : {}), gstMode: mode, billShow, ...(order.soldByName ? { servedBy: order.soldByName } : {}), orderType: order.type, ...(orderTypeKind ? { orderTypeKind } : {}), ...(serviceDue && !serviceCharge ? { serviceChargeRemoved: true as const } : {}), tableName: orderTableLabel(db, orderId), splitLabel: order.splitLabel,
     ...(order.orderTypeName ? { orderTypeName: order.orderTypeName } : {}),
     ...(customer ? { customer: receiptCustomer(customer, loyalty, earned) } : {}),
     items: items.map((item) => {
@@ -131,12 +137,14 @@ type OrderCustomer = NonNullable<NonNullable<ReturnType<typeof loadOrderJson>>["
  * The customer's slab discount and the points they spend. Points need loyalty turned on and enough unexpired balance,
  * and may pay at most `maxRedeemPercent` of what is left of the subtotal after the other discounts.
  */
-function customerDiscounts(db: Database, customer: OrderCustomer | null, subtotalPaise: number, discount: BillDiscount) {
+function customerDiscounts(db: Database, customer: OrderCustomer | null, subtotalPaise: number, discount: BillDiscount, candidate: AppliedOffer | null, time: number) {
   const settings = loyaltySettings(db);
-  const slab = customer ? customerSlab(db, customer.id, subtotalPaise, localDateKey(Date.now())) : null;
+  const customerRule = customer ? customerSlab(db, customer.id, subtotalPaise, localDateKey(time)) : null;
+  const offer = candidate && candidate.savingPaise > (customerRule?.discountPaise ?? 0) ? candidate : null;
+  const slab = offer ? null : customerRule;
   const points = discount.redeemPoints ?? 0;
   const balance = customer && settings.enabled ? pointsBalance(db, customer.id) : 0;
-  const payable = Math.max(0, subtotalPaise - discount.manualPaise - (slab?.discountPaise ?? 0));
+  const payable = Math.max(0, subtotalPaise - discount.manualPaise - (offer?.savingPaise ?? 0) - (slab?.discountPaise ?? 0));
   const capPoints = Math.floor(payable * settings.maxRedeemPercent / 100 / settings.pointValuePaise);
   if (points > 0) {
     if (!customer) throw httpError(400, "Add the customer to the order to redeem points");
@@ -145,7 +153,7 @@ function customerDiscounts(db: Database, customer: OrderCustomer | null, subtota
     if (points > balance) throw httpError(400, `${customer.name} has ${balance} points`);
     if (points > capPoints) throw httpError(400, `Points can pay up to ${settings.maxRedeemPercent}% of this bill: at most ${capPoints} points`);
   }
-  return { enabled: settings.enabled, pointsPer100: settings.pointsPer100, slab, maxRedeemPoints: Math.max(0, Math.min(balance, capPoints)),
+  return { enabled: settings.enabled, pointsPer100: settings.pointsPer100, slab, offer, maxRedeemPoints: Math.max(0, Math.min(balance, capPoints)),
     customerDiscountPaise: slab?.discountPaise ?? 0, pointsRedeemed: points, pointsValuePaise: points * settings.pointValuePaise };
 }
 
@@ -173,9 +181,9 @@ function discountNote(manual: string | null, loyalty: ReturnType<typeof priceOrd
  */
 export function issueBill(db: Database, orderId: string, opts: {
   discountPaise: number; discountNote: string | null; redeemPoints?: number; clientRef: string; requestJson: string; actorId: string; role: IssueRole; approvedBy?: string | null;
-  gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>; buyer?: BuyerDetailsInput | null; serviceCharge?: boolean;
+  pricingTime?: number; gstMode?: GstMode; receiptExtra?: Partial<ReceiptSnapshot>; buyer?: BuyerDetailsInput | null; serviceCharge?: boolean;
 }): { billId: string; changedStockIds: string[] } {
-  const { totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0 }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true);
+  const { totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: opts.discountPaise, redeemPoints: opts.redeemPoints ?? 0 }, { id: opts.actorId, role: opts.role, approvedBy: opts.approvedBy ?? null }, opts.gstMode, opts.receiptExtra, opts.buyer ?? null, opts.serviceCharge ?? true, opts.pricingTime);
   const id = uuidv7();
   const now = Date.now();
   const billNo = nextSequence(db, "bill_no");
@@ -277,9 +285,9 @@ export function registerBilling(app: FastifyInstance): void {
     if (type === "zomato") throw httpError(409, "Zomato orders are billed and closed with Picked up on the Zomato desk", "zomato_order");
   }
   const orderType = (orderId: string) => (db.prepare("SELECT type FROM orders WHERE id = ?").get(orderId) as { type: string } | undefined)?.type;
-  function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor) {
+  function preview(orderId: string, body: z.infer<typeof BillPreview>, actor: BillActor, time = Date.now()) {
     refuseZomato(orderType(orderId));
-    const { items, totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, actor, undefined, undefined, body.buyer, body.serviceCharge);
+    const { items, totals, receipt, loyalty } = priceOrder(db, orderId, { manualPaise: body.discountPaise, redeemPoints: body.redeemPoints }, actor, undefined, undefined, body.buyer, body.serviceCharge, time);
     const previewKey = createHash("sha256").update(JSON.stringify({ orderId, items, receipt, totals, discountNote: body.discountNote, serviceCharge: body.serviceCharge })).digest("hex");
     return { ...totals, receipt, previewKey, maxRedeemPoints: loyalty.maxRedeemPoints };
   }
@@ -325,10 +333,11 @@ export function registerBilling(app: FastifyInstance): void {
       }
       refuseZomato(orderType(orderId));
       if (db.prepare("SELECT id FROM bills WHERE order_id = ?").get(orderId)) throw httpError(409, "Order already billed; reload to view its bill");
-      const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy });
+      const pricingTime = Date.now();
+      const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy }, pricingTime);
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
       const target = body.printerId ? printer(body.printerId) : null;
-      const issued = issueBill(db, orderId, { discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
+      const issued = issueBill(db, orderId, { pricingTime, discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
       changedStockIds.push(...issued.changedStockIds);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
       return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };

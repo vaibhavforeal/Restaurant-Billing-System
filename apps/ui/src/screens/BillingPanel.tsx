@@ -8,7 +8,7 @@ import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
-import { enqueueRequest, outcomeOrSaved } from "../retry-queue";
+import { discardRequest, enqueueRequest, outcomeOrSaved } from "../retry-queue";
 import { isUnreachable } from "../offline-cache";
 import { SegmentedControl } from "../PosControls";
 import { useIntegrations } from "../integrations";
@@ -32,7 +32,7 @@ function preferredPayment(): "cash" | "card" | "upi" { const value = readPrefere
 
 type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string; refNote: string };
 
-export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
+export function BillSummary({ value, compact = false, gst }: { value: BillTotals & { receipt?: Bill["receipt"] }; compact?: boolean; gst?: BillGst | undefined }) {
   const rates = billTaxRates(value, gst);
   // Nothing GST-related is shown for a bill issued without GST or one whose GST Zomato pays.
   const noGst = gst !== undefined && !billChargesGst(gst);
@@ -46,7 +46,12 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
       <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
     </table></div>}
   </>;
-  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{(value.charges ?? []).map((c) => <Fragment key={c.kind}><dt>{chargeLabel(c)}</dt><dd>{money(c.amountPaise)}</dd></Fragment>)}{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
+  const offer = value.receipt?.offer;
+  const otherDiscount = value.discountPaise - (offer?.savingPaise ?? 0);
+  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd>
+    {offer && <><dt>{offer.name}</dt><dd>−{money(offer.savingPaise)}</dd></>}
+    {(!offer || otherDiscount > 0) && <><dt>Discount</dt><dd>{money(otherDiscount)}</dd></>}
+    {(value.charges ?? []).map((c) => <Fragment key={c.kind}><dt>{chargeLabel(c)}</dt><dd>{money(c.amountPaise)}</dd></Fragment>)}{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
   const includes = !noGst && !added && includedPaise > 0 && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
@@ -58,6 +63,7 @@ const WHEN_BACK = "it reaches the hub when the connection returns";
 
 export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount = 0, onFireHeld, disabled = false, onBusyChange, onGoToTables, onClosed, role, checkoutRef, checkoutLabel, summaryFooter = false, onTotalChange }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; /** Dishes held back from the kitchen; billing asks to fire them first. */ heldCount?: number; onFireHeld?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined; checkoutRef?: Ref<() => void>; checkoutLabel?: string | undefined; summaryFooter?: boolean; onTotalChange?: (total: number | null) => void }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
+  const checkoutQueueIds = useRef<string[]>([]);
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [discount, setDiscount] = useState("0");
@@ -183,16 +189,24 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       // Resolve an ambiguous response from the persisted bill before another attempt.
       try { acceptBill((await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`)).bill); } catch { /* retain the retryable request */ }
       try { await onChanged(); } catch { /* preserve the last confirmed view until reconnect */ }
+      if (e instanceof Error && e.message.includes("review a fresh bill preview")) {
+        // These writes were refused by the hub. Clear this checkout from the queue before repricing.
+        for (const id of checkoutQueueIds.current) discardRequest(id);
+        checkoutQueueIds.current = [];
+        createRequest.current = null;
+        setPreview(null);
+        try { await getPreview(false); } catch (refreshError) { setError(refreshError instanceof Error ? refreshError.message : "Refresh the bill preview"); }
+      }
     } finally { lock.current = false; setBusy(false); onBusyChange?.(false); }
   }
-  async function getPreview() {
+  async function getPreview(prepare = true) {
     const discountPaise = rupeesToPaise(discount);
     if (discountPaise === null) throw new Error("Enter a valid discount amount");
     if (discountPaise > 0 && !reason.trim()) throw new Error("Enter a discount reason");
-    if (onPrepare) {
+    if (prepare && onPrepare) {
       setMessage("Saving your takeaway and sending kitchen items…");
       await onPrepare();
-    } else if (heldCount > 0 && onFireHeld) {
+    } else if (prepare && heldCount > 0 && onFireHeld) {
       if (!window.confirm(holdPrompt(heldCount))) throw new Error(BILLING_CANCELLED);
       setMessage("Sending held dishes to the kitchen…");
       await onFireHeld();
@@ -217,7 +231,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
-    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>({ path: `/api/orders/${order.id}/bill`, body: createRequest.current, label: "Issue bill" }));
+    const issuing = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>({ path: `/api/orders/${order.id}/bill`, body: createRequest.current, label: "Issue bill" });
+    checkoutQueueIds.current = [issuing.id];
+    const outcome = await outcomeOrSaved(issuing);
     if (outcome.saved) { setPreview(null); setMessage(`Bill saved on this device · ${WHEN_BACK}.`); return; }
     const { bill: value, job: printJob, printError } = outcome.value;
     acceptBill(value); setPreview(null); setApproverPin(""); setRedeem(""); setJob(printJob);
@@ -237,10 +253,16 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     const issuing = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null }>({ path: `/api/orders/${order.id}/bill`, body: { ...request, printerId: null }, label: "Issue takeaway bill" });
     issuing.done.catch(() => { /* reported through the payment below and in the saved-actions list */ });
     if (!issuing.id) await issuing.done;
-    const paying = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({
+    const payment = enqueueRequest<{ bill: Bill }>({
       path: "/api/bills/{after:bill.id}/settle", after: issuing.id, lane: order.id, label: "Record takeaway payment",
       body: { clientRef: settlement.current.clientRef, payments: rows },
-    }));
+    });
+    checkoutQueueIds.current = [payment.id, issuing.id];
+    const paying = await outcomeOrSaved(payment).catch(async error => {
+      // A dependent payment reports a generic failure. Show the original billing refusal.
+      if (error instanceof Error && error.message.includes("earlier step")) await issuing.done;
+      throw error;
+    });
     setPreview(null);
     setPayments(rows.map((row) => ({ id: uuid(), mode: row.mode, amount: paiseToRupees(row.amountPaise), refNote: row.refNote })));
     if (paying.saved) { setMessage(`Bill and payment saved on this device · ${WHEN_BACK}.`); return; }

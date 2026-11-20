@@ -25,6 +25,7 @@ export function saveReportLines(db: Database, billId: string) {
     order_id: string; receipt_json: string | null; rounding_paise: number; gst_mode: string | null;
   };
   // With GST added on top the taxable value is the amount after discount; otherwise (a missing mode is "included") the tax is inside it.
+  const offer = (JSON.parse(bill.receipt_json ?? "{}") as { offer?: import("./offers.js").AppliedOffer }).offer;
   const taxOnTop = bill.gst_mode === "exclusive";
   const rows = db.prepare(`SELECT oi.id, oi.product_id, oi.variant_id, oi.name_snapshot, oi.qty, oi.parent_item_id AS parent_item_id,
     oi.price_paise_snapshot * oi.qty AS subtotal, oi.gst_rate_snapshot AS rate,
@@ -52,13 +53,14 @@ export function saveReportLines(db: Database, billId: string) {
   for (const tax of taxes) {
     const group = lines.filter((line) => line.rate === tax.gst_rate);
     if (!group.length) continue;
-    const weights = group.map((line) => line.subtotal);
+    const applied = group.map(line => offer?.allocations[line.id] ?? 0);
+    const weights = group.map((line, i) => line.subtotal - applied[i]!);
     const discount = weights.reduce((sum, n) => sum + n, 0) - tax.taxable_paise - (taxOnTop ? 0 : tax.cgst_paise + tax.sgst_paise);
     const discounts = allocatePaise(discount, weights);
     const netWeights = weights.map((n, i) => n - discounts[i]!);
     const taxable = allocatePaise(tax.taxable_paise, netWeights);
     const cgst = allocatePaise(tax.cgst_paise, netWeights), sgst = allocatePaise(tax.sgst_paise, netWeights);
-    group.forEach((line, i) => Object.assign(line, { discount: discounts[i]!, taxable: taxable[i]!, cgst: cgst[i]!, sgst: sgst[i]! }));
+    group.forEach((line, i) => Object.assign(line, { discount: discounts[i]! + applied[i]!, taxable: taxable[i]!, cgst: cgst[i]!, sgst: sgst[i]! }));
   }
   // Each line keeps its share of the packaging charge, so a refund can credit it item by item.
   const packaging = orderItemPackaging(db, bill.order_id);

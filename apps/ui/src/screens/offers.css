@@ -1,0 +1,6 @@
+.offers-screen .panel { padding: 1rem; margin-block: 1rem; }
+.offers-screen form { max-width: 42rem; }
+.offers-screen form > fieldset { display: grid; gap: .8rem; }
+.offers-screen label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-right: .7rem; }
+.offers-screen select[multiple] { min-width: 15rem; }
+.offers-screen .offers-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
