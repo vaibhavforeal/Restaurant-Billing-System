@@ -1,6 +1,7 @@
 import { AddonChoices, AddonLines } from "../AddonChoices";
 import { addonPickProblem, addonTotal, groupAddonLines, pickedAddons, pricedAddonGroups } from "../addon-cart";
-import type { AddonGroup, AddonPickerGroup, AddonSnapshot } from "../types";
+import type { AddonGroup, AddonPickerGroup } from "../types";
+import { addDraftRows, type DraftItem } from "../order-draft";
 import { useEffect, useRef, useState } from "react";
 import { priceForTier, PRICE_TIER_LABELS } from "@masalapos/domain/pricing";
 import { ApiError, apiFetch, session, type User } from "../api";
@@ -48,21 +49,11 @@ function carriedStatusFor(orderId: string): string {
 /** How often an open order screen re-reads the menu hints (Popular follows the time of day). */
 const INSIGHTS_REFRESH_MS = 15 * 60 * 1000;
 
-interface DraftItem {
-  clientRef: string;
-  productId: string;
-  variantId: string | null;
-  name: string;
-  pricePaise: number;
-  qty: number;
-  note: string;
-  /** A combo's chosen options, and what it holds for the cart to show. */
-  comboPicks?: string[];
-  addonPicks?: string[];
-  addons?: AddonSnapshot[];
-  contents?: string[];
-  /** Held back from the kitchen: KOT leaves it for later, Fire sends it. */
-  held?: boolean;
+function MenuCardPhoto({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+
+  return <img className="menu-card-photo" src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 }
 
 export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling = false, onNextTakeaway, onHold, captain = false }: { user: User; orderId: string; onBack: () => void; onOpenOrder: (orderId: string) => void; quickBilling?: boolean; onNextTakeaway?: () => void; onHold?: () => void; captain?: boolean }) {
@@ -80,6 +71,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const [captainError, setCaptainError] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [photoAttempt, retryMenuPhotos] = useState(0);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftItem[]>(readDraft);
   /** Hold orders (Settings): the last value from the hub, kept on the device for offline use. */
@@ -285,11 +277,17 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         if (event === "order.updated" && (data as { order: Order }).order.id === orderId) void reload().catch(() => {});
         if (event === "table.changed") void reload().catch(() => {});
         if (event === "stock.changed" || event === "catalog.changed") void reload().catch(() => {});
-        if (event === "catalog.changed") { void reload().catch(() => {}); loadMenuInsights(); }
+        if (event === "catalog.changed") loadMenuInsights();
         if (event === "settings.changed") { loadOrderSettings(); loadMenuInsights(); }
         if (event === "kot.updated" && (data as { kot: { orderId: string } }).kot.orderId === orderId) void reload().catch(() => {});
       },
-      onStatus: (connected) => { if (connected) { void reload().catch(() => {}); loadOrderSettings(); } },
+      onStatus: (connected) => {
+        if (connected) {
+          retryMenuPhotos((attempt) => attempt + 1);
+          void reload().catch(() => {});
+          loadOrderSettings();
+        }
+      },
       onAuthFail: () => session.clear(),
     });
     return () => { reloadRevision.current++; dispose(); unsub(); window.clearInterval(insightsTimer); window.removeEventListener("masalapos:ack", acknowledged); };
@@ -366,7 +364,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (queuedRequests(user.id).some((r) => r.path === `/api/orders/${orderId}/bill` && !r.error)) {
       setError("A bill is queued for this order. Wait for it to finish before starting another order."); return false;
     }
-    return saveDraft([...readDraft(), ...rows.map((row) => ({ clientRef: uuid(), note: "", ...row }))]);
+    return saveDraft(addDraftRows(readDraft(), rows, laneState().punchedRefs, uuid));
   }
 
   /** Repeat last order: the customer's previous bill back in the cart at today's prices, naming what could not go in. */
@@ -840,10 +838,24 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         </div>
         <div className="menu-results" ref={menuResults} role="region" tabIndex={0} aria-label="Menu items"><div className="menu-grid">{activeProducts.flatMap((p) => {
           const variants = p.variants.filter((v) => v.isActive);
-          const top = <div className="menu-card-top"><span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>{popular.has(p.id) && <span className="menu-popular-label">Popular</span>}{p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}</div>;
-          if (p.kind === "combo") return [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, combo, ₹${paiseToRupees(p.pricePaise)}`} onClick={() => chooseCombo(p)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">Combo</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
-          return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
-          : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
+          const isPopular = popular.has(p.id);
+          function card(key: string, pricePaise: number, onAdd: () => void, portion?: string, portionLabel = portion) {
+            const price = `₹${paiseToRupees(pricePaise)}`;
+            return <button key={key} className={`menu-card${p.isSoldOut ? " sold-out" : ""}${isPopular ? " popular" : ""}`} disabled={p.isSoldOut || locked}
+              aria-label={portionLabel ? `${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${portionLabel}, ${price}` : undefined} onClick={onAdd}>
+              <div className="menu-card-top">
+                <span className={`veg-indicator ${p.isVeg ? "" : "non-veg"}`}>{p.isVeg ? "VEG" : "NON-VEG"}</span>
+                {isPopular && <span className="menu-popular-label">Popular</span>}
+                {p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}
+              </div>
+              {p.photoUrl?.startsWith("/api/menu-images/") && <MenuCardPhoto key={`${photoAttempt}:${p.photoUrl}`} src={p.photoUrl} />}
+              <div className="menu-card-name">{p.name}{portion !== undefined && <small className="menu-card-portion">{portion}</small>}</div>
+              <div className="menu-card-bottom"><span>{price}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div>
+            </button>;
+          }
+          if (p.kind === "combo") return [card(p.id, p.pricePaise, () => chooseCombo(p), "Combo", "combo")];
+          if (variants.length) return variants.map((v) => card(`${p.id}.${v.id}`, v.pricePaise, () => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise), v.name));
+          return [card(p.id, p.pricePaise, () => addToDraft(p.id, null, p.name, p.pricePaise))];
         })}</div>
         {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3></div>}</div>
       </section>}
