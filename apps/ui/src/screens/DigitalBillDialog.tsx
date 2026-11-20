@@ -43,14 +43,13 @@ export function DigitalBillDialog({ orderId, onClose, onCheckout, onBusyChange }
     const url = URL.createObjectURL(file()), link = document.createElement("a");
     link.href = url; link.download = invoiceFileName(bill!.invoiceNo); link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setMessage("Digital bill downloaded. Attach it in your messaging app to send it to the customer.");
+    setMessage("Digital bill downloaded. Attach it to a message to share it.");
   }
   return <WorkspaceDialog open title="Send digital bill" busy={busy} onClose={onClose} className="table-summary-dialog">
     {error && <p role="alert" className="error-message">{error}</p>}
     {message && <p role="status">{message}</p>}
     {loading ? <p role="status">Loading digital bill…</p> : bill ? <>
       <p><strong>Bill {bill.invoiceNo}</strong> · ₹{paiseToRupees(bill.totalPaise)} · {bill.status}</p>
-      <p>Share the receipt file using an app on this device, or download it to attach to a message. The customer can open the file without signing in.</p>
       <div className="table-digital-actions">{shareable && <button className="primary" disabled={busy} onClick={() => void share()}>Share digital bill</button>}<button disabled={busy} onClick={download}>Download digital bill</button></div>
     </> : !error && <><p>Issue the bill in Checkout before sending a digital receipt.</p><button className="primary" onClick={onCheckout}>Open checkout</button></>}
   </WorkspaceDialog>;

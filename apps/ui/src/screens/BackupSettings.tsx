@@ -69,7 +69,7 @@ export function BackupSettings() {
   const validStorage = Number.isInteger(days) && days >= 7 && days <= 365;
 
   return <section aria-label="Backups and recovery" className="backup-settings">
-    <header className="system-page-heading"><h2>Backups & recovery</h2><p>Keep your restaurant data safe, and get back to work when you need to.</p></header>
+    <header className="system-page-heading"><h2>Backups & recovery</h2></header>
     {(error || status?.lastError || status?.secondError) && <p role="alert" className="backup-error">{error || status?.lastError || status?.secondError}</p>}
     <p role="status" className="backup-message">{message}</p>
     {!status && !error && <p role="status">Loading your backups…</p>}
@@ -79,7 +79,6 @@ export function BackupSettings() {
         <span className="system-icon"><Icon name="folder" size={24} /></span>
         <div>
           <h3>Backups on this PC</h3>
-          <p>Automatic daily copies of your restaurant data.</p>
         </div>
         <dl className="backup-overview">
           <div><dt>Latest backup</dt><dd>{latest ? formatWhen(latest.createdAt) : "No backups yet"}</dd></div>
@@ -110,12 +109,12 @@ export function BackupSettings() {
             })}>Download</button>
             {canRestore && <button aria-label={`Restore backup from ${formatWhen(b.createdAt)}`} disabled={busy || restoring} onClick={() => void stage(() => apiFetch<RestorePreview>("/api/system/restore/local", { method: "POST", body: JSON.stringify({ name: b.name }) }), "Checking backup…")}>Restore…</button>}
           </span>
-        </li>)}</ul> : <p className="system-empty">No saved copies yet. Choose Back up now to create your first backup.</p>}
+        </li>)}</ul> : <p className="system-empty">No backups yet.</p>}
       </details>
 
       <section className="backup-restore"><div className="system-section-heading"><Icon name="refresh" size={20} /><h3>Restore a backup</h3></div>
       {canRestore ? <>
-        <p>Choose a file from a USB drive or download, or select a copy from Backup history. You will see what it contains before anything changes.</p>
+        <p>Preview a backup file before restoring.</p>
         <input ref={fileInput} type="file" accept=".db" hidden onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";

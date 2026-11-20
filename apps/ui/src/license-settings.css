@@ -1,7 +1,7 @@
 .license-settings { min-width: 0; }
 .license-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .license-heading h2 { margin: 0 0 5px; }
-.license-heading p, .license-help, .license-label { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.license-help, .license-label { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .license-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
 .license-summary > div { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .license-summary strong { font-size: 24px; }

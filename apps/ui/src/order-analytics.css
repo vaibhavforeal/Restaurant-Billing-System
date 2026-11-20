@@ -1,7 +1,6 @@
 .order-analytics { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; padding-bottom: var(--space-6); }
 .analytics-heading, .analytics-filter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-6); }
-.analytics-heading h3, .analytics-heading p { margin: 0; }
-.analytics-heading p { margin-top: var(--space-2); color: var(--muted); }
+.analytics-heading h3 { margin: 0; }
 .analytics-filter > small { color: var(--muted); }
 html[data-theme] .analytics-metrics .sales-metric strong { font-size: clamp(16px, 10cqw, 24px); overflow-wrap: anywhere; white-space: normal; }
 .analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-6); }

@@ -80,7 +80,7 @@ export function ServiceRequests({ disabled, onBusyChange, compact = false }: { d
       {request.status === "pending" && <button disabled={disabled || busyId !== null} onClick={() => void resolve(request)}>{busyId === request.id ? "Saving…" : "Mark handled"}</button>}
     </li>)}</ul>
     {requests.length === 100 && <p className="service-inbox-help">Showing the latest 100 {history ? "service" : "pending"} requests.</p>}
-    <p className="service-inbox-help">Mark handled after helping the guest. A bill request does not create a bill or record a payment.</p>
+    <p className="service-inbox-help">Bill requests don’t create bills or record payments.</p>
   </>;
   if (compact) return <div className="table-request-icon">
     <button className="table-request-button" title={error ? `Table service — ${error}` : "Table service — waiter calls and bill requests"}
@@ -92,7 +92,7 @@ export function ServiceRequests({ disabled, onBusyChange, compact = false }: { d
     <WorkspaceDialog open={expanded} title="Table service requests" onClose={() => { if (!lock.current && !disabled) setExpanded(false); }} busy={busyId !== null || disabled} className="tables-requests-dialog service-requests-dialog">{actions}{inbox}</WorkspaceDialog>
   </div>;
   return <section className="service-inbox panel" aria-label="Table service requests">
-    <div className="service-inbox-heading"><div><h3>Table service requests</h3><p>Waiter calls and requests for the bill from guests.</p></div>{actions}</div>
+    <div className="service-inbox-heading"><div><h3>Table service requests</h3></div>{actions}</div>
     {inbox}
   </section>;
 }

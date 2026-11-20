@@ -137,13 +137,13 @@ function ServiceCalls({ token, available }: { token: string; available: boolean 
 
   if (!available && !calls.waiter && !calls.bill) return null;
   return <section className="guest-services" aria-label="Ask our team">
-    <div className="guest-services-heading"><h2>Need a hand?</h2><p>Our team is here to help. Pay at the restaurant.</p></div>
+    <div className="guest-services-heading"><h2>Table service</h2></div>
     {storageWarning && <p className="guest-services-error" role="status">Browser storage is unavailable. Saved request updates may not survive a reload.</p>}
     <div className="guest-services-grid">{kinds.filter((kind) => available || calls[kind]).map((kind) => {
       const call = calls[kind], receipt = call?.receipt, busy = sending.includes(kind);
       const title = kind === "waiter" ? "Call waiter" : "Request bill";
       return <div className="guest-service" key={kind} aria-label={title}>
-        <div><h3>{title}</h3><p>{kind === "waiter" ? "Ask a member of our team to visit your table." : "Ask our team to bring the bill to your table."}</p></div>
+        <div><h3>{title}</h3></div>
         {receipt && <p className={`guest-service-status guest-service-${receipt.status}`} role="status">{receipt.status === "pending" ? "Sent to staff · Awaiting attention" : receipt.status === "resolved" ? "Our team marked this request handled." : "This request expired without being marked handled. Please speak with staff."}</p>}
         {call && !receipt && <p className="guest-service-status" role="status">{busy ? "Contacting the restaurant…" : "Your request is saved; receipt is not yet confirmed."}</p>}
         {errors[kind] && <p className="guest-services-error" role="alert">{errors[kind]}</p>}

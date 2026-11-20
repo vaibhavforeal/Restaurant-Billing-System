@@ -365,36 +365,36 @@ function GuestMenuContent({ token }: { token: string }) {
         <button className="guest-menu-primary" disabled={sending} onClick={() => void submit()}>{sending ? "Checking…" : "Retry the same request"}</button>
       </section>}
       {menu && <>
-        <div className="guest-menu-intro"><div><p className="guest-menu-kicker">Fresh from our kitchen</p><h2>What would you like?</h2>
-          <p>{menu.orderingAvailable ? "Choose your favourites. Our team will review your request before preparing your order." : "Take a look at our menu, then ask our team to place your order."}</p></div>
-          <div className="guest-menu-intro-actions"><span className="guest-menu-mode">{menu.orderingAvailable ? "Order at your table" : "Browse our menu"}</span><button disabled={loading || sending} onClick={() => void loadMenu()}>{loading ? "Refreshing…" : "Refresh menu"}</button></div>
+        <div className="guest-menu-intro"><div><h2>Menu</h2>
+          {!menu.orderingAvailable && <p>Ask staff to place your order.</p>}</div>
+          <div className="guest-menu-intro-actions"><button disabled={loading || sending} onClick={() => void loadMenu()}>{loading ? "Refreshing…" : "Refresh menu"}</button></div>
         </div>
         <div className={`guest-menu-layout${menu.orderingAvailable && !receipt ? "" : " guest-menu-browse-only"}`}>
           <section className="guest-menu-catalog" aria-label="Menu">
-            <div className="guest-menu-search"><label htmlFor="guest-search">Find something delicious</label><input id="guest-search" type="search" placeholder="Search dishes or sizes" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <div className="guest-menu-search"><label htmlFor="guest-search">Search dishes</label><input id="guest-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
               <label className="guest-menu-veg-filter"><input type="checkbox" checked={vegOnly} onChange={(event) => setVegOnly(event.target.checked)} /> Vegetarian only</label></div>
             <div className="guest-menu-categories" aria-label="Menu categories"><button aria-pressed={category === "all"} onClick={() => setCategory("all")}>All dishes</button>
               {menu.categories.map((item) => <button key={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.name}</button>)}
             </div>
             <div className="guest-menu-products">{visible.map((product) => <ProductCard key={`${menu.menuVersion}:${product.id}`} product={product} popular={popularIds.includes(product.id)} orderingAvailable={menu.orderingAvailable} locked={locked} onAdd={add} />)}</div>
-            {!visible.length && <div className="guest-menu-empty"><h3>{menu.products.length ? "No dishes found" : "The menu is being prepared"}</h3><p>{menu.products.length ? "Try another search or category." : "Please ask our team about today's menu."}</p></div>}
+            {!visible.length && <div className="guest-menu-empty"><h3>{menu.products.length ? "No dishes found" : "The menu is being prepared"}</h3>{!menu.products.length && <p>Ask staff about today’s menu.</p>}</div>}
           </section>
           {menu.orderingAvailable && !receipt && <aside className="guest-menu-cart" aria-label="Your request" ref={cartRef} id="guest-cart" tabIndex={-1}>
             <div className="guest-menu-cart-heading"><h2>Your request</h2><span>{count} item{count === 1 ? "" : "s"}</span></div>
-            {!saved.cart.length ? <p className="guest-menu-cart-empty">Your table is ready. Add a dish to get started.</p> : <>
+            {!saved.cart.length ? <p className="guest-menu-cart-empty">No items yet.</p> : <>
               <ul className="guest-menu-cart-items">{saved.cart.map((item) => <li key={item.key}>
                 <div className="guest-menu-cart-item-heading"><h3>{item.name}</h3><strong>{money(item.pricePaise * item.qty)}</strong></div>
                 <AddonLines addons={item.addons} qty={item.qty} />{item.contents && <small className="guest-menu-combo-contents">{item.contents.join(", ")}</small>}
                 <small>{money(item.pricePaise)} each</small>
                 <div className="guest-menu-quantity"><button aria-label={`Decrease ${item.name}`} disabled={locked} onClick={() => editItem(item.key, { qty: item.qty - 1 })}>−</button><span aria-label={`Quantity for ${item.name}`}>{item.qty}</span><button aria-label={`Increase ${item.name}`} disabled={locked || item.qty >= 20} onClick={() => editItem(item.key, { qty: item.qty + 1 })}>+</button><button className="guest-menu-remove" disabled={locked} onClick={() => editItem(item.key, { qty: 0 })} aria-label={`Remove ${item.name}`}>Remove</button></div>
-                <label className="guest-menu-item-note">Instructions for {item.name}<textarea rows={2} maxLength={200} placeholder="Optional: less spicy, no onions…" value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
+                <label className="guest-menu-item-note">Instructions for {item.name} (optional)<textarea rows={2} maxLength={200} value={item.note} disabled={locked} onChange={(event) => editItem(item.key, { note: event.target.value })} /></label>
               </li>)}</ul>
               {suggestions.length > 0 && <div className="guest-menu-suggestions"><h3>Goes well with your order</h3>
                 <ul>{suggestions.map(({ product, variant }) => <li key={product.id}>
                   <span>{product.name}{variant && <small>{variant.name}</small>}</span><strong>{money(variant?.pricePaise ?? product.pricePaise)}</strong>
                   <button disabled={locked} onClick={() => add(product, variant?.id ?? null)} aria-label={`Also add ${product.name}${variant ? `, ${variant.name}` : ""}`}>Add <span aria-hidden="true">+</span></button>
                 </li>)}</ul></div>}
-              <div className="guest-menu-cart-total"><div><span>Menu subtotal</span><strong>{money(subtotal)}</strong></div><p>No tax is added to menu prices. Your final bill is prepared at the restaurant.</p></div>
+              <div className="guest-menu-cart-total"><div><span>Menu subtotal</span><strong>{money(subtotal)}</strong></div></div>
               {saved.reviewRequired && !needsRefresh && <label className="guest-menu-review"><input type="checkbox" disabled={locked} checked={false} onChange={() => save({ ...savedRef.current, reviewRequired: false })} /> I have reviewed the updated items and prices.</label>}
               <div className="guest-menu-cart-actions"><button className="guest-menu-primary" disabled={locked || saved.reviewRequired || loading} onClick={() => void submit()}>{sending ? "Sending…" : "Submit to staff"}</button><p>Staff must accept your request first. Pay at the restaurant.</p></div>
             </>}

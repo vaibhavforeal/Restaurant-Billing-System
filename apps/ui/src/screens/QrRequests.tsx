@@ -130,7 +130,7 @@ export function QrRequests({ tables, disabled, onOpenOrder, onChanged, onBusyCha
       <div className="qr-inbox-toolbar"><div className="tabs" aria-label="QR request status">{statuses.map((value) => <button key={value} aria-pressed={filter === value} className={filter === value ? "selected" : ""} disabled={busyId !== null} onClick={() => setFilter(value)}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</div>
         <button disabled={loading || busyId !== null} onClick={() => setRefresh((value) => value + 1)}>{loading ? "Refreshing…" : "Refresh requests"}</button></div>
       {!canAccept && license && <p className="qr-plan-note">Pro is required to accept guest requests. You can still review or reject earlier requests.</p>}
-      {filter === "pending" && <p className="qr-help">Accepting adds pending items to the selected bill group. Open the order and use <strong>Send to kitchen</strong> when ready.</p>}
+      {filter === "pending" && <p className="qr-help">After accepting, open the order and select <strong>Send to kitchen</strong>.</p>}
       <div className="qr-request-grid">{requests.map((request) => <RequestCard key={request.id} request={request} table={tables.find((table) => table.id === request.tableId)} canAccept={canAccept} busy={busyId !== null || disabled} saving={busyId === request.id} onReview={review} onOpenOrder={openOrder} />)}</div>
       {requests.length === 0 && <p role="status" className="qr-empty">{loading ? "Loading requests…" : `No ${filter} QR requests.`}</p>}
       {requests.length === requestLimit && <p className="qr-help">Showing the latest {requestLimit} {filter} requests.</p>}
@@ -146,7 +146,7 @@ export function QrRequests({ tables, disabled, onOpenOrder, onChanged, onBusyCha
   </div>;
   return <section className="qr-inbox panel" aria-label="Guest QR requests">
     <div className="qr-inbox-heading">
-      <div><h3>QR requests {count}</h3><p>Review guests’ choices before adding them to a bill.</p></div>
+      <div><h3>QR requests {count}</h3></div>
       <button aria-expanded={expanded} aria-controls="qr-request-list" disabled={busyId !== null} onClick={() => setExpanded((value) => !value)}>{expanded ? "Hide requests" : "Review requests"}</button>
     </div>
     {feedback}{inbox}
@@ -273,8 +273,8 @@ export function QrTableManager({ disabled, onBusyChange }: { disabled: boolean; 
   }
 
   return <section className="qr-manager panel" aria-label="Manage table QR codes">
-    <div className="qr-inbox-heading"><div><h3>Table QR codes</h3><p>Guests scan at their table using the restaurant’s Wi-Fi.</p></div><button disabled={busy || loading} onClick={() => setRefresh((value) => value + 1)}>{loading ? "Loading…" : "Refresh codes"}</button></div>
-    <p className="qr-help">Basic includes menu browsing; Pro also allows order requests for staff review. Guest phones do not use registered staff-device slots.</p>
+    <div className="qr-inbox-heading"><div><h3>Table QR codes</h3></div><button disabled={busy || loading} onClick={() => setRefresh((value) => value + 1)}>{loading ? "Loading…" : "Refresh codes"}</button></div>
+    <p className="qr-help">Pro enables order requests. Guest phones don’t use staff device slots.</p>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     <div className="qr-manager-fields"><label>Table<select value={tableId} disabled={busy || loading} onChange={(event) => { setTableId(event.target.value); setMessage(""); }}><option value="">Choose a table</option>{tables.map((value) => <option value={value.id} key={value.id}>{value.name}{value.area ? ` · ${value.area}` : ""}{value.isActive ? "" : " (inactive)"}</option>)}</select></label>
       <label>Restaurant network address<select value={origin} disabled={busy || loading || origins.length === 0} onChange={(event) => { setOrigin(event.target.value); setMessage(""); }}><option value="">Choose an address</option>{origins.map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
@@ -291,7 +291,7 @@ export function QrTableManager({ disabled, onBusyChange }: { disabled: boolean; 
         <label>Guest menu link<input ref={linkInput} readOnly value={code.url} onFocus={(event) => event.target.select()} /></label>
         <div className="qr-card-actions"><a href={code.url} target="_blank" rel="noreferrer">Open menu</a><button disabled={busy} onClick={() => void copyLink()}>Copy link</button><button disabled={busy} onClick={printCode}>Print QR code</button></div>
       </div></div>}
-      {code && createPortal(<div className="qr-print-sheet" aria-hidden="true"><p>MasalaPOS · Guest menu</p><h1>{table.name}</h1>{table.area && <p>{table.area}</p>}<img src={code.qr} alt="" width={280} height={280} /><h2>Scan for the menu</h2><p>Connect to the restaurant’s Wi-Fi, then scan this code.</p><p>Ask a member of staff if you need help.</p></div>, document.body)}
+      {code && createPortal(<div className="qr-print-sheet" aria-hidden="true"><p>MasalaPOS · Guest menu</p><h1>{table.name}</h1>{table.area && <p>{table.area}</p>}<img src={code.qr} alt="" width={280} height={280} /><h2>Scan for the menu</h2><p>Connect to the restaurant’s Wi-Fi, then scan this code.</p></div>, document.body)}
     </>}
     {!loading && tables.length === 0 && <p>Add a table in Manage tables to create its guest menu QR code.</p>}
   </section>;

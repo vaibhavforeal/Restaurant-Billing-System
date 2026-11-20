@@ -15,7 +15,7 @@ export function AiSuggestionSettings() {
       <label className="ai-setting-row">
         <input type="checkbox" checked={form.popularItemsEnabled} disabled={busy} aria-describedby="popular-items-help"
           onChange={(e) => update({ popularItemsEnabled: e.target.checked })} />
-        <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip><small>Show category best-sellers first.</small></span>
+        <span>Show popular items <InfoTip id="popular-items-help">Marks the dish that sold most in each category over the last 30 days as Popular and shows it first, on staff order screens and the QR table menu.</InfoTip></span>
       </label>
       <label className="ai-setting-row ai-setting-dependent">
         <input type="checkbox" checked={form.popularByTimeEnabled} disabled={busy || !form.popularItemsEnabled} aria-describedby="popular-by-time-help"
@@ -26,12 +26,12 @@ export function AiSuggestionSettings() {
       <label className="ai-setting-row">
         <input type="checkbox" checked={form.orderedTogetherEnabled} disabled={busy} aria-describedby="ordered-together-help"
           onChange={(e) => update({ orderedTogetherEnabled: e.target.checked })} />
-        <span>Suggest dishes ordered together <InfoTip id="ordered-together-help">Shows up to 3 dishes from other categories that often share a bill with what is already in the cart, over the last 30 days, on staff order screens and the QR table menu.</InfoTip><small>Recommend dishes that go with the current cart.</small></span>
+        <span>Suggest dishes ordered together <InfoTip id="ordered-together-help">Shows up to 3 dishes from other categories that often share a bill with what is already in the cart, over the last 30 days, on staff order screens and the QR table menu.</InfoTip></span>
       </label>
       <label className="ai-setting-row">
         <input type="checkbox" checked={form.customerUsualEnabled} disabled={busy} aria-describedby="customer-usual-help"
           onChange={(e) => update({ customerUsualEnabled: e.target.checked })} />
-        <span>Suggest a customer's usual <InfoTip id="customer-usual-help">When a saved customer is added to an order, shows the dishes on at least 2 of their bills in the last 6 months, and a button to repeat their last order. Needs CRM &amp; Loyalty.</InfoTip><small>Use a saved customer's past orders. Requires CRM &amp; Loyalty.</small></span>
+        <span>Suggest a customer's usual <InfoTip id="customer-usual-help">When a saved customer is added to an order, shows the dishes on at least 2 of their bills in the last 6 months, and a button to repeat their last order. Needs CRM &amp; Loyalty.</InfoTip></span>
       </label>
       </div>
       <div className="ai-suggestion-actions">

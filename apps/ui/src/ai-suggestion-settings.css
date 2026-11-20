@@ -7,7 +7,6 @@ html[data-theme] .ai-suggestion-settings.panel {
   .ai-setting-row { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.4; }
   .ai-setting-row > input { flex: none; margin-top: 4px; }
   .ai-setting-row > span { min-width: 0; }
-  .ai-setting-row small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
   .ai-setting-dependent { margin: 8px 0 0 28px; font-weight: 400; }
   .ai-setting-dependent:has(input:disabled) { color: var(--muted); }
   .info-tip-trigger { min-height: 24px; width: 24px; }
@@ -22,7 +21,6 @@ html[data-theme] .ai-suggestion-settings.panel {
   .ai-service-status.available { color: var(--pos-success); background: var(--pos-success-bg); }
   .ai-assistant-controls label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .ai-assistant-controls button { margin-left: auto; }
-  .ai-assistant-help { color: var(--muted); font-size: 12px; }
   .ai-assistant-data summary { padding: 4px 0; font-size: 12px; }
   .ai-assistant-data p { margin-top: 4px; color: var(--muted); }
   .ai-assistant-usage { width: 100%; border-collapse: collapse; font-size: 12px; }

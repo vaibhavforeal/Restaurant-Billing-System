@@ -26,7 +26,7 @@ export function Customers({ isAdmin, canExport }: { isAdmin: boolean; canExport:
 
   return <section className="screen customers">
     <div className="page-header crm-header">
-      <div><h1>Customers &amp; loyalty</h1><p className="muted">Know your guests. Make every visit more personal.</p></div>
+      <div><h1>Customers &amp; loyalty</h1></div>
       <div className="tabs" role="group" aria-label="CRM sections">
         {tabs.map((t) => <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}>{t}</button>)}
       </div>
@@ -86,7 +86,7 @@ function CustomerDirectory({ types, isAdmin }: { types: CustomerType[]; isAdmin:
 
   return <>
     <div className="customer-toolbar">
-      <div><h2>Guest directory</h2><p className="muted">Contact details, visit history and rewards in one place.</p></div>
+      <div><h2>Guest directory</h2></div>
       <button type="button" className="primary" disabled={busy} onClick={() => { ++profileVersion.current; setOpening(false); setAdding(true); }}>+ Add customer</button>
     </div>
     <div className="customers-layout">
@@ -109,7 +109,7 @@ function CustomerDirectory({ types, isAdmin }: { types: CustomerType[]; isAdmin:
         {status}
         {opening && <p role="status" className="muted">Opening customer…</p>}
         {adding ? <section className="panel customer-create" aria-label="Add customer">
-          <div className="customer-create-heading"><div><h2>Add customer</h2><p className="muted">Start with a name and mobile number. Add the personal touches below.</p></div><button type="button" disabled={busy} onClick={() => setAdding(false)}>Cancel</button></div>
+          <div className="customer-create-heading"><div><h2>Add customer</h2></div><button type="button" disabled={busy} onClick={() => setAdding(false)}>Cancel</button></div>
       <fieldset disabled={busy} className="cash-drawer-form">
         <legend className="sr-only">Customer details</legend>
         <label>Name <input autoFocus value={form.name} maxLength={80} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -129,10 +129,7 @@ function CustomerDirectory({ types, isAdmin }: { types: CustomerType[]; isAdmin:
         </section> : selected
           ? <CustomerProfile key={selected.customer.id} detail={selected} types={types} isAdmin={isAdmin} onChanged={async () => { await open(selected.customer.id); await search(); }} />
           : <section className="panel customer-welcome">
-              <div className="customer-welcome-mark" aria-hidden="true">◉</div>
-              <h2>A little familiarity goes a long way.</h2>
-              <p className="muted">Select a guest to see their story with your restaurant.</p>
-              <dl><div><dt>Visits &amp; favourites</dt><dd>Remember what brings them back.</dd></div><div><dt>Points &amp; rewards</dt><dd>Keep their next reward in sight.</dd></div><div><dt>Details &amp; feedback</dt><dd>Give every visit a personal touch.</dd></div></dl>
+              <h2>Select a customer</h2>
             </section>}
       </div>
     </div>

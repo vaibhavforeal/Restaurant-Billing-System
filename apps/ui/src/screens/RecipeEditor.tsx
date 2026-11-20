@@ -167,9 +167,9 @@ export function RecipeEditor({ productId, items, canManage, fullRecipe, refresh,
           </div>;
         })}
       </div>
-      {!rows.length && <div className="recipe-empty"><Icon name="kitchen" size={28} /><h4>No ingredients yet</h4><p>{base.links.length ? "Saving will remove this recipe and stop future stock deductions." : "Add the stock ingredients used to prepare one menu item."}</p></div>}
+      {!rows.length && <div className="recipe-empty"><Icon name="kitchen" size={28} /><h4>No ingredients yet</h4>{base.links.length > 0 && <p>Saving will remove this recipe and stop future stock deductions.</p>}</div>}
       {editable && <button ref={addButton} className="recipe-add" type="button" disabled={disabled || rows.length >= (fullRecipe ? 100 : 1)} onClick={() => setPicker(true)}><Icon name="plus" size={16} /> Add ingredient</button>}
-      {editable && <div className="recipe-actions"><span className="muted">{rows.length === 100 ? "100 ingredient limit reached" : "Save to apply your changes"}</span><button type="button" disabled={working || !dirty} onClick={discard}>Discard changes</button><button className="primary" disabled={disabled || !dirty}>{busy ? "Saving recipe…" : "Save recipe"}</button></div>}
+      {editable && <div className="recipe-actions">{rows.length === 100 && <span className="muted">100 ingredient limit reached</span>}<button type="button" disabled={working || !dirty} onClick={discard}>Discard changes</button><button className="primary" disabled={disabled || !dirty}>{busy ? "Saving recipe…" : "Save recipe"}</button></div>}
     </form>}
     <details className="recipe-help"><summary>How recipes affect stock</summary><p>Kitchen items deduct stock when sent. Other items deduct stock when billed. Changes also apply to punched items that have not reached that step. Earlier deductions and cancellation reversals keep their original quantities.</p><p>Grams and millilitres convert to the ingredient’s saved stock unit. Each ingredient can appear once; Pro supports up to 100 ingredients.</p></details>
     {picker && <RecipeIngredientPicker items={items} selectedIds={rows.map((row) => row.stockItemId)} canCreate={editable} onSelect={addIngredient} onCreated={onStockCreated} onClose={closePicker} onBusyChange={setStockBusy} onDirtyChange={setStockDirty} />}

@@ -67,6 +67,7 @@ export function ProductEditor({ product, kind = "item", products = [], addonGrou
   const lock = useRef(false);
   const localId = useRef(0);
   const preview = photoChange === undefined ? currentPhoto : photoChange;
+  const availableAddonGroups = addonGroups.filter((group) => group.isActive && !addonGroupIds.includes(group.id));
   const addonsChanged = addonOnly !== (product?.addonOnly ?? false) || JSON.stringify(addonGroupIds) !== JSON.stringify(product?.addonGroupIds ?? []);
   const dirty = addonsChanged || name !== initial.name || description !== initial.description || categoryId !== initial.categoryId ||
     acPrice !== initial.acPrice || takeawayPrice !== initial.takeawayPrice || zomatoPrice !== initial.zomatoPrice || price !== initial.price || gstRate !== initial.gstRate || isVeg !== initial.isVeg || stationId !== initial.stationId ||
@@ -190,10 +191,10 @@ export function ProductEditor({ product, kind = "item", products = [], addonGrou
     <form onSubmit={(event) => { event.preventDefault(); save(); }}>
       <div className="product-editor-layout"><div className="product-editor-fields">
         <label className="product-field-wide">{isCombo ? "Combo name" : "Product name"}<input required value={name} disabled={busy !== null} onChange={(event) => setName(event.target.value)} /></label>
-        <details className="product-field-wide"><summary>Description (optional)</summary><label className="product-field-wide">Menu description<textarea maxLength={500} rows={4} value={description} disabled={busy !== null} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the dish, its ingredients, or how it is served." /><small>{description.length}/500 characters · Shown on the guest menu.</small></label>
+        <details className="product-field-wide"><summary>Description (optional)</summary><label className="product-field-wide">Menu description<textarea maxLength={500} rows={4} value={description} disabled={busy !== null} onChange={(event) => setDescription(event.target.value)} /></label>
           {ai?.enabled && ai.canDescribe && <div className="product-ai-describe" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" disabled={busy !== null || drafting || !name.trim()} onClick={() => void draftDescription()}>{drafting ? "Writing…" : description.trim() ? "Rewrite" : "Write description"}</button>
-            <small className="muted">{draftError || "Drafted by the AI assistant; check it, then Save."}</small>
+            {draftError && <small className="error-message" role="alert">{draftError}</small>}
           </div>}</details>
         <div className="product-field-wide product-metadata-grid">
           <label>Category<select required value={categoryId} disabled={busy !== null} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.isActive ? "" : " (inactive)"}</option>)}</select></label>
@@ -202,46 +203,44 @@ export function ProductEditor({ product, kind = "item", products = [], addonGrou
         </div>
         <div className="product-field-wide product-prices-grid">
           <label>Non-AC price (₹)<input required inputMode="decimal" value={price} disabled={busy !== null} onChange={(event) => setPrice(event.target.value)} /></label>
-          <label><span>AC price (₹) <InfoTip>Leave AC or takeaway blank to use the Non-AC price; a blank Zomato price uses the Takeaway price. Portion prices are set separately below.</InfoTip></span><input inputMode="decimal" value={acPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setAcPrice(event.target.value)} /></label>
-          <label>Takeaway price (₹)<input inputMode="decimal" value={takeawayPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setTakeawayPrice(event.target.value)} /></label>
-          <label>Zomato price (₹)<input inputMode="decimal" value={zomatoPrice} placeholder="Use Takeaway" disabled={busy !== null} onChange={(event) => setZomatoPrice(event.target.value)} /></label>
-          {packagingPerItem && <label><span>Packaging (₹) <InfoTip>Added to the packaging charge on takeaway and delivery bills, per unit. Leave blank for none.</InfoTip></span><input inputMode="decimal" value={packaging} placeholder="0.00" disabled={busy !== null} onChange={(event) => setPackaging(event.target.value)} /></label>}
+          <label>AC price (₹)<input inputMode="decimal" value={acPrice} disabled={busy !== null} onChange={(event) => setAcPrice(event.target.value)} /></label>
+          <label>Takeaway price (₹)<input inputMode="decimal" value={takeawayPrice} disabled={busy !== null} onChange={(event) => setTakeawayPrice(event.target.value)} /></label>
+          <label>Zomato price (₹)<input inputMode="decimal" value={zomatoPrice} disabled={busy !== null} onChange={(event) => setZomatoPrice(event.target.value)} /></label>
+          {packagingPerItem && <label>Packaging (₹)<input inputMode="decimal" value={packaging} disabled={busy !== null} onChange={(event) => setPackaging(event.target.value)} /></label>}
         </div>
-        <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" checked={isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(event.target.checked)} /> <span>Sold out <InfoTip>Sold-out items stay visible but cannot be added to new orders. Existing order items stay unchanged. Deactivating hides the product from the menu.</InfoTip></span></label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
+        <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" checked={isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(event.target.checked)} /> Sold out</label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
 
       </div><section className="product-photo-editor" aria-label="Product photo"><h3>Menu photo</h3><div className="pos-section-body">
 
-        {preview ? <img src={preview} alt={`Photo for ${name || "this product"}`} className="product-photo-preview" /> : <div className="product-photo-placeholder">{photoLoading && photoChange === undefined ? "Loading saved photo…" : photoError && photoChange === undefined ? "Saved photo unavailable" : "No photo selected"}</div>}
-        <label><span>Choose a photo <InfoTip>JPEG, PNG, or WebP · Up to 10 MB. The photo is resized and saved on the restaurant PC.</InfoTip></span><input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy !== null} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) choosePhoto(file); }} /></label>
+        {preview && <img src={preview} alt={`Photo for ${name || "this product"}`} className="product-photo-preview" />}
+        {photoLoading && photoChange === undefined && <p role="status">Loading saved photo…</p>}
+        <input aria-label="Choose a photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy !== null} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) choosePhoto(file); }} />
 
         {busy === "photo" && <p role="status">Preparing photo…</p>}
         {photoError && photoChange === undefined && <p role="alert">{photoError}. Saving other details will preserve the saved photo. <button type="button" disabled={busy !== null || photoLoading} onClick={() => setPhotoReload((value) => value + 1)}>Retry photo</button></p>}
-        <div className="product-photo-actions">{preview && <button type="button" disabled={busy !== null} onClick={() => { setPhotoChange(null); setMessage("Photo will be removed when you save."); }}>Remove photo</button>}{photoChange !== undefined && <button type="button" disabled={busy !== null} onClick={() => { setPhotoChange(undefined); setMessage("Photo change discarded."); }}>{product?.photoVersion ? "Keep saved photo" : "Undo photo change"}</button>}</div>
-        {photoChange === null && <p role="status" className="product-editor-help">The photo will be removed when saved.</p>}
+        {(preview || photoChange !== undefined) && <div className="product-photo-actions">{preview && <button type="button" disabled={busy !== null} onClick={() => { setPhotoChange(null); setMessage("Photo will be removed when you save."); }}>Remove photo</button>}{photoChange !== undefined && <button type="button" disabled={busy !== null} onClick={() => { setPhotoChange(undefined); setMessage("Photo change discarded."); }}>{product?.photoVersion ? "Keep saved photo" : "Undo photo change"}</button>}</div>}
       </div></section></div>
 
-      {!isCombo && <fieldset disabled={busy !== null} className="combo-slot-editor"><legend>Add-ons</legend>
+      {!isCombo && <fieldset disabled={busy !== null} className="combo-slot-editor product-addon-options"><legend>Add-ons</legend>
         <label><input type="checkbox" checked={addonOnly} onChange={(event) => setAddonOnly(event.target.checked)} /> Add-on only</label>
-        <p className="muted">Add-on-only products appear inside add-on groups, and stay off the ordering menu.</p>
-        {!addonOnly && <><h3>Add-on groups</h3><p className="muted">Select groups in the order staff and guests should see them.</p>
-          {addonGroupIds.map((id, index) => { const group = addonGroups.find((value) => value.id === id); return <div key={id} className="addon-group-order"><span>{group?.name ?? "Unavailable group"}{group?.isActive === false ? " (Archived - skipped when ordering)" : ""}</span>
+        {!addonOnly && (addonGroupIds.length > 0 || availableAddonGroups.length > 0) && <><h3>Add-on groups</h3>
+          {addonGroupIds.map((id, index) => { const group = addonGroups.find((value) => value.id === id); return <div key={id} className="addon-group-order"><span>{group?.name ?? "Unavailable group"}{group?.isActive === false ? " (Archived)" : ""}</span>
             <button type="button" disabled={index === 0} aria-label={`Move ${group?.name ?? "group"} up`} onClick={() => { const next = [...addonGroupIds]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; setAddonGroupIds(next); }}>Move up</button>
             <button type="button" onClick={() => setAddonGroupIds(addonGroupIds.filter((value) => value !== id))}>Remove</button></div>; })}
-          {addonGroups.filter((group) => group.isActive && !addonGroupIds.includes(group.id)).map((group) => <label className="addon-group-order" key={group.id}><input type="checkbox" checked={false} onChange={() => setAddonGroupIds([...addonGroupIds, group.id])} />{group.name}</label>)}
-          {!addonGroups.length && <p>Create add-on groups in the Catalog first.</p>}
+          {availableAddonGroups.map((group) => <label className="addon-group-order" key={group.id}><input type="checkbox" checked={false} onChange={() => setAddonGroupIds([...addonGroupIds, group.id])} />{group.name}</label>)}
         </>}
       </fieldset>}
       {isCombo ? <ComboSlotsEditor slots={slots} products={products.filter((value) => value.id !== product?.id)} disabled={busy !== null} onChange={(next) => { setSlots(next); setSlotsChanged(true); }} />
-      : <details className="product-variants" aria-label="Product variants"><summary>Variants (portions) <InfoTip>{product ? "Changes to variants are saved immediately. Other product details use Save product below." : "Variants will be saved with the new product."}</InfoTip></summary><div className="pos-section-body">
+      : <details className="product-variants" aria-label="Product variants"><summary>Variants (portions){product && <> <InfoTip>Changes to variants are saved immediately. Other product details use Save product below.</InfoTip></>}</summary><div className="pos-section-body">
 
         {variants.map((variant) => <div className="product-variant-row" key={variant.id}><span>{variant.name} · Non-AC ₹{paiseToRupees(variant.pricePaise)} · AC ₹{paiseToRupees(variant.acPricePaise ?? variant.pricePaise)} · Takeaway ₹{paiseToRupees(variant.takeawayPricePaise ?? variant.pricePaise)} · Zomato ₹{paiseToRupees(variant.zomatoPricePaise ?? variant.takeawayPricePaise ?? variant.pricePaise)}{packagingPerItem && variant.packagingPaise != null && ` · Packaging ₹${paiseToRupees(variant.packagingPaise)}`}{!variant.isActive && <small>Inactive</small>}</span><button type="button" disabled={busy !== null || editingVariantId !== null || Object.values(newVariant).some(Boolean)} onClick={() => { setEditingVariantId(variant.id); setNewVariant({ name: variant.name, price: paiseToRupees(variant.pricePaise), acPrice: optionalPrice(variant.acPricePaise), takeawayPrice: optionalPrice(variant.takeawayPricePaise), zomatoPrice: optionalPrice(variant.zomatoPricePaise), packaging: optionalPrice(variant.packagingPaise) }); }}>Edit prices</button><button type="button" disabled={busy !== null || editingVariantId === variant.id} onClick={() => toggleVariant(variant)}>{product ? variant.isActive ? "Deactivate" : "Activate" : "Remove"}</button></div>)}
         <div className="product-variant-inputs">
-          <label className="product-variant-name">Variant name<input value={newVariant.name} disabled={busy !== null} placeholder="e.g. Half" onChange={(event) => setNewVariant({ ...newVariant, name: event.target.value })} /></label>
+          <label className="product-variant-name">Variant name<input value={newVariant.name} disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, name: event.target.value })} /></label>
           <label>Non-AC (₹)<input aria-label="Variant Non-AC price (₹)" value={newVariant.price} disabled={busy !== null} inputMode="decimal" onChange={(event) => setNewVariant({ ...newVariant, price: event.target.value })} /></label>
-          <label>AC (₹)<input aria-label="Variant AC price (₹)" inputMode="decimal" value={newVariant.acPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, acPrice: event.target.value })} /></label>
-          <label>Takeaway (₹)<input aria-label="Variant takeaway price (₹)" inputMode="decimal" value={newVariant.takeawayPrice} placeholder="Use Non-AC" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, takeawayPrice: event.target.value })} /></label>
-          <label><span>Zomato (₹) <InfoTip>Leave blank to use the variant's Takeaway price. Blank AC and Takeaway prices use its Non-AC price.</InfoTip></span><input aria-label="Variant Zomato price (₹)" inputMode="decimal" value={newVariant.zomatoPrice} placeholder="Use Takeaway" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, zomatoPrice: event.target.value })} /></label>
-          {packagingPerItem && <label>Packaging (₹)<input aria-label="Variant packaging (₹)" inputMode="decimal" value={newVariant.packaging} placeholder="Same as item" disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, packaging: event.target.value })} /></label>}
+          <label>AC (₹)<input aria-label="Variant AC price (₹)" inputMode="decimal" value={newVariant.acPrice} disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, acPrice: event.target.value })} /></label>
+          <label>Takeaway (₹)<input aria-label="Variant takeaway price (₹)" inputMode="decimal" value={newVariant.takeawayPrice} disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, takeawayPrice: event.target.value })} /></label>
+          <label>Zomato (₹)<input aria-label="Variant Zomato price (₹)" inputMode="decimal" value={newVariant.zomatoPrice} disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, zomatoPrice: event.target.value })} /></label>
+          {packagingPerItem && <label>Packaging (₹)<input aria-label="Variant packaging (₹)" inputMode="decimal" value={newVariant.packaging} disabled={busy !== null} onChange={(event) => setNewVariant({ ...newVariant, packaging: event.target.value })} /></label>}
           <div className="product-variant-actions"><button type="button" disabled={busy !== null} onClick={addVariant}>{editingVariantId ? "Save variant" : "Add variant"}</button>{editingVariantId && <button type="button" disabled={busy !== null} onClick={() => { setEditingVariantId(null); setNewVariant(emptyVariant); }}>Cancel variant edit</button>}</div>
         </div>
       </div></details>}

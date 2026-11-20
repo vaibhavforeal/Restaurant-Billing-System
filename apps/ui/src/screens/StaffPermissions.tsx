@@ -47,7 +47,7 @@ export function StaffPermissions({ user, onClose, onSaved }: { user: AdminUser; 
   const changeCount = Object.keys(changes).length;
   return <section className="panel staff-permissions" aria-label={`Permissions for ${user.name}`}>
     <div className="staff-permissions-head">
-      <div><h3>Permissions for {user.name}</h3><p className="muted">Starts from the {user.role === "waiter" ? "captain / waiter" : user.role} role. Tick to allow, untick to take away.</p></div>
+      <div><h3>Permissions for {user.name}</h3><p className="muted">Starts from the {user.role === "waiter" ? "captain / waiter" : user.role} role.</p></div>
       <button type="button" onClick={onClose}>Close</button>
     </div>
     {error && <p role="alert">{error}</p>}

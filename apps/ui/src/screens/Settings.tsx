@@ -410,7 +410,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             onChange={receiptProfile => setEditPrinter(previous => ({ ...previous, receiptProfile }))} />
           <PrintProfileControls title="KOT and cancellation profile" value={editPrinter.kotProfile ?? DEFAULT_PRINT_PROFILE} disabled={busy}
             onChange={kotProfile => setEditPrinter(previous => ({ ...previous, kotProfile }))} />
-          <div className="info-action-row"><button disabled={busy} onClick={() => void savePrinter(editingPrinterId)}>Save printer and profiles</button><InfoTip>Test prints use the saved profile and its copy count.</InfoTip></div>
+          <div className="info-action-row"><button disabled={busy} onClick={() => void savePrinter(editingPrinterId)}>Save printer and profiles</button><InfoTip>Test prints use saved settings.</InfoTip></div>
 
         </div>}
 

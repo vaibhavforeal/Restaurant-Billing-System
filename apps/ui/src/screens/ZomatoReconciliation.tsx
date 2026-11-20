@@ -66,7 +66,7 @@ export function ZomatoReconciliationPanel() {
     downloadText(toCsv([header, ...rows]), `zomato-reconciliation-${period.from}-${period.to}.csv`, "text/csv;charset=utf-8");
   }
   return <section className="zomato-screen">
-    <div className="page-header"><div><h3>Zomato reconciliation</h3><p>Zomato orders and settlement reconciliation</p></div><button onClick={() => void refresh()} disabled={busy}>Refresh</button></div>
+    <div className="page-header"><div><h3>Zomato reconciliation</h3></div><button onClick={() => void refresh()} disabled={busy}>Refresh</button></div>
     <div className="zomato-status"><strong>{settings?.adapterConfigured && settings.enabled ? "Live receiver enabled" : "Live activation pending"}</strong>
       <span>{settings?.restaurantId ? `${settings.restaurantName || "Restaurant"} · ${settings.restaurantId}` : "Add your restaurant ID in Marketplace, Zomato settings to get started."}</span></div>
     {error && <p role="alert">{error}. Displayed data may be out of date. Use Refresh to try again.</p>}
@@ -85,7 +85,7 @@ export function ZomatoReconciliationPanel() {
       <div className="zomato-toolbar"><label>Search order or reference<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Order ID or settlement reference" /></label>
         <label>Show<select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All orders</option><option value="review">Needs review</option>{Object.entries(stateLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
       <p className="muted">{visible.length} of {currentReport.rows.length} orders. Statement net = gross − deductions + additions. Reported paid comes from your import; bank receipt is not verified.</p>
-      {!visible.length ? <div className="panel zomato-empty"><h3>{currentReport.rows.length ? "No matching orders" : "No orders or statements in this period"}</h3><p>{currentReport.rows.length ? "Change the search or status filter." : "Import your order history and settlement entries below, then choose their dates."}</p></div> :
+      {!visible.length ? <div className="panel zomato-empty"><h3>{currentReport.rows.length ? "No matching orders" : "No orders or statements in this period"}</h3>{!currentReport.rows.length && <p>Import order or settlement history below.</p>}</div> :
         <div className="zomato-table-wrap" tabIndex={0} aria-label="Reconciliation table, scroll horizontally for all amounts"><table className="zomato-table"><thead><tr>
           <th>Order / date</th><th>Result</th><th>Order value</th><th>Statement gross</th><th>Deductions</th><th>Additions</th><th>Statement net</th><th>Reported paid</th><th>Gross difference</th><th>Payout difference</th>
         </tr></thead><tbody>{visible.map(row => <tr key={row.orderId}>
@@ -135,7 +135,7 @@ function ZomatoImport({ restaurantId, onImported }: { restaurantId: string; onIm
     finally { lock.current = false; setBusy(false); }
   }
   return <section className="panel zomato-import" aria-label="Import Zomato records"><h3>Import orders and settlements</h3>
-    <p className="muted">Map your Zomato exports to the MasalaPOS template. Amounts are INR with two decimals. These templates are not Zomato's export format.</p>
+    <p className="muted">Use the MasalaPOS template. Enter INR amounts with two decimals.</p>
     {!restaurantId && <p>Save a restaurant ID in Marketplace, Zomato settings before importing.</p>}
     <fieldset disabled={busy || !restaurantId} className="zomato-fields">
       <div className="zomato-toolbar"><label>Import type<select value={kind} onChange={e => { setKind(e.target.value as ZomatoImportKind); replaceCsv(""); if (file.current) file.current.value = ""; }}><option value="orders">Order history</option><option value="settlements">Settlement entries</option></select></label>

@@ -92,7 +92,7 @@ export function Users() {
   return (
     <div className="legacy-screen">
       <h2>Users & captains</h2>
-      <p>Everyone signs in with their username and password. Admins also have an approval PIN for approving discounts, voids and refunds at the counter. Choose the captain on each customer's order when they arrive.</p>
+      <p>Admins use an approval PIN for discounts, voids and refunds.</p>
       <fieldset disabled={busy} style={{ border: 0, padding: 0, minWidth: 0 }}>
       <legend className="sr-only">Staff accounts</legend>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>

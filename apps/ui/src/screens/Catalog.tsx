@@ -167,17 +167,17 @@ export function Catalog() {
       <div className="panel catalog-products">
         <div className="catalog-products-heading">
           <h2>Products</h2>
-          <div className="catalog-create-actions">
-            <button disabled={busy !== null} onClick={() => setManagingAddons(true)}>Add-on groups</button>
-            <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null}>
-              New combo
-            </button>
-            <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null}>
-              New product
-            </button>
-          </div>
+          <CatalogTransfer busy={busy !== null} run={run} onImported={setMessage} />
         </div>
-        <CatalogTransfer busy={busy !== null} run={run} onImported={setMessage} />
+        <div className="catalog-create-actions">
+          <button disabled={busy !== null} onClick={() => setManagingAddons(true)}>Add-on groups</button>
+          <button onClick={() => setEditing("new-combo")} disabled={!selectedCat || busy !== null}>
+            New combo
+          </button>
+          <button className="primary" onClick={() => setEditing("new")} disabled={!selectedCat || busy !== null}>
+            New product
+          </button>
+        </div>
         {error && <div role="alert" className="error-message">{error}</div>}
         {message && <p role="status">{message}</p>}
         <div className="catalog-table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>

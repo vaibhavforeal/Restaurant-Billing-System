@@ -249,7 +249,7 @@ html[data-theme] {
   .product-editor h2 { font-size: var(--text-heading); }
   .product-editor-actions { padding-top: var(--space-4); gap: var(--space-4); }
   .product-variant-row, .product-variant-inputs, .recipe-ingredient { gap: var(--space-4); }
-  .product-photo-preview, .product-photo-placeholder { max-height: calc(var(--control-touch) * 3); width: 100%; object-fit: contain; }
+  .product-photo-preview { max-height: calc(var(--control-touch) * 3); width: 100%; object-fit: contain; }
   .recipe-ingredients { gap: var(--space-4); margin-block: var(--space-4); }
   .recipe-editor { padding-top: var(--space-4); margin-top: var(--space-4); }
   .reservation-form, .reservation-toolbar, .reservation-actions, .reservation-list { gap: var(--space-4); }

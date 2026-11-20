@@ -406,15 +406,15 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
               {quickMode === "cash" && <div className="cash-chips" aria-label="Cash quick amounts">{[preview.totalPaise, ...[50000, 100000, 200000].filter((amount) => amount > preview.totalPaise)].map((amount, index) => <button key={amount} onClick={() => setCashReceived(paiseToRupees(amount))}>{index === 0 ? "Exact" : money(amount)}</button>)}</div>}
               {quickMode === "cash" && <p className="billing-change" role="status">Change: {money(Math.max(0, (quickReceived ?? 0) - preview.totalPaise))}</p>}
               {quickMode === "upi" && preview.receipt.upiId && preview.totalPaise > 0 && <>
-                <p className="billing-note">Customer paying by QR? Issue the bill first, then verify payment before settling.</p>
+                <p className="billing-note">Issue the bill to show the UPI QR.</p>
                 <button disabled={blocked || hasDraft} onClick={() => void run(issue)}>{printerId ? "Print UPI bill" : "Issue UPI bill"}</button>
               </>}
-              <p className="billing-note">Confirm after receiving payment.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue bill and record received payment")} disabled={blocked || hasDraft || !cashValid} onClick={() => void run(issueAndPay)}>{shortcut("billing", printerId ? "Pay & print" : "Record payment")}</button>
+              <button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue bill and record received payment")} disabled={blocked || hasDraft || !cashValid} onClick={() => void run(issueAndPay)}>{shortcut("billing", printerId ? "Pay & print" : "Record payment")}</button>
             </fieldset> : <div className="billing-issue"><p>Issuing freezes the items and totals.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue the reviewed bill")} disabled={blocked || hasDraft} onClick={() => void run(issue)}>{shortcut("billing", printerId ? "Save & print bill" : "Issue bill")}</button></div>}
           </div>}
           {bill && <div className="billing-payment">
             {bill.status === "unpaid" && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
-              {canShowQr && <><button onClick={() => setShowQr(true)}>Show UPI QR</button><p className="billing-note">Customers can scan from this screen or the printed bill. Verify payment in your UPI app before settling.</p></>}
+              {canShowQr && <><button onClick={() => setShowQr(true)}>Show UPI QR</button><p className="billing-note">Verify payment in your UPI app before settling.</p></>}
               {payments.map((p, index) => <div key={p.id} className="billing-payment-row">
                 <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={paymentModes} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); savePreference("masalapos.payment-mode", mode); }} /></div>
                 <label>Amount {index + 1} (₹) <input type="number" min="0.01" step="0.01" value={p.amount} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, amount: e.target.value } : r))} /></label>

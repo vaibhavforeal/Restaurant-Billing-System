@@ -55,7 +55,7 @@ export function CatalogTransfer({ busy, run, onImported }: {
         const result = await apiFetch<{ csv: string; filename: string }>("/api/catalog/export");
         download(result.csv, result.filename);
       }, "transfer"); }}>Export CSV</button>
-      <button disabled={busy} onClick={() => input.current?.click()}>Import CSV</button><InfoTip>All categories · Prices in rupees · Preview before saving</InfoTip>
+      <button disabled={busy} onClick={() => input.current?.click()}>Import CSV</button>
       <button disabled={busy} onClick={() => download(catalogTemplateCsv(), "masalapos-items-template.csv")}>Download template</button>
       <input ref={input} type="file" accept=".csv,text/csv" aria-label="Choose item CSV" hidden disabled={busy}
         onChange={(e) => { chooseFile(e.target.files?.[0]); e.target.value = ""; }} />
@@ -85,7 +85,7 @@ export function CatalogTransfer({ busy, run, onImported }: {
           </tr>)}</tbody>
         </table></div>
 
-        <button className="primary" disabled={busy} onClick={importFile}>Import {preview.created + preview.updated} items</button><InfoTip>Updates apply the values in this file. No items or variants will be deleted.</InfoTip>
+        <button className="primary" disabled={busy} onClick={importFile}>Import {preview.created + preview.updated} items</button><InfoTip>Import updates matching items. It never deletes items or variants.</InfoTip>
       </>}
     </div>}
   </section>;

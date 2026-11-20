@@ -3,7 +3,6 @@
 .system-settings p { color: var(--muted); font-size: var(--text-secondary); line-height: 1.5; }
 .system-settings .system-page-heading { margin: var(--space-6) 0; }
 .system-settings .system-page-heading h2 { font-size: var(--text-heading); letter-spacing: normal; margin: 0 0 var(--space-2); padding: 0; border: 0; }
-.system-settings .system-page-heading p { margin: 0; }
 html[data-theme] .system-settings button { display: inline-flex; justify-content: center; align-items: center; gap: var(--space-4); min-height: var(--control); padding: var(--space-2) var(--space-4); font-size: var(--text-base); border-radius: var(--radius); }
 html[data-theme] .system-settings button.primary { min-height: var(--control-primary); }
 .system-settings h3 { font-size: var(--text-base); margin: 0; }

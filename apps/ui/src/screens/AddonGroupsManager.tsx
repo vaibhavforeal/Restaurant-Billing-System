@@ -52,7 +52,7 @@ export function AddonGroupsManager({ groups, products, onChanged, onClose }: { g
   return <section className="panel addon-manager">
     <div className="addon-manager-header"><h2>Add-on groups</h2><button disabled={busy} onClick={() => edit("new")}>New group</button><button disabled={busy} onClick={onClose}>Back to products</button></div>
     {error && <p role="alert" className="error-message">{error}</p>}
-    {!groups.length && <p>No add-on groups yet. Create a group, then attach it to dishes in the product editor.</p>}
+    {!groups.length && <p>No add-on groups yet.</p>}
     {groups.map((group) => <div className="addon-group-row" key={group.id}><div><strong>{group.name}</strong><small>{group.isActive ? "Active" : "Archived"} · {addonHint(group)} · {group.options.length} options · {group.productIds.length} dishes</small></div><button disabled={busy} onClick={() => edit(group)}>Edit</button><button disabled={busy} onClick={() => void write(`/api/addon-groups/${group.id}`, "PATCH", { isActive: !group.isActive })}>{group.isActive ? "Archive" : "Unarchive"}</button></div>)}
     <WorkspaceDialog open={editing !== null} title={editing === "new" ? "New add-on group" : "Edit add-on group"} busy={busy} onClose={() => setEditing(null)}>
       <form onSubmit={(event) => { event.preventDefault(); save(); }}><fieldset disabled={busy} className="combo-slot-editor">

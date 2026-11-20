@@ -61,7 +61,7 @@ export function RecipeIngredientPicker({ items, selectedIds, canCreate, onSelect
       <label className="recipe-picker-search">Find ingredient<input autoFocus type="search" value={search} placeholder="Search stock items" onChange={(event) => setSearch(event.target.value)} /></label>
       <div className="recipe-picker-list" aria-label="Available ingredients">
         {visible.map((item) => <button key={item.id} onClick={() => onSelect(item)}><span>{item.name}<small>{item.qty.toLocaleString("en-IN", { maximumFractionDigits: 3 })} {item.unit} on hand</small></span><span className="recipe-unit-tag">{item.unit}</span><Icon name="plus" size={16} /></button>)}
-        {!visible.length && <p className="recipe-empty">{available.length ? "No ingredients match your search." : "No unused active stock items. Create a stock item to add another ingredient."}</p>}
+        {!visible.length && <p className="recipe-empty">{available.length ? "No ingredients match your search." : "No unused active stock items."}</p>}
       </div>
       {canCreate && <button className="recipe-create-stock" onClick={() => { setCreating(true); update({ ...emptyStock, name: search.trim() }); }}><Icon name="plus" size={16} /> Create stock item</button>}
     </>}

@@ -305,7 +305,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
           <div className="table-card-footer"><span className="table-price-tier">{t.priceTier === "ac" ? "AC" : "Non-AC"}</span><span className="table-card-action">{ready ? "Kitchen ready" : targetCount > 1 ? `${targetCount} split bills` : t.status === "billed" ? "Awaiting payment" : targetCount ? selectedTableId === t.id ? "Tap again to open" : "View order" : t.status === "reserved" ? "View reservation" : "Open table"}<Icon name={ready ? "check" : "arrow"} size={14} /></span></div>
         </button>; })}</div>
       </section>)}
-      {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3><p>{active.length ? "Try another status or search." : isAdmin ? "Add tables in Settings → Table Settings." : "Ask an admin to add tables."}</p></div>}
+      {visible.length === 0 && <div className="panel empty-state"><Icon name="tables" size={34} /><h3>{active.length ? "No tables match this view" : "No tables yet"}</h3>{active.length === 0 && <p>{isAdmin ? "Add tables in Settings → Table Settings." : "Ask an admin to add tables."}</p>}</div>}
       </div>
       {hasSide && <div className={`tables-side${showBookings || selected ? " has-reservations" : ""}`}>
       {selected && <TableOrderPanel key={selected.orderId} user={user} orderId={selected.orderId} disabled={othersBusy}

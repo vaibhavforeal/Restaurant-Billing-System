@@ -1,4 +1,3 @@
-import { InfoTip } from "../InfoTip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CUSTOM_FILTER_OP_LABELS, CUSTOM_REPORT_SOURCES, customReportSource, filterOpsFor, type CustomReport, type CustomReportSource, type SavedCustomReport } from "@masalapos/domain/custom-reports";
 import { apiFetch } from "../api";
@@ -119,7 +118,7 @@ export function CustomReports({ canManage, initialPeriod, onPeriodChange }: { ca
         </li>)}</ol>}
       </fieldset>
 
-      <fieldset><legend>Group by <InfoTip>(optional — combine rows that share these values)</InfoTip></legend>
+      <fieldset><legend>Group by (optional)</legend>
         <div className="custom-report-fields">{groupable.map((f) => <label key={f.id}>
           <input type="checkbox" checked={draft.groupBy.includes(f.id)} onChange={(e) => edit(withGrouping(draft, f.id, e.target.checked))} /> {f.label}</label>)}</div>
       </fieldset>

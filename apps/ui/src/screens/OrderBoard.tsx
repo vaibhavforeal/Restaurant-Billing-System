@@ -82,7 +82,7 @@ export function OrderBoard({ user, onOpenOrder }: { user: User; onOpenOrder: (or
 
   return <section className="screen order-board">
     <div className="page-header">
-      <div><h2>My Orders</h2><p>Takeaway, delivery and Zomato orders. Today's settled orders are under Processed.</p></div>
+      <div><h2>My Orders</h2></div>
       <div className="order-board-actions">
         <button type="button" onClick={refresh}><Icon name="refresh" size={14} /> Refresh</button>
       </div>

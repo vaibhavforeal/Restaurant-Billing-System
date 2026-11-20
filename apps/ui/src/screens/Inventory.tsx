@@ -288,7 +288,7 @@ function RecipesWorkspace({ products, items, loading, canManage, fullRecipe, ref
         <header className="recipe-product-heading"><button className="recipe-back" disabled={busy} onClick={back}>Back to menu items</button><div><p className="muted">Recipe</p><h3 ref={heading} tabIndex={-1}>{product.name}</h3></div>{!product.isActive && <span className="recipe-unit-tag">Inactive menu item</span>}</header>
         <RecipeEditor key={product.id} productId={product.id} items={items} canManage={canManage} fullRecipe={fullRecipe} refresh={refresh} onDirtyChange={onDirtyChange}
           onBusyChange={busyChanged} onStockCreated={onStockCreated} />
-      </> : <div className="recipe-welcome"><Icon name="kitchen" size={36} /><h3>Build recipes for your menu</h3><p>Choose a menu item to manage the ingredients used for each sale.</p><small>Stock balances and purchases are in the Stock tab.</small></div>}
+      </> : <div className="recipe-welcome"><Icon name="kitchen" size={36} /><h3>Select a menu item</h3></div>}
     </section>
   </div>;
 }

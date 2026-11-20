@@ -88,7 +88,7 @@ export function TableSettings({ onBusyChange }: { onBusyChange: (busy: boolean) 
       <button aria-pressed={view === "qr"} disabled={busy} onClick={() => setView("qr")}>Table QR codes</button>
     </div>
     {view === "tables" ? <section aria-label="Manage tables">
-      <div className="table-settings-heading"><p>Add tables, change pricing, and arrange their display order.</p><button disabled={busy || loading} onClick={() => void run()}>Refresh</button></div>
+      <div className="table-settings-heading"><button disabled={busy || loading} onClick={() => void run()}>Refresh</button></div>
       {error && <p role="alert">{error}</p>}
       {loading ? <p role="status">Loading tables…</p> : <>
       <form className="table-add-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addTable(); }}>

@@ -87,12 +87,7 @@
 .customer-list-message p { color: var(--muted); margin: 8px 0 0; }
 .customer-detail-area { min-width: 0; }
 .customers .customer-welcome { padding: 12px; }
-.customer-welcome-mark { color: var(--pos-accent); font-size: 36px; margin-bottom: 20px; }
-.customers .customer-welcome h2 { max-width: 320px; font-size: 22px; line-height: 1.3; letter-spacing: -.5px; margin-bottom: 12px; }
-.customer-welcome dl { margin: 14px 0 0; }
-.customer-welcome dl > div { border-top: 1px solid var(--line); padding: 10px 0; }
-.customer-welcome dt { font-size: 14px; font-weight: 600; }
-.customer-welcome dd { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.customers .customer-welcome h2 { margin: 0; font-size: 18px; }
 .customers .customer-profile, .customers .customer-create { padding: 12px; }
 .customers .crm-profile-head { padding-bottom: 10px; }
 .customers .crm-profile-head h3 { font-size: 20px; overflow-wrap: anywhere; }

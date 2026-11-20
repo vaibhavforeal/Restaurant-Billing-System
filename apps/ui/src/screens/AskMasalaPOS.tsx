@@ -52,7 +52,7 @@ export function AskMasalaPOS({ setup = false }: { setup?: boolean }) {
   </section>;
   return <section className="ask-masalapos" aria-label="Ask MasalaPOS">
     <div className="page-header"><h3>Ask MasalaPOS</h3></div>
-    <p className="ask-intro">Ask about sales in plain English. Answers come only from this restaurant's figures; nothing here is saved.</p>
+    <p className="ask-intro">Answers use this restaurant’s sales data. Chats aren’t saved.</p>
     <div className="ask-examples">{EXAMPLES.map((example) =>
       <button key={example} type="button" className="ask-example" disabled={busy} onClick={() => void ask(example)}>{example}</button>)}</div>
     <form className="ask-form" onSubmit={(e) => { e.preventDefault(); void ask(question); }}>

@@ -38,7 +38,7 @@ export function AiAssistantSettings() {
   const on = !!view?.service?.enabled;
   return <fieldset className="ai-assistant-settings">
     <legend>AI assistant · MasalaPOS</legend>
-    <p className="muted">Ask about sales, summarize the day, and draft menu descriptions. Requires internet.</p>
+    <p className="muted">Requires internet.</p>
     {!view && !status && <p role="status">Loading assistant status…</p>}
     {view && <>
       <p className={`ai-service-status${on ? " available" : ""}`} role="status">{serviceStatusText(view)}</p>
@@ -49,7 +49,6 @@ export function AiAssistantSettings() {
         </label>
           <button type="button" disabled={busy} onClick={() => void check()}>{busy ? "Checking…" : "Check"}</button>
         </div>
-        <small className="ai-assistant-help">Controls whether AI buttons appear for this restaurant's staff.</small>
         <details className="ai-assistant-data"><summary>Data shared with AI</summary><p>{PRIVACY}</p></details>
         <table className="ai-assistant-usage"><thead><tr><th>Usage on this counter</th><th>Requests</th><th>Tokens</th></tr></thead>
           <tbody>{usageRows(view.usage).map((row) => <tr key={row.feature}><td>{row.feature}</td><td>{row.requests}</td><td>{row.tokens.toLocaleString("en-IN")}</td></tr>)}</tbody></table>

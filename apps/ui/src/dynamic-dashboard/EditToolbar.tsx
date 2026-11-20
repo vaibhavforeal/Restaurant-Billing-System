@@ -21,7 +21,7 @@ const TOUCH = "h-11";
 export function EditToolbar({ editing, busy, full, onCustomise, onAdd, onReset, onCancel, onSave }: Props) {
   return <div className="dd-toolbar">
     {editing ? <>
-      <p className="dd-edit-hint text-caption-1-regular text-text-secondary">Drag by the header. Nearby edges align automatically; hold Alt to move freely.</p>
+      <p className="dd-edit-hint text-caption-1-regular text-text-secondary">Drag the header to move. Hold Alt to bypass snapping.</p>
       <Button variant="secondary" size="small" className={TOUCH} leadingIcon={asIcon(RiAddLine)} disabled={full || busy} title={full ? "Your dashboard is full" : undefined} onClick={onAdd}>Add widget</Button>
       <Button variant="secondary" size="small" className={TOUCH} disabled={busy} onClick={onReset}>Reset to default</Button>
       <Button variant="secondary" size="small" className={TOUCH} disabled={busy} onClick={onCancel}>Cancel</Button>

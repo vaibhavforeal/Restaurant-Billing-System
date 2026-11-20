@@ -35,7 +35,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
   }
 
   return <section className="screen marketplace-screen">
-    <div className="page-header"><div><h2>Marketplace</h2><p>Add-ons and modules for this restaurant</p></div></div>
+    <div className="page-header"><div><h2>Marketplace</h2></div></div>
     <p className="marketplace-note">MasalaPOS decides which add-ons and modules this restaurant can use. {userCan(user, "integrations.configure") ? "You can turn an included one off here and back on later." : "Only an admin can turn them on or off."}</p>
     <h3 className="marketplace-section">Add-ons</h3>
     {!ready && <p role="status">Loading integrations…</p>}

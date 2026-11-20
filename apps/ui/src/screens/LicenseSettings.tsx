@@ -138,7 +138,7 @@ export function LicenseSettings() {
   const current = devices?.find((d) => d.current);
   const canRegister = status && ["active", "grace"].includes(status.state) && !current && devices !== null && devices.length < (status.maxDevices ?? 0);
   return <section className="panel license-settings" aria-label="Plan and devices">
-    <div className="license-heading"><div><h2>Plan and devices</h2><p>Activation, renewal and access for this restaurant.</p></div>
+    <div className="license-heading"><div><h2>Plan and devices</h2></div>
       <div className="license-actions">
         {online && <button disabled={busy || loading} onClick={() => { void run(async () => {
           setMessage((await apiFetch<{ message: string }>("/api/license/check", { method: "POST" })).message);
@@ -170,10 +170,10 @@ export function LicenseSettings() {
           setMessage("Activation request downloaded.");
         }, false); }}>Download activation request</button>
         {online && status.plan && <><h3>Use a different Order ID</h3>
-          <p className="license-help">For example when a trial becomes a paid order. The new order must belong to the same customer.</p>{enrollForm}</>}
+          <p className="license-help">The new order must belong to the same customer.</p>{enrollForm}</>}
       </details>
       <div className="license-section"><h3>Import or renew a license</h3>
-        <p className="license-help">Choose a file or paste the signed license from your provider. Preview checks its signature and shows the changes before you apply it.</p>
+        <p className="license-help">Preview the signed license from your provider before applying it.</p>
         <label>License file<input aria-label="License file" type="file" accept=".txt,.lic,text/plain" disabled={busy} onChange={(e) => { readFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
         <form onSubmit={(e) => { e.preventDefault(); void run(async () => {
           setPreview(null); setPreview(await apiFetch<LicensePreview>("/api/license/preview", { method: "POST", body: JSON.stringify({ license }) }));
@@ -195,7 +195,7 @@ export function LicenseSettings() {
         </section>}
       </div>
       <div className="license-section"><h3>Registered devices</h3>
-        <p className="license-help">Each PC or phone browser uses a slot. Tabs in the same browser share one. Sign in as an admin on a new browser to register it.</p>
+        <p className="license-help">Each browser uses one slot. Sign in as an admin to register a new browser.</p>
         {loading && <p role="status">Refreshing devices and history...</p>}
         {devices?.length === 0 && <p>No devices registered yet.</p>}
         <ul className="license-devices">{devices?.map((device) => <li key={device.id}>
@@ -219,7 +219,7 @@ export function LicenseSettings() {
         {!current && devices && status.maxDevices !== null && devices.length >= status.maxDevices && <p className="license-warning">Device limit reached. Remove an unused registration or import an upgraded license.</p>}
       </div>
       <details className="license-section"><summary>License and device history</summary>
-        <p className="license-help">Successful changes recorded on this restaurant server. Earlier changes are not backfilled.</p>
+        <p className="license-help">Shows changes recorded after history tracking began.</p>
         {history?.events.length === 0 && <p>No changes recorded yet.</p>}
         <ol className="license-history">{history?.events.map((event) => <li key={event.id}><strong>{event.summary}</strong><small>{dateTime(event.occurredAt, timezone)} / {event.actorName}</small></li>)}</ol>
         {history?.nextBefore !== null && history?.nextBefore !== undefined && <button disabled={busy || loading} onClick={() => { void run(async () => {

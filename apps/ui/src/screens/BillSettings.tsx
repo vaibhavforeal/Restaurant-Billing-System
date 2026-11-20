@@ -107,8 +107,8 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
           <small id="invoice-prefix-cn">Credit notes are numbered CN/{fy}/001.</small>
         </label>
         <label style={field}>
-          <span>Round off total <InfoTip id="round-off-help">Applies to new bills. Refunds use each bill's own rounding.</InfoTip></span>
-          <select value={form.roundOff} disabled={busy} aria-describedby="round-off-help"
+          <span>Round off new bills</span>
+          <select value={form.roundOff} disabled={busy}
             onChange={(e) => update({ roundOff: e.target.value as SettingsData["roundOff"] })}>
             <option value="rupee">To the nearest ₹1</option>
             <option value="half">To the nearest 50 paise</option>
@@ -136,7 +136,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
         <label style={field}>
           <span>Packaging label</span>
           <input value={form.packagingChargeLabel} maxLength={24} placeholder="Packaging" disabled={busy} aria-describedby="charge-label-hint" onChange={(e) => update({ packagingChargeLabel: e.target.value })} />
-          <small id="charge-label-hint">Labels print on the bill, up to 24 characters. Leave blank for the default.</small>
+          <small id="charge-label-hint">Up to 24 characters. Blank uses the default label.</small>
         </label>
         <label style={check}>
           <input type="checkbox" checked={form.packagingPerItem} disabled={busy} aria-describedby="packaging-per-item-hint"
@@ -148,7 +148,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
       <fieldset className="bill-settings-group">
         <legend>Printed bill</legend>
         <label style={field}>
-          <span>Bill style <InfoTip id="bill-style-help">Applies to new bills; reprints keep their saved style. Preview/PDF uses the selected typeface. Thermal printing uses the printer's built-in font with matching spacing and emphasis.</InfoTip></span>
+          <span>Bill style <InfoTip id="bill-style-help">Applies to new bills. Reprints keep their saved style. Thermal printers use their built-in font.</InfoTip></span>
           <select value={form.receiptStyle ?? "classic"} onChange={(e) => update({ receiptStyle: resolveReceiptStyle(e.target.value) })} disabled={busy} aria-describedby="bill-style-help">
             <option value="classic">Classic - Receipt mono</option>
             <option value="modern">Modern - Bold sans serif</option>
@@ -183,7 +183,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
       <fieldset className="bill-settings-group">
         <legend>Order handling</legend>
         <label style={field}>
-          <span>Kitchen slip when a sent item is changed <InfoTip id="kot-edit-help">When staff change the quantity or note of an item already sent to the kitchen, a CHANGED slip can print at that kitchen station. The kitchen screen updates either way.</InfoTip></span>
+          <span>Print kitchen slip when a sent item changes <InfoTip id="kot-edit-help">The kitchen screen updates even when printing is off.</InfoTip></span>
           <select value={form.kotEditPrint} disabled={busy} aria-describedby="kot-edit-help"
             onChange={(e) => update({ kotEditPrint: e.target.value as SettingsData["kotEditPrint"] })}>
             <option value="ask">Ask each time</option>

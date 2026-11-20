@@ -112,7 +112,7 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
   const now = data?.now ?? Date.now();
 
   return <WorkspaceDialog open title="Reservations" onClose={close} busy={busy} className="reservations-dialog">
-    <p className="reservation-help">{data ? `Restaurant time: ${data.timezone}. ` : ""}Bookings hold a table for the selected time. Seat the party to open its bill.</p>
+    <p className="reservation-help">{data ? `Restaurant time: ${data.timezone}. ` : ""}Seating opens a bill.</p>
     {error && <p className="error-message" role="alert">{error}</p>}
     {loadError && <p className="error-message" role="alert">{loadError}</p>}
     {message && <p role="status">{message}</p>}
@@ -127,7 +127,6 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
       <label>Date and time<input type="datetime-local" required disabled={busy} value={editor.input.startsLocal} onChange={(e) => field("startsLocal", e.target.value)} /></label>
       <label>Duration (minutes)<input type="number" min={15} max={480} required disabled={busy} value={editor.input.durationMinutes} onChange={(e) => field("durationMinutes", Number(e.target.value))} /></label>
       <label className="reservation-wide">Notes (optional)<textarea rows={2} maxLength={500} disabled={busy} value={editor.input.notes} onChange={(e) => field("notes", e.target.value)} /></label>
-      <p className="reservation-help reservation-wide">Check the chosen table has enough seats for the party. Overlapping reservations are blocked.</p>
       <div className="reservation-actions reservation-wide"><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save reservation"}</button>
         <button type="button" disabled={busy} onClick={() => { if (!dirty || window.confirm("Discard the unsaved reservation changes?")) { setEditor(null); onDirtyChange(false); setError(""); } }}>Back to reservations</button></div>
     </form> : <>

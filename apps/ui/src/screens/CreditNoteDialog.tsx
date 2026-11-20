@@ -262,7 +262,6 @@ function CreditBody({ kind, bill, items, role, printers, printerId, onBusyChange
 
     <section className="credit-note-preview" aria-label="Credit preview" aria-live="polite">
       <h3>Credit note</h3>
-      {needsItems && !lines.length && <p className="muted">Choose how many of each item to refund.</p>}
       {needsItems && tickbox && <label className="credit-note-packaging">
         <input type="checkbox" checked={refundPackaging} disabled={busy} onChange={(e) => setRefundPackaging(e.target.checked)} />
         <span>Refund packaging{tickbox.amountPaise !== null && ` (${money(tickbox.amountPaise)})`}</span>

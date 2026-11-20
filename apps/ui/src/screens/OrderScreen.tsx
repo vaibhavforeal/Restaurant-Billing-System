@@ -762,7 +762,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {!useOrderControls && order.type === "parcel" && order.status === "open" && takeawayTypes.length > 1 && <label className="order-type-picker">Order type <select value={order.orderTypeId} disabled={locked} onChange={(e) => chooseOrderType(e.target.value)}>
           {takeawayTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select></label>}
-        {isQuick && order.status === "open" && <p className="muted">Select items, then checkout. Kitchen items are sent automatically.</p>}</div>
+        {isQuick && order.status === "open" && <p className="muted">Checkout sends kitchen items automatically.</p>}</div>
       {captain ? <OverflowMenu label="More">
         {order.status === "open" && showHold && <button {...shortcutProps("hold")} title={shortcut("hold", "Save this order for any device and return to tables")} disabled={locked} onClick={() => void holdOrder()}>Hold & return to tables</button>}
         {order.status === "open" && draft.length > 0 && <button disabled={locked} {...shortcutProps("save_items")} title={shortcut("save_items", "Save without sending to kitchen")} onClick={punch}>Save items only</button>}
@@ -845,7 +845,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           return variants.length ? variants.map((v) => <button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} aria-label={`${p.isSoldOut ? "Sold out:" : "Add"} ${p.name}, ${v.name}, ₹${paiseToRupees(v.pricePaise)}`} key={`${p.id}.${v.id}`} onClick={() => addToDraft(p.id, v.id, `${p.name} (${v.name})`, v.pricePaise)}>{top}<div className="menu-card-name">{p.name}<small className="menu-card-portion">{v.name}</small></div><div className="menu-card-bottom"><span>₹{paiseToRupees(v.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>)
           : [<button className={`menu-card${p.isSoldOut ? " sold-out" : ""}${popular.has(p.id) ? " popular" : ""}`} disabled={p.isSoldOut || locked} key={p.id} onClick={() => addToDraft(p.id, null, p.name, p.pricePaise)}>{top}<div className="menu-card-name">{p.name}</div><div className="menu-card-bottom"><span>₹{paiseToRupees(p.pricePaise)}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div></button>];
         })}</div>
-        {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3><p>Try another name or category.</p></div>}</div>
+        {!activeProducts.length && <div className="empty-state"><Icon name="search" size={32} /><h3>No menu items found</h3></div>}</div>
       </section>}
       <aside className="order-cart" id="order-cart" aria-label="Current order">
         <div className="cart-heading"><h3>Current order <span>{itemCount} {itemCount === 1 ? "item" : "items"}</span></h3><Icon name={order.type === "dine_in" ? "tables" : "bag"} size={17} /></div>
@@ -859,7 +859,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
         {useOrderControls && order.notes && <p className="table-order-note"><strong>Order notes</strong>{order.notes}</p>}
         {order.status === "open" && (draft.length > 0 || order.items.length === 0) && <div className="cart-section">
           <h3>{captain ? "Not sent" : "Cart"} ({draft.length} items)</h3>
-          {!draft.length && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>Select a dish.</p>}
           {pricedDraft.map((d) => <div className="cart-row draft-row" key={d.clientRef}>
             <button className="cart-item-name" title={d.note ? d.name + ": " + d.note : "Add note for " + d.name} aria-label={"Note for " + d.name} disabled={locked || queuedRefs.has(d.clientRef)} onClick={() => addNote(d.clientRef)}><strong>{d.name}</strong><AddonLines addons={d.addons} qty={d.qty} />{d.contents && <small className="cart-combo-contents">{d.contents.join(", ")}</small>}{d.note ? <small>{d.note}</small> : <small>Add notes</small>}</button>
             <QtyStepper name={d.name} value={d.qty} disabled={locked || queuedRefs.has(d.clientRef)} onChange={(qty) => updateDraft(d.clientRef, { qty })} />

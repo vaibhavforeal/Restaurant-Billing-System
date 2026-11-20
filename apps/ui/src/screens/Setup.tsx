@@ -45,7 +45,7 @@ export function Setup({ activation = "none", licensed = true, onDone }: { activa
     finally { lock.current = false; setBusy(false); }
   }
   return <AuthLayout><form onSubmit={submit} className="auth-form setup-details"><h2>Your admin account</h2>
-    <p>Step 2 of 2. The admin manages staff, the menu and settings for {profile.restaurantName.trim()}.</p>
+    <p>Step 2 of 2 · {profile.restaurantName.trim()}</p>
     <label>Your name<input required autoFocus placeholder="Your name (admin)" value={adminName} onChange={(e) => setAdminName(e.target.value)} disabled={busy} /></label>
     <label>Username<input required placeholder="For example, admin" value={username} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={32} onChange={(e) => setUsername(e.target.value)} disabled={busy} /></label>
     <label>Password<input required type="password" placeholder="At least 8 characters" value={password} autoComplete="new-password" maxLength={128} onChange={(e) => setPassword(e.target.value)} disabled={busy} /></label>
@@ -86,7 +86,7 @@ function DetailsStep({ activated, profile, onChange, onNext }: { activated: Acti
   return <AuthLayout><form onSubmit={next} className="auth-form setup-details" noValidate><h2>Set up MasalaPOS</h2>
     {activated && <p role="status">Activated for {activated.customer.name}: {activated.order.plan === "pro" ? "Pro" : "Basic"}{activated.order.trial ? " trial" : ""}
       {activated.order.expiresAt !== null && <> until {new Date(activated.order.expiresAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</>}.</p>}
-    <p>Step 1 of 2. These details print on every bill. You can change them later in Settings.</p>
+    <p>Step 1 of 2 · These details print on bills.</p>
     {field("restaurantName", "Restaurant name", { autoFocus: true, maxLength: 120, autoComplete: "organization" })}
     {field("address", "Street address", { maxLength: 300, placeholder: "Shop no., building, street, area", autoComplete: "street-address" })}
     <div className="setup-row">

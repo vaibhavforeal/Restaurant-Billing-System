@@ -63,12 +63,12 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
     </nav>}
     <div hidden={!backupOnly && view !== "backups"}><BackupSettings /></div>
     {!backupOnly && <div hidden={view !== "connections"}>
-      <header className="system-page-heading"><h2>Connect your team</h2><p>Set up a counter, waiter tablet or kitchen display on your restaurant network.</p></header>
+      <header className="system-page-heading"><h2>Connect your team</h2></header>
       {error && <p role="alert" className="backup-error">{error}</p>}
       {message && <p role="status">{message}</p>}
       {!loaded && !error && <p role="status">Finding your restaurant connections…</p>}
       {loaded && <>
-      <div className="connection-network-note"><Icon name="monitor" size={18} /><p>Keep every device on the <strong>same restaurant Wi-Fi or Ethernet</strong>. The main POS must stay running. Everyone signs in with their own username and password.</p></div>
+      <div className="connection-network-note"><Icon name="monitor" size={18} /><p>Connect devices to the <strong>same restaurant network</strong> and keep the main POS running.</p></div>
       <nav className="connection-device-picker" aria-label="Device type">{devices.map((item) => <button key={item.id} aria-pressed={device === item.id} onClick={() => setDevice(item.id)}>
         <Icon name={item.icon} size={22} /><span><strong>{item.title}</strong><small>{item.detail}</small></span><Icon name="arrow" size={16} />
       </button>)}</nav>
@@ -85,17 +85,17 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
         <p className="connection-footnote">Reserve the main PC's IP address in your router so the restaurant address stays the same.</p>
       </>}
       {device === "android" && <>
-        <div className="system-section-heading"><Icon name="tablet" size={22} /><div><h3>Android Captain app</h3><p>Take orders and send KOTs from an Android phone or tablet.</p></div></div>
+        <div className="system-section-heading"><Icon name="tablet" size={22} /><div><h3>Android Captain app</h3></div></div>
         {apk && android ? <>
           <div className="connection-step"><span>1</span><div><h4>Install MasalaPOS Captain {apk.versionName}</h4><p>Scan a download code. Android asks once to allow installs from the browser.</p></div></div>
           <div className="connection-code-list">{android.downloads.map(link => <ConnectionCode key={link.url} url={link.url} qr={link.qr} label="Download Captain" />)}</div>
           <div className="connection-step"><span>2</span><div><h4>Pair with this restaurant</h4><p>Open the app, tap <strong>Scan pairing code</strong> and scan a code below. Sign in with a captain's username and password.</p></div></div>
           <div className="connection-code-list">{android.pairings.map(pairing => <ConnectionCode key={pairing.origin} url={pairing.origin} qr={pairing.qr} label={pairing.secure ? "Secure pairing" : "Unencrypted pairing"} pairing />)}</div>
           <p className="connection-footnote">{android.pairings.length > 0 && android.pairings.every(pairing => pairing.secure) ? "The app checks the restaurant certificate itself. Nothing else needs to be installed." : "Unencrypted connections need the local Captain HTTPS setup on the POS PC. Pair tablets again after setup."} The app updates itself from this POS after each MasalaPOS update.</p>
-        </> : <div className="system-empty"><h4>Android app not included in this build</h4><p>Your tablets can still use Captain in the browser.</p><button onClick={() => setDevice("browser")}>Set up Captain in browser<Icon name="arrow" size={16} /></button></div>}
+        </> : <div className="system-empty"><h4>Android app not included in this build</h4><button onClick={() => setDevice("browser")}>Set up Captain in browser<Icon name="arrow" size={16} /></button></div>}
       </>}
       {device === "browser" && <>
-        <div className="system-section-heading"><Icon name="cloud" size={22} /><div><h3>Captain in browser</h3><p>Sign in as a captain for tables, orders and KOTs.</p></div></div>
+        <div className="system-section-heading"><Icon name="cloud" size={22} /><div><h3>Captain in browser</h3></div></div>
         {captain?.enabled ? <>
           <div className="connection-step"><span>1</span><div><h4>Trust the restaurant certificate</h4><p>Install this certificate on each tablet once, before opening a secure Captain link.</p><a href="/captain/restaurant-ca.cer" download>Download restaurant certificate</a></div></div>
           <div className="connection-step"><span>2</span><div><h4>Open Captain and sign in</h4><p>Scan a code, sign in with a staff username and password, then choose Install Captain from the account menu.</p></div></div>
@@ -105,7 +105,7 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
         <p className="connection-footnote">On Android, install in Chrome. On iPad, use Safari → Share → Add to Home Screen.</p>
       </>}
       {device === "kitchen" && kitchenDisplay && <>
-        <div className="system-section-heading"><Icon name="kitchen" size={22} /><div><h3>Kitchen displays</h3><p>Keep your kitchen in sync with live tickets and completion updates.</p></div></div>
+        <div className="system-section-heading"><Icon name="kitchen" size={22} /><div><h3>Kitchen displays</h3></div></div>
         <ol className="connection-instructions"><li>Create a staff member with the <strong>Kitchen</strong> role in Users.</li><li>Install MasalaPOS Kitchen on a kitchen PC and enter a POS address, or open a Kitchen link on a tablet.</li><li>Sign in with the kitchen staff username and password.</li></ol>
         {!connections.length && <p className="system-empty">No LAN address found. Connect this PC to the restaurant network, then reopen Settings.</p>}
         <ul className="connection-link-list">{connections.map(connection => <li key={connection.url}><span>Kitchen address</span><a href={`${connection.url}/kitchen/`} target="_blank" rel="noreferrer">{connection.url}/kitchen/</a></li>)}</ul>
@@ -121,5 +121,5 @@ export function SystemSettings({ backupOnly = false }: { backupOnly?: boolean })
 }
 
 function ConnectionCode({ url, qr, label, pairing = false }: { url: string; qr: string; label: string; pairing?: boolean }) {
-  return <div className="connection-code"><img src={qr} width={180} height={180} alt={`${label}: ${url}`} /><div><span className="connection-address-label">{label}</span>{pairing ? <code>{url}</code> : <a href={url} target="_blank" rel="noreferrer">{url}</a>}<p>Scan this code with the device you want to connect.</p></div></div>;
+  return <div className="connection-code"><img src={qr} width={180} height={180} alt={`${label}: ${url}`} /><div><span className="connection-address-label">{label}</span>{pairing ? <code>{url}</code> : <a href={url} target="_blank" rel="noreferrer">{url}</a>}</div></div>;
 }
