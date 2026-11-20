@@ -10,7 +10,6 @@
 .dash-error { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 .dash-link { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--pos-accent); text-decoration: underline; font: inherit; cursor: pointer; }
 html[data-theme] .financial-home .dash-link { min-height: 0; background: transparent; border: 0; color: var(--pos-accent); }
-.dash :is(button, input, [tabindex]):focus-visible { outline: var(--focus-width) solid var(--pos-accent); outline-offset: 2px; }
 
 /* Status strip */
 .dash-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4) var(--space-8); padding: var(--space-4) var(--space-8); border: var(--border) solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
@@ -69,7 +68,6 @@ html[data-theme] .dash .dash-icon-button { display: inline-flex; align-items: ce
 .dash-alert-list > li + li { border-top: var(--border) solid var(--line); }
 html[data-theme] .dash .dash-alert-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-6); width: 100%; padding: var(--space-6) var(--space-8); border: 0; border-radius: 0; background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
 html[data-theme] .dash .dash-alert-row:hover:not(:disabled) { background: var(--pos-accent-soft); }
-.dash-alert-row:focus-visible { outline-offset: -3px; }
 .dash-alert-main, .dash-alert-side { display: grid; gap: var(--space-1); min-width: 0; }
 .dash-alert-main strong { overflow-wrap: anywhere; }
 .dash-alert-side { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

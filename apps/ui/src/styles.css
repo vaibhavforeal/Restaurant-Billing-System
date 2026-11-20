@@ -11,6 +11,11 @@
   button:hover:not(:disabled) { background: #fafafa; border-color: #c6c8d0; }
   button:disabled { cursor: default; opacity: .45; }
   :focus-visible { outline: 3px solid #e3919a; outline-offset: 3px; }
+  :where(button, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):focus-visible {
+    outline-offset: -3px;
+  }
+  :where(input[type="checkbox"], input[type="radio"]):focus-visible { outline-width: 2px; outline-offset: 0; }
+  button:focus-visible { outline-color: currentColor; }
   input, select, textarea { min-height: 42px; max-width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid #dce0e6; border-radius: 7px; color: var(--ink); background: #fff; }
   input::placeholder, textarea::placeholder { color: #90949d; }
   input[type="checkbox"], input[type="radio"] { min-height: auto; accent-color: var(--red); }

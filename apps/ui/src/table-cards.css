@@ -15,7 +15,7 @@ html[data-theme] .tables-screen.table-overview {
     box-shadow: none;
   }
   .table-card.selected { outline: 2px solid var(--table-color); outline-offset: 1px; }
-  .table-card:focus-visible { outline: 3px solid var(--pos-accent); outline-offset: 2px; }
+  .table-card:focus-visible { outline: var(--focus-width) solid var(--pos-accent); outline-offset: calc(-1 * var(--focus-width)); }
   .table-card-heading { align-items: center; flex-wrap: wrap; gap: 4px 6px; }
   .table-card-heading strong { font-size: 20px; line-height: 1.2; letter-spacing: -.3px; }
   .table-state {

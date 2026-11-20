@@ -14,6 +14,15 @@ html[data-theme] {
   input[type="number"], .pos-money, .pos-totals, .stat-value, td, dd, .qty-stepper { font-variant-numeric: tabular-nums; }
   input[type="number"], .pos-money { text-align: right; }
   :focus-visible { outline: var(--focus-width) solid var(--pos-accent); outline-offset: var(--space-1); }
+  /* Keep focus rings clear of nearby labels and controls in dense rows. */
+  :where(button:not(.cart-item-name, .saved-item-note), input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):not(:where([class~="boardui-root"] *)):focus-visible {
+    outline-offset: calc(-1 * var(--focus-width));
+  }
+  :where(.cart-item-name, .saved-item-note, input[type="checkbox"], input[type="radio"]):not(:where([class~="boardui-root"] *)):focus-visible {
+    outline-width: 2px;
+    outline-offset: 0;
+  }
+  button:not(:where([class~="boardui-root"] *)):focus-visible { outline-color: currentColor; }
   label, small, .muted { font-size: var(--text-secondary); }
   label { color: var(--ink); }
   h1, h2, h3, h4 { font-size: var(--text-heading); letter-spacing: normal; margin-bottom: var(--space-4); }
