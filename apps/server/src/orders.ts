@@ -93,8 +93,8 @@ export function registerOrders(app: FastifyInstance): void {
         if (label === null) throw httpError(409, "table has too many open splits");
 
         app.db
-          .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier, captain_id, captain_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          .run(id, body.clientRef, body.type, body.tableId, label, req.user.id, now, tablePriceTier(app.db, body.tableId!), captainId, chosenCaptainName);
+          .prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier, captain_id, captain_name, guest_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          .run(id, body.clientRef, body.type, body.tableId, label, req.user.id, now, tablePriceTier(app.db, body.tableId!), captainId, chosenCaptainName, body.guestCount ?? null);
       });
       write();
     } else if (body.type === "zomato") {

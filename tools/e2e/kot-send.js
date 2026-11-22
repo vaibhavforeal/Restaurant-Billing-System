@@ -24,6 +24,14 @@
     if (document.querySelector(".order-screen")) await click("← Tables");
     else if (!document.querySelector(".table-card")) await click("tables");
     (await wait(() => [...document.querySelectorAll(".table-card")].find(e => e.querySelector("strong")?.textContent === name), name)).click();
+    const guestCount = await wait(() => document.querySelector(".table-opening-dialog[open] input"), "guest count");
+    check(document.activeElement === guestCount, "Opening a table focuses Guest count");
+    for (const value of ["", "0", "1.5", "1000"]) {
+      guestCount.value = value;
+      check(!guestCount.checkValidity(), "Invalid guest count: " + JSON.stringify(value));
+    }
+    guestCount.value = "4";
+    guestCount.form.requestSubmit();
     await wait(() => kotButton(), "order workspace");
     await click("All items");
   };
@@ -44,6 +52,7 @@
     await openTable(firstTable);
     const orderAtTable = async name => (await api("/api/orders")).orders.find(o => o.tableName === name);
     const first = await orderAtTable(firstTable);
+    check(first.guestCount === 4, "Table opening saves four guests");
     const draftKey = `masalapos.draft.${user.id}.${first.id}`;
     check(kotButton().disabled, "Empty order disables KOT");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "F9", bubbles: true })); await pause();

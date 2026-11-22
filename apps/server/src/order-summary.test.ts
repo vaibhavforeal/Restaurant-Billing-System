@@ -22,6 +22,20 @@ describe("table summary", () => {
   const service = (id: string, body: object) => request("PATCH", `/api/orders/${id}/service-type`, { expectedRevision: 0, ...body });
   const add = (id: string) => request("POST", `/api/orders/${id}/items`, { items: [{ productId, qty: 1, clientRef: uuidv7() }] });
 
+  it("saves the opening party size once and leaves additional splits uncounted", async () => {
+    const body = { type: "dine_in", tableId, clientRef: uuidv7(), guestCount: 4 };
+    for (const guestCount of [0, 1.5, 1000]) {
+      expect((await request("POST", "/api/orders", { ...body, guestCount })).statusCode).toBe(400);
+    }
+    expect((await request("POST", "/api/orders", { ...body, type: "parcel", tableId: null })).statusCode).toBe(400);
+    const created = await request("POST", "/api/orders", body);
+    expect(created.statusCode).toBe(201);
+    const { id } = created.json().order;
+    expect((await request("POST", "/api/orders", body)).json().order).toMatchObject({ id, guestCount: 4 });
+    expect((await order()).guestCount).toBeNull();
+    expect((await details(id, { guestCount: 5 })).json().order.guestCount).toBe(5);
+  });
+
   it("persists notes, guest count and sales staff separately from the captain and opening user", async () => {
     const cashier = await createUser(app, token, { name: "Meena", role: "cashier", pin: "2345" });
     const original = await order();

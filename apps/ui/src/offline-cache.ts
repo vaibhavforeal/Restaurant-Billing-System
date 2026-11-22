@@ -55,13 +55,14 @@ export const isUnreachable = (error: unknown) => !(error && typeof error === "ob
  * A new order started while offline: what the counter shows until the hub has it. Its id is the one the counter chose,
  * so the hub's copy replaces this one without any change of identity.
  */
-export function placeholderOrder(input: { id: string; clientRef: string; userId: string; type: Order["type"]; table: Pick<TableInfo, "id" | "name" | "priceTier"> | null; captainId?: string | null; captainName?: string | null }): Order {
+export function placeholderOrder(input: { id: string; clientRef: string; userId: string; type: Order["type"]; table: Pick<TableInfo, "id" | "name" | "priceTier"> | null; guestCount?: number | undefined; captainId?: string | null; captainName?: string | null }): Order {
   return {
     id: input.id, clientRef: input.clientRef, type: input.type, orderTypeId: input.type, orderTypeName: null,
     zomatoOrderId: null, zomatoStatus: null, tableId: input.table?.id ?? null, splitLabel: null,
     tableName: input.table?.name ?? null, tableLabel: input.table?.name ?? null, mergedInto: null, customer: null,
     status: "open", openedBy: input.userId, openedAt: Date.now(), closedAt: null, items: [], kots: [], stockWarnings: [],
     priceTier: input.type === "parcel" ? "takeaway" : input.table?.priceTier ?? "non_ac",
+    guestCount: input.guestCount ?? null,
     captainId: input.captainId ?? null, captainName: input.captainName ?? null,
   };
 }
