@@ -151,3 +151,13 @@ html[data-theme] .sales-reports > .sales-report-table .sales-date-button { min-h
 .gst-returns-period label { display: grid; gap: 4px; }
 .gst-returns-warnings { border: 1px solid #d97706; background: #fffbeb; color: #78350f; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
 .gst-returns-warnings p { margin: 4px 0; }
+
+.custom-report > .custom-report-builder {
+  border-block-start: 1px solid var(--line);
+  padding-block: 12px;
+  margin: 0;
+}
+.custom-report-builder summary { cursor: pointer; }
+.custom-report-builder summary small { font-weight: 400; }
+.custom-report > .custom-report-bar label { flex: 1 1 13rem; min-width: 0; }
+.custom-report > .custom-report-bar select { width: 100%; }

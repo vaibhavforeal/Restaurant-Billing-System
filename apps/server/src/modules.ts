@@ -1,5 +1,5 @@
 import {
-  MODULE_IDS, ModuleToggle, isModuleId, moduleDef, resolveModuleStates,
+  MODULE_IDS, ModuleToggle, isAlwaysOnModule, isModuleId, moduleDef, resolveModuleStates,
   type Database, type ModuleId, type ModuleInfo, type ModuleMap,
 } from "@masalapos/domain";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
@@ -52,6 +52,7 @@ export function requireModule(app: FastifyInstance, id: ModuleId): preHandlerHoo
  * switching on needs the owner's allowance. Returns whether anything changed.
  */
 export function setModuleEnabled(app: FastifyInstance, id: ModuleId, enabled: boolean, actorId: string): boolean {
+  if (isAlwaysOnModule(id) && !enabled) throw httpError(409, `${moduleDef(id).name} is always on.`);
   const state = moduleState(app.db, id);
   if (enabled && !state.allowed) throw httpError(403, `${state.name} is not included for this restaurant. Contact MasalaPOS to add it.`);
   const changed = app.db.transaction(() => {

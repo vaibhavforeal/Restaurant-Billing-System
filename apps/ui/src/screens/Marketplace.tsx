@@ -4,7 +4,7 @@ import type { User } from "../api";
 import { canToggle, statusLabel } from "../integrations-model";
 import { useIntegrations } from "../integrations";
 import { useModules } from "../modules";
-import type { ModuleGroup, ModuleInfo } from "@masalapos/domain/modules";
+import { isAlwaysOnModule, type ModuleGroup, type ModuleInfo } from "@masalapos/domain/modules";
 import type { Page } from "../NavBar";
 import { Offers } from "./Offers";
 import { ZomatoSettingsDialog } from "./ZomatoConnection";
@@ -96,7 +96,7 @@ function ModuleSection({ group, title, user }: { group: ModuleGroup; title: stri
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const inFlight = useRef(new Set<string>());
-  const list = modules.filter((m) => m.group === group);
+  const list = modules.filter((m) => m.group === group && !isAlwaysOnModule(m.id));
   const nameOf = (id: string) => modules.find((m) => m.id === id)?.name ?? id;
 
   async function toggle(m: ModuleInfo) {

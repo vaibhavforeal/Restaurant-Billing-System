@@ -208,7 +208,7 @@ export function ProductEditor({ product, kind = "item", products = [], addonGrou
           <label>Zomato price (₹)<input inputMode="decimal" value={zomatoPrice} disabled={busy !== null} onChange={(event) => setZomatoPrice(event.target.value)} /></label>
           {packagingPerItem && <label>Packaging (₹)<input inputMode="decimal" value={packaging} disabled={busy !== null} onChange={(event) => setPackaging(event.target.value)} /></label>}
         </div>
-        <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" checked={isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(event.target.checked)} /> Sold out</label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
+        <div className="product-field-wide product-editor-options"><label><input type="checkbox" checked={isVeg} disabled={busy !== null} onChange={(event) => setIsVeg(event.target.checked)} /> Vegetarian</label><label><input type="checkbox" role="switch" checked={!isSoldOut} disabled={busy !== null} onChange={(event) => setIsSoldOut(!event.target.checked)} /> Enable for new orders</label>{product && <label><input type="checkbox" checked={isActive} disabled={busy !== null} onChange={(event) => setIsActive(event.target.checked)} /> Active in catalog</label>}</div>
 
       </div><section className="product-photo-editor" aria-label="Product photo"><h3>Menu photo</h3><div className="pos-section-body">
 

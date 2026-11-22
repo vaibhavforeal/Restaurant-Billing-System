@@ -66,9 +66,9 @@
   html[data-theme="dark"] :is(.error-message:not(:empty), .billing-attention, .billing-dialog .billing-error, .license-badge.expired, .license-badge.invalid, .license-badge.clock_error, .qr-request-status.rejected) { background: #40272f; color: #ff9ca7; border-color: #75414b; }
   html[data-theme="dark"] :is(.alert, .ticket-header span, .status.occupied, .status.pending, .status.open, .license-warning, .license-badge.grace, .qr-notification-banner, .qr-plan-note, .qr-request-status.pending, .service-inbox-status, .menu-sold-out-label, .tables-screen .status.reserved) { background: #3c3020; color: #f3c77e; border-color: #6d5533; }
   html[data-theme="dark"] .tables-screen .table-card.reserved { background: #302a22; border-color: #92703a; }
-  html[data-theme="dark"] :is(.table-reservation-note, .qr-item-note, .qr-review-note, .catalog-availability > span.sold-out) { color: #f3c77e; }
+  html[data-theme="dark"] :is(.table-reservation-note, .qr-item-note, .qr-review-note) { color: #f3c77e; }
   html[data-theme="dark"] :is(.status.free, .status.sent, .status.settled, .status.paid, .license-badge.active, .license-message, .billing-dialog .billing-message, .billing-dialog .billing-paid, .qr-request-status.accepted, .service-inbox-resolved) { background: #20392d; color: #96d9b2; border-color: #426a52; }
-  html[data-theme="dark"] :is(.veg-indicator, .catalog-availability > span) { color: #96d9b2; border-color: #426a52; }
+  html[data-theme="dark"] :is(.veg-indicator) { color: #96d9b2; border-color: #426a52; }
   html[data-theme="dark"] .veg-indicator.non-veg { color: #edb58f; border-color: #77553f; }
   html[data-theme="dark"] :is(.status.cancelled, .license-badge, .qr-request-status, .service-inbox-expired, .menu-glyph) { background: #292f3a; color: var(--muted); }
   html[data-theme="dark"] .theme-toggle { color: var(--ink); }

@@ -22,6 +22,7 @@ export type Page =
   | { name: "users" }
   | { name: "settings"; section?: "plan" }
   | { name: "bills" }
+  | { name: "offers" }
   | { name: "marketplace" }
   | { name: "reports"; tab?: "sales" | "collections" | "day-end" | "gst" | "analytics" | "bills" | "zomato" | "cash"; period?: { from: string; to: string } }
   | { name: "inventory" }

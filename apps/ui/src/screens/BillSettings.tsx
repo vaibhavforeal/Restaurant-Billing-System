@@ -1,3 +1,4 @@
+import { DiscountCaps } from "./DiscountCaps";
 import { useEffect, useState } from "react";
 import { DEFAULT_GST_RATES, GST_MODES, type GstMode } from "@masalapos/domain/gst";
 import { financialYear, formatInvoiceNo } from "@masalapos/domain/invoice-numbers";
@@ -200,6 +201,7 @@ export function BillSettings({ onOpenPrinters }: { onOpenPrinters: () => void })
 
       <button className="primary" onClick={save} style={{ fontWeight: 700 }} disabled={busy}>Save</button>
       <SaveStatus status={status} message={message} />
+      <DiscountCaps />
       {preview.error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{preview.error}</p>}
     </div>
     <div className="bill-settings-preview">

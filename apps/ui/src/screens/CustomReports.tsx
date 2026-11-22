@@ -83,42 +83,33 @@ export function CustomReports({ canManage, initialPeriod, onPeriodChange }: { ca
   const groupable = source.fields.filter((f) => f.role === "dimension" && f.groupable !== false);
 
   return <div className="custom-report">
-    <div className="page-header"><h3>Custom reports</h3><button disabled={!table || loading} onClick={exportCsv}>Export CSV</button></div>
+    <div className="page-header"><h3>Custom reports</h3>{table && <button disabled={loading} onClick={exportCsv}>Export CSV</button>}</div>
     <div className="custom-report-bar">
       <label>Saved report <select aria-label="Saved report" value={selectedId} onChange={(e) => chooseSaved(e.target.value)}>
         <option value="">New report</option>{saved.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
       </select></label>
-      {canManage && <>
-        <label>Report name <input aria-label="Report name" value={name} maxLength={80} placeholder="e.g. Daily sales by category" onChange={(e) => setName(e.target.value)} /></label>
-        <button disabled={!name.trim() || !("config" in built)} onClick={() => void save(false)}>{selectedId ? "Save changes" : "Save report"}</button>
-        {selectedId && <button disabled={!name.trim() || !("config" in built)} onClick={() => void save(true)}>Save as new</button>}
-        {selectedId && <button className="danger" onClick={() => void remove()}>Delete</button>}
-      </>}
-    </div>
-    {!canManage && <p className="sales-report-empty">Saved reports can be run by everyone; an admin creates and edits them.</p>}
-
-    <details className="custom-report-builder" open>
-      <summary>Report design</summary>
-      <fieldset><legend>Data</legend>
         <label>Data source <select aria-label="Data source" value={draft.source} onChange={(e) => edit(newDraft(e.target.value))}>
           {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
         </select></label>
-        <p className="report-notes">{source.description}</p>
-      </fieldset>
 
+    </div>
+
+
+    <details className="custom-report-builder">
+      <summary>Customize columns and filters <small>({draft.columns.length} columns · {draft.filters.length} filters)</small></summary>
       <fieldset><legend>Columns</legend>
         <div className="custom-report-fields">{source.fields.map((f) => <label key={f.id}>
           <input type="checkbox" checked={draft.columns.some((c) => c.field === f.id)} disabled={draft.groupBy.length > 0 && f.groupable === false} title={draft.groupBy.length > 0 && f.groupable === false ? "Not available on a grouped report" : undefined} onChange={(e) => edit(withColumn(draft, f.id, e.target.checked))} /> {f.label}
-          <small> {f.role === "measure" ? "(number)" : ""}</small></label>)}</div>
-        {draft.columns.length > 0 && <ol className="custom-report-order" aria-label="Column order and headings">{draft.columns.map((c, i) => <li key={c.field}>
+          </label>)}</div>
+        {draft.columns.length > 0 && <details><summary>Column order and headings</summary><ol className="custom-report-order" aria-label="Column order and headings">{draft.columns.map((c, i) => <li key={c.field}>
           <span>{field(c.field).label}</span>
           <input aria-label={`Heading for ${field(c.field).label}`} value={c.label} maxLength={60} placeholder="Heading (optional)" onChange={(e) => edit({ ...draft, columns: draft.columns.map((x) => x.field === c.field ? { ...x, label: e.target.value } : x) })} />
           <button aria-label={`Move ${field(c.field).label} left`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
           <button aria-label={`Move ${field(c.field).label} right`} disabled={i === draft.columns.length - 1} onClick={() => move(i, 1)}>↓</button>
-        </li>)}</ol>}
+        </li>)}</ol></details>}
       </fieldset>
 
-      <fieldset><legend>Group by (optional)</legend>
+      <fieldset><legend>Group by</legend>
         <div className="custom-report-fields">{groupable.map((f) => <label key={f.id}>
           <input type="checkbox" checked={draft.groupBy.includes(f.id)} onChange={(e) => edit(withGrouping(draft, f.id, e.target.checked))} /> {f.label}</label>)}</div>
       </fieldset>
@@ -152,9 +143,14 @@ export function CustomReports({ canManage, initialPeriod, onPeriodChange }: { ca
       </fieldset>
     </details>
 
-    <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { setPeriod(next); onPeriodChange(next); setReport(null); void run(draft, next); }} onRefresh={() => void run()} />
-    <div className="custom-report-run"><button disabled={loading || !("config" in built)} onClick={() => void run()}>{loading ? "Running…" : "Run report"}</button>
-      {"problem" in built && <span role="status">{built.problem}</span>}</div>
+    <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { setPeriod(next); onPeriodChange(next); setReport(null); void run(draft, next); }} submitLabel={loading ? "Running…" : "Run report"} submitDisabled={loading || !("config" in built)} />
+    {"problem" in built && <p role="status">{built.problem}</p>}
+      {canManage && <details className="custom-report-builder"><summary>Save and manage</summary><div className="custom-report-bar">
+        <label>Report name <input aria-label="Report name" value={name} maxLength={80} placeholder="e.g. Daily sales by category" onChange={(e) => setName(e.target.value)} /></label>
+        <button disabled={!name.trim() || !("config" in built)} onClick={() => void save(false)}>{selectedId ? "Save changes" : "Save report"}</button>
+        {selectedId && <button disabled={!name.trim() || !("config" in built)} onClick={() => void save(true)}>Save as new</button>}
+        {selectedId && <button className="danger" onClick={() => void remove()}>Delete</button>}
+      </div></details>}
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {report && table && <>
       <div className="sales-range-caption"><span>{report.from} → {report.to} · {report.timezone}</span><span>Updated {new Date(report.generatedAt).toLocaleTimeString()}</span></div>

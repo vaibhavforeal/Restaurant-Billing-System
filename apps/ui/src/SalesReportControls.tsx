@@ -2,8 +2,8 @@ import { InfoTip } from "./InfoTip";
 import { useEffect, useState, type CSSProperties } from "react";
 import { localDay, recentPeriod, salesMetrics, type ReportPeriod, type SalesReport } from "./sales-report";
 
-export function SalesPeriodControls({ period, today = localDay(), loading, onChange, onRefresh }: {
-  period: ReportPeriod; today?: string | undefined; loading: boolean; onChange: (period: ReportPeriod) => void; onRefresh: () => void;
+export function SalesPeriodControls({ period, today = localDay(), loading, onChange, onRefresh, submitLabel, submitDisabled }:  {
+  period: ReportPeriod; today?: string | undefined; loading: boolean; onChange: (period: ReportPeriod) => void; onRefresh?: () => void; submitLabel?: string; submitDisabled?: boolean;
 }) {
   const [draft, setDraft] = useState(() => ({ from: period.from, to: period.to }));
   const [error, setError] = useState("");
@@ -19,8 +19,8 @@ export function SalesPeriodControls({ period, today = localDay(), loading, onCha
     })}</div>
     <label>From<input type="date" required value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} /></label>
     <label>To<input type="date" required value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} /></label>
-    <button type="submit">Apply dates</button>
-    <button className="sales-refresh" type="button" disabled={loading} onClick={onRefresh} title="Refresh sales and payment collections">{loading ? "Loading…" : "Refresh"}</button>
+    <button type="submit" disabled={submitDisabled} className={submitLabel ? "primary" : undefined}>{submitLabel ?? "Apply dates"}</button>
+    {onRefresh && <button className="sales-refresh" type="button" disabled={loading} onClick={onRefresh} title="Refresh sales and payment collections">{loading ? "Loading…" : "Refresh"}</button>}
     {error && <p className="sales-period-error" role="alert">{error}</p>}
   </form>;
 }

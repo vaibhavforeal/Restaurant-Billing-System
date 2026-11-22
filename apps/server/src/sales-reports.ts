@@ -102,6 +102,12 @@ export function salesReport(db: Database, range: ReportRange): SalesReport {
 }
 
 export function registerSalesReports(app: FastifyInstance) {
+  app.get("/api/dashboard/sales", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { date } = z.object({ date: z.string() }).parse(req.query);
+    const range = reportRange({ from: date, to: date });
+    return { report: salesReport(app.db, range) };
+  });
   app.get("/api/reports/sales", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req) => {
     return { report: salesReport(app.db, reportRange(req.query)) };
   });

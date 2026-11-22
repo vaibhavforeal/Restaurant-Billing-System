@@ -41,7 +41,7 @@ export const MODULES: readonly ModuleDef[] = [
     description: "Ingredient costs, dish margins and the profit report." },
   { id: "reports", name: "Reports & analytics", group: "backoffice", dependsOn: [], plans: { basic: true, pro: true },
     description: "Sales, collections, item, analytics and custom reports. Bills and the day-end GST summary stay available." },
-  { id: "dashboard", name: "Sales dashboard", group: "backoffice", dependsOn: ["reports"], plans: { basic: true, pro: true },
+  { id: "dashboard", name: "Sales dashboard", group: "backoffice", dependsOn: [], plans: { basic: true, pro: true },
     description: "The sales dashboard on the home screen." },
   { id: "zomato", name: "Zomato", group: "addon", dependsOn: [], plans: { basic: true, pro: true },
     description: "Receive Zomato delivery orders, review them and bill them from the counter." },
@@ -49,13 +49,14 @@ export const MODULES: readonly ModuleDef[] = [
     description: "Show KOTs on kitchen screens and tablets so the kitchen can mark tickets done." },
   { id: "crm", name: "CRM & Loyalty", group: "addon", dependsOn: [], plans: { basic: true, pro: true },
     description: "Customer profiles, loyalty points and tiers, customer-type discounts, feedback, segments and insights." },
-  { id: "dynamicReports", name: "Dynamic Reports", group: "addon", dependsOn: ["reports", "dashboard"], plans: { basic: false, pro: true },
+  { id: "dynamicReports", name: "Dynamic Reports", group: "addon", dependsOn: ["reports"], plans: { basic: false, pro: true },
     description: "Build your own Home dashboard: drag, resize and choose the sales, item and live service widgets you want." },
   { id: "offers", name: "Offers", group: "addon", dependsOn: [], plans: { basic: true, pro: true },
     description: "Scheduled bill discounts and buy-X-get-Y deals." },
 ];
 
 export const isModuleId = (id: string): id is ModuleId => (MODULE_IDS as readonly string[]).includes(id);
+export const isAlwaysOnModule = (id: ModuleId) => id === "dashboard" || id === "reports";
 export const moduleDef = (id: ModuleId) => MODULES.find((m) => m.id === id)!;
 
 /** The allowed map: true for each module the restaurant may use. */
@@ -74,7 +75,7 @@ export function planModules(plan: "basic" | "pro"): ModuleMap {
 /** The plan's defaults with the owner's choices applied. */
 export function resolveModules(plan: "basic" | "pro", overrides: ModuleOverrides = {}): ModuleMap {
   const map = planModules(plan);
-  for (const id of MODULE_IDS) if (overrides[id] !== undefined) map[id] = overrides[id]!;
+  for (const id of MODULE_IDS) if (!isAlwaysOnModule(id) && overrides[id] !== undefined) map[id] = overrides[id]!;
   return map;
 }
 
@@ -103,8 +104,8 @@ export function resolveModuleStates(allowed: ModuleMap, enabled: (id: ModuleId) 
     const known = done.get(id);
     if (known) return known;
     const def = moduleDef(id);
-    const isAllowed = allowed[id];
-    const isEnabled = enabled(id);
+    const isAllowed = isAlwaysOnModule(id) || allowed[id];
+    const isEnabled = isAlwaysOnModule(id) || enabled(id);
     const blocker = def.dependsOn.map(resolve).find((d) => !d.active);
     const reason = !isAllowed ? "Not included for this restaurant" : !isEnabled ? "Turned off" : blocker ? `Needs ${blocker.name}` : null;
     const info: ModuleInfo = { ...def, allowed: isAllowed, enabled: isEnabled, active: reason === null, reason, updatedAt: updatedAt(id) };

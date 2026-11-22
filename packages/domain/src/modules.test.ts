@@ -37,9 +37,11 @@ describe("modules", () => {
     expect(() => ModuleMapSchema.parse({ ...allModules(), payroll: true })).toThrow();
   });
 
-  it("dynamic reports is a Pro add-on that needs reports and the sales dashboard", () => {
-    expect(moduleDef("dynamicReports")).toMatchObject({ group: "addon", dependsOn: ["reports", "dashboard"], plans: { basic: false, pro: true } });
-    const states = resolveModuleStates(allModules(), (id) => id !== "dashboard");
-    expect(states.find((s) => s.id === "dynamicReports")).toMatchObject({ active: false, reason: "Needs Sales dashboard" });
+  it("dynamic reports is a Pro add-on that needs reports while the sales dashboard is always active", () => {
+    expect(moduleDef("dynamicReports")).toMatchObject({ group: "addon", dependsOn: ["reports"], plans: { basic: false, pro: true } });
+    const states = resolveModuleStates({ ...allModules(), dashboard: false, reports: false }, (id) => id !== "dashboard" && id !== "reports");
+    expect(states.find((s) => s.id === "reports")).toMatchObject({ allowed: true, enabled: true, active: true });
+    expect(states.find((s) => s.id === "dashboard")).toMatchObject({ allowed: true, enabled: true, active: true });
+    expect(states.find((s) => s.id === "dynamicReports")).toMatchObject({ active: true, reason: null });
   });
 });

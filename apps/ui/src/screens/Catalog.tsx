@@ -31,6 +31,7 @@ export function Catalog() {
   const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
   const [managingAddons, setManagingAddons] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [defaultGstRate, setDefaultGstRate] = useState(5);
   const [packagingPerItem, setPackagingPerItem] = useState(false);
@@ -74,10 +75,10 @@ export function Catalog() {
     } finally { lock.current = false; setBusy(null); }
   }
 
-  function toggleSoldOut(product: Product) {
+  function toggleAvailability(product: Product) {
     void run(async () => {
       await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ isSoldOut: !product.isSoldOut }) });
-      setMessage(`${product.name} is ${product.isSoldOut ? "available" : "sold out"} for new orders.`);
+      setMessage(`${product.name} is ${product.isSoldOut ? "enabled" : "disabled"} for new orders.`);
     }, product.id);
   }
 
@@ -133,7 +134,11 @@ export function Catalog() {
     );
   }
 
-  const visible = products.filter((p) => p.categoryId === selectedCat);
+  const query = search.trim().toLowerCase();
+  const visible = products.filter((p) => query
+    ? p.name.toLowerCase().includes(query) || (p.description ?? "").toLowerCase().includes(query)
+    : p.categoryId === selectedCat);
+  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
 
   return (
     <div className="catalog-layout">
@@ -148,7 +153,7 @@ export function Catalog() {
           {categories.map((c) => (
             <li key={c.id} style={{ display: "flex", gap: 4, alignItems: "center", padding: "4px 0", opacity: c.isActive ? 1 : 0.45 }}>
               <button
-                className={c.id === selectedCat ? "primary soft" : ""} onClick={() => setSelectedCat(c.id)}
+                className={c.id === selectedCat ? "primary soft" : ""} onClick={() => { setSearch(""); setSelectedCat(c.id); }}
                 style={{ flex: 1, textAlign: "left", padding: 8, fontWeight: c.id === selectedCat ? 700 : 400 }}
               >
                 {c.name}
@@ -178,6 +183,11 @@ export function Catalog() {
             New product
           </button>
         </div>
+        <div>
+          <input type="search" aria-label="Search all products" placeholder="Search all products"
+            value={search} onChange={(event) => setSearch(event.target.value)} />
+          {search && <button onClick={() => setSearch("")}>Clear search</button>}
+        </div>
         {error && <div role="alert" className="error-message">{error}</div>}
         {message && <p role="status">{message}</p>}
         <div className="catalog-table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -191,14 +201,14 @@ export function Catalog() {
               <th>GST</th>
               <th>Veg</th>
               <th>Variants</th>
-              <th>Availability</th>
               <th></th>
+              <th style={{ textAlign: "right" }}>Availability</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((p) => (
               <tr key={p.id} style={{ borderBottom: "1px solid #eee", opacity: p.isActive ? 1 : 0.45 }}>
-                <td className="catalog-product-name" style={{ padding: 6 }}><strong>{p.name}</strong>{p.addonOnly && <small>Add-on only</small>}{p.description && <p>{p.description}</p>}{!p.isActive && <small>Inactive · </small>}{p.photoVersion && <small>Photo added</small>}</td>
+                <td className="catalog-product-name" style={{ padding: 6 }}><strong>{p.name}</strong>{query && <small>{categoryNames.get(p.categoryId)}</small>}{p.addonOnly && <small>Add-on only</small>}{p.description && <p>{p.description}</p>}{!p.isActive && <small>Inactive · </small>}{p.photoVersion && <small>Photo added</small>}</td>
                 <td className="pos-money">₹{paiseToRupees(p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.acPricePaise ?? p.pricePaise)}</td>
                 <td className="pos-money">₹{paiseToRupees(p.takeawayPricePaise ?? p.pricePaise)}</td>
@@ -206,16 +216,21 @@ export function Catalog() {
                 <td>{p.gstRate === null ? "Default" : `${p.gstRate}%`}</td>
                 <td>{p.isVeg ? "🟢" : "🔴"}</td>
                 <td>{p.kind === "combo" ? <span className="catalog-combo">Combo · {p.combo?.map((g) => g.name).join(", ") || "no slots yet"}</span> : p.variants.filter((v) => v.isActive).map((v) => v.name).join(", ") || "—"}</td>
-                <td className="catalog-availability"><span className={p.isSoldOut ? "sold-out" : ""}>{p.isSoldOut ? "Sold out" : "Available"}</span><button disabled={busy !== null} aria-label={`Mark ${p.name} ${p.isSoldOut ? "available" : "sold out"}`} onClick={() => toggleSoldOut(p)}>{busy === p.id ? "Saving…" : p.isSoldOut ? "Mark available" : "Mark sold out"}</button></td>
-                <td>
-                  <button disabled={busy !== null} onClick={() => setEditing(p)}>Edit</button>
+                <td><button disabled={busy !== null} onClick={() => setEditing(p)}>Edit</button></td>
+                <td className="catalog-item-availability">
+                  <button type="button" role="switch" aria-checked={!p.isSoldOut}
+                    aria-label={`Enable ${p.name} for new orders`} disabled={busy !== null}
+                    onClick={() => toggleAvailability(p)}>
+                    <span className="catalog-switch-track" aria-hidden="true" />
+                    {p.isSoldOut ? "Disabled" : "Enabled"}
+                  </button>
                 </td>
               </tr>
             ))}
             {visible.length === 0 && (
               <tr>
                 <td colSpan={zomato ? 10 : 9} style={{ padding: 12, color: "var(--muted)" }}>
-                  No products in this category yet.
+                  {query ? "No products match your search." : "No products in this category yet."}
                 </td>
               </tr>
             )}

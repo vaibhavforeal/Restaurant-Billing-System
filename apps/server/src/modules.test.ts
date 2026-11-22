@@ -85,14 +85,18 @@ describe("module controls", () => {
     expect((await request("POST", `/api/orders/${open}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey })).statusCode).toBe(201);
   });
 
-  it("keeps bills and the day-end GST summary when reports are off", async () => {
+  it("keeps reports and the sales dashboard permanently available", async () => {
     const { request } = await dev();
-    await request("PATCH", "/api/modules/reports", { enabled: false });
+    expect((await request("PATCH", "/api/modules/reports", { enabled: false })).statusCode).toBe(409);
     for (const url of ["/api/reports/sales", "/api/reports/analytics", "/api/reports/operations/items", "/api/custom-reports"]) {
-      expect((await request("GET", url)).statusCode, url).toBe(409);
+      expect((await request("GET", url)).statusCode, url).toBe(200);
     }
     expect((await request("GET", "/api/reports/day-end")).statusCode).toBe(200);
-    expect((await states(request))["dashboard"]).toMatchObject({ active: false, reason: "Needs Reports & analytics" });
+    expect((await request("PATCH", "/api/modules/dashboard", { enabled: false })).statusCode).toBe(409);
+    expect((await states(request))["dashboard"]).toMatchObject({ active: true, reason: null });
+    for (const url of ["/api/dashboard/sales?date=2026-01-12", "/api/dashboard/analytics?date=2026-01-12&type=dine_in"]) {
+      expect((await request("GET", url)).statusCode, url).toBe(200);
+    }
   });
 
   it("stops stock edits while inventory is off but keeps stock readable", async () => {

@@ -6,6 +6,7 @@ import { Home } from "./screens/Home";
 import { Kitchen } from "./screens/Kitchen";
 import { Login } from "./screens/Login";
 import { OrderScreen } from "./screens/OrderScreen";
+import { OffersPage } from "./screens/Offers";
 import { Settings } from "./screens/Settings";
 import { Setup, type SetupActivation } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
@@ -193,6 +194,7 @@ function StaffApp() {
           {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={`${user.id}-${page.requestId ?? 0}`} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
+          {page.name === "offers" && user.role === "admin" && userCan(user, "integrations.configure") && userCan(user, "integrations.read") && <OffersPage />}
           {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}
           {page.name === "users" && userCan(user, "users.manage") && <Users />}
           {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}

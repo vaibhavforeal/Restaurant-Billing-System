@@ -423,10 +423,22 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             {quick ? <fieldset disabled={blocked} className="quick-payment"><legend>Payment received</legend>
               <div className="billing-payment-fields">
                 <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={paymentModes} onChange={(mode) => { setQuickMode(mode); savePreference("masalapos.payment-mode", mode); }} /></div>
-                {quickMode === "cash" && <label>Cash received (₹)<input type="number" min={paiseToRupees(preview.totalPaise)} step="0.01" placeholder={paiseToRupees(preview.totalPaise)} value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>}
+                {quickMode === "cash" && <label>Cash received (₹)<input type="text" inputMode="decimal" placeholder={paiseToRupees(preview.totalPaise)} value={cashReceived} onChange={(event) => { if (/^\d{0,10}(?:\.\d{0,2})?$/.test(event.target.value)) setCashReceived(event.target.value); }} /></label>}
               </div>
               {quickMode === "cash" && <div className="cash-chips" aria-label="Cash quick amounts">{[preview.totalPaise, ...[50000, 100000, 200000].filter((amount) => amount > preview.totalPaise)].map((amount, index) => <button key={amount} onClick={() => setCashReceived(paiseToRupees(amount))}>{index === 0 ? "Exact" : money(amount)}</button>)}</div>}
-              {quickMode === "cash" && <p className="billing-change" role="status">Change: {money(Math.max(0, (quickReceived ?? 0) - preview.totalPaise))}</p>}
+              {quickMode === "cash" && <>
+                <div className="billing-cash-keypad" role="group" aria-label="Cash received keypad">
+                  {["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"].map((key) =>
+                    <button type="button" key={key} aria-label={key === "⌫" ? "Delete last digit" : undefined}
+                      onClick={() => setCashReceived((value) => {
+                        if (key === "⌫") return value.slice(0, -1) || "0";
+                        const next = (value === "0" && key !== "." ? "" : value) + key;
+                        if (next === ".") return "0.";
+                        return /^\d{1,10}(?:\.\d{0,2})?$/.test(next) ? next : value;
+                      })}>{key}</button>)}
+                </div>
+                <p className="billing-change" role="status">{cashValid ? "Change" : "Still due"}: {money(Math.abs((quickReceived ?? 0) - preview.totalPaise))}</p>
+              </>}
               {quickMode === "upi" && preview.receipt.upiId && preview.totalPaise > 0 && <>
                 <p className="billing-note">Issue the bill to show the UPI QR.</p>
                 <button disabled={blocked || hasDraft} onClick={() => void run(issue)}>{printerId ? "Print UPI bill" : "Issue UPI bill"}</button>

@@ -178,8 +178,9 @@
     check(saved.photoVersion && saved.description === updatedDescription, 'JPEG upload restores a photo while retaining the description');
 
     const toggle = async (name, soldOut) => {
-      await clickElement(() => catalogRow(name)?.querySelector('button[aria-label="Mark ' + name + ' ' + (soldOut ? 'sold out' : 'available') + '"]'), 'quick availability toggle for ' + name);
-      await wait(() => catalogRow(name)?.querySelector('.catalog-availability > span')?.textContent === (soldOut ? 'Sold out' : 'Available') && !catalogRow(name).querySelector('.catalog-availability button').disabled, 'saved availability for ' + name);
+      const control = () => catalogRow(name)?.querySelector('button[role="switch"]');
+      await clickElement(control, 'quick availability toggle for ' + name);
+      await wait(() => control()?.getAttribute('aria-checked') === String(!soldOut) && !control().disabled, 'saved availability for ' + name);
     };
     await showCatalog(); await toggle(product.name, true); await toggle(portion.name, true);
     check((await savedProduct()).isSoldOut && (await savedProduct()).isActive && (await savedProduct(portion.id)).isSoldOut, 'Quick sold-out actions keep both products active and visible');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STAFF_TABS, staffTabVisible } from "./integrations-model";
+import { STAFF_TABS, navTabVisible, staffTabVisible } from "./integrations-model";
 import { userCan } from "./permissions";
 import { overridesFor } from "./screens/StaffPermissions";
 
@@ -15,6 +15,14 @@ describe("permissions in the UI", () => {
     expect(STAFF_TABS.filter((t) => staffTabVisible(t, (s) => cashierPlusCatalog.has(s))))
       .toEqual(["home", "tables", "reports", "customers", "inventory", "kitchen", "catalog", "marketplace"]);
     expect(STAFF_TABS.filter((t) => staffTabVisible(t, () => false))).toEqual(["home"]);
+  });
+
+  it("shows Offers in the admin menu even before the integration is enabled", () => {
+    expect(STAFF_TABS).toContain("offers");
+    expect(staffTabVisible("offers", () => true)).toBe(true);
+    expect(staffTabVisible("offers", slug => slug === "integrations.read")).toBe(false);
+    expect(navTabVisible("offers", "admin", () => false)).toBe(true);
+    expect(navTabVisible("offers", "cashier", () => true)).toBe(false);
   });
 
   it("saves only the permissions that differ from the role", () => {

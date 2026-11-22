@@ -15,12 +15,10 @@ back on later. A restaurant can never switch on a module MasalaPOS has not inclu
 | Inventory | Back office | — | Included | Included |
 | Recipes | Back office | Inventory | — | Included |
 | Dish costing | Back office | Recipes | — | Included |
-| Reports & analytics | Back office | — | Included | Included |
-| Sales dashboard | Back office | Reports & analytics | Included | Included |
 | Zomato | Add-on | — | Included | Included |
 | Kitchen Display (KDS) | Add-on | — | — | Included |
 | CRM & Loyalty | Add-on | — | Included | Included |
-| Dynamic Reports | Add-on | Reports & analytics, Sales dashboard | — | Included |
+| Dynamic Reports | Add-on | Always-on reporting | — | Included |
 
 The plan columns are the starting point for a new restaurant. MasalaPOS can allow or
 block any module for any restaurant on top of its plan.
@@ -79,8 +77,6 @@ Turning a module off never deletes anything, and work already started can be fin
 | Inventory | The Inventory page and stock edits | Sales keep deducting stock |
 | Recipes | Editing recipes | Saved recipes keep deducting stock |
 | Dish costing | Costing pages, the profit report, entering costs on purchases | Cost keeps being recorded on sales |
-| Reports & analytics | Sales, collections, item, analytics, custom and CRM reports | Bills, Day-end / GST, Cash & day close, Zomato reconciliation |
-| Sales dashboard | The dashboard on the home screen | — |
 | Zomato, Kitchen Display, CRM & Loyalty | See [Marketplace](marketplace.md) and [Customers & loyalty](customers-and-loyalty.md) | Saved data |
 
 A page whose module is off explains why: not included, switched off, or waiting on another

@@ -50,11 +50,11 @@ export function useDashboard(date: string, zomatoEnabled = false) {
     const day = encodeURIComponent(date);
     const get = <T,>(path: string) => apiFetch<T>(path, { signal, cache: "no-store" });
     void Promise.allSettled([
-      get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=dine_in`),
-      get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=parcel`),
-      zomatoEnabled ? get<{ report: OrderAnalyticsReport }>(`/api/reports/analytics?from=${day}&to=${day}&type=zomato`) : Promise.resolve(null),
+      get<{ report: OrderAnalyticsReport }>(`/api/dashboard/analytics?date=${day}&type=dine_in`),
+      get<{ report: OrderAnalyticsReport }>(`/api/dashboard/analytics?date=${day}&type=parcel`),
+      zomatoEnabled ? get<{ report: OrderAnalyticsReport }>(`/api/dashboard/analytics?date=${day}&type=zomato`) : Promise.resolve(null),
       get<{ report: DashboardDayEnd }>(`/api/reports/day-end?date=${day}`),
-      get<{ report: SalesReport }>(`/api/reports/sales?from=${day}&to=${day}`),
+      get<{ report: SalesReport }>(`/api/dashboard/sales?date=${day}`),
       get<{ orders: Order[] }>("/api/orders"),
     ]).then(([dineIn, takeaway, zomato, dayEnd, sales, orders]) => {
       if (controller.signal.aborted || request !== revision.current) return;

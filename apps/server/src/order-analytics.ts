@@ -64,6 +64,13 @@ export function orderAnalyticsReport(db: Database, range: ReportRange, orderType
 }
 
 export function registerOrderAnalytics(app: FastifyInstance) {
+  app.get("/api/dashboard/analytics", { preHandler: app.requirePermission("reports.read") }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { date } = z.object({ date: z.string() }).parse(req.query);
+    const range = reportRange({ from: date, to: date });
+    const { type } = z.object({ type: z.enum(["dine_in", "parcel", "zomato"]) }).parse(req.query);
+    return { report: orderAnalyticsReport(app.db, range, type) };
+  });
   app.get("/api/reports/analytics", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports")] }, async (req, reply) => {
     const range = reportRange(req.query);
     const { type: orderType } = z.object({ type: z.enum(["all", "parcel", "dine_in", "zomato"]).default("all") }).parse(req.query);

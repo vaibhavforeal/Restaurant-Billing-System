@@ -235,8 +235,6 @@ html[data-theme] {
   .catalog-layout { grid-template-columns: var(--column-small) minmax(0, 1fr); gap: var(--space-6); }
   .catalog-layout h2 { font-size: var(--text-heading); }
   .category-editor, .catalog-products { padding: var(--space-4); }
-  .catalog-availability > span { display: inline; margin: var(--space-0) var(--space-4) var(--space-0) var(--space-0); }
-  .catalog-availability button { padding: var(--space-1) var(--space-2); }
   .catalog-table-scroll th:nth-child(2) { text-align: right; }
   .category-editor li button:first-child { min-height: var(--control); margin: var(--space-0); }
   .system-settings p { color: var(--muted); }
