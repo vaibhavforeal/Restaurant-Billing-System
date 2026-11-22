@@ -47,7 +47,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const savedFor = (orderIds: string[]) => savedActions.filter((r) => orderIds.includes(r.lane));
   const [qrBusy, setQrBusy] = useState(false);
   const [serviceBusy, setServiceBusy] = useState(false);
-  const [reservationView, setReservationView] = useState<{ tableId: string | null } | null>(null);
+  const [reservationView, setReservationView] = useState<{ tableId: string | null; create?: boolean } | null>(null);
   const [reservationBusy, setReservationBusy] = useState(false);
   const [reservationDirty, setReservationDirty] = useState(false);
   const reservationLock = useRef(false), reservationDirtyLock = useRef(false);
@@ -314,7 +314,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
         onClose={closeOrderPanel} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}
         onBusyChange={onOrderPanelBusy} />}
       {!selected && showBookings && <aside className="tables-parcels tables-reservations" aria-label="Current and upcoming reservations">
-        <div className="panel-title"><h3>Reservations</h3><button type="button" disabled={busy} onClick={() => { void loadBookings(); void reload().catch(() => setError("Failed to refresh tables")); }}>Refresh</button></div>
+        <div className="panel-title"><h3>Reservations</h3><div className="actions">{modules.isActive("reservations") && userCan(user, "reservations.manage") && <button type="button" className="primary" aria-label="New reservation" aria-haspopup="dialog" disabled={busy || !active.length} onClick={() => setReservationView({ tableId: null, create: true })}>New</button>}<button type="button" disabled={busy} onClick={() => { void loadBookings(); void reload().catch(() => setError("Failed to refresh tables")); }}>Refresh</button></div></div>
         <div className="reservation-slots" id="reservation-list" role="region" aria-label="Reservations by half hour" tabIndex={0}>
           {([["Current", bookingSlots.current], ["Upcoming", bookingSlots.upcoming]] as const).map(([label, slot]) => <section className={`reservation-slot ${label.toLowerCase()}`} key={label} aria-label={`${label} slot`}>
             <h4><span>{bookingTime(slot.start)} – {bookingTime(slot.end)}</span><span className="reservation-slot-badge">{label}</span></h4>
@@ -331,7 +331,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       </div>}
     </div>
     {canQuickBill && <NewZomatoOrderDialog open={zomatoDialog} orders={zomatoList} onClose={() => setZomatoDialog(false)} onCreated={(orderId) => { setZomatoDialog(false); openOrder(orderId); }} />}
-    {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId}
+    {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId} createOnOpen={!!reservationView.create}
       onClose={() => setReservationView(null)} onOpenOrder={(id) => { setReservationView(null); openOrder(id); }}
       onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); void loadBookings(); }}
       onBusyChange={onReservationBusy} onDirtyChange={onReservationDirty} />}

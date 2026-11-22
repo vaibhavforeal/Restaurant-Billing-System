@@ -1,4 +1,3 @@
-import { ActivityAlertSettings } from "./ActivityAlertSettings";
 import { AiSuggestionSettings } from "./AiSuggestionSettings";
 import { BillSettings } from "./BillSettings";
 import { TableSettings } from "./TableSettings";
@@ -310,7 +309,6 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             {profileStatus === "error" && profileError}
           </div>
         </div>
-        <ActivityAlertSettings />
       </div>}
 
       {/* Printers section */}

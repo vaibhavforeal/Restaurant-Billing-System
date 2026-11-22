@@ -11,6 +11,7 @@ import { Settings } from "./screens/Settings";
 import { Setup, type SetupActivation } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
 import { OrderBoard } from "./screens/OrderBoard";
+import { ActivityAlertSettings } from "./screens/ActivityAlertSettings";
 import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
 import { SalesReports } from "./screens/SalesReports";
@@ -196,7 +197,13 @@ function StaffApp() {
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
           {page.name === "offers" && user.role === "admin" && userCan(user, "integrations.configure") && userCan(user, "integrations.read") && <OffersPage />}
           {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}
-          {page.name === "users" && userCan(user, "users.manage") && <Users />}
+          {page.name === "users" && userCan(user, "users.manage") && <section aria-label="Users">
+            <div className="tabs" role="group" aria-label="User pages">
+              <button aria-pressed={!page.section} onClick={() => go({ name: "users" })}>Staff accounts</button>
+              {userCan(user, "settings.manage") && <button aria-pressed={page.section === "alerts"} onClick={() => go({ name: "users", section: "alerts" })}>Staff Alerts</button>}
+            </div>
+            {page.section === "alerts" && userCan(user, "settings.manage") ? <ActivityAlertSettings /> : <Users />}
+          </section>}
           {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeStaff={userCan(user, "users.manage")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}

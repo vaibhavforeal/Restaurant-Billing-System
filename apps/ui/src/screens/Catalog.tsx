@@ -202,7 +202,7 @@ export function Catalog() {
               <th>Veg</th>
               <th>Variants</th>
               <th></th>
-              <th style={{ textAlign: "right" }}>Availability</th>
+              <th className="catalog-item-availability">Availability</th>
             </tr>
           </thead>
           <tbody>

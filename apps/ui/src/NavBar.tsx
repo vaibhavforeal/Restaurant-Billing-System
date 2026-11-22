@@ -19,7 +19,7 @@ export type Page =
   | { name: "order"; orderId: string; returnTo?: "tables" | "orders" }
   | { name: "kitchen" }
   | { name: "catalog" }
-  | { name: "users" }
+  | { name: "users"; section?: "alerts" }
   | { name: "settings"; section?: "plan" }
   | { name: "bills" }
   | { name: "offers" }

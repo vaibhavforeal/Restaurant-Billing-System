@@ -13,7 +13,7 @@ const FIELDS: Array<{ key: keyof ActivityThresholds; label: string; hint: string
   { key: "minEvents", label: "Minimum events", hint: "...and at least this many times in the chosen dates.", step: "1" },
 ];
 
-/** Settings → Restaurant profile → Staff activity alerts: the limits the Staff activity report flags at. */
+/** Users → Staff Alerts: the limits the Staff activity report flags at. */
 export function ActivityAlertSettings() {
   const [form, setForm] = useState<Form | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);

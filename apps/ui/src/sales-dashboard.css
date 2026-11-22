@@ -161,3 +161,24 @@ html[data-theme] .sales-reports > .sales-report-table .sales-date-button { min-h
 .custom-report-builder summary small { font-weight: 400; }
 .custom-report > .custom-report-bar label { flex: 1 1 13rem; min-width: 0; }
 .custom-report > .custom-report-bar select { width: 100%; }
+
+/* Shared density for every Reports & Analytics view, including nested report builders. */
+html[data-theme] .sales-reports {
+  --report-control-height: 30px;
+  --table-row: 28px;
+  gap: 8px;
+}
+html[data-theme] .sales-reports :is(button, .report-more, .sales-period input),
+html[data-theme] .sales-reports > .sales-period :is(button, input) {
+  min-height: var(--report-control-height);
+  padding: 3px 8px;
+  line-height: 1.2;
+}
+html[data-theme] .sales-reports .sales-date-button { padding: 0; }
+html[data-theme] .sales-reports :is(.sales-period, .report-navigation, .custom-report-bar) { gap: 6px; }
+html[data-theme] .sales-reports .sales-metric { padding: 6px 10px; }
+html[data-theme] .sales-reports table :is(td, th) { height: var(--table-row); padding: 3px 7px; }
+html[data-theme] .sales-reports .custom-report-builder { padding-block: 7px; }
+@media (pointer: coarse) {
+  html[data-theme] .sales-reports { --report-control-height: 36px; }
+}
