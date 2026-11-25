@@ -18,7 +18,7 @@
     .table-status-button, .pos-segments > button, .tabs > button,
     .order-pane-switch > button, .table-summary-customer > button,
     .primary.soft, .text-button, .sales-date-button, .order-held-banner,
-    .cart-item-name, .table-summary-phone, .catalog-item-availability > button
+    .cart-item-name, .table-summary-phone, .catalog-item-availability > button, .marketplace-switch
   )) {
     background: var(--staff-button-bg);
     color: var(--staff-button-text);
@@ -34,7 +34,7 @@
     .table-status-button, .pos-segments > button, .tabs > button,
     .order-pane-switch > button, .table-summary-customer > button,
     .primary.soft, .text-button, .sales-date-button, .order-held-banner,
-    .cart-item-name, .table-summary-phone, .catalog-item-availability > button
+    .cart-item-name, .table-summary-phone, .catalog-item-availability > button, .marketplace-switch
   )):hover:not(:disabled) {
     background: var(--staff-button-hover);
     border-color: var(--staff-button-hover);
