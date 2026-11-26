@@ -1,0 +1,67 @@
+---
+import '../styles/global.css';
+import Footer from '../components/Footer.astro';
+import { config, waLink } from '../config';
+
+interface Props { title: string; description: string; }
+const { title, description } = Astro.props;
+const demo = waLink('Hi, I would like a demo of MasalaPOS.');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#f58a07" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script is:inline>document.documentElement.classList.add('js');</script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav wrap">
+      <a class="nav__mark" href="/" aria-label="MasalaPOS home">
+        <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#1c1714"/><path d="M11 8v7a3 3 0 0 0 3 3v6M11 8v5M14 8v5M17 8v5M21 8c-1.7 0-3 2-3 5s1.3 4 3 4v7" fill="none" stroke="#f58a07" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>{config.name}</span>
+      </a>
+      <nav class="nav__links" aria-label="Main">
+        <a href="/#modules">What it does</a>
+        <a href="/#plans">Plans</a>
+        <a href="/#faq">Questions</a>
+      </nav>
+      <a class="btn nav__cta" href={demo}>Book a demo</a>
+    </header>
+    <main id="main"><slot /></main>
+    <Footer />
+    <script is:inline>
+      (function () {
+        var els = document.querySelectorAll('[data-reveal]');
+        if (!('IntersectionObserver' in window)) { els.forEach(function (e) { e.classList.add('in'); }); return; }
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+        }, { threshold: 0.12, rootMargin: '0px 0px -5% 0px' });
+        els.forEach(function (e) { io.observe(e); });
+      })();
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  .nav { position: absolute; inset: 0 0 auto 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 18px; }
+  .nav__mark { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--display); font-weight: 700; font-size: 1.5rem; letter-spacing: -0.03em; }
+  .nav__links { display: flex; gap: 28px; margin-inline: auto 12px; font-family: var(--display); font-weight: 600; font-size: 1rem; }
+  .nav__links a { text-decoration: none; }
+  .nav__links a:hover { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; }
+  .nav__cta { min-height: 44px; padding-inline: 22px; font-size: 1rem; background: var(--ink); color: #fff; }
+  .nav__cta:hover { background: #3a2f28; }
+  @media (max-width: 720px) {
+    .nav__links { display: none; }
+    .nav__mark { font-size: 1.25rem; }
+    .nav__cta { margin-left: auto; }
+  }
+</style>

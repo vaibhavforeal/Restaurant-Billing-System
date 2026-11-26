@@ -1,0 +1,102 @@
+---
+import Screen from './Screen.astro';
+import { modules } from '../data/content';
+
+// Six bowls around one in the middle, like a masala dabba seen from above.
+const pos = modules.map((_, i) => {
+  if (i === 0) return { x: 50, y: 50 };
+  const a = ((i - 1) * 60 - 90) * (Math.PI / 180);
+  return { x: 50 + 33 * Math.cos(a), y: 50 + 33 * Math.sin(a) };
+});
+---
+
+<section id="modules" class="dabba" aria-labelledby="dabba-title">
+  <div class="dabba__tin">
+    <h2 id="dabba-title" class="head dabba__title" data-reveal>One tin, seven bowls.</h2>
+    <div class="tin" role="tablist" aria-label="MasalaPOS modules">
+      {modules.map((m, i) => (
+        <a
+          class="bowl"
+          role="tab"
+          id={`tab-${m.id}`}
+          href={`#m-${m.id}`}
+          aria-controls={`m-${m.id}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          style={`left:${pos[i].x}%;top:${pos[i].y}%;background:${m.color};color:${m.fg}`}
+        >
+          <span>{m.name}</span>
+        </a>
+      ))}
+    </div>
+    <p class="dabba__hint small">Tap a bowl to see what is inside.</p>
+  </div>
+
+  <div class="dabba__panels">
+    {modules.map((m, i) => (
+      <article class="panel" id={`m-${m.id}`} role="tabpanel" aria-labelledby={`tab-${m.id}`} data-panel>
+        <div class="panel__stage" style={`background:${m.color}`}>
+          <Screen kind={m.kind} />
+        </div>
+        <h3 class="panel__name">{m.name}</h3>
+        <p class="panel__plan">Included in {m.plan}.</p>
+        <ul class="panel__lines">
+          {m.lines.map((l) => <li>{l}</li>)}
+        </ul>
+      </article>
+    ))}
+  </div>
+</section>
+
+<script>
+  const root = document.querySelector('.dabba');
+  if (root) {
+    const bowls = Array.from(root.querySelectorAll<HTMLAnchorElement>('.bowl'));
+    const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-panel]'));
+    root.classList.add('dabba--live');
+    const show = (i: number, focus = false) => {
+      bowls.forEach((b, j) => b.setAttribute('aria-selected', String(i === j)));
+      panels.forEach((p, j) => { p.hidden = i !== j; });
+      if (focus) bowls[i].focus();
+    };
+    bowls.forEach((b, i) => {
+      b.addEventListener('click', (e) => { e.preventDefault(); show(i); });
+      b.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); show((i + 1) % bowls.length, true); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); show((i + bowls.length - 1) % bowls.length, true); }
+      });
+    });
+    show(0);
+  }
+</script>
+
+<style is:global>
+  .dabba { padding: var(--gap-section) var(--m) 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(32px, 5vw, 96px); align-items: start; }
+  .dabba__title { max-width: 8em; margin-bottom: 32px; }
+  .dabba__tin { position: sticky; top: 24px; }
+  .tin { position: relative; width: min(100%, 560px); aspect-ratio: 1; border-radius: 50%; background: var(--tawa); }
+  .tin::before { content: ''; position: absolute; inset: 4%; border-radius: 50%; background: #2d2620; }
+  .bowl { position: absolute; width: 29%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; display: grid; place-items: center; text-align: center; padding: 6%; text-decoration: none; font-family: var(--display); font-weight: 600; font-size: clamp(13px, 1.15vw, 16px); line-height: 1.15; transition: transform 0.35s var(--ease); }
+  .bowl:hover { transform: translate(-50%, -50%) scale(1.06); }
+  .bowl[aria-selected='true'] { transform: translate(-50%, -50%) scale(1.12); font-weight: 700; }
+  .bowl[aria-selected='true'] span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .dabba__hint { margin-top: 20px; color: var(--muted); }
+  .dabba__panels { display: grid; gap: 80px; }
+  .panel__stage { border-radius: var(--r); padding: clamp(20px, 4vw, 56px); display: grid; place-items: center; min-height: 340px; }
+  .panel__stage [data-ui] { max-width: 540px; font-size: clamp(13px, 1.05vw, 15px); }
+  .panel__name { font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; font-size: clamp(1.8rem, 1.3rem + 2vw, 3rem); line-height: 1; margin: 28px 0 8px; }
+  .panel__lines { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; max-width: 34em; }
+  .panel__lines li { position: relative; padding-left: 1.6em; }
+  .panel__lines li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--accent); }
+  .panel__plan { margin-bottom: 16px; color: var(--muted); }
+  .dabba--live .dabba__panels { display: block; }
+  .dabba--live .panel[hidden] { display: none; }
+  .dabba--live .panel { animation: panelin 0.45s var(--ease); }
+  @keyframes panelin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .dabba--live .panel { animation: none; } .bowl { transition: none; } }
+  @media (max-width: 900px) {
+    .dabba { grid-template-columns: 1fr; }
+    .dabba__tin { position: static; }
+    .tin { margin-inline: auto; }
+    .bowl { font-size: 13px; }
+  }
+</style>

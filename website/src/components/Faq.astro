@@ -1,0 +1,39 @@
+---
+import { faq } from '../data/content';
+---
+
+<section id="faq" class="faq wrap" aria-labelledby="faq-title">
+  <h2 id="faq-title" class="head faq__title">Questions owners ask.</h2>
+  <div class="faq__list">
+    {faq.map((f) => (
+      <details name="faq" class="qa">
+        <summary><span>{f.q}</span><i aria-hidden="true"></i></summary>
+        <p>{f.a}</p>
+      </details>
+    ))}
+  </div>
+</section>
+
+<style is:global>
+  .faq { padding-top: var(--gap-section); display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: clamp(24px, 4vw, 64px); align-items: start; }
+  .faq__title { position: sticky; top: 96px; font-size: clamp(2rem, 1.2rem + 2.4vw, 3.6rem); }
+  .faq__list { display: grid; gap: 8px; }
+  .qa { background: var(--tile); border-radius: var(--r); transition: background-color 0.25s; }
+  .qa summary { list-style: none; cursor: pointer; min-height: 72px; padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; gap: 20px; font-family: var(--display); font-weight: 600; font-size: 1.25rem; line-height: 1.25; }
+  .qa summary::-webkit-details-marker { display: none; }
+  .qa summary i { position: relative; flex: none; width: 16px; height: 16px; }
+  .qa summary i::before, .qa summary i::after { content: ''; position: absolute; left: 0; top: 6.5px; width: 16px; height: 3px; background: currentColor; border-radius: 2px; transition: transform 0.3s var(--ease); }
+  .qa summary i::after { transform: rotate(90deg); }
+  .qa[open] { background: var(--accent); }
+  .qa[open] summary i::after { transform: rotate(0); }
+  .qa p { padding: 0 28px 28px; max-width: 52ch; font-size: 1.0625rem; }
+  .qa:hover:not([open]) { background: var(--sand); }
+  @media (prefers-reduced-motion: reduce) { .qa, .qa summary i::before, .qa summary i::after { transition: none; } }
+  @media (max-width: 800px) {
+    .faq { grid-template-columns: 1fr; }
+    .faq__title { position: static; font-size: 9vw; }
+    .faq__list { gap: 6px; }
+    .qa summary { min-height: 64px; padding: 14px 20px; font-size: 1.125rem; }
+    .qa p { padding: 0 20px 22px; font-size: 1rem; }
+  }
+</style>

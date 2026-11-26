@@ -1,0 +1,50 @@
+---
+import { config, waLink } from '../config';
+const letters = 'MasalaPOS'.split('');
+const heights = [100, 82, 94, 70, 88, 76, 100, 90, 72];
+const colors = ['#f58a07', '#ffc21a', '#ffb35c', '#ffe2b5', '#f58a07', '#ffd89a', '#c2410c', '#ffc21a', '#ffb35c'];
+const fg = ['#1c1714', '#1c1714', '#1c1714', '#1c1714', '#1c1714', '#1c1714', '#ffffff', '#1c1714', '#1c1714'];
+const demo = waLink('Hi, I would like a demo of MasalaPOS.');
+---
+
+<footer class="foot on-dark">
+  <div class="foot__mark wrap" role="img" aria-label="MasalaPOS">
+    {letters.map((l, i) => (
+      <span style={`height:${heights[i]}%;background:${colors[i]};color:${fg[i]}`} aria-hidden="true">{l}</span>
+    ))}
+  </div>
+  <div class="foot__grid wrap">
+    <nav class="foot__links" aria-label="Footer">
+      <a href="/#modules">What it does</a>
+      <a href="/#plans">Plans</a>
+      <a href="/#faq">Questions</a>
+      <a href="/privacy/">Privacy</a>
+    </nav>
+    <div class="foot__contact">
+      <a href={demo}>WhatsApp {config.whatsappDisplay}</a>
+      {config.email && <a href={`mailto:${config.email}`}>{config.email}</a>}
+    </div>
+  </div>
+  <div class="foot__base wrap">
+    <span>© 2026 MasalaPOS</span>
+    <a class="btn" href={demo}>Book a demo</a>
+  </div>
+</footer>
+
+<style is:global>
+  .foot { background: var(--tawa); color: #fff; padding-block: clamp(40px, 5vw, 72px) 28px; }
+  .foot__mark { display: flex; align-items: flex-end; gap: 4px; height: clamp(120px, 34svh, 340px); }
+  .foot__mark span { flex: 1; display: flex; align-items: flex-end; justify-content: center; font-family: var(--display); font-weight: 700; font-size: clamp(2.2rem, 11vw, 12rem); line-height: 0.82; letter-spacing: -0.04em; overflow: hidden; border-radius: 0 0 0 0; }
+  .foot__grid { margin-top: 56px; display: grid; grid-template-columns: 8fr 4fr; gap: 24px; font-family: var(--display); font-size: 0.9375rem; }
+  .foot__links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .foot__contact { display: grid; gap: 8px; }
+  .foot a:not(.btn) { text-decoration: none; }
+  .foot a:not(.btn):hover { text-decoration: underline; text-underline-offset: 4px; }
+  .foot__base { margin-top: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-family: var(--display); font-size: 0.9375rem; }
+  .foot__base .btn { min-height: 44px; padding-inline: 22px; font-size: 1rem; }
+  @media (max-width: 800px) {
+    .foot__mark { height: 22svh; }
+    .foot__grid { grid-template-columns: 1fr; }
+    .foot__links { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>

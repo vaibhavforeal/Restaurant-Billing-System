@@ -1,0 +1,43 @@
+---
+import { plans } from '../data/content';
+import { waLink } from '../config';
+const link = (p: string) => waLink(`Hi, I would like pricing for the MasalaPOS ${p} plan.`);
+---
+
+<section id="plans" class="plans" aria-label="Basic and Pro plans">
+  <div class="plan plan--basic">
+    <h2 class="plan__name">{plans.basic.name}</h2>
+    <p class="plan__who">{plans.basic.sentence}</p>
+    <p class="plan__big">{plans.basic.big}</p>
+    <p class="plan__body">{plans.basic.body}</p>
+    <a class="btn plan__btn" href={link('Basic')}>Contact for pricing</a>
+  </div>
+  <div class="plan plan--pro">
+    <h2 class="plan__name">{plans.pro.name}</h2>
+    <p class="plan__who">{plans.pro.sentence}</p>
+    <p class="plan__big">{plans.pro.big}</p>
+    <p class="plan__body">{plans.pro.body}</p>
+    <a class="btn btn--ink plan__btn" href={link('Pro')}>Contact for pricing</a>
+  </div>
+</section>
+
+<style is:global>
+  .plans { display: grid; grid-template-columns: 5fr 7fr; min-height: min(90svh, 780px); }
+  .plan { padding: clamp(24px, 3.2vw, 48px) var(--m); display: flex; flex-direction: column; }
+  .plan--basic { background: var(--tawa); color: #fff; }
+  .plan--pro { background: var(--turmeric); color: var(--ink); }
+  .plan__name { font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; line-height: 1; font-size: clamp(2.6rem, 1rem + 5vw, 5.6rem); }
+  .plan__who { margin-top: 16px; max-width: 26ch; font-size: 1.25rem; line-height: 1.35; }
+  .plan__big { margin-top: auto; padding-top: 48px; font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; line-height: 0.98; font-size: clamp(2.2rem, 0.8rem + 4.4vw, 5.4rem); max-width: 9em; }
+  .plan__body { margin-top: 24px; max-width: 34em; }
+  .plan__btn { margin-top: 28px; align-self: flex-start; min-height: 60px; font-size: 1.2rem; }
+  .plan--basic .btn { background: var(--accent); color: var(--ink); }
+  .plan--basic .btn:hover { background: var(--turmeric); }
+  @media (max-width: 800px) {
+    .plans { grid-template-columns: 1fr; }
+    .plan { min-height: 70svh; }
+    .plan--pro { order: -1; }
+    .plan__name { font-size: 12vw; }
+    .plan__btn { align-self: stretch; }
+  }
+</style>
