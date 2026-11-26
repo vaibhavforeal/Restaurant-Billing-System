@@ -16,8 +16,7 @@ All three steps are needed.
    Reports. Pro plans include it by default. On Basic, MasalaPOS can allow it for a
    single order or counter in the [MasalaPOS Portal](vendor-portal.md).
 2. **Marketplace switch.** An admin opens **Marketplace** and switches on **Dynamic
-   Reports** (under Insights). Add-ons stay off until someone switches them on. It
-   also needs Reports & analytics and Sales dashboard to be on.
+   Reports** (under Insights). Add-ons stay off until someone switches them on. The standard Sales dashboard is always available to staff with report access.
 3. **Permission for staff.** Admins can customise by default. For anyone else, an
    admin opens **Users**, opens the person's permissions and grants **Customise own
    dashboard** (`reports.dashboard`). The person also needs **View** under Reports
@@ -180,8 +179,6 @@ layouts are kept.
 3. The person has **Customise own dashboard**, and has signed in again since it was
    granted.
 4. The person has **View** under Reports (`reports.read`).
-5. **Sales dashboard** is on in Marketplace. Dynamic Reports depends on it and shows
-   "Waiting" while it is off.
 
 **A widget disappeared.** The person lost a permission it needs, or a module it needs
 was switched off (for example Kitchen Display for Running KOTs). It comes back when

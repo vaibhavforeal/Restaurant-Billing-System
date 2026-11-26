@@ -35,6 +35,7 @@ export const OrderCreate = z
     clientRef: ClientRef,
     /** A counter working offline chooses the new order's id, so it can queue items and sends for it straight away. */
     id: z.string().uuid().optional(),
+    guestCount: z.number().int().min(1).max(999).optional(),
     captainId: z.string().min(1).nullable().optional(),
     type: z.enum(["dine_in", "parcel", "zomato"]),
     tableId: z.string().min(1).nullable().default(null),
@@ -43,6 +44,7 @@ export const OrderCreate = z
     orderTypeId: z.string().min(1).max(64).optional(),
   })
   .superRefine((o, ctx) => {
+    if (o.guestCount !== undefined && o.type !== "dine_in") ctx.addIssue({ code: "custom", message: "Guest count is only available for dine-in orders", path: ["guestCount"] });
     if (o.type === "dine_in" && !o.tableId) ctx.addIssue({ code: "custom", message: "dine_in requires tableId" });
     if (o.type === "parcel" && o.tableId) ctx.addIssue({ code: "custom", message: "parcel cannot have a table" });
     if (o.type === "parcel" && o.captainId) ctx.addIssue({ code: "custom", message: "Select captains for dine-in orders" });

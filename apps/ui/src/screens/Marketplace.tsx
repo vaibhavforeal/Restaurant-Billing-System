@@ -4,8 +4,9 @@ import type { User } from "../api";
 import { canToggle, statusLabel } from "../integrations-model";
 import { useIntegrations } from "../integrations";
 import { useModules } from "../modules";
-import type { ModuleGroup, ModuleInfo } from "@masalapos/domain/modules";
+import { isAlwaysOnModule, type ModuleGroup, type ModuleInfo } from "@masalapos/domain/modules";
 import type { Page } from "../NavBar";
+import { Catalog } from "./Catalog";
 import { ZomatoSettingsDialog } from "./ZomatoConnection";
 import "../marketplace.css";
 import { userCan } from "../permissions";
@@ -17,6 +18,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [zomatoSettings, setZomatoSettings] = useState(false);
+  const [manageOffers, setManageOffers] = useState(false);
   const inFlight = useRef(new Set<string>());
 
   async function toggle(info: IntegrationInfo) {
@@ -34,6 +36,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
     }
   }
 
+  if (manageOffers && user.role === "admin" && integrations.some(i => i.id === "offers" && i.enabled && i.licensed)) return <Catalog initialOffers onOffersClose={() => setManageOffers(false)} />;
   return <section className="screen marketplace-screen">
     <div className="page-header"><div><h2>Marketplace</h2></div></div>
     <p className="marketplace-note">MasalaPOS decides which add-ons and modules this restaurant can use. {userCan(user, "integrations.configure") ? "You can turn an included one off here and back on later." : "Only an admin can turn them on or off."}</p>
@@ -56,6 +59,7 @@ export function Marketplace({ user, onNavigate }: { user: User; onNavigate: (pag
           {error && <p role="alert" className="marketplace-error">{error}</p>}
           <div className="marketplace-card-foot">
             {!info.licensed && info.status === "available" && userCan(user, "settings.manage") ? <button onClick={() => onNavigate({ name: "settings", section: "plan" })}>View licence</button>
+              : info.id === "offers" && info.enabled && user.role === "admin" ? <button onClick={() => setManageOffers(true)}>Manage offers</button>
               : info.id === "zomato" && info.enabled && info.status === "available" && userCan(user, "zomato.configure") ? <button onClick={() => setZomatoSettings(true)}>Settings</button> : <span />}
             <button
               type="button" role="switch" className="marketplace-switch"
@@ -92,7 +96,7 @@ function ModuleSection({ group, title, user }: { group: ModuleGroup; title: stri
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const inFlight = useRef(new Set<string>());
-  const list = modules.filter((m) => m.group === group);
+  const list = modules.filter((m) => m.group === group && !isAlwaysOnModule(m.id));
   const nameOf = (id: string) => modules.find((m) => m.id === id)?.name ?? id;
 
   async function toggle(m: ModuleInfo) {

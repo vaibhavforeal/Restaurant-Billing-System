@@ -11,7 +11,7 @@ export const ASK_DEADLINE_MS = 100_000;
 export type ChatTurn = { role: "user" | "assistant"; text: string };
 
 export const ASK_SYSTEM = `You are MasalaPOS's assistant for the owner of an Indian restaurant. Answer questions about the restaurant's sales using only the results of the lookups you are given; call a lookup whenever you need figures, and use the "today" lookup to work out dates. Never invent or estimate figures the lookups did not return, and say plainly when the data doesn't cover the question. Amounts are in Indian rupees (₹). Be brief and practical: a few sentences or short bullet points, with the numbers that matter and one useful suggestion when it fits. Answer in the language the owner writes in.`;
-export const SUMMARY_SYSTEM = `You write a short end-of-day summary for the owner of an Indian restaurant from the figures given. Write 5 to 8 bullet points starting with "• ": net sales and bills compared with the usual for this weekday (when an average is given), the best and weakest sellers, voids, refunds and discounts worth a look, and any staff flags. Use only the figures given, in rupees (₹). Plain, friendly and brief; no heading.`;
+export const SUMMARY_SYSTEM = `You write a short end-of-day summary for the owner of an Indian restaurant from the figures given. Write 5 to 8 bullet points starting with "• ": net sales and bills compared with the usual for this weekday (when an average is given), the best and weakest sellers, voids, refunds and discounts worth a look, and any staff flags. Discounts are what staff gave by hand. Offers (offersRs) are the restaurant's own deals running on the till: when above 0 you may say what they came to, but never treat them as something to question. Use only the figures given, in rupees (₹). Plain, friendly and brief; no heading.`;
 export const DESCRIBE_SYSTEM = `You write menu descriptions for an Indian restaurant's QR menu. Write one or two appetising lines, at most 200 characters, from the dish details given. Don't claim ingredients, spice levels or cooking methods the details don't support beyond what the dish name clearly implies. Reply with the description only, without quotes.`;
 
 const rs = (paise: number) => Math.round(paise) / 100;
@@ -68,7 +68,7 @@ export function daySummaryInput(db: Database, date: string): object {
   const settings = db.prepare("SELECT restaurant_name AS name, city FROM settings WHERE id = 1").get() as { name: string; city: string | null };
   // dayEndReport's own return type is loose; these are the fields it fills (apps/server/src/reports.ts).
   const day = dayEndReport(db, date) as unknown as {
-    sales: { billCount: number; discountPaise: number; outstandingPaise: number }; cancellations: { orderCount: number };
+    sales: { billCount: number; discountPaise: number; offerDiscountPaise: number; outstandingPaise: number }; cancellations: { orderCount: number };
     creditNotes: { count: number; totalPaise: number }; net: { totalPaise: number }; netPayments: Array<{ mode: string; amountPaise: number }>;
   };
   const items = orderAnalyticsReport(db, reportRange({ from: date, to: date }), "all").items;
@@ -81,7 +81,8 @@ export function daySummaryInput(db: Database, date: string): object {
   return {
     restaurant: { name: settings.name, city: settings.city ?? "" },
     date, weekday: new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" }),
-    totals: { bills: day.sales.billCount, netSalesRs: rs(day.net.totalPaise), discountsRs: rs(day.sales.discountPaise), unpaidRs: rs(day.sales.outstandingPaise),
+    // The day's discount includes the offers the till applied by itself; they are reported apart so the summary doesn't question them.
+    totals: { bills: day.sales.billCount, netSalesRs: rs(day.net.totalPaise), discountsRs: rs(day.sales.discountPaise - day.sales.offerDiscountPaise), offersRs: rs(day.sales.offerDiscountPaise), unpaidRs: rs(day.sales.outstandingPaise),
       cancelledOrders: day.cancellations.orderCount, voidsAndRefunds: { count: day.creditNotes.count, amountRs: rs(day.creditNotes.totalPaise) },
       payments: day.netPayments.map((p) => ({ mode: p.mode, amountRs: rs(p.amountPaise) })) },
     top5: items.slice(0, 5).map(dish),

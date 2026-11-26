@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import type { CustomerDetail, InstallationSummary, OrderDetail, OrderInput, OrderKind, PortalSettingsData } from "../../../licensing-worker/src/portal/api-types";
 import { buyerState, computeTotals, draftLines, formatPaise, parseRupees, PLAN_DEVICES, PLAN_NAMES } from "../../../licensing-worker/src/portal/shared";
-import { MODULES } from "../../../../packages/domain/src/modules";
+import { MODULES, isAlwaysOnModule } from "../../../../packages/domain/src/modules";
 import { api, patch, post } from "../api";
 import { date, money } from "../format";
 import { Link, navigate, useLeaveGuard } from "../router";
@@ -121,7 +121,7 @@ function EditorForm({ customer, settings, counters, order, initialKind, initialT
           <p className="muted small" style={{ marginTop: 8 }}>Each counter gets the term added to its current end date (or to the payment date if it has already ended).</p></section>}
         {!trial && <details><summary><strong>Modules</strong> <span className="muted">{Object.keys(form.modules).length ? `${Object.keys(form.modules).length} changed from the plan` : `as in the ${PLAN_NAMES[form.plan]} plan`}</span></summary>
           <table className="data" style={{ marginTop: 12 }}><thead><tr><th>Module</th><th>{PLAN_NAMES[form.plan]} plan</th><th>On this order</th></tr></thead><tbody>
-            {MODULES.map(({ id, name, plans }) => { const inPlan = plans[form.plan]; const value = form.modules[id];
+            {MODULES.filter((module) => !isAlwaysOnModule(module.id)).map(({ id, name, plans }) => { const inPlan = plans[form.plan]; const value = form.modules[id];
               return <tr key={id}><td>{name}</td><td>{inPlan ? "Included" : <span className="muted">Not included</span>}</td><td>
                 <select aria-label={`${name} on this order`} value={value === undefined ? "" : String(value)} disabled={busy} style={{ width: 170 }}
                   onChange={(e) => { const next = { ...form.modules }; if (e.target.value === "") delete next[id]; else next[id] = e.target.value === "true"; update({ modules: next }); }}>

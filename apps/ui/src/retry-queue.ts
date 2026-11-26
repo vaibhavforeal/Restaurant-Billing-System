@@ -1,3 +1,4 @@
+import type { Bill } from "@masalapos/domain/billing";
 import { ApiError, apiFetch, session } from "./api";
 import {
   ENTRY_PREFIX, discardEntry, dueEntries, listEntries, pruneResults, readResult, retryEntry, runDue, saveEntry,
@@ -34,7 +35,7 @@ function isEmptyKitchenSend(path: string, body: unknown): boolean {
 
 /** What may be saved and sent later: every request here is safe to repeat (the hub ignores repeats by reference). */
 const QUEUEABLE: Record<"POST" | "PATCH", RegExp> = {
-  POST: /^\/api\/(orders|orders\/[^/]+\/(items|send|bill|cancel)|order-items\/[^/]+\/(cancel|edit-sent)|bills\/([^/]+|\{after:[a-zA-Z.]+\})\/settle)$/,
+  POST: /^\/api\/(orders|orders\/[^/]+\/(items|send|bill|checkout|cancel)|order-items\/[^/]+\/(cancel|edit-sent)|bills\/([^/]+|\{after:[a-zA-Z.]+\})\/settle)$/,
   // A pending item's change sets absolute values (held, qty, note), so a repeat changes nothing.
   PATCH: /^\/api\/(orders\/[^/]+\/(captain|customer|order-type)|order-items\/[^/]+)$/,
 };
@@ -63,6 +64,9 @@ const waiters = new Map<string, { resolve: (value: unknown) => void; reject: (er
 
 function notifyQueue() { listeners.forEach((listener) => listener()); }
 export function subscribeQueue(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+export function shiftCacheKey() {
+  return actor && localStorage.getItem(GENERATION) ? `masalapos.shift.${localStorage.getItem(GENERATION)}.${actor}` : null;
+}
 export function queueConnected() { return generationChecked; }
 
 export function queuedRequests(userId = actor): QueuedRequest[] {
@@ -70,6 +74,14 @@ export function queuedRequests(userId = actor): QueuedRequest[] {
 }
 
 /** Sends a stopped action again. */
+export function retryPayment(id: string) {
+  const done = new Promise<{ bill: Bill }>((resolve, reject) => {
+    waiters.set(id, { resolve: value => resolve(value as { bill: Bill }), reject });
+  });
+  retryRequest(id);
+  settleWaiters();
+  return { id, done };
+}
 export function retryRequest(id: string) {
   if (retryEntry(store, id, Date.now())) { notifyQueue(); void pump(); }
 }

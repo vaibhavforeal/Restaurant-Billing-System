@@ -19,13 +19,14 @@ export function canToggle(info: IntegrationInfo, canConfigure: boolean): boolean
 }
 
 /** The sidebar tabs for staff in the full POS, in order. */
-export const STAFF_TABS = ["home", "tables", "orders", "reports", "customers", "inventory", "kitchen", "catalog", "users", "marketplace", "settings"] as const;
+export const STAFF_TABS = ["home", "tables", "orders", "reports", "customers", "inventory", "kitchen", "catalog", "offers", "users", "marketplace", "settings"] as const;
 /** The permission each tab needs; Home is always there. */
 const TAB_PERMISSION: Record<typeof STAFF_TABS[number], string | null> = {
   home: null, tables: "tables.read", orders: "orders.read", reports: "reports.read", customers: "customers.read", inventory: "stock.read",
-  kitchen: "kots.read", catalog: "catalog.manage", users: "users.manage", marketplace: "integrations.read", settings: "settings.manage",
+  kitchen: "kots.read", catalog: "catalog.manage", offers: "integrations.configure", users: "users.manage", marketplace: "integrations.read", settings: "settings.manage",
 };
 export function staffTabVisible(tab: typeof STAFF_TABS[number], can: (slug: string) => boolean): boolean {
+  if (tab === "offers" && !can("integrations.read")) return false;
   const needed = TAB_PERMISSION[tab];
   return needed === null || can(needed);
 }
@@ -34,6 +35,7 @@ const TAB_INTEGRATION: Partial<Record<Page["name"], IntegrationId>> = { kitchen:
 
 /** Pages that belong to an integration show only while it is on (the kitchen board and Customers). The kitchen role cannot read integrations, so its only tab always shows and the board explains when the Kitchen Display is off. */
 export function navTabVisible(page: Page["name"], role: User["role"], isEnabled: (id: IntegrationId) => boolean): boolean {
+  if (page === "offers") return role === "admin";
   const integration = TAB_INTEGRATION[page];
   if (!integration || (page === "kitchen" && role === "kitchen")) return true;
   return isEnabled(integration);

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7 } from "@masalapos/domain";
 import { defaultLayout, type DashboardData, type WidgetValue } from "@masalapos/domain/dashboard";
-import { freshApp, setupAdmin, createUser, auth, enableIntegration } from "./test-helpers.js";
+import { freshApp, setupTradingAdmin, createTradingUser, auth, enableIntegration } from "./test-helpers.js";
 
 type Options = Partial<{ period: string; compare: string; orderType: string; topN: number }>;
 const NO_ACCESS = "You no longer have access to this widget.";
@@ -41,8 +41,8 @@ describe("dashboard widget data", () => {
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 28, 15));
-    app = freshApp(); ({ token, user: { id: adminId } } = await setupAdmin(app));
-    ({ token: cashier, id: cashierId } = await createUser(app, token, { name: "Ravi", pin: "5678", role: "cashier" }));
+    app = freshApp(); ({ token, user: { id: adminId } } = await setupTradingAdmin(app));
+    ({ token: cashier, id: cashierId } = await createTradingUser(app, token, { name: "Ravi", pin: "5678", role: "cashier" }));
     enableIntegration(app, "dynamicReports");
     const { category } = await post("/api/categories", { name: "Mains" });
     ({ product: { id: productId } } = await post("/api/products", { categoryId: category.id, name: "Paneer", pricePaise: 20000, gstRate: 5, kotStationId: null }));

@@ -5,7 +5,7 @@ import { MIGRATIONS, PLANS, migrate, openDb, uuidv7,
   type Bill, type LicenseClaims, type RecipeUpdateInput, type StockItem, type StockLink, type StockUnit, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
-import { SETUP, testLogin } from "./test-helpers.js";
+import { openTestDrawer, SETUP, testLogin } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -31,6 +31,7 @@ async function fixture() {
   const device = "a".repeat(64);
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
+  openTestDrawer(app,setup.json().user.id);
   const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const request = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });

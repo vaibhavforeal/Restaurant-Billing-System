@@ -1,4 +1,4 @@
-import { buildMenuEngineeringReport, buildStaffActivityReport, localDateKey, prepForecast, type ActivityEvent, type Database } from "@masalapos/domain";
+import { buildMenuEngineeringReport, buildStaffActivityReport, businessDateKey, localDateKey, prepForecast, type ActivityEvent, type Database } from "@masalapos/domain";
 import { z } from "zod";
 import { profitLines } from "../costing.js";
 import { moduleActive } from "../modules.js";
@@ -6,6 +6,7 @@ import { orderAnalyticsReport } from "../order-analytics.js";
 import { reportRange, type ReportRange } from "../sales-reports.js";
 import { ACTIVITY_BASELINE_DAYS, activityEvents, activityThresholds } from "../staff-activity.js";
 import type { AiTool } from "./provider.js";
+import { dayStartHour } from "../business-day.js";
 
 /**
  * The only things the assistant's model can see: read-only lookups over existing reports, returning figures, dish and
@@ -40,15 +41,15 @@ const RangeArgs = z.object({ from: z.string().optional(), to: z.string().optiona
 const ItemArgs = RangeArgs.extend({ category: z.string().max(80).optional() }).strict();
 const DateArgs = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict();
 
-function rangeOf(args: z.infer<typeof RangeArgs>): ReportRange {
-  return reportRange({ ...(args.from ? { from: args.from } : {}), ...(args.to ? { to: args.to } : {}) });
+function rangeOf(args: z.infer<typeof RangeArgs>, startHour: number): ReportRange {
+  return reportRange({ ...(args.from ? { from: args.from } : {}), ...(args.to ? { to: args.to } : {}) }, startHour);
 }
 const span = (range: ReportRange) => `${range.from} to ${range.to}`;
 
 function staffActivity(db: Database, range: ReportRange) {
   const named = (events: ActivityEvent[]) => events.map((e) => ({ ...e, staffName: firstName(e.staffName), detail: "", reference: null }));
   const [start, end] = range.bounds;
-  const report = buildStaffActivityReport({ from: range.from, to: range.to, today: localDateKey(Date.now()), timezone: "", generatedAt: 0, days: range.dates.length,
+  const report = buildStaffActivityReport({ from: range.from, to: range.to, today: range.today, timezone: "", generatedAt: 0, days: range.dates.length,
     baselineDays: ACTIVITY_BASELINE_DAYS, events: named(activityEvents(db, start, end)), baseline: named(activityEvents(db, start - ACTIVITY_BASELINE_DAYS * DAY_MS, start)), thresholds: activityThresholds(db) });
   const [flagged, byStaff] = report.tables;
   return {
@@ -60,31 +61,31 @@ function staffActivity(db: Database, range: ReportRange) {
 
 function lookup(db: Database, name: string, raw: unknown, now: number): { result: unknown; used: string } {
   switch (name) {
-    case "sales_by_day": { const range = rangeOf(RangeArgs.parse(raw)); const r = orderAnalyticsReport(db, range, "all");
+    case "sales_by_day": { const range = rangeOf(RangeArgs.parse(raw), dayStartHour(db)); const r = orderAnalyticsReport(db, range, "all");
       return { result: { days: r.daily.map((d) => ({ date: d.date, orders: d.takeawayOrders + d.tableOrders, salesRs: rs(d.totalPaise) })) }, used: `${LABELS[name]}, ${span(range)}` }; }
-    case "sales_by_hour": { const range = rangeOf(RangeArgs.parse(raw)); const r = orderAnalyticsReport(db, range, "all");
+    case "sales_by_hour": { const range = rangeOf(RangeArgs.parse(raw), dayStartHour(db)); const r = orderAnalyticsReport(db, range, "all");
       return { result: { hours: r.hourly.map((h) => ({ hour: h.hour, orders: h.orderCount, salesRs: rs(h.totalPaise) })) }, used: `${LABELS[name]}, ${span(range)}` }; }
-    case "item_sales": { const args = ItemArgs.parse(raw); const range = rangeOf(args); const r = orderAnalyticsReport(db, range, "all");
+    case "item_sales": { const args = ItemArgs.parse(raw); const range = rangeOf(args, dayStartHour(db)); const r = orderAnalyticsReport(db, range, "all");
       const wanted = args.category?.trim().toLowerCase();
       const dishes = r.items.filter((i) => !wanted || i.category.toLowerCase() === wanted).slice(0, 30).map((i) => ({ dish: i.name, category: i.category, plates: i.qty, salesRs: rs(i.totalPaise) }));
       return { result: { dishes }, used: `${LABELS[name]}${args.category ? ` (${args.category})` : ""}, ${span(range)}` }; }
-    case "category_sales": { const range = rangeOf(RangeArgs.parse(raw)); const r = orderAnalyticsReport(db, range, "all");
+    case "category_sales": { const range = rangeOf(RangeArgs.parse(raw), dayStartHour(db)); const r = orderAnalyticsReport(db, range, "all");
       return { result: { categories: r.categories.map((c) => ({ category: c.name, plates: c.qty, orders: c.orderCount, salesRs: rs(c.totalPaise) })) }, used: `${LABELS[name]}, ${span(range)}` }; }
-    case "order_types": { const range = rangeOf(RangeArgs.parse(raw)); const r = orderAnalyticsReport(db, range, "all");
+    case "order_types": { const range = rangeOf(RangeArgs.parse(raw), dayStartHour(db)); const r = orderAnalyticsReport(db, range, "all");
       return { result: { types: r.comparison.map((t) => ({ type: t.type, orders: t.orderCount, plates: t.qty, salesRs: rs(t.totalPaise) })) }, used: `${LABELS[name]}, ${span(range)}` }; }
-    case "menu_engineering": { const range = rangeOf(RangeArgs.parse(raw));
+    case "menu_engineering": { const range = rangeOf(RangeArgs.parse(raw), dayStartHour(db));
       if (!moduleActive(db, "costing")) return { result: { error: "Dish costing isn't turned on, so margins aren't available." }, used: "" };
       const lines = db.transaction(() => profitLines(db, range.bounds))();
-      const report = buildMenuEngineeringReport({ from: range.from, to: range.to, today: localDateKey(now), timezone: "", generatedAt: 0, lines });
+      const report = buildMenuEngineeringReport({ from: range.from, to: range.to, today: range.today, timezone: "", generatedAt: 0, lines });
       const dishes = report.tables.slice(1).flatMap((t) => t.rows.map((r) => ({ dish: r.dish, category: t.title, plates: r.plates, marginPerPlateRs: r.margin === null ? null : rs(Number(r.margin)), group: r.group })));
       return { result: { dishes }, used: `${LABELS[name]}, ${span(range)}` }; }
-    case "prep_forecast": { const { date } = DateArgs.parse(raw); const f = prepForecast(db, date, localDateKey(now));
+    case "prep_forecast": { const { date } = DateArgs.parse(raw); const f = prepForecast(db, date, businessDateKey(now, dayStartHour(db)));
       return { result: { date: f.date, basedOn: f.basedOn, dishes: f.dishes.map((d) => ({ dish: d.name, category: d.category, expectedPlates: Math.ceil(d.average) })),
         ingredients: f.ingredients.map((i) => ({ item: i.name, unit: i.unit, need: i.need, inStock: i.onHand })) }, used: `${LABELS[name]}, ${date}` }; }
-    case "staff_activity": { const range = rangeOf(RangeArgs.parse(raw));
+    case "staff_activity": { const range = rangeOf(RangeArgs.parse(raw), dayStartHour(db));
       return { result: staffActivity(db, range), used: `${LABELS[name]}, ${span(range)}` }; }
     case "today": { z.object({}).strict().parse(raw);
-      return { result: { date: localDateKey(now), weekday: new Date(now).toLocaleDateString("en-GB", { weekday: "long" }), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, used: LABELS[name]! }; }
+      return { result: { date: businessDateKey(now, dayStartHour(db)), weekday: new Date(now).toLocaleDateString("en-GB", { weekday: "long" }), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, used: LABELS[name]! }; }
     default: return { result: { error: `There is no lookup called ${name}.` }, used: "" };
   }
 }

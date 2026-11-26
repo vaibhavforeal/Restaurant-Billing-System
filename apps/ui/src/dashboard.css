@@ -13,7 +13,18 @@ html[data-theme] .financial-home .dash-link { min-height: 0; background: transpa
 
 /* Status strip */
 .dash-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4) var(--space-8); padding: var(--space-4) var(--space-8); border: var(--border) solid var(--line); border-radius: var(--radius-panel); background: var(--surface); }
-.dash-strip-status { display: flex; align-items: center; gap: var(--space-4); margin: 0; color: var(--muted); font-size: var(--text-base); }
+.dashboard :is(.dashboard-top-actions, .dashboard-order-actions) { gap: var(--space-3); }
+.dashboard .dashboard-top-actions { min-width: 0; }
+.dashboard .dashboard-order-actions { flex-wrap: nowrap; white-space: nowrap; }
+html[data-theme] .dashboard .dashboard-top-actions button {
+  min-height: var(--control-primary);
+  padding: var(--space-2) var(--space-4);
+  gap: var(--space-3);
+  font-size: var(--text-base);
+  line-height: 1.2;
+}
+.dashboard-top-actions svg { flex: none; }
+.dashboard-drawer-action { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .dash-strip-controls { display: flex; align-items: center; gap: var(--space-4); }
 .dash-date input { width: 150px; background: var(--surface); color: var(--ink); }
 html[data-theme] .dash .dash-icon-button { display: inline-flex; align-items: center; justify-content: center; width: var(--control-touch); min-width: var(--control-touch); padding: 0; }
@@ -158,4 +169,4 @@ html[data-theme] .dash .dash-alert-row:hover:not(:disabled) { background: var(--
   .dash-side .payment-bar-track { height: var(--space-2); }
   .dash-alerts-head { padding-block: var(--space-1); }
 }
-@media print { .dash-strip-controls, .dash-alert-row { display: none; } }
+@media print { .dash-strip-controls, .dashboard-top-actions, .dash-alert-row { display: none; } }

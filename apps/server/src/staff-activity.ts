@@ -1,7 +1,8 @@
-import { buildStaffActivityReport, localDateKey, type ActivityEvent, type ActivityThresholds, type Database } from "@masalapos/domain";
+import { buildStaffActivityReport, type ActivityEvent, type ActivityThresholds, type Database } from "@masalapos/domain";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { reportRange } from "./sales-reports.js";
+import { dayStartHour } from "./business-day.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Days before the chosen dates that set each person's usual rate. */
@@ -53,10 +54,11 @@ export function activityEvents(db: Database, start: number, end: number): Activi
       detail: `${r.kind === "void" ? "Void" : "Refund"}${name(r.reason)}; asked by ${r.staffName}, approved by ${r.approver}`,
       reference: `Bill #${r.billNo}`, paidBillVoid: r.kind === "void" && r.paid === 1 });
   }
-  for (const r of db.prepare(`SELECT b.created_at AS at, b.created_by AS staffId, u.name AS staffName, b.discount_paise AS amount, b.subtotal_paise AS subtotal,
+  // Offers are the owner's, not the staff member's choice, so they are left out of the discount given.
+  for (const r of db.prepare(`SELECT b.created_at AS at, b.created_by AS staffId, u.name AS staffName, b.discount_paise - b.offer_discount_paise AS amount, b.subtotal_paise AS subtotal,
       b.discount_note AS note, b.bill_no AS billNo, a.name AS approver
     FROM bills b JOIN users u ON u.id = b.created_by LEFT JOIN users a ON a.id = b.discount_approved_by
-    WHERE b.discount_paise > 0 AND b.created_at >= ? AND b.created_at < ?`).all(...range) as Array<{ at: number; staffId: string; staffName: string; amount: number; subtotal: number; note: string | null; billNo: number; approver: string | null }>) {
+    WHERE b.discount_paise - b.offer_discount_paise > 0 AND b.created_at >= ? AND b.created_at < ?`).all(...range) as Array<{ at: number; staffId: string; staffName: string; amount: number; subtotal: number; note: string | null; billNo: number; approver: string | null }>) {
     const percent = r.subtotal > 0 ? Math.round(r.amount * 1000 / r.subtotal) / 10 : 100;
     events.push({ kind: "discount", at: r.at, staffId: r.staffId, staffName: r.staffName, count: 1, amountPaise: r.amount,
       detail: `${percent}% off${name(r.note)}${r.approver ? `; approved by ${r.approver}` : ""}`, reference: `Bill #${r.billNo}`, discountPercent: percent });
@@ -84,13 +86,13 @@ export function activityEvents(db: Database, start: number, end: number): Activi
 export function registerStaffActivity(app: FastifyInstance): void {
   const db = app.db;
   app.get("/api/reports/staff-activity", { preHandler: app.requirePermission("users.manage") }, async (req, reply) => {
-    const { from, to, dates, bounds } = reportRange(req.query);
+    const { from, to, dates, bounds, today } = reportRange(req.query, dayStartHour(app.db));
     const { events, baseline } = db.transaction(() => ({
       events: activityEvents(db, bounds[0], bounds[1]),
       baseline: activityEvents(db, bounds[0] - ACTIVITY_BASELINE_DAYS * DAY_MS, bounds[0]),
     }))();
     reply.header("Cache-Control", "no-store");
-    return { report: buildStaffActivityReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(),
+    return { report: buildStaffActivityReport({ from, to, today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(),
       days: dates.length, baselineDays: ACTIVITY_BASELINE_DAYS, events, baseline, thresholds: activityThresholds(db) }) };
   });
   const manage = app.requirePermission("settings.manage");

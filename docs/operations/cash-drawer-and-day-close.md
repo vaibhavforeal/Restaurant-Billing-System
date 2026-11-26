@@ -9,7 +9,7 @@ Open **Reports → Cash & day close**.
 ## Open a shift (cashier or admin)
 
 1. Count the change in the drawer.
-2. Enter it as **Opening float** and choose **Open shift**.
+2. Select the available drawer. An admin can add named drawers on this screen. Enter the count as **Opening float** and choose **Open shift**.
 
 Each person has at most one open shift.
 
@@ -22,14 +22,13 @@ Each person has at most one open shift.
 gave + pay-ins − pay-outs. UPI and card payments are not counted. Cash collected by another person
 counts in their drawer.
 
-## Close the shift
+## Settle and hand over
 
-1. Count the cash in the drawer and enter it in **Cash counted in drawer**.
-2. Check the **Difference** (over or short) and add a note if needed.
-3. Choose **Close shift**.
-
-The expected cash, counted cash and difference are saved and cannot be changed afterwards. An
-admin can close a shift someone left open.
+1. Choose the incoming cashier under **Settle and hand over**. At closing, select **Final handover to admin** and choose the receiving admin.
+2. Count the whole drawer, explain any difference and choose **Submit handover**. Cash payments, refunds and drawer movements are frozen for this drawer.
+3. For a shortage or excess, an admin signs in, opens **Cash & day close**, and chooses **Approve difference**.
+4. The named recipient signs in and enters their own count. A mismatch sends the drawer back for recount. Refresh the drawer to see the latest status.
+5. Matching counts close the outgoing shift. The incoming cashier receives the full count as the new opening float. A final admin receipt releases the drawer without opening a shift.
 
 ## Close the day (admin)
 

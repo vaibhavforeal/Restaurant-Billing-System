@@ -11,17 +11,20 @@
   const check = (value, label) => { if (!value) throw new Error(label); };
   await wait(() => document.querySelector(".menu-card"), "menu");
   await click("All items");
-  for (const name of ["Paneer tikka", "Crispy corn", "Fresh lime"]) {
+  const addDish = async (name) => {
     const tile = [...document.querySelectorAll(".menu-card")].find(e => e.querySelector(".menu-card-name")?.textContent.trim() === name);
     check(tile, "Missing " + name); tile.click(); await pause();
-  }
+  };
+  for (const name of ["Paneer tikka", "Crispy corn", "Fresh lime"]) await addDish(name);
   await click("Add Vegetable biryani, Large, ₹240.00");
   const quantity = document.querySelector('input[aria-label="Quantity of Paneer tikka"]');
   fill(quantity, "2"); await pause(); quantity.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await pause();
   await click("Note for Paneer tikka");
   fill(scope().querySelector("textarea"), "Less spicy"); await pause(); await click("Save note");
   check(document.querySelector(".cart-total").textContent.includes("630.00"), "Unchanged sum of item prices: ₹630.00");
-  await click("Remove Crispy corn"); await click("Undo");
+  await click("Remove Crispy corn");
+  check(!button("Remove Crispy corn") && !button("Undo"), "Draft removal clears the row without showing Undo");
+  await addDish("Crispy corn");
   await click("Send to kitchen");
   await wait(() => document.querySelector(".captain-message")?.textContent.includes("Sent to kitchen"), "KOT acknowledgement");
   const headers = { authorization: "Bearer " + localStorage.getItem("masalapos.token"), "x-masalapos-device": localStorage.getItem("masalapos.device.v1") };

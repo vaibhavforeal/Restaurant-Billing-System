@@ -6,10 +6,12 @@ import { Home } from "./screens/Home";
 import { Kitchen } from "./screens/Kitchen";
 import { Login } from "./screens/Login";
 import { OrderScreen } from "./screens/OrderScreen";
+
 import { Settings } from "./screens/Settings";
 import { Setup, type SetupActivation } from "./screens/Setup";
 import { Tables } from "./screens/Tables";
 import { OrderBoard } from "./screens/OrderBoard";
+import { ActivityAlertSettings } from "./screens/ActivityAlertSettings";
 import { Users } from "./screens/Users";
 import { Bills } from "./screens/Bills";
 import { SalesReports } from "./screens/SalesReports";
@@ -39,6 +41,7 @@ import "./compact-workspace.css";
 import { CurrentUserProvider, userCan } from "./permissions";
 import { connectWs } from "./ws";
 import { isUnreachable, readSignedIn, saveSignedIn } from "./offline-cache";
+import { BusinessDaySync } from "./order-settings";
 
 type State =
   | { kind: "loading" }
@@ -78,7 +81,7 @@ function CustomersRoute({ user, onNavigate }: { user: User; onNavigate: (page: P
   const { ready, isEnabled } = useIntegrations();
   if (!ready) return <p role="status">Loading customers…</p>;
   if (!isEnabled("crm")) return <IntegrationOff name="CRM & Loyalty" canManage={userCan(user, "integrations.configure")} onOpenMarketplace={() => onNavigate({ name: "marketplace" })} />;
-  return <Customers isAdmin={userCan(user, "settings.manage")} canExport={userCan(user, "crm.export")} />;
+  return <Customers isAdmin={userCan(user, "settings.manage")} canExport={userCan(user, "crm.export")} onOpenSettings={(section) => onNavigate({ name: "settings", section })} />;
 }
 
 /** A page that belongs to a module: while the module is not available it explains why instead. */
@@ -94,6 +97,7 @@ function StaffApp() {
   usePosShortcuts();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [demo, setDemo] = useState(false);
+
   const navigationGuard = useRef(new Set<NavigationGuard>());
   const captainEntry = isCaptainPath();
   const androidBack = useRef<() => boolean>(() => false);
@@ -129,6 +133,7 @@ function StaffApp() {
       try {
         const { needsSetup, demo, activation = "none", licensed = true } = await apiFetch<{ needsSetup: boolean; demo?: boolean; activation?: SetupActivation; licensed?: boolean }>("/api/needs-setup");
         setDemo(!!demo);
+
         if (needsSetup) return setState({ kind: "setup", activation, licensed });
         if (session.token) {
           try {
@@ -185,6 +190,7 @@ function StaffApp() {
           <LicenseGate key={user.id} user={user}>
           {/* Sibling keys must differ; each still starts afresh when another staff member signs in. */}
           <ConnectionStatus key={`connection-${user.id}`} userId={user.id} captain={captain} onOpenOrder={(orderId) => { if (canLeave()) onOpenOrder(orderId); }} />
+          <BusinessDaySync key={`day-${user.id}`} />
           <QrNotifications key={`qr-${user.id}`} enabled={user.role !== "kitchen"} onReview={() => go({ name: "tables", qrInbox: Date.now() })}>
           <main className="workspace" id="main-content">
           {page.name === "home" && <Home user={user} onNavigate={go} />}
@@ -193,8 +199,15 @@ function StaffApp() {
           {page.name === "takeaway" && canQuickBill && <ModuleRoute id="takeaway" user={user} onNavigate={go}><QuickTakeaway key={`${user.id}-${page.requestId ?? 0}`} user={user} onBack={onBack} onOpenOrder={onOpenOrder} /></ModuleRoute>}
           {page.name === "order" && <OrderScreen key={page.orderId} user={user} captain={captain} orderId={page.orderId} onBack={onBack} onOpenOrder={onOpenOrder} quickBilling={canQuickBill} onHold={() => { releaseHeldTakeaway(user.id, page.orderId); onBack(); }} onNextTakeaway={() => go({ name: "takeaway" })} />}
           {page.name === "kitchen" && <KitchenRoute user={user} onNavigate={go} />}
+          {page.name === "offers" && user.role === "admin" && userCan(user, "integrations.configure") && userCan(user, "integrations.read") && <Catalog initialOffers />}
           {page.name === "catalog" && userCan(user, "catalog.manage") && <Catalog />}
-          {page.name === "users" && userCan(user, "users.manage") && <Users />}
+          {page.name === "users" && userCan(user, "users.manage") && <section aria-label="Users">
+            <div className="tabs" role="group" aria-label="User pages">
+              <button aria-pressed={!page.section} onClick={() => go({ name: "users" })}>Staff accounts</button>
+              {userCan(user, "settings.manage") && <button aria-pressed={page.section === "alerts"} onClick={() => go({ name: "users", section: "alerts" })}>Staff Alerts</button>}
+            </div>
+            {page.section === "alerts" && userCan(user, "settings.manage") ? <ActivityAlertSettings /> : <Users />}
+          </section>}
           {page.name === "settings" && userCan(user, "settings.manage") && <Settings key={page.section ?? ""} section={page.section} />}
           {page.name === "bills" && <Bills onOpenOrder={onOpenOrder} />}
           {page.name === "reports" && <SalesReports initialTab={page.tab} initialPeriod={page.period} canSeeCosts={userCan(user, "costs.read")} canSeeStaff={userCan(user, "users.manage")} canSeeZomato={userCan(user, "zomato.read")} canSettle={userCan(user, "bills.settle")} onOpenOrder={onOpenOrder} />}

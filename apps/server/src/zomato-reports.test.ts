@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { uuidv7 } from "@masalapos/domain";
-import { auth, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, enableIntegration, freshApp, setupTradingAdmin } from "./test-helpers.js";
 
 let app: ReturnType<typeof freshApp>;
 afterEach(async () => { await app?.close(); });
@@ -16,7 +16,7 @@ async function post(token: string, url: string, payload: unknown) {
 /** One cash takeaway and one picked-up Zomato order (Rs 580), both issued today. */
 async function seed() {
   app = freshApp();
-  const admin = await setupAdmin(app);
+  const admin = await setupTradingAdmin(app);
   enableIntegration(app, "zomato");
   const { category } = await post(admin.token, "/api/categories", { name: "Mains" });
   const { product: meal } = await post(admin.token, "/api/products", { name: "Meal", categoryId: category.id, pricePaise: 30000, gstRate: 5, kotStationId: null });
@@ -54,7 +54,7 @@ describe("Zomato in reports", () => {
 
   it("reports a zero Zomato receivable when there are no Zomato payments", async () => {
     app = freshApp();
-    const admin = await setupAdmin(app);
+    const admin = await setupTradingAdmin(app);
     const { report } = await get(admin.token, "/api/reports/day-end");
     expect(report.zomatoReceivablePaise).toBe(0);
     expect(report.zomatoSuppliesPaise).toBe(0);

@@ -1,26 +1,14 @@
-import { useEffect, useState } from "react";
-import type { ZomatoSettings } from "@masalapos/domain/zomato";
-import { apiFetch } from "./api";
+import { useMemo } from "react";
+import { useOrderSettings } from "./order-settings";
 import { paiseToRupees } from "./money";
 import type { Order } from "./types";
-import { connectWs } from "./ws";
-import { DEFAULT_ZOMATO_AGE, useZomatoStatus, ZOMATO_PILL, zomatoAgeTone, zomatoCardAction } from "./zomato-desk";
+import { useZomatoStatus, ZOMATO_PILL, zomatoAgeTone, zomatoCardAction } from "./zomato-desk";
 import "./zomato.css";
 
-/** The restaurant's amber and red minutes: loaded once, reloaded when Zomato settings change, defaults until loaded or if loading fails. */
-export function useZomatoAgeThresholds() {
-  const [thresholds, setThresholds] = useState(DEFAULT_ZOMATO_AGE);
-  useEffect(() => {
-    let alive = true;
-    const load = () => apiFetch<ZomatoSettings>("/api/zomato/settings", { cache: "no-store" })
-      .then((s) => ({ warnMinutes: s.warnMinutes, lateMinutes: s.lateMinutes }))
-      .catch(() => DEFAULT_ZOMATO_AGE)
-      .then((next) => { if (alive) setThresholds(next); });
-    void load();
-    const disconnect = connectWs({ onEvent: (event) => { if (event === "zomato.changed") void load(); }, onStatus: () => {} });
-    return () => { alive = false; disconnect(); };
-  }, []);
-  return thresholds;
+/** The restaurant's amber and red minutes for open orders, from Settings → Bill settings; defaults until loaded. */
+export function useOrderAgeThresholds() {
+  const { orderWarnMinutes, orderLateMinutes } = useOrderSettings();
+  return useMemo(() => ({ warnMinutes: orderWarnMinutes, lateMinutes: orderLateMinutes }), [orderWarnMinutes, orderLateMinutes]);
 }
 
 /** Open Zomato orders with one-tap Ready and Picked up. The caller passes only open or billed Zomato orders, oldest first. */
@@ -33,7 +21,7 @@ export function ZomatoPanel({ orders, canCreate, disabled, onNew, onOpenOrder, o
   onChanged: () => void;
 }) {
   const { busyId, error, advance } = useZomatoStatus();
-  const ageThresholds = useZomatoAgeThresholds();
+  const ageThresholds = useOrderAgeThresholds();
 
   async function act(order: Order) {
     const { status } = zomatoCardAction(order);

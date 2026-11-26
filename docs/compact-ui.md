@@ -69,7 +69,7 @@ Nonvisual modules (API/session, websocket, retry queue, navigation guard, money,
 
 ### Per-screen result
 
-- Billing: vertical category rail, five menu columns at the minimum width, single-row draft/saved items, typed quantities, undo, pinned subtotal/actions, local date/time and operator metadata, visible connection and selected-printer status.
+- Billing: vertical category rail, five menu columns at the minimum width, single-row draft/saved items, typed quantities, pinned subtotal/actions, local date/time and operator metadata, visible connection and selected-printer status.
 - Payment: compact native dialog; server subtotal/discount/GST/rounding/total rows; Cash/Card/UPI segments; exact/quick tender amounts and change; existing split-payment editor preserved for issued bills.
 - Tables: compact status tiles with running item subtotal and elapsed time from the existing order list. Reservations, QR requests, table management, parcels and splits remain reachable.
 - Bills/reports: slim toolbars, 32px rows, sticky headers, right-aligned amounts, two-column report sections, export disclosure.

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { financialYear, uuidv7, type Bill } from "@masalapos/domain";
 import type { GstReturnsReport } from "@masalapos/domain/gst-returns";
-import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, freshApp, setupTradingAdmin } from "./test-helpers.js";
 
 const OWN = "29AAPFU0939F1ZR";
 const ACME = { gstin: "29AABCU9603R1ZJ", name: "Acme Pvt Ltd" };
@@ -17,7 +17,7 @@ describe("GST returns", () => {
 
   beforeEach(async () => {
     app = freshApp();
-    token = (await setupAdmin(app)).token;
+    token = (await setupTradingAdmin(app)).token;
     app.db.prepare("UPDATE settings SET gstin = ? WHERE id = 1").run(OWN);
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     // ₹105 including 5% GST: taxable ₹100, CGST ₹2.50, SGST ₹2.50.
@@ -171,7 +171,7 @@ describe("GST returns", () => {
   it("works without the Reports module, needs the report permission, and checks the period", async () => {
     app.db.prepare("UPDATE settings SET gstin = '' WHERE id = 1").run();
     expect((await report("2026-01")).regime).toBe("unregistered");
-    const kitchen = await createUser(app, token, { name: "Kiran", pin: "4321", role: "kitchen" });
+    const kitchen = await createTradingUser(app, token, { name: "Kiran", pin: "4321", role: "kitchen" });
     expect((await app.inject({ url: "/api/reports/gst-returns?period=2026-01", headers: auth(kitchen.token) })).statusCode).toBe(403);
     expect((await app.inject({ url: "/api/reports/gst-returns?period=2026-13", headers: auth(token) })).statusCode).toBe(400);
   });

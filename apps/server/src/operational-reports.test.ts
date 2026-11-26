@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type OperationalReport, appendStockMove } from "@masalapos/domain";
-import { freshAppWithFakeSink, setupAdmin, createUser, auth, enableIntegration } from "./test-helpers.js";
+import { freshAppWithFakeSink, setupTradingAdmin, createTradingUser, auth, enableIntegration } from "./test-helpers.js";
 
 describe("operational reports", () => {
   let app: FastifyInstance, token: string, categoryId: string, productId: string;
@@ -27,7 +27,7 @@ describe("operational reports", () => {
     return bill;
   }
   beforeEach(async () => {
-    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app)); enableIntegration(app, "kds");
+    ({ app } = freshAppWithFakeSink()); ({ token } = await setupTradingAdmin(app)); enableIntegration(app, "kds");
     categoryId = (await post("/api/categories", { name: "Meals" })).category.id;
     productId = (await post("/api/products", { name: "Meal", categoryId, pricePaise: 10001, gstRate: 5, kotStationId: null })).product.id;
   });
@@ -62,7 +62,7 @@ describe("operational reports", () => {
   });
 
   it("attributes split receipts to the settling cashier and payment date, independently of bill issuer", async () => {
-    const cashier = await createUser(app, token, { name: "Counter 2", role: "cashier", pin: "2345" });
+    const cashier = await createTradingUser(app, token, { name: "Counter 2", role: "cashier", pin: "2345" });
     const bill = await issue((await order()).id);
     app.db.prepare("UPDATE bills SET created_at = ? WHERE id = ?").run(at(26), bill.id);
     await post(`/api/bills/${bill.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: 5000 }, { mode: "upi", amountPaise: bill.totalPaise - 5000 }] }, cashier.token);
@@ -164,9 +164,9 @@ describe("operational reports", () => {
   });
 
   it("validates every report date range and role and returns usable empty results", async () => {
-    const waiter = await createUser(app, token, { name: "Waiter", role: "waiter", pin: "2345" });
-    const kitchen = await createUser(app, token, { name: "Cook", role: "kitchen", pin: "3456" });
-    const cashier = await createUser(app, token, { name: "Cashier", role: "cashier", pin: "4567" });
+    const waiter = await createTradingUser(app, token, { name: "Waiter", role: "waiter", pin: "2345" });
+    const kitchen = await createTradingUser(app, token, { name: "Cook", role: "kitchen", pin: "3456" });
+    const cashier = await createTradingUser(app, token, { name: "Cashier", role: "cashier", pin: "4567" });
     for (const kind of ["items", "cashiers", "hourly", "kots", "cancellations", "stock", "credit-notes"]) {
       for (const user of [waiter, kitchen]) expect((await request("GET", `/api/reports/operations/${kind}`, undefined, user.token)).statusCode).toBe(403);
       expect((await request("GET", `/api/reports/operations/${kind}`, undefined, cashier.token)).statusCode).toBe(200);

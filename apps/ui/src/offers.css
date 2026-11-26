@@ -1,0 +1,39 @@
+.offers-manager { display: grid; gap: 14px; }
+.offer-manager-header, .offer-manager-actions, .offer-row-actions, .offer-form-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.offer-manager-header { justify-content: space-between; }
+.offer-manager-header h2, .offer-row h3, .offer-help { margin: 0; }
+.offer-help, .offer-row small { color: var(--muted); line-height: 1.5; }
+.offer-list { list-style: none; margin: 0; padding: 0; }
+.offer-row { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.offer-row-copy { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.offer-row-copy h3 { font-size: 15px; }
+.offer-row-copy p { margin: 6px 0; line-height: 1.5; }
+.offer-row-actions { justify-content: flex-end; max-width: 230px; }
+.offer-row-actions small { width: 100%; text-align: end; }
+.offer-row-actions [role="switch"][aria-checked="true"] { color: var(--red); background: var(--red-light); border-color: var(--red); }
+.offer-empty { padding-block: 20px; color: var(--muted); }
+.offer-form-fields { display: grid; gap: 16px; min-width: 0; padding: 0; margin: 0; border: 0; }
+.offer-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.offer-field { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.offer-form label:not(.offer-check) { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.offer-form input:not([type="checkbox"]), .offer-form select { width: 100%; min-width: 0; box-sizing: border-box; }
+.offer-form .offer-check { display: flex; align-items: center; gap: 8px; margin: 0; }
+.offer-form .offer-check input { width: 16px; height: 16px; min-height: 0; margin: 0; }
+.offer-picker, .offer-conditions, .offer-days { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.offer-conditions { display: grid; gap: 14px; }
+.offer-form legend { padding-inline: 4px; font-weight: 600; }
+.offer-picker .offer-help { margin-bottom: 10px; }
+.offer-picker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.offer-picker-row select { flex: 1; }
+.offer-day-choices { display: flex; gap: 14px; flex-wrap: wrap; }
+.offer-field-error { display: block; color: var(--danger-text); margin-top: 4px; font-size: 12px; }
+.offer-form [aria-invalid="true"] { border-color: var(--danger-text); }
+.offer-form-actions { justify-content: flex-end; }
+.offer-dialog .offer-form button, .offer-dialog .offer-form input:not([type="checkbox"]), .offer-dialog .offer-form select { min-height: 40px; }
+@media (max-width: 650px) {
+  .offer-field-grid { grid-template-columns: minmax(0, 1fr); }
+  .offer-row { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .offer-row-actions { justify-content: flex-start; max-width: none; }
+  .offer-row-actions small { width: auto; text-align: start; }
+  .offer-manager-header { align-items: flex-start; }
+}

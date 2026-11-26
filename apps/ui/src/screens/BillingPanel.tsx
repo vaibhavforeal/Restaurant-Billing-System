@@ -1,3 +1,5 @@
+import { CashDrawer, cashShiftForPayment, currentCashShift } from "./CashDrawer";
+import { WorkspaceDialog } from "../WorkspaceDialog";
 import { Fragment, useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
@@ -8,13 +10,15 @@ import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
-import { enqueueRequest, outcomeOrSaved } from "../retry-queue";
+import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, retryPayment } from "../retry-queue";
 import { isUnreachable } from "../offline-cache";
 import { SegmentedControl } from "../PosControls";
 import { useIntegrations } from "../integrations";
 import { UpiQrPreview } from "./UpiQrPreview";
 import { BillItemLines, CreditNoteDialog, CreditNoteList } from "./CreditNoteDialog";
 import { readPreference, savePreference, useShortcutLabels } from "../pos-shortcuts";
+import { allowedPayment, preferredPayment, RECEIPT_PRINTER_KEY, rememberPayment } from "../device-preferences";
+import { useOrderSettings } from "../order-settings";
 import { billPaymentLabel, billTaxRates, gstNote, type BillGst, useZomatoStatus, ZOMATO_PILL, zomatoCardAction } from "../zomato-desk";
 import "../billing-panel.css";
 import "../zomato.css";
@@ -28,11 +32,10 @@ import { showServiceChargeBox } from "../charges-form";
 const money = (value: number) => `₹${paiseToRupees(value)}`;
 type Preview = BillTotals & { previewKey: string; receipt: Bill["receipt"]; maxRedeemPoints?: number };
 const paymentModes = [{ value: "cash", label: "Cash" }, { value: "card", label: "Card" }, { value: "upi", label: "UPI" }] as const;
-function preferredPayment(): "cash" | "card" | "upi" { const value = readPreference("masalapos.payment-mode", "cash"); return value === "card" || value === "upi" ? value : "cash"; }
 
 type PaymentDraft = { id: string; mode: "cash" | "upi" | "card"; amount: string; refNote: string };
 
-export function BillSummary({ value, compact = false, gst }: { value: BillTotals; compact?: boolean; gst?: BillGst | undefined }) {
+export function BillSummary({ value, compact = false, gst }: { value: BillTotals & { receipt?: Bill["receipt"] }; compact?: boolean; gst?: BillGst | undefined }) {
   const rates = billTaxRates(value, gst);
   // Nothing GST-related is shown for a bill issued without GST or one whose GST Zomato pays.
   const noGst = gst !== undefined && !billChargesGst(gst);
@@ -46,7 +49,12 @@ export function BillSummary({ value, compact = false, gst }: { value: BillTotals
       <tbody>{rates.map((t) => <tr key={t.gstRate}><td>{t.gstRate}%</td><td>{money(t.taxablePaise)}</td><td>{money(t.cgstPaise)} ({t.gstRate / 2}%)</td><td>{money(t.sgstPaise)} ({t.gstRate / 2}%)</td></tr>)}</tbody>
     </table></div>}
   </>;
-  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd><dt>Discount</dt><dd>{money(value.discountPaise)}</dd>{(value.charges ?? []).map((c) => <Fragment key={c.kind}><dt>{chargeLabel(c)}</dt><dd>{money(c.amountPaise)}</dd></Fragment>)}{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
+  const offers = value.receipt?.offers ?? [];
+  const otherDiscount = value.discountPaise - offers.reduce((sum, offer) => sum + offer.discountPaise, 0);
+  const amounts = <dl className="pos-totals"><dt>Subtotal</dt><dd>{money(value.subtotalPaise)}</dd>
+    {offers.map((offer, index) => <Fragment key={index}><dt>{offer.name}</dt><dd>−{money(offer.discountPaise)}</dd></Fragment>)}
+    {(!offers.length || otherDiscount > 0) && <><dt>Discount</dt><dd>{money(otherDiscount)}</dd></>}
+    {(value.charges ?? []).map((c) => <Fragment key={c.kind}><dt>{chargeLabel(c)}</dt><dd>{money(c.amountPaise)}</dd></Fragment>)}{added && <><dt>CGST</dt><dd>{money(value.cgstPaise)}</dd><dt>SGST</dt><dd>{money(value.sgstPaise)}</dd></>}<dt>Round off</dt><dd>{money(value.roundingPaise)}</dd></dl>;
   const payable = <p className="payable"><span>Payable:</span><strong>{money(value.totalPaise)}</strong></p>;
   const includes = !noGst && !added && includedPaise > 0 && <p className="bill-includes-gst">Includes GST <strong>{money(includedPaise)}</strong></p>;
   return <div className={`bill-summary${compact ? " bill-summary-compact" : ""}`}>
@@ -58,6 +66,7 @@ const WHEN_BACK = "it reaches the hub when the connection returns";
 
 export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount = 0, onFireHeld, disabled = false, onBusyChange, onGoToTables, onClosed, role, checkoutRef, checkoutLabel, summaryFooter = false, onTotalChange }: { order: Order; hasDraft: boolean; onChanged: () => Promise<void>; onPrepare?: (() => Promise<void>) | undefined; /** Dishes held back from the kitchen; billing asks to fire them first. */ heldCount?: number; onFireHeld?: (() => Promise<void>) | undefined; disabled?: boolean; onBusyChange?: (busy: boolean) => void; onGoToTables?: (() => void) | undefined; /** A Zomato order was picked up and closed: the screen should go back. */ onClosed?: (() => void) | undefined; /** Whether an admin PIN is needed to approve a void, refund or large discount. */ role?: "admin" | "cashier" | "waiter" | "kitchen" | undefined; checkoutRef?: Ref<() => void>; checkoutLabel?: string | undefined; summaryFooter?: boolean; onTotalChange?: (total: number | null) => void }) {
   const { shortcut, shortcutProps } = useShortcutLabels();
+  const checkoutQueueIds = useRef<string[]>([]);
   const [bill, setBill] = useState<Bill | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [discount, setDiscount] = useState("0");
@@ -80,10 +89,11 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const [redeemCap, setRedeemCap] = useState<number | null>(null);
   useEffect(() => setRedeemCap(null), [order.customer?.id]);
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-  const [printerId, setPrinterId] = useState(() => readPreference("masalapos.receipt-printer"));
+  const [printerId, setPrinterId] = useState(() => readPreference(RECEIPT_PRINTER_KEY));
   const [payments, setPayments] = useState<PaymentDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
+  const [openingCash, setOpeningCash] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [html, setHtml] = useState("");
@@ -95,7 +105,17 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const billRevision = useRef(0);
   const [job, setJob] = useState<PrintJobInfo | null>(null);
   const [creditKind, setCreditKind] = useState<"void" | "refund" | null>(null);
-  const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(preferredPayment);
+  const { paymentModes: takenModes } = useOrderSettings();
+  const taken = useRef(takenModes);
+  taken.current = takenModes;
+  const modeOptions = paymentModes.filter((option) => takenModes.includes(option.value));
+  const startMode = () => allowedPayment(preferredPayment(), taken.current);
+  const [quickMode, setQuickMode] = useState<PaymentDraft["mode"]>(startMode);
+  // A method switched off in Settings while this bill is open moves to one the counter still takes.
+  useEffect(() => {
+    setQuickMode((mode) => allowedPayment(mode, takenModes));
+    setPayments((rows) => rows.map((row) => takenModes.includes(row.mode) || takenModes.length === 0 ? row : { ...row, mode: takenModes[0]! }));
+  }, [takenModes]);
   const [cashReceived, setCashReceived] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const dialogTitle = useRef<HTMLHeadingElement>(null);
@@ -129,7 +149,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   function acceptBill(value: Bill | null) {
     billRevision.current++;
     setBill(value);
-    if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: preferredPayment(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
+    if (value && value.status === "unpaid") setPayments((p) => p.length ? p : value.totalPaise ? [{ id: uuid(), mode: startMode(), amount: paiseToRupees(value.totalPaise), refNote: "" }] : []);
   }
   useEffect(() => {
     let active = true;
@@ -183,16 +203,24 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       // Resolve an ambiguous response from the persisted bill before another attempt.
       try { acceptBill((await apiFetch<{ bill: Bill | null }>(`/api/orders/${order.id}/bill`)).bill); } catch { /* retain the retryable request */ }
       try { await onChanged(); } catch { /* preserve the last confirmed view until reconnect */ }
+      if (e instanceof Error && e.message.includes("review a fresh bill preview")) {
+        // These writes were refused by the hub. Clear this checkout from the queue before repricing.
+        for (const id of checkoutQueueIds.current) discardRequest(id);
+        checkoutQueueIds.current = [];
+        createRequest.current = null;
+        setPreview(null);
+        try { await getPreview(false); } catch (refreshError) { setError(refreshError instanceof Error ? refreshError.message : "Refresh the bill preview"); }
+      }
     } finally { lock.current = false; setBusy(false); onBusyChange?.(false); }
   }
-  async function getPreview() {
+  async function getPreview(prepare = true) {
     const discountPaise = rupeesToPaise(discount);
     if (discountPaise === null) throw new Error("Enter a valid discount amount");
     if (discountPaise > 0 && !reason.trim()) throw new Error("Enter a discount reason");
-    if (onPrepare) {
+    if (prepare && onPrepare) {
       setMessage("Saving your takeaway and sending kitchen items…");
       await onPrepare();
-    } else if (heldCount > 0 && onFireHeld) {
+    } else if (prepare && heldCount > 0 && onFireHeld) {
       if (!window.confirm(holdPrompt(heldCount))) throw new Error(BILLING_CANCELLED);
       setMessage("Sending held dishes to the kitchen…");
       await onFireHeld();
@@ -206,18 +234,20 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       if (problem) throw new Error(`Buyer's GSTIN: ${problem}`);
       if (!buyer.name) throw new Error("Enter the business's legal name");
     }
-    const { preview: value } = await apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
+    const [{ preview: value }] = await Promise.all([apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
       method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}), ...(buyer ? { buyer } : {}), serviceCharge }),
-    });
+    }), can("bills.settle") ? currentCashShift().catch(() => null) : null]);
     setPreview(value);
     if (value.charges?.some((c) => c.kind === "service")) setServiceDue(true);
     setRedeemCap(value.maxRedeemPoints ?? null);
     setMessage(""); setCashReceived("");
-    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge, ...(pin ? { approverPin: pin } : {}) };
+    createRequest.current = { clientRef: uuid(), previewKey: value.previewKey, discountPaise, discountNote: reason.trim(), printerId: printerId || null, redeemPoints, buyer, serviceCharge, removedOfferIds: [], ...(pin ? { approverPin: pin } : {}) };
   }
   async function issue() {
     if (!createRequest.current || hasDraft) throw new Error("Review the bill preview first");
-    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>({ path: `/api/orders/${order.id}/bill`, body: createRequest.current, label: "Issue bill" }));
+    const issuing = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError?: string | null }>({ path: `/api/orders/${order.id}/bill`, body: createRequest.current, label: "Issue bill" });
+    checkoutQueueIds.current = [issuing.id];
+    const outcome = await outcomeOrSaved(issuing);
     if (outcome.saved) { setPreview(null); setMessage(`Bill saved on this device · ${WHEN_BACK}.`); return; }
     const { bill: value, job: printJob, printError } = outcome.value;
     acceptBill(value); setPreview(null); setApproverPin(""); setRedeem(""); setJob(printJob);
@@ -230,31 +260,37 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     const received = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview.totalPaise;
     if (quickMode === "cash" && (received === null || received < preview.totalPaise)) throw new Error("Cash received must cover the total");
     const rows = preview.totalPaise ? [{ mode: quickMode, amountPaise: preview.totalPaise, refNote: "" }] : [];
-    // Print after recording payment so the quick-flow receipt includes payment. Both steps are saved together: the
-    // payment waits for the bill and uses its id, so a reload or a lost connection between them still finishes both.
-    const fingerprint = JSON.stringify(rows);
+    const shiftId = rows.some(row => row.mode === "cash") ? await cashShiftForPayment() : undefined;
+    if (shiftId === null) { setOpeningCash(true); return; }
+    const fingerprint = JSON.stringify({ rows, shiftId });
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
-    const issuing = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null }>({ path: `/api/orders/${order.id}/bill`, body: { ...request, printerId: null }, label: "Issue takeaway bill" });
-    issuing.done.catch(() => { /* reported through the payment below and in the saved-actions list */ });
-    if (!issuing.id) await issuing.done;
-    const paying = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({
-      path: "/api/bills/{after:bill.id}/settle", after: issuing.id, lane: order.id, label: "Record takeaway payment",
-      body: { clientRef: settlement.current.clientRef, payments: rows },
-    }));
+    const handle = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError: string | null }>({
+      path: `/api/orders/${order.id}/checkout`, lane: order.id, label: "Checkout payment",
+      body: { ...request, printerId: printerId || null, settlement: { clientRef: settlement.current.clientRef, payments: rows, shiftId } },
+    });
+    checkoutQueueIds.current = [handle.id];
+    const paying = await outcomeOrSaved(handle);
     setPreview(null);
-    setPayments(rows.map((row) => ({ id: uuid(), mode: row.mode, amount: paiseToRupees(row.amountPaise), refNote: row.refNote })));
-    if (paying.saved) { setMessage(`Bill and payment saved on this device · ${WHEN_BACK}.`); return; }
-    const paid = paying.value.bill;
-    acceptBill(paid);
-    setMessage(`Payment recorded.${quickMode === "cash" && received !== null && received > paid.totalPaise ? ` Change: ${money(received - paid.totalPaise)}.` : ""}`);
-    try { await onChanged(); }
-    catch { setError("Payment is recorded. Reopen the order if its status has not refreshed."); }
-    if (printerId) {
-      try {
-        const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${paid.id}/print`, { method: "POST", body: JSON.stringify({ printerId }) });
-        setJob(result.job);
-      } catch { setError("Payment is recorded. Receipt printing was not confirmed; check the printer before printing again."); }
-    }
+    if (paying.saved) { setMessage("Payment pending sync."); return; }
+    acceptBill(paying.value.bill);
+    setJob(paying.value.job);
+    setMessage(`Payment recorded.${quickMode === "cash" && received !== null && received > paying.value.bill.totalPaise ? ` Change: ${money(received - paying.value.bill.totalPaise)}.` : ""}`);
+    if (paying.value.printError) setError(paying.value.printError);
+    await onChanged();
+  }
+  const savedPayment = bill?.status === "unpaid" ? queuedRequests().find(entry =>
+    entry.lane === order.id && entry.path.endsWith("/settle")) : undefined;
+
+  async function resumePayment() {
+    if (!bill || !savedPayment) return;
+    const current = await apiFetch<{ bill: Bill }>(`/api/bills/${bill.id}`);
+    if (current.bill.status !== "unpaid") { acceptBill(current.bill); await onChanged(); return; }
+    if (!await cashShiftForPayment()) { setOpeningCash(true); return; }
+    const retried = await outcomeOrSaved(retryPayment(savedPayment.id));
+    if (retried.saved) { setMessage("Payment pending sync."); return; }
+    acceptBill(retried.value.bill);
+    setMessage("Payment recorded.");
+    await onChanged();
   }
   async function settle() {
     if (!bill) return;
@@ -264,10 +300,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       return { mode: p.mode, amountPaise, refNote: p.refNote };
     });
     if (rows.reduce((sum, p) => sum + p.amountPaise, 0) !== bill.totalPaise) throw new Error("Payments must exactly match the bill total");
-    const fingerprint = JSON.stringify(rows);
+    const shiftId = rows.some(row => row.mode === "cash") ? await cashShiftForPayment() : undefined;
+    if (shiftId === null) { setOpeningCash(true); return; }
+    const fingerprint = JSON.stringify({rows, shiftId});
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
-    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({ path: `/api/bills/${bill.id}/settle`, body: { clientRef: settlement.current.clientRef, payments: rows }, label: "Record payment", lane: order.id }));
-    if (outcome.saved) { setMessage(`Payment saved on this device · ${WHEN_BACK}.`); return; }
+    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({ path: `/api/bills/${bill.id}/settle`, body: { clientRef: settlement.current.clientRef, payments: rows, shiftId }, label: "Record payment", lane: order.id }));
+    if (outcome.saved) { setMessage("Payment pending sync."); return; }
     const value = outcome.value.bill;
     acceptBill(value); setMessage("Payment recorded. This group is settled."); await onChanged();
   }
@@ -298,7 +336,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     setFrameReady(false); setHtml(await response.text());
   }
   function changePrinter(value: string) {
-    setPrinterId(value); savePreference("masalapos.receipt-printer", value);
+    setPrinterId(value); savePreference(RECEIPT_PRINTER_KEY, value);
     setPreview(null); createRequest.current = null;
   }
   const entered = payments.reduce((sum, p) => sum + (rupeesToPaise(p.amount) ?? 0), 0);
@@ -359,6 +397,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
         {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector("input")?.focus(); }}>{shortcut("discount", "Discount")}</button>}
         <button disabled={blocked} onClick={closeDialog} aria-label="Close billing">Close</button>
       </header>
+      {openingCash && <WorkspaceDialog open className="cash-drawer-dialog" title="Open day cash" onClose={() => setOpeningCash(false)}>
+        <CashDrawer canSettle canCloseDay={false} canReadReports={false} onOpened={() => { setOpeningCash(false); setMessage("Drawer opened. Confirm payment to finish checkout."); }} />
+      </WorkspaceDialog>}
       <div className="billing-dialog-body">
         {error && <p className="billing-error" role="alert">{error}</p>}
         {message && <p className="billing-message" role="status">{message}</p>}
@@ -400,11 +441,23 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             <BillItemLines items={order.items} refundedQty={{}} showRefunded={false} />
             {quick ? <fieldset disabled={blocked} className="quick-payment"><legend>Payment received</legend>
               <div className="billing-payment-fields">
-                <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={paymentModes} onChange={(mode) => { setQuickMode(mode); savePreference("masalapos.payment-mode", mode); }} /></div>
+                <div className="billing-wide-field"><span className="pos-field-label">Payment method</span><SegmentedControl label="Payment method" value={quickMode} options={modeOptions} onChange={(mode) => { setQuickMode(mode); rememberPayment(mode); }} /></div>
                 {quickMode === "cash" && <label>Cash received (₹)<input type="number" min={paiseToRupees(preview.totalPaise)} step="0.01" placeholder={paiseToRupees(preview.totalPaise)} value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>}
               </div>
               {quickMode === "cash" && <div className="cash-chips" aria-label="Cash quick amounts">{[preview.totalPaise, ...[50000, 100000, 200000].filter((amount) => amount > preview.totalPaise)].map((amount, index) => <button key={amount} onClick={() => setCashReceived(paiseToRupees(amount))}>{index === 0 ? "Exact" : money(amount)}</button>)}</div>}
-              {quickMode === "cash" && <p className="billing-change" role="status">Change: {money(Math.max(0, (quickReceived ?? 0) - preview.totalPaise))}</p>}
+              {quickMode === "cash" && <>
+                <div className="billing-cash-keypad" role="group" aria-label="Cash received keypad">
+                  {["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"].map((key) =>
+                    <button type="button" key={key} aria-label={key === "⌫" ? "Delete last digit" : undefined}
+                      onClick={() => setCashReceived((value) => {
+                        if (key === "⌫") return value.slice(0, -1) || "0";
+                        const next = (value === "0" && key !== "." ? "" : value) + key;
+                        if (next === ".") return "0.";
+                        return /^\d{1,10}(?:\.\d{0,2})?$/.test(next) ? next : value;
+                      })}>{key}</button>)}
+                </div>
+                <p className="billing-change" role="status">{cashValid ? "Change" : "Still due"}: {money(Math.abs((quickReceived ?? 0) - preview.totalPaise))}</p>
+              </>}
               {quickMode === "upi" && preview.receipt.upiId && preview.totalPaise > 0 && <>
                 <p className="billing-note">Issue the bill to show the UPI QR.</p>
                 <button disabled={blocked || hasDraft} onClick={() => void run(issue)}>{printerId ? "Print UPI bill" : "Issue UPI bill"}</button>
@@ -413,10 +466,15 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             </fieldset> : <div className="billing-issue"><p>Issuing freezes the items and totals.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue the reviewed bill")} disabled={blocked || hasDraft} onClick={() => void run(issue)}>{shortcut("billing", printerId ? "Save & print bill" : "Issue bill")}</button></div>}
           </div>}
           {bill && <div className="billing-payment">
-            {bill.status === "unpaid" && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
+            {savedPayment && <div>
+              <p role="status">{savedPayment.error ?? "Payment pending sync."}</p>
+              {savedPayment.error?.includes("Open a drawer shift") &&
+                <button disabled={blocked} onClick={() => void run(resumePayment)}>Retry saved cash payment · {money(bill.totalPaise)}</button>}
+            </div>}
+            {bill.status === "unpaid" && !savedPayment && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
               {canShowQr && <><button onClick={() => setShowQr(true)}>Show UPI QR</button><p className="billing-note">Verify payment in your UPI app before settling.</p></>}
               {payments.map((p, index) => <div key={p.id} className="billing-payment-row">
-                <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={paymentModes} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); savePreference("masalapos.payment-mode", mode); }} /></div>
+                <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={modeOptions} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); rememberPayment(mode); }} /></div>
                 <label>Amount {index + 1} (₹) <input type="number" min="0.01" step="0.01" value={p.amount} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, amount: e.target.value } : r))} /></label>
                 <label>Reference {index + 1} <input maxLength={200} value={p.refNote} onChange={(e) => setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, refNote: e.target.value } : r))} /></label>
                 <button className="billing-remove-payment" aria-label={`Remove payment ${index + 1}`} onClick={() => setPayments((rows) => rows.filter((r) => r.id !== p.id))}>Remove</button>

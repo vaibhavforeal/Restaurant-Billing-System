@@ -53,6 +53,7 @@ export async function seedDemo(app: FastifyInstance) {
     const sent = await request(`/api/orders/${order.id}/send`);
     return { order, kots: sent.kots as Array<{ id: string }> };
   }
+  await request("/api/shifts", { clientRef: randomUUID(), drawerId: "main", openingFloatPaise: 0 });
   for (let i = 0; i < 8; i++) {
     const sample = await order(i % 4, i);
     for (const kot of sample.kots) await request(`/api/kots/${kot.id}/done`, {});

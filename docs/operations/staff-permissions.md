@@ -42,7 +42,7 @@ someone could grant themselves everything else. Make the person an admin instead
 Some rules stay tied to roles:
 - Voids, refunds and discounts above a person's limit still need an admin's PIN for anyone
   who is not an admin, even with the permission.
-- Discount limits are set per person and per role under **Users**, not here.
+- Discount limits are set per person and per role under **Settings → Bill settings → Discount limits**.
 - Captains / waiters work in the Captain app and kitchen staff on the kitchen board; extra
   permissions apply where those apps offer the screen.
 

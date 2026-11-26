@@ -52,7 +52,12 @@ describe("staff activity report", () => {
     await ok("POST", `/api/order-items/${sent.items[0]!.id}/cancel`, { reason: "Guest left" }, cashier.token);
     await ok("POST", `/api/shifts/${shift.id}/cash-movements`, { clientRef: uuidv7(), kind: "pay_out", amountPaise: 60000, reason: "Vegetables" }, cashier.token);
     // Expected: ₹1,000 float + ₹250 sale − ₹250 refund − ₹600 pay-out = ₹400; counted ₹100, so ₹300 short.
-    await ok("POST", `/api/shifts/${shift.id}/close`, { clientRef: uuidv7(), countedCashPaise: 10000, note: "" }, cashier.token);
+    const recipient = (app.db.prepare("SELECT id FROM users WHERE role='admin'").get() as {id:string}).id;
+    const url = `/api/shifts/${shift.id}/handover`;
+    const revision = () => (app.db.prepare("SELECT MAX(seq) AS seq FROM handover_events WHERE shift_id=?").get(shift.id) as {seq:number}).seq;
+    await ok("POST",url,{clientRef:uuidv7(),revision:0,change:{action:"submit",recipient,final:true,counted:10000,note:"Short drawer"}},cashier.token);
+    await ok("POST",url,{clientRef:uuidv7(),revision:revision(),change:{action:"approve"}});
+    await ok("POST",url,{clientRef:uuidv7(),revision:revision(),change:{action:"receive",received:10000}});
 
     const { status, report: r, headers } = await report();
     expect(status).toBe(200);

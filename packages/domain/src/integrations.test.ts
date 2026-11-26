@@ -3,7 +3,7 @@ import { INTEGRATIONS, IntegrationToggle, isIntegrationId } from "./integrations
 
 describe("integration registry", () => {
   it("lists Zomato, Swiggy (coming soon) and the Kitchen Display", () => {
-    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm", "dynamicReports"]);
+    expect(INTEGRATIONS.map((i) => i.id)).toEqual(["zomato", "swiggy", "kds", "crm", "dynamicReports", "offers"]);
     const [zomato, swiggy] = INTEGRATIONS;
     expect(zomato).toMatchObject({ status: "available", setupPage: "zomato", category: "delivery" });
     expect(swiggy).toMatchObject({ status: "coming_soon", setupPage: null, category: "delivery" });
@@ -38,5 +38,13 @@ describe("integration registry", () => {
 
   it("lists Dynamic Reports in the Marketplace", () => {
     expect(isIntegrationId("dynamicReports")).toBe(true);
+  });
+
+  it("offers Offers on every plan, with nothing to set up", () => {
+    expect(INTEGRATIONS.find((i) => i.id === "offers")).toEqual({
+      id: "offers", name: "Offers",
+      description: "Offers that apply on bills by themselves: buy X get Y, item and category discounts, and bill discounts above a minimum.",
+      category: "customers", status: "available", setupPage: null,
+    });
   });
 });

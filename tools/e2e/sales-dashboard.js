@@ -124,7 +124,7 @@
     check(card('dine-in')[0] === money(dineIn.totals.totalPaise), 'Returning to today restores the figures');
 
     // A failed analytics request keeps the figures, says so, and Retry recovers
-    window.fetch = async (path, init) => String(path).startsWith('/api/reports/analytics') ? new Response(JSON.stringify({ error: 'Fixture analytics outage' }), { status: 503, headers: { 'content-type': 'application/json' } }) : nativeFetch(path, init);
+    window.fetch = async (path, init) => String(path).startsWith('/api/dashboard/analytics') ? new Response(JSON.stringify({ error: 'Fixture analytics outage' }), { status: 503, headers: { 'content-type': 'application/json' } }) : nativeFetch(path, init);
     document.querySelector('[aria-label="Refresh dashboard"]').click();
     await wait(() => document.querySelector('.dash-error')?.textContent.includes('Fixture analytics outage'));
     check(card('dine-in')[0] === money(dineIn.totals.totalPaise) && document.querySelector('.dash-error').textContent.includes('may be incomplete'), 'Failed refresh keeps the last figures and shows an alert with Retry');

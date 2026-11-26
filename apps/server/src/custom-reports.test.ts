@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { CUSTOM_REPORT_SOURCES, uuidv7, type CustomReportConfigInput, type OperationalReport } from "@masalapos/domain";
-import { freshApp, setupAdmin, createUser, auth } from "./test-helpers.js";
+import { freshApp, setupTradingAdmin, createTradingUser, auth } from "./test-helpers.js";
 
 describe("custom reports", () => {
   let app: FastifyInstance, token: string, adminId: string, cashier: string, productId: string;
@@ -27,8 +27,8 @@ describe("custom reports", () => {
     return (res.json().report as OperationalReport).tables[0]!;
   }
   beforeEach(async () => {
-    app = freshApp(); ({ token, user: { id: adminId } } = await setupAdmin(app));
-    ({ token: cashier } = await createUser(app, token, { name: "Ravi", pin: "5678", role: "cashier" }));
+    app = freshApp(); ({ token, user: { id: adminId } } = await setupTradingAdmin(app));
+    ({ token: cashier } = await createTradingUser(app, token, { name: "Ravi", pin: "5678", role: "cashier" }));
     const { category } = await post("/api/categories", { name: "Mains" });
     ({ product: { id: productId } } = await post("/api/products", { categoryId: category.id, name: "Paneer", pricePaise: 20000, gstRate: 5, kotStationId: null }));
   });

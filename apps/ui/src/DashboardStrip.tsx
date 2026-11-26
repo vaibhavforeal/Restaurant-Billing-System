@@ -1,18 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "./Icon";
-import { DASHBOARD_MIN_DATE, pickedDate, updatedLabel } from "./dashboard-view";
-import { useNow } from "./useDashboard";
+import { DASHBOARD_MIN_DATE, pickedDate } from "./dashboard-view";
 
-export function DashboardStrip({ date, today, updatedAt, loading, onDate, onRefresh }: {
-  date: string; today: string; updatedAt: number | null; loading: boolean; onDate: (date: string) => void; onRefresh: () => void;
+export function DashboardStrip({ date, today, orderActions, loading, onDate, onRefresh }: {
+  date: string; today: string; orderActions: ReactNode; loading: boolean; onDate: (date: string) => void; onRefresh: () => void;
 }) {
-  const now = useNow(60_000);
   // The input keeps what is being typed; only a usable date reaches the dashboard. Rejecting a partial year through a
   // controlled `value={date}` would make React reset the field mid-keystroke.
   const [draft, setDraft] = useState(date);
   useEffect(() => setDraft(date), [date]);
-  return <div className="dash-strip" aria-label="Dashboard status">
-    <p className="dash-strip-status" aria-live="polite"><Icon name="clock" size={16} /><span>{loading && updatedAt === null ? "Loading…" : updatedLabel(updatedAt, Math.max(now, updatedAt ?? 0))}</span></p>
+  return <div className="dash-strip" aria-label="Dashboard controls">
+    {orderActions}
     <div className="dash-strip-controls">
       <label className="dash-date"><span className="dash-sr-only">Dashboard date</span>
         <input type="date" value={draft} min={DASHBOARD_MIN_DATE} max={today} required onBlur={() => setDraft(date)} onChange={(event) => {

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type OperationalReport, type StockItem, type StockMove, type StockCostChange } from "@masalapos/domain";
-import { freshApp, setupAdmin, auth, createUser } from "./test-helpers.js";
+import { freshApp, setupTradingAdmin, auth, createTradingUser } from "./test-helpers.js";
 
 describe("stock costing", () => {
   let app: FastifyInstance; let token: string;
-  beforeEach(async () => { app = freshApp(); ({ token } = await setupAdmin(app)); });
+  beforeEach(async () => { app = freshApp(); ({ token } = await setupTradingAdmin(app)); });
   afterEach(async () => { await app.close(); app.db.close(); });
   const request = (method: "GET" | "POST" | "PATCH" | "PUT", url: string, payload?: object, as = token) =>
     app.inject({ method, url, headers: auth(as), ...(payload ? { payload } : {}) });
@@ -79,7 +79,7 @@ describe("stock costing", () => {
     const item = await stock();
     expect((await unitCost(item.id, 30_000_000)).statusCode).toBe(201);
     expect((await purchase(item.id, { costPaise: 340_000 })).statusCode).toBe(201);
-    const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+    const { token: cashier } = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
     const denied = await unitCost(item.id, 1_000, {}, cashier);
     expect(denied.statusCode).toBe(403);
     expect(denied.json().permission).toBe("costs.read");
@@ -146,7 +146,7 @@ describe("stock costing", () => {
 
   it("refuses a priced purchase from a stock manager without cost access", async () => {
     const item = await stock();
-    const { id: managerId, token: manager } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+    const { id: managerId, token: manager } = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
     // A cashier the admin let edit stock, without cost access.
     const granted = await request("PUT", `/api/users/${managerId}/permissions`, { overrides: { "stock.manage": true, "costs.read": false } });
     expect(granted.statusCode, granted.body).toBe(200);
@@ -337,7 +337,7 @@ describe("stock costing", () => {
     });
 
     it("refuses cashiers", async () => {
-      const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+      const { token: cashier } = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
       for (const url of ["/api/costing/stock", "/api/costing/dishes"]) {
         const res = await request("GET", url, undefined, cashier);
         expect(res.statusCode).toBe(403);
@@ -505,7 +505,7 @@ describe("stock costing", () => {
     it("rejects ranges over 366 days and refuses cashiers", async () => {
       expect((await profit("?from=2024-01-01&to=2025-01-02")).statusCode).toBe(400);
       expect((await profit("?from=2024-01-01&to=2024-12-31")).statusCode).toBe(200);
-      const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+      const { token: cashier } = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
       const res = await profit(undefined, cashier);
       expect(res.statusCode).toBe(403);
       expect(res.json().permission).toBe("costs.read");
@@ -541,7 +541,7 @@ describe("stock costing", () => {
       });
 
       it("is for admins with Dish costing, like the profit report", async () => {
-        const { token: cashier } = await createUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
+        const { token: cashier } = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "cashier" });
         const res = await engineering(cashier);
         expect(res.statusCode).toBe(403);
         expect(res.json().permission).toBe("costs.read");

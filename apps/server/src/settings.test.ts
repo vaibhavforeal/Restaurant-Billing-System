@@ -17,6 +17,7 @@ describe("settings", () => {
     // setup wrote the restaurant name into the settings singleton
     expect(before.json().settings).toEqual({
       restaurantName: "Cafe Test", address: "12 MG Road", city: "Bengaluru", stateCode: "29", pincode: "560001", phone: "9845012345", gstin: "", fssai: "", receiptFooter: "", receiptHeader: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "Service charge", packagingChargeLabel: "Packaging", packagingPerItem: false,
+      orderWarnMinutes: 15, orderLateMinutes: 25, kotPrintWithKds: true, paymentModes: ["cash", "card", "upi"], qrAutoAccept: false, dayStartHour: 0,
     });
 
     const put = await app.inject({
@@ -295,8 +296,46 @@ describe("settings", () => {
     const waiter = await createUser(app, admin.token, { name: "Ravi", pin: "4321", role: "waiter" });
     const read = () => app.inject({ method: "GET", url: "/api/order-settings", headers: auth(waiter.token) });
     expect((await read()).statusCode).toBe(200);
-    expect((await read()).json()).toEqual({ holdOrders: true });
+    expect((await read()).json()).toEqual({ holdOrders: true, orderWarnMinutes: 15, orderLateMinutes: 25, paymentModes: ["cash", "card", "upi"], dayStartHour: 0 });
     await app.inject({ method: "PUT", url: "/api/settings", payload: { restaurantName: "Cafe", holdOrdersEnabled: false }, headers: auth(admin.token) });
-    expect((await read()).json()).toEqual({ holdOrders: false });
+    expect((await read()).json()).toMatchObject({ holdOrders: false });
+  });
+});
+
+describe("service settings", () => {
+  const save = (admin: { token: string }, payload: object) => app.inject({ method: "PUT", url: "/api/settings", headers: auth(admin.token), payload: { restaurantName: "Cafe Test", ...payload } });
+
+  it("saves each one and keeps it on unrelated saves", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const saved = await save(admin, { orderWarnMinutes: 10, orderLateMinutes: 20, kotPrintWithKds: false, paymentModes: ["upi", "cash"], qrAutoAccept: true, dayStartHour: 4 });
+    expect(saved.statusCode).toBe(200);
+    // Payment methods come back in the counter's order whatever order they were sent in.
+    expect(saved.json().settings).toMatchObject({ orderWarnMinutes: 10, orderLateMinutes: 20, kotPrintWithKds: false, paymentModes: ["cash", "upi"], qrAutoAccept: true, dayStartHour: 4 });
+    const kept = await save(admin, {});
+    expect(kept.json().settings).toMatchObject({ orderWarnMinutes: 10, orderLateMinutes: 20, kotPrintWithKds: false, paymentModes: ["cash", "upi"], qrAutoAccept: true, dayStartHour: 4 });
+  });
+
+  it("refuses red before amber, no payment method and a day start past 6 a.m.", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    expect((await save(admin, { orderWarnMinutes: 20, orderLateMinutes: 20 })).statusCode).toBe(400);
+    // Only amber sent: it is checked against the saved red (25).
+    expect((await save(admin, { orderWarnMinutes: 30 })).statusCode).toBe(400);
+    expect((await save(admin, { orderLateMinutes: 10 })).statusCode).toBe(400);
+    expect((await save(admin, { paymentModes: [] })).statusCode).toBe(400);
+    expect((await save(admin, { paymentModes: ["cash", "cash"] })).statusCode).toBe(400);
+    expect((await save(admin, { dayStartHour: 7 })).statusCode).toBe(400);
+    const after = await app.inject({ method: "GET", url: "/api/settings", headers: auth(admin.token) });
+    expect(after.json().settings).toMatchObject({ orderWarnMinutes: 15, orderLateMinutes: 25, paymentModes: ["cash", "card", "upi"], dayStartHour: 0 });
+  });
+
+  it("gives staff the order-age minutes and payment methods", async () => {
+    app = freshApp();
+    const admin = await setupAdmin(app);
+    const cashier = await createUser(app, admin.token, { name: "Meena", pin: "5678", role: "cashier" });
+    await save(admin, { orderWarnMinutes: 8, orderLateMinutes: 12, paymentModes: ["upi"], dayStartHour: 3 });
+    const read = await app.inject({ method: "GET", url: "/api/order-settings", headers: auth(cashier.token) });
+    expect(read.json()).toEqual({ holdOrders: true, orderWarnMinutes: 8, orderLateMinutes: 12, paymentModes: ["upi"], dayStartHour: 3 });
   });
 });

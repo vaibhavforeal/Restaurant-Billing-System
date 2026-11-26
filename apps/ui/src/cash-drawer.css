@@ -1,0 +1,52 @@
+.cash-drawer .cash-drawer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.cash-drawer .cash-drawer-toolbar :is(h3, p) { margin: 0; }
+.cash-drawer-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface), var(--ink) 4%);
+}
+.cash-drawer-balance strong { font-size: var(--text-heading); font-variant-numeric: tabular-nums; }
+.cash-drawer-totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.cash-drawer-totals dd { margin: 0; text-align: end; }
+.cash-drawer-setup { border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.cash-drawer-setup > summary { cursor: pointer; width: fit-content; }
+.cash-drawer-setup[open] > summary { margin-bottom: var(--space-3); }
+
+html[data-theme] .workspace-dialog.cash-drawer-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+.cash-drawer-dialog .workspace-dialog-header {
+  min-height: 0;
+  padding: var(--space-2) var(--space-4);
+}
+.cash-drawer-dialog .workspace-dialog-body { padding: var(--space-4); }
+.cash-drawer-dialog .cash-drawer.panel { gap: var(--space-4); padding: 0; }
+.cash-drawer-dialog .cash-drawer p { margin: 0; }
+.cash-drawer-dialog .cash-drawer-form { gap: var(--space-3); margin: 0; padding: 0; }
+.cash-drawer-dialog .cash-drawer-form legend { padding: 0; }
+.cash-drawer-dialog .cash-drawer-form label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  flex-basis: 100%;
+}
+.cash-drawer-dialog .cash-drawer-form input[type="checkbox"] { min-height: 0; }
+.cash-drawer-dialog .cash-drawer-form label { flex: 1 1 8rem; min-width: 0; }
+.cash-drawer-dialog .cash-drawer-form :is(input, select):not([type="checkbox"]) { width: 100%; min-width: 0; }
+.cash-drawer-dialog .cash-drawer-movement label:nth-of-type(2) { flex-basis: 6rem; }

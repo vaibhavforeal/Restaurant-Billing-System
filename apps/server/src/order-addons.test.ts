@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { calculateBill, uuidv7, type Bill } from "@masalapos/domain";
 import { receiptSlip } from "./print/receipt.js";
 import { renderBytes } from "./print/render-bytes.js";
-import { auth, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, freshAppWithFakeSink, setupTradingAdmin } from "./test-helpers.js";
 
 type Item = { id: string; productId: string; name: string; qty: number; pricePaise: number; gstRate: number; status: string; kotId: string | null;
   parentItemId: string | null; addonOfItemId: string | null; held: boolean; note: string | null; cancelReason: string | null };
@@ -16,7 +16,7 @@ describe("orders with add-ons", () => {
   let toppings: Group; let base: Group; let other: Group;
 
   beforeEach(async () => {
-    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app));
+    ({ app } = freshAppWithFakeSink()); ({ token } = await setupTradingAdmin(app));
     categoryId = (await post("/api/categories", { name: "Pizza" })).json().category.id;
     kitchen = (app.db.prepare("SELECT id FROM kot_stations LIMIT 1").get() as { id: string }).id;
     bar = (await post("/api/kot-stations", { name: "Bar", printerId: null })).json().station.id;

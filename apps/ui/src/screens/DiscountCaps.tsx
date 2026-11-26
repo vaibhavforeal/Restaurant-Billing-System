@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiFetch } from "../api";
 
+import type { AdminUser } from "../types";
+
 type CapRole = "cashier" | "waiter" | "kitchen";
 interface Cap { role: string; maxPercent: number | null }
 const LABELS: Record<string, string> = { cashier: "Cashier", waiter: "Captain / waiter", kitchen: "Kitchen" };
@@ -49,7 +51,55 @@ export function DiscountCaps() {
       </p>)}
       <button className="primary" onClick={() => void save()}>Save discount limits</button>
     </fieldset>
+    <StaffLimits />
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
   </section>;
+}
+
+function StaffLimits() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [selected, setSelected] = useState("");
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    apiFetch<{ users: AdminUser[] }>("/api/users").then(({ users }) =>
+      setUsers(users.filter((user) => user.role !== "admin"))
+    ).catch(() => setError("Failed to load staff discount limits"));
+  }, []);
+
+  async function save() {
+    const limit = value === "" ? null : Number(value);
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      await apiFetch(`/api/users/${selected}`, { method: "PATCH", body: JSON.stringify({ maxDiscountPercent: limit }) });
+      setUsers((rows) => rows.map((row) => row.id === selected ? { ...row, maxDiscountPercent: limit } : row));
+      setMessage("Staff limit saved.");
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Could not save staff limit"); }
+    finally { setBusy(false); }
+  }
+
+  return <fieldset className="bill-settings-group" disabled={busy}>
+    <legend>Individual staff limits</legend>
+    <label>Staff member <select value={selected} onChange={(event) => {
+      const id = event.target.value;
+      setSelected(id);
+      setValue(String(users.find((user) => user.id === id)?.maxDiscountPercent ?? ""));
+      setMessage("");
+      setError("");
+    }}>
+      <option value="">Choose staff member</option>
+      {users.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.username || LABELS[user.role]})</option>)}
+    </select></label>
+    {selected && <>
+      <label>Discount limit (%) <input type="number" min="0" max="100" step="any" placeholder="Role default" value={value} onChange={(event) => { setValue(event.target.value); setMessage(""); }} /></label>
+      <button type="button" disabled={Number(value) < 0 || Number(value) > 100} onClick={() => void save()}>Save staff limit</button>
+    </>}
+    {error && <p role="alert">{error}</p>}
+    {message && <p role="status">{message}</p>}
+  </fieldset>;
 }

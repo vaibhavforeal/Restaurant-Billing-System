@@ -41,21 +41,22 @@ export function captainPairingUri(origin: string, fingerprint?: string): string 
   return `masalapos-captain://pair?${params}`;
 }
 export function registerSystem(app: FastifyInstance, backups?: Backups, port = 4100, generation = "initial", captainHttps?: CaptainHttpsInfo, cloudBackups?: CloudBackups,
-  restore: { staging?: RestoreStaging; desktop?: UpdateBridge } = {}) {
+  restore: { staging?: RestoreStaging; desktop?: UpdateBridge; localOnly?: boolean } = {}) {
   const manage = app.requirePermission("settings.manage");
+  const connections = () => restore.localOnly ? [`http://127.0.0.1:${port}`] : lanUrls(port);
   app.get("/api/system/generation", { preHandler: app.requireAuth }, async () => ({ generation }));
   app.get("/api/system/connections", { preHandler: manage }, async () => {
     const secure = captainHttps?.enabled ? (captainHttps.addresses ?? []).map((address) => `https://${address}:${captainHttps.port}`) : [];
     return {
-      connections: await Promise.all(lanUrls(port).map(async (url) => ({ url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) }))),
+      connections: await Promise.all(connections().map(async (url) => ({ url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) }))),
       android: {
         // A new tablet's browser does not trust the restaurant CA yet, so the APK downloads over LAN HTTP.
-        downloads: await Promise.all(lanUrls(port).map(async (origin) => {
+        downloads: await Promise.all(connections().map(async (origin) => {
           const url = `${origin}${CAPTAIN_APK_PATH}`;
           return { url, qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }) };
         })),
         // Pair over HTTPS when it is set up; plain LAN HTTP still works but is unencrypted.
-        pairings: await Promise.all((secure.length ? secure : lanUrls(port)).map(async (origin) => {
+        pairings: await Promise.all((secure.length ? secure : connections()).map(async (origin) => {
           const pairing = captainPairingUri(origin, secure.length ? captainHttps?.fingerprint : undefined);
           return { origin, secure: secure.length > 0, qr: await QRCode.toDataURL(pairing, { width: 220, margin: 2 }) };
         })),

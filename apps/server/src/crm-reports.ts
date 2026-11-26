@@ -4,6 +4,7 @@ import { billSpendSql, loyaltySettings, loyaltyTiers } from "./loyalty.js";
 import { reportRange } from "./sales-reports.js";
 import { segmentCustomers } from "./customer-segments.js";
 import { requireModule } from "./modules.js";
+import { dayStartHour } from "./business-day.js";
 
 /**
  * CRM insights for a date range. Customer counts use non-void bills in the range: a customer is "new" when their first
@@ -13,7 +14,7 @@ import { requireModule } from "./modules.js";
 export function registerCrmReports(app: FastifyInstance): void {
   const db = app.db;
   app.get("/api/reports/crm", { preHandler: [app.requirePermission("reports.read"), requireModule(app, "reports"), requireIntegration(app, "crm")] }, async (req) => {
-    const { from, to, bounds: [start, end] } = reportRange(req.query);
+    const { from, to, bounds: [start, end] } = reportRange(req.query, dayStartHour(app.db));
     const bills = db.prepare(`SELECT COUNT(*) AS bills, COUNT(customer_id) AS withCustomer FROM bills WHERE status <> 'void' AND created_at >= ? AND created_at < ?`)
       .get(start, end) as { bills: number; withCustomer: number };
     const visitors = db.prepare(`SELECT b.customer_id AS id, COUNT(*) AS visits, SUM(${billSpendSql("b")}) AS spend,

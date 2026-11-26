@@ -9,7 +9,7 @@ import { userCan } from "../permissions";
 import { orderSummary } from "../table-order-summary";
 import type { Order } from "../types";
 import { kitchenContextLabel, useZomatoStatus, ZOMATO_PILL, zomatoAgeTone, zomatoCardAction } from "../zomato-desk";
-import { useZomatoAgeThresholds } from "../ZomatoPanel";
+import { useOrderAgeThresholds } from "../ZomatoPanel";
 import "../order-board.css";
 
 type View = "overview" | Stage;
@@ -27,7 +27,7 @@ export function OrderBoard({ user, onOpenOrder }: { user: User; onOpenOrder: (or
   const kdsOn = isEnabled("kds");
   const canSettle = userCan(user, "bills.settle");
   const zomato = useZomatoStatus();
-  const ageThresholds = useZomatoAgeThresholds();
+  const ageThresholds = useOrderAgeThresholds();
 
   const reload = useCallback(async () => {
     try {

@@ -60,6 +60,26 @@ describe("kitchen display gate", () => {
     expect(JSON.parse(jobs[0]!.job_json)).toMatchObject({ kind: "kot" });
   });
 
+  it("skips kitchen slips while KDS is on when Settings says so, and prints them again with KDS off", async () => {
+    app = freshApp();
+    const { token } = await setupAdmin(app);
+    const printer = await app.inject({ method: "POST", url: "/api/printers", headers: auth(token), payload: { name: "Kitchen", kind: "network", connection: "127.0.0.1:9100", paperWidth: 58 } });
+    const saved = await app.inject({ method: "PUT", url: "/api/settings", headers: auth(token), payload: { restaurantName: "Cafe Test", kotPrintWithKds: false } });
+    expect(saved.statusCode).toBe(200);
+    const jobs = () => (app.db.prepare("SELECT COUNT(*) AS n FROM print_jobs").get() as { n: number }).n;
+    // KDS off: the switch has no effect and the slip prints.
+    await sendKot(auth(token), printer.json().printer.id);
+    expect(jobs()).toBe(1);
+    enableIntegration(app, "kds");
+    const orderId = (app.db.prepare("SELECT order_id FROM kots").get() as { order_id: string }).order_id;
+    const productId = (app.db.prepare("SELECT id FROM products").get() as { id: string }).id;
+    await app.inject({ method: "POST", url: `/api/orders/${orderId}/items`, headers: auth(token), payload: { items: [{ productId, qty: 1 }] } });
+    const sent = await app.inject({ method: "POST", url: `/api/orders/${orderId}/send`, headers: auth(token) });
+    expect(sent.statusCode).toBe(200);
+    expect(sent.json().printErrors ?? []).toEqual([]);
+    expect(jobs()).toBe(1);
+  });
+
   it("commercial installation without kds refuses the kitchen", async () => {
     const c = await commercialApp("basic"); app = c.app;
     enableIntegration(app, "kds");

@@ -82,6 +82,9 @@
 .table-manager-list strong { display: block; font-size: 12px; font-weight: 550; }
 .table-manager-list small { display: block; font-size: 10px; color: var(--muted); }
 .table-manager-list .inactive > span { color: var(--muted); }
+.table-opening-dialog { width: min(360px, calc(100vw - 24px)); }
+.table-opening-dialog form, .table-opening-dialog label { display: grid; gap: 8px; }
+.table-opening-dialog .actions { justify-content: flex-end; }
 .table-split-dialog { width: min(520px, calc(100vw - 24px)); }
 .split-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
 .split-options > button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

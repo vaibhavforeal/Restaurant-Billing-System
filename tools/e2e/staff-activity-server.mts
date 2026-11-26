@@ -40,7 +40,12 @@ const paid = await bill(meena.token);
 await call("POST", `/api/bills/${paid.id}/settle`, { clientRef: uuidv7(), payments: [{ mode: "cash", amountPaise: paid.totalPaise }] }, meena.token);
 await call("POST", `/api/bills/${paid.id}/void`, { clientRef: uuidv7(), reason: "Wrong order", approverPin: "1234", refunds: [{ mode: "cash", amountPaise: paid.totalPaise }] }, meena.token);
 await call("POST", `/api/shifts/${shift.id}/cash-movements`, { clientRef: uuidv7(), kind: "pay_out", amountPaise: 60000, reason: "Vegetables" }, meena.token);
-await call("POST", `/api/shifts/${shift.id}/close`, { clientRef: uuidv7(), countedCashPaise: 10000, note: "" }, meena.token);
+const recipient = admin.user.id;
+const url = `/api/shifts/${shift.id}/handover`;
+const revision = () => (app.db.prepare("SELECT MAX(seq) AS seq FROM handover_events WHERE shift_id=?").get(shift.id) as {seq:number}).seq;
+await call("POST",url,{clientRef:uuidv7(),revision:0,change:{action:"submit",recipient,final:true,counted:10000,note:"Short drawer"}},meena.token);
+await call("POST",url,{clientRef:uuidv7(),revision:revision(),change:{action:"approve"}});
+await call("POST",url,{clientRef:uuidv7(),revision:revision(),change:{action:"receive",received:10000}});
 // Asha (admin): a 30% discount.
 await bill(admin.token, { discountPaise: 7500, discountNote: "Friend" });
 // Ravi: cancelled 1 kebab after KOT 10 days ago, and 4 today.

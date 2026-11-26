@@ -149,6 +149,17 @@ export interface SettingsData {
   packagingChargeLabel: string;
   /** Add each item's packaging amount to the packaging charge. */
   packagingPerItem: boolean;
+  /** An open order turns amber, then red, on the order board after this many minutes. */
+  orderWarnMinutes: number;
+  orderLateMinutes: number;
+  /** Kitchen slips still print while the Kitchen Display is on. */
+  kotPrintWithKds: boolean;
+  /** The payment methods the counter takes; at least one. */
+  paymentModes: Array<"cash" | "card" | "upi">;
+  /** QR guest orders go to the table's bill and the kitchen without staff review. */
+  qrAutoAccept: boolean;
+  /** The hour (0-6) the business day starts. */
+  dayStartHour: number;
 }
 
 export interface Customer {

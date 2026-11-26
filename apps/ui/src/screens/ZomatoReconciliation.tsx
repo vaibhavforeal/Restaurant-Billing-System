@@ -5,7 +5,7 @@ import { toCsv } from "@masalapos/domain/csv";
 import { apiFetch } from "../api";
 import { connectWs } from "../ws";
 import { downloadText } from "../download";
-import { recentPeriod, reportMoney } from "../sales-report";
+import { localDay, recentPeriod, reportMoney } from "../sales-report";
 import { dateTime, errorMessage } from "../zomato-format";
 import "../zomato.css";
 
@@ -17,7 +17,7 @@ type ImportHistory = { id: string; kind: string; added: number; skipped: number;
 
 /** Zomato settlement reconciliation, shown as a tab of Reports. Covers POS Zomato orders and imported records. */
 export function ZomatoReconciliationPanel() {
-  const [period, setPeriod] = useState(() => recentPeriod(7));
+  const [period, setPeriod] = useState(() => recentPeriod(7, localDay()));
   const [settings, setSettings] = useState<ZomatoSettings | null>(null);
   const [report, setReport] = useState<ZomatoReconciliation | null>(null);
   const [history, setHistory] = useState<ImportHistory[]>([]);

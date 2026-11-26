@@ -30,14 +30,24 @@ describe("modules", () => {
 
   it("requires a complete module map in the licence", () => {
     expect(ModuleMapSchema.parse(allModules())).toEqual(allModules());
+    const { offers: _offers, ...legacy } = allModules();
+    expect(ModuleMapSchema.parse(legacy).offers).toBe(true);
     const { crm: _missing, ...partial } = allModules();
     expect(() => ModuleMapSchema.parse(partial)).toThrow();
     expect(() => ModuleMapSchema.parse({ ...allModules(), payroll: true })).toThrow();
   });
 
-  it("dynamic reports is a Pro add-on that needs reports and the sales dashboard", () => {
-    expect(moduleDef("dynamicReports")).toMatchObject({ group: "addon", dependsOn: ["reports", "dashboard"], plans: { basic: false, pro: true } });
-    const states = resolveModuleStates(allModules(), (id) => id !== "dashboard");
-    expect(states.find((s) => s.id === "dynamicReports")).toMatchObject({ active: false, reason: "Needs Sales dashboard" });
+  it("dynamic reports is a Pro add-on that needs reports while the sales dashboard is always active", () => {
+    expect(moduleDef("dynamicReports")).toMatchObject({ group: "addon", dependsOn: ["reports"], plans: { basic: false, pro: true } });
+    const states = resolveModuleStates({ ...allModules(), dashboard: false, reports: false }, (id) => id !== "dashboard" && id !== "reports");
+    expect(states.find((s) => s.id === "reports")).toMatchObject({ allowed: true, enabled: true, active: true });
+    expect(states.find((s) => s.id === "dashboard")).toMatchObject({ allowed: true, enabled: true, active: true });
+    expect(states.find((s) => s.id === "dynamicReports")).toMatchObject({ active: true, reason: null });
+  });
+
+  it("offers is a standalone add-on on every plan", () => {
+    expect(moduleDef("offers")).toMatchObject({ name: "Offers", group: "addon", dependsOn: [], plans: { basic: true, pro: true } });
+    expect(planModules("basic").offers).toBe(true);
+    expect(planModules("pro").offers).toBe(true);
   });
 });

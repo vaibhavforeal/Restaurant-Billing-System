@@ -15,3 +15,9 @@
   .printer-form input[type="checkbox"] { width: auto; }
   .print-job-card > div { min-width: 0; }
 }
+
+.station-form { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-4); margin-bottom: var(--space-4); }
+.station-form label { display: grid; flex: 1 1 10rem; min-width: 0; gap: var(--space-2); }
+.station-form :is(input, select) { width: 100%; min-width: 0; }
+.station-table-scroll { overflow-x: auto; }
+.station-table-scroll select { max-width: 14rem; }

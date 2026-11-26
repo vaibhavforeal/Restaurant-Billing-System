@@ -47,7 +47,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const savedFor = (orderIds: string[]) => savedActions.filter((r) => orderIds.includes(r.lane));
   const [qrBusy, setQrBusy] = useState(false);
   const [serviceBusy, setServiceBusy] = useState(false);
-  const [reservationView, setReservationView] = useState<{ tableId: string | null } | null>(null);
+  const [reservationView, setReservationView] = useState<{ tableId: string | null; create?: boolean } | null>(null);
   const [reservationBusy, setReservationBusy] = useState(false);
   const [reservationDirty, setReservationDirty] = useState(false);
   const reservationLock = useRef(false), reservationDirtyLock = useRef(false);
@@ -56,6 +56,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   const qrLock = useRef(false);
   const serviceLock = useRef(false);
   const [error, setError] = useState("");
+  const [openingTable, setOpeningTable] = useState<TableInfo | null>(null);
+  const guestInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (openingTable) guestInput.current?.focus(); }, [openingTable]);
   const [creating, setCreating] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const actionLock = useRef(false);
@@ -118,12 +121,12 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
   }
 
   /** Starts an order with an id this counter chooses, so it opens at once even while the hub is unreachable. */
-  async function startOrder(type: "dine_in" | "parcel", table: TableInfo | null): Promise<string> {
+  async function startOrder(type: "dine_in" | "parcel", table: TableInfo | null, guestCount?: number): Promise<string> {
     const id = uuid(), clientRef = uuid();
     const outcome = await outcomeOrSaved(enqueueRequest<{ order: Order }>({
-      path: "/api/orders", body: { id, clientRef, type, tableId: table?.id ?? null }, label: table ? `New order on ${table.name}` : "New takeaway",
+      path: "/api/orders", body: { id, clientRef, type, guestCount, tableId: table?.id ?? null }, label: table ? `New order on ${table.name}` : "New takeaway",
     }));
-    if (outcome.saved) saveOrderCopy(user.id, placeholderOrder({ id, clientRef, userId: user.id, type, table }));
+    if (outcome.saved) saveOrderCopy(user.id, placeholderOrder({ id, clientRef, userId: user.id, type, table, guestCount }));
     return id;
   }
 
@@ -162,16 +165,9 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
     if (table.status === "reserved") { setReservationView({ tableId: table.id }); return; }
     const targets = tableOpenTargets(table);
     if (targets.length === 0) {
-      // Free table: create split A
-      if (creating) return;
-      setCreating(true);
-      void run(async () => {
-        try {
-          openOrder(await startOrder("dine_in", table));
-        } finally {
-          setCreating(false);
-        }
-      });
+      if (creating || openingTable) return;
+      setError("");
+      setOpeningTable(table);
     } else if (targets.length === 1) {
       // One bill (a split, or the combined order of a linked table): show it beside the grid; a second tap, a double-click
       // or Edit items opens it.
@@ -314,7 +310,7 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
         onClose={closeOrderPanel} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }}
         onBusyChange={onOrderPanelBusy} />}
       {!selected && showBookings && <aside className="tables-parcels tables-reservations" aria-label="Current and upcoming reservations">
-        <div className="panel-title"><h3>Reservations</h3><button type="button" disabled={busy} onClick={() => { void loadBookings(); void reload().catch(() => setError("Failed to refresh tables")); }}>Refresh</button></div>
+        <div className="panel-title"><h3>Reservations</h3><div className="actions">{modules.isActive("reservations") && userCan(user, "reservations.manage") && <button type="button" className="primary" aria-label="New reservation" aria-haspopup="dialog" disabled={busy || !active.length} onClick={() => setReservationView({ tableId: null, create: true })}>New</button>}<button type="button" disabled={busy} onClick={() => { void loadBookings(); void reload().catch(() => setError("Failed to refresh tables")); }}>Refresh</button></div></div>
         <div className="reservation-slots" id="reservation-list" role="region" aria-label="Reservations by half hour" tabIndex={0}>
           {([["Current", bookingSlots.current], ["Upcoming", bookingSlots.upcoming]] as const).map(([label, slot]) => <section className={`reservation-slot ${label.toLowerCase()}`} key={label} aria-label={`${label} slot`}>
             <h4><span>{bookingTime(slot.start)} – {bookingTime(slot.end)}</span><span className="reservation-slot-badge">{label}</span></h4>
@@ -330,8 +326,27 @@ export function Tables({ user, qrInbox, onOpenOrder, onTakeaway, captain = false
       {showZomatoPanel && <aside className="tables-parcels tables-zomato" id="zomato-list" aria-label="Zomato orders"><ZomatoPanel orders={zomatoList} canCreate={zomatoOn} disabled={busy} onNew={() => setZomatoDialog(true)} onOpenOrder={openOrder} onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); }} /></aside>}
       </div>}
     </div>
+    {openingTable && <WorkspaceDialog open title={`Open ${openingTable.name}`} className="table-opening-dialog" busy={busy} onClose={() => { if (!actionLock.current) setOpeningTable(null); }}>
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        const count = guestInput.current?.valueAsNumber;
+        if (busy || !count || !Number.isInteger(count) || count < 1 || count > 999) return;
+        void run(async () => {
+          const id = await startOrder("dine_in", openingTable, count);
+          setOpeningTable(null);
+          openOrder(id);
+        });
+      }}>
+        <label>Guest count<input ref={guestInput} type="number" inputMode="numeric" required min={1} max={999} step={1} disabled={busy} /></label>
+        {error && <p className="error-message" role="alert">{error}</p>}
+        <div className="actions">
+          <button type="button" disabled={busy} onClick={() => setOpeningTable(null)}>Cancel</button>
+          <button type="submit" className="primary" disabled={busy}>Open table</button>
+        </div>
+      </form>
+    </WorkspaceDialog>}
     {canQuickBill && <NewZomatoOrderDialog open={zomatoDialog} orders={zomatoList} onClose={() => setZomatoDialog(false)} onCreated={(orderId) => { setZomatoDialog(false); openOrder(orderId); }} />}
-    {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId}
+    {reservationView && <Reservations user={user} tables={tables} initialTableId={reservationView.tableId} createOnOpen={!!reservationView.create}
       onClose={() => setReservationView(null)} onOpenOrder={(id) => { setReservationView(null); openOrder(id); }}
       onChanged={() => { void reload().catch(() => setError("Failed to refresh tables")); void loadBookings(); }}
       onBusyChange={onReservationBusy} onDirtyChange={onReservationDirty} />}

@@ -3,13 +3,11 @@ import {
   COMPARE_LABELS, DASHBOARD_LIMITS, PERIOD_LABELS, widgetDef, widgetVisible,
   type DashboardData, type DashboardItemValue, type DashboardWidgetId, type WidgetOptionsValue,
 } from "@masalapos/domain/dashboard";
-import { updatedLabel } from "../dashboard-view";
 import { useModules } from "../modules";
 import { useCan } from "../permissions";
 import { useLiveRefresh } from "../live-refresh";
 import { useAction } from "../use-action";
 import { useMediaQuery } from "../use-media-query";
-import { useNow } from "../useDashboard";
 import { Button } from "@board/components/base/buttons/button";
 import { BoardRoot } from "./BoardRoot";
 import { EditToolbar } from "./EditToolbar";
@@ -49,7 +47,6 @@ function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
   const can = useCan();
   const modules = useModules();
   const narrow = !useMediaQuery("(min-width: 720px)");
-  const now = useNow(60_000);
   const { layout, error: loadError, unavailable: layoutOff, load, save, reset } = useDashboardLayout();
   const [draft, setDraft] = useState<DashboardItemValue[] | null>(null);
   const [catalogue, setCatalogue] = useState(false);
@@ -147,7 +144,6 @@ function DashboardScreen({ onUnavailable }: { onUnavailable(): void }) {
         </>;
       }}
     />
-    {!editing && <p className="dd-footer" role="status">{updatedLabel(data?.generatedAt ?? null, now)}</p>}
     <WidgetCatalogue open={catalogue} onPick={pick} onClose={() => setCatalogue(false)} />
     <WidgetSettings item={settingsItem} onChange={(options: Partial<WidgetOptionsValue>) => settingsKey && setDraft((d) => d && updateOptions(d, settingsKey, options))} onClose={() => setSettingsKey(null)} />
   </div>;

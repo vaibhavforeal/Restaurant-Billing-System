@@ -12,8 +12,8 @@ import { userCan } from "../permissions";
 interface Editor { id: string | null; version: number; clientRef: string; input: ReservationInput; original: string }
 const statusText = { booked: "Booked", seated: "Seated", cancelled: "Cancelled", no_show: "No-show" };
 
-export function Reservations({ user, tables, initialTableId, onClose, onOpenOrder, onChanged, onBusyChange, onDirtyChange }: {
-  user: User; tables: TableInfo[]; initialTableId: string | null; onClose: () => void;
+export function Reservations({ user, tables, initialTableId, createOnOpen, onClose, onOpenOrder, onChanged, onBusyChange, onDirtyChange }: {
+  user: User; tables: TableInfo[]; initialTableId: string | null; createOnOpen?: boolean; onClose: () => void;
   onOpenOrder: (id: string) => void; onChanged: () => void;
   onBusyChange: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void;
 }) {
@@ -86,6 +86,13 @@ export function Reservations({ user, tables, initialTableId, onClose, onOpenOrde
     setEditor({ id: reservation?.id ?? null, version: reservation?.version ?? 1, clientRef: uuid(), input, original: JSON.stringify(input) });
     setError(""); setMessage("");
   }
+  const pendingCreate = useRef(createOnOpen);
+  useEffect(() => {
+    if (pendingCreate.current && data && date && canManage && bookable && tables.some((t) => t.isActive)) {
+      pendingCreate.current = false;
+      startEditor();
+    }
+  }, [data, date, canManage, bookable, tables]);
   function field<K extends keyof ReservationInput>(key: K, value: ReservationInput[K]) {
     setEditor((old) => old ? { ...old, input: { ...old.input, [key]: value } } : null);
   }

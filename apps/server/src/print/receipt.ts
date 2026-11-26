@@ -15,6 +15,10 @@ export const escape = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp
 const statusLabel = (bill: Bill) => bill.status === "paid" ? "PAID" : bill.status === "void" ? "VOID" : "PAYMENT DUE";
 const paidAmount = (bill: Bill) => bill.payments.reduce((sum, p) => sum + p.amountPaise, 0);
 const quantity = (bill: Bill) => bill.receipt.items.reduce((sum, item) => sum + item.qty, 0);
+/** The offers that took money off the bill; a bill issued without any (or before Offers existed) has none. */
+const appliedOffers = (bill: Bill) => bill.receipt.offers ?? [];
+/** What the Discount line shows: the discount the offers do not account for (the staff's, the customer's slab, points). */
+const otherDiscountPaise = (bill: Bill) => bill.discountPaise - appliedOffers(bill).reduce((sum, offer) => sum + offer.discountPaise, 0);
 /** Who the bill is for and their loyalty points, when a customer was attached. */
 function customerLines(bill: Bill): string[] {
   const c = bill.receipt.customer;
@@ -151,7 +155,8 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   });
   rule();
   pair(`Subtotal (${quantity(bill)} qty)`, money(bill.subtotalPaise));
-  if (bill.discountPaise) pair("Discount", `-${money(bill.discountPaise)}`);
+  for (const offer of appliedOffers(bill)) pair(`Offer: ${offer.name}`, `-${money(offer.discountPaise)}`);
+  if (otherDiscountPaise(bill) > 0) pair("Discount", `-${money(otherDiscountPaise(bill))}`);
   for (const c of bill.charges ?? []) pair(clean(chargeLabel(c)), money(c.amountPaise));
   if (zomatoGst) line("GST paid by Zomato (section 9(5))");
   for (const t of addedGst(bill)) {
@@ -184,7 +189,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   pos.bold(false); rule().align("center");
   const payment = billUpiPayment(bill);
   if (payment) {
-    pos.bold(true); line(`SCAN & PAY Rs. ${money(payment.amountPaise)}`); pos.bold(false);
+    pos.bold(true); line(payment.sample ? "SAMPLE QR - NO PAYMENT" : `SCAN & PAY Rs. ${money(payment.amountPaise)}`); pos.bold(false);
     const qr = upiQrRaster(payment.uri, paperWidth);
     // The bitmap already includes centered padding across the full print width.
     pos.align("left").raster(qr.widthBytes, qr.height, qr.data).align("center");
@@ -218,6 +223,7 @@ export function receiptHtml(bill: Bill): string {
   const itemGst = show.itemGst && billChargesGst(r);
   const taxes = includedGst(bill);
   const payment = billUpiPayment(bill);
+  const offerRows = appliedOffers(bill).map((offer) => `<tr><td>Offer: ${e(offer.name)}</td><td class="amount">-₹${money(offer.discountPaise)}</td></tr>`).join("\n    ");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Bill ${escape(bill.invoiceNo)}</title><style>${RESTAURANT_RECEIPT_CSS}
   @page{@bottom-left{content:"Bill ${escape(bill.invoiceNo)}";font:9px Arial,sans-serif;color:#71717a}}
@@ -241,7 +247,7 @@ export function receiptHtml(bill: Bill): string {
   </tbody></table>
   <section class="summary" aria-label="Bill totals"><table class="totals"><tbody>
     <tr class="subtotal"><td>Subtotal <span class="quantity">${quantity(bill)} qty</span></td><td class="amount">₹${money(bill.subtotalPaise)}</td></tr>
-    ${bill.discountPaise ? `<tr><td>Discount</td><td class="amount">-₹${money(bill.discountPaise)}</td></tr>` : ""}
+    ${offerRows}${otherDiscountPaise(bill) > 0 ? `<tr><td>Discount</td><td class="amount">-₹${money(otherDiscountPaise(bill))}</td></tr>` : ""}
     ${(bill.charges ?? []).map((c) => `<tr><td>${e(chargeLabel(c))}</td><td class="amount">₹${money(c.amountPaise)}</td></tr>`).join("")}
     ${zomatoGst ? `<tr><td colspan="2" class="tax-note">GST paid by Zomato (section 9(5))</td></tr>` : ""}
     ${addedGst(bill).map((t) => `<tr class="tax"><td>CGST ${t.gstRate / 2}% on ${money(t.taxablePaise)}</td><td class="amount">₹${money(t.cgstPaise)}</td></tr>
@@ -257,7 +263,7 @@ export function receiptHtml(bill: Bill): string {
     <p class="payment-state"><strong>${bill.status === "paid" ? "PAID IN FULL" : bill.status === "void" ? "VOID - NOT PAYABLE" : `AMOUNT DUE ₹${money(due)}`}</strong></p></section>
   ${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}
   ${customerLines(bill).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}
-  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill ${e(bill.invoiceNo)} · Amount filled in automatically</p></section>` : ""}
+  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>${payment.sample ? "Sample payment QR" : "Scan &amp; pay with UPI"}</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill ${e(bill.invoiceNo)} · ${payment.sample ? "Payments are simulated" : "Amount filled in automatically"}</p></section>` : ""}
   ${bill.feedbackUrl ? `<section class="upi-payment" aria-label="Feedback"><h2>Rate your visit</h2><div class="upi-qr">${upiQrSvg(bill.feedbackUrl)}</div><p class="tax-note">Scan on the restaurant Wi-Fi</p></section>` : ""}
   <footer>${e(footerLines(bill).join("\n"))}</footer></main></body></html>`;
 }

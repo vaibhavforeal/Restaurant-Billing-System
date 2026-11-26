@@ -1,10 +1,10 @@
 @media screen {
   html[data-theme="light"] {
-    --pos-primary: #252830;
-    --pos-primary-hover: #14171d;
+    --pos-primary: var(--red);
+    --pos-primary-hover: var(--red-hover);
     --pos-on-primary: #fff;
-    --staff-button-bg: #252830;
-    --staff-button-hover: #14171d;
+    --staff-button-bg: var(--red);
+    --staff-button-hover: var(--red-hover);
     --staff-button-text: #fff;
     --staff-button-outline: #69717d;
   }
@@ -12,12 +12,13 @@
   html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(button, .pos-overflow > summary):not(:where(
     [class~="boardui-root"] *, .menu-card, .table-card, .settings-card, .nav-item,
     .sales-tabs > button, .sales-menu-toggle, .sales-profile,
-    .category-rail > button, .recipe-product-list > button,
+    .category-rail > button, .category-editor li > button, .recipe-product-list > button,
     .report-tabs > button, .menu-view-controls > button,
+    .order-board-rail > button, .order-board-chips > button, .order-card-open,
     .table-status-button, .pos-segments > button, .tabs > button,
     .order-pane-switch > button, .table-summary-customer > button,
     .primary.soft, .text-button, .sales-date-button, .order-held-banner,
-    .cart-item-name, .table-summary-phone
+    .cart-item-name, .table-summary-phone, .catalog-item-availability > button, .marketplace-switch
   )) {
     background: var(--staff-button-bg);
     color: var(--staff-button-text);
@@ -27,15 +28,26 @@
   html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(button, .pos-overflow > summary):not(:where(
     [class~="boardui-root"] *, .menu-card, .table-card, .settings-card, .nav-item,
     .sales-tabs > button, .sales-menu-toggle, .sales-profile,
-    .category-rail > button, .recipe-product-list > button,
+    .category-rail > button, .category-editor li > button, .recipe-product-list > button,
     .report-tabs > button, .menu-view-controls > button,
+    .order-board-rail > button, .order-board-chips > button, .order-card-open,
     .table-status-button, .pos-segments > button, .tabs > button,
     .order-pane-switch > button, .table-summary-customer > button,
     .primary.soft, .text-button, .sales-date-button, .order-held-banner,
-    .cart-item-name, .table-summary-phone
+    .cart-item-name, .table-summary-phone, .catalog-item-availability > button, .marketplace-switch
   )):hover:not(:disabled) {
     background: var(--staff-button-hover);
     border-color: var(--staff-button-hover);
+  }
+
+  html[data-theme="light"] .catalog-item-availability > button {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ink);
+  }
+
+  html[data-theme="light"] .catalog-item-availability > button:hover:not(:disabled) {
+    background: var(--surface);
   }
 
   html[data-theme="light"] .order-screen.order-with-summary .table-summary-toolbar > button,

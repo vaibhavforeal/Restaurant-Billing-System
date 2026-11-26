@@ -128,6 +128,7 @@ describe("table reservations", () => {
     const responses = await Promise.all([f.seat(r), f.seat(r)]);
     expect(responses.every((v) => v.statusCode === 200)).toBe(true);
     const result = responses[0]!.json();
+    expect(result.order.guestCount).toBe(r.partySize);
     expect(result.reservation).toMatchObject({ status: "seated", orderId: result.order.id, version: 2 });
     expect(result.order).toMatchObject({ type: "dine_in", tableId: f.table.id, status: "open", splitLabel: "A" });
     expect(responses[1]!.json().order.id).toBe(result.order.id); expect(f.countOrders()).toBe(1);

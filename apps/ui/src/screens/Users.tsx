@@ -2,7 +2,6 @@ import { useAction } from "../use-action";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import type { AdminUser } from "../types";
-import { DiscountCaps } from "./DiscountCaps";
 import { StaffPermissions } from "./StaffPermissions";
 import "../staff-permissions.css";
 
@@ -20,7 +19,8 @@ function askApprovalPin(name: string): string | null {
   return pin;
 }
 
-export function Users() {
+/** Staff accounts. Role discount limits are in Settings → Discounts & limits; `onOpenDiscounts` links there for admins who can change settings. */
+export function Users({ onOpenDiscounts }: { onOpenDiscounts?: (() => void) | undefined } = {}) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -55,7 +55,7 @@ export function Users() {
     });
   }
 
-  function patchUser(id: string, patch: Partial<Pick<AdminUser, "role" | "isActive" | "maxDiscountPercent" | "username">> & { pin?: string; password?: string }) {
+  function patchUser(id: string, patch: Partial<Pick<AdminUser, "role" | "isActive" | "username">> & { pin?: string; password?: string }) {
     void run(() => apiFetch(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) }));
   }
 
@@ -116,7 +116,6 @@ export function Users() {
             <th style={{ padding: 6 }}>Name</th>
             <th>Username</th>
             <th>Role</th>
-            <th>Discount limit</th>
             <th>Status</th>
             <th></th>
           </tr>
@@ -133,8 +132,6 @@ export function Users() {
                   ))}
                 </select>
               </td>
-              <td>{u.role === "admin" ? "No limit" : <input type="number" min={0} max={100} step="0.5" style={{ width: 70 }} aria-label={`Discount limit (%) for ${u.name}`} placeholder="Role default" defaultValue={u.maxDiscountPercent ?? ""} key={`${u.id}-${u.maxDiscountPercent ?? ""}`}
-                onBlur={(e) => { const raw = e.target.value.trim(); const next = raw === "" ? null : Number(raw); if (next !== u.maxDiscountPercent && (next === null || (Number.isFinite(next) && next >= 0 && next <= 100))) patchUser(u.id, { maxDiscountPercent: next }); }} />}</td>
               <td>{u.isActive ? "active" : "inactive"}</td>
               <td style={{ display: "flex", gap: 4, padding: 4 }}>
                 <button onClick={() => resetPassword(u)}>Reset password</button>
@@ -152,7 +149,7 @@ export function Users() {
       </div>
       </fieldset>
       {editing && <StaffPermissions key={editing.id} user={editing} onClose={() => setEditing(null)} onSaved={() => { void reload(); setMessage(`Permissions saved for ${editing.name}.`); }} />}
-      <DiscountCaps />
+      {onOpenDiscounts && <p className="muted">Discount limits for each role are in Settings. <button type="button" className="link-button" onClick={onOpenDiscounts}>Open Discounts &amp; limits</button></p>}
     </div>
   );
 }

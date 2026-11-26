@@ -1,11 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { UnitCostSet, buildMenuEngineeringReport, buildProfitReport, dishCost, effectiveGstRate, localDateKey, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@masalapos/domain";
+import { UnitCostSet, buildMenuEngineeringReport, buildProfitReport, dishCost, effectiveGstRate, moveCostPaise, preGstPaise, priceForTier, stockJson, stockMilli, uuidv7, type DishCost, type DishPrice, type PriceTier, type ProfitLine, type StockCost, type StockRow } from "@masalapos/domain";
 import { readGstSettings } from "./gst-settings.js";
 import { priorRequest } from "./client-ref.js";
 import { httpError } from "./http-error.js";
 import { reportRange } from "./sales-reports.js";
 import { publishStock, versionCheck } from "./stock.js";
 import { requireModule } from "./modules.js";
+import { dayStartHour } from "./business-day.js";
 
 const PRICE_TIERS: PriceTier[] = ["non_ac", "ac", "takeaway", "zomato"];
 
@@ -106,7 +107,7 @@ export function registerCosting(app: FastifyInstance): void {
   });
 
   app.get("/api/reports/profit", { preHandler: costs }, async (req, reply) => {
-    const { from, to, bounds } = reportRange(req.query);
+    const { from, to, bounds, today } = reportRange(req.query, dayStartHour(app.db));
     // One synchronous read transaction keeps lines, wastage and adjustments on the same snapshot.
     const { lines, wastage, adjustments } = db.transaction(() => {
       const lines = profitLines(db, bounds);
@@ -116,7 +117,7 @@ export function registerCosting(app: FastifyInstance): void {
         FROM stock_moves WHERE reason = ? AND created_at >= ? AND created_at < ?${extra}`).get(reason, ...bounds) as { costPaise: number; unknownCount: number };
       return { lines, wastage: movements("wastage"), adjustments: movements("adjustment", " AND client_ref IS NOT NULL") };
     })();
-    const report = buildProfitReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines, wastage, adjustments });
+    const report = buildProfitReport({ from, to, today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines, wastage, adjustments });
     if (lines.some((line) => line.qty < 0)) report.notes.push("Revenue is net of credit notes (voids and refunds) made in these dates; ingredient cost is unchanged because no stock comes back.");
     reply.header("Cache-Control", "no-store");
     return { report };
@@ -124,10 +125,10 @@ export function registerCosting(app: FastifyInstance): void {
 
   /** Menu engineering: each dish as Star / Plowhorse / Puzzle / Dog within its category, from the profit report's lines. */
   app.get("/api/reports/menu-engineering", { preHandler: costs }, async (req, reply) => {
-    const { from, to, bounds } = reportRange(req.query);
+    const { from, to, bounds, today } = reportRange(req.query, dayStartHour(app.db));
     const lines = db.transaction(() => profitLines(db, bounds))();
     reply.header("Cache-Control", "no-store");
-    return { report: buildMenuEngineeringReport({ from, to, today: localDateKey(Date.now()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines }) };
+    return { report: buildMenuEngineeringReport({ from, to, today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, generatedAt: Date.now(), lines }) };
   });
 }
 

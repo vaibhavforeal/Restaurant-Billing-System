@@ -1,3 +1,4 @@
+import { tradingShift } from "./cash-custody.js";
 import { verifyPassword } from "@masalapos/core";
 import { reverseLoyalty } from "./customers.js";
 import { BillPrint, CreditPreview, RefundBill, VoidBill, creditFor, nextCreditNoteNo, nextSequence, packagingCredit, refundState, refundableByMode, uuidv7, voidRemainder,
@@ -208,8 +209,9 @@ function writeCreditNote(db: Database, note: {
   for (const c of note.draft.charges) charge.run(id, c.kind, c.label, c.gstRate, c.amountPaise, c.taxablePaise, c.cgstPaise, c.sgstPaise, c.roundingPaise, c.totalPaise);
   const tax = db.prepare("INSERT INTO credit_note_taxes (credit_note_id, gst_rate, taxable_paise, cgst_paise, sgst_paise) VALUES (?, ?, ?, ?, ?)");
   for (const x of note.draft.taxes) tax.run(id, x.gstRate, x.taxablePaise, x.cgstPaise, x.sgstPaise);
-  const refund = db.prepare("INSERT INTO refund_payments (id, credit_note_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)");
-  for (const r of note.refunds) refund.run(uuidv7(), id, r.mode, r.amountPaise, r.refNote || null, note.now);
+  const shiftId = note.refunds.some(r => r.mode === "cash") ? tradingShift(db, note.requestedBy) : null;
+  const refund = db.prepare("INSERT INTO refund_payments (id, credit_note_id, mode, amount_paise, ref_note, created_at, shift_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+  for (const r of note.refunds) refund.run(uuidv7(), id, r.mode, r.amountPaise, r.refNote || null, note.now, r.mode === "cash" ? shiftId : null);
   return id;
 }
 

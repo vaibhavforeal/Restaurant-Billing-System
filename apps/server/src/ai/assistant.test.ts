@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7 } from "@masalapos/domain";
 import { auth, enableIntegration, freshApp, setupAdmin } from "../test-helpers.js";
-import { ask, ASK_DEADLINE_MS, cleanHistory, daySummary, daySummaryInput, describeDish, MAX_LOOKUPS } from "./assistant.js";
+import { ask, ASK_DEADLINE_MS, cleanHistory, daySummary, daySummaryInput, describeDish, MAX_LOOKUPS, SUMMARY_SYSTEM } from "./assistant.js";
 import type { AiProvider, AiReply, AiRequest } from "./provider.js";
 
 /** A provider that answers from a script and records each request. */
@@ -106,6 +106,21 @@ describe("assistant flows", () => {
     expect(clean.at(-1)!.text).toHaveLength(2000);
     expect(cleanHistory("nonsense")).toEqual([]);
     expect(cleanHistory([{ role: "user", text: 5 }, null])).toEqual([]);
+  });
+
+  it("daySummaryInput keeps the till's own offers out of discounts, so the summary doesn't question them", async () => {
+    enableIntegration(app, "offers");
+    await post("/api/offers", { name: "Ten off", kind: "bill_off", percentBp: 1000 });
+    const dal = (app.db.prepare("SELECT id FROM products WHERE name = 'Dal'").get() as { id: string }).id;
+    const { order } = await post("/api/orders", { clientRef: uuidv7(), type: "parcel" });
+    await post(`/api/orders/${order.id}/items`, { items: [{ productId: dal, qty: 1, clientRef: uuidv7() }] });
+    const { preview } = await post(`/api/orders/${order.id}/bill-preview`, { discountPaise: 0 });
+    expect(preview.offerDiscountPaise).toBe(1200);
+    await post(`/api/orders/${order.id}/bill`, { clientRef: uuidv7(), previewKey: preview.previewKey, discountPaise: 0 });
+    // The day's ₹300 is the cashier's own discount; the ₹12 of offers is reported on its own.
+    const input = daySummaryInput(app.db, today()) as { totals: Record<string, unknown> };
+    expect(input.totals).toMatchObject({ bills: 2, discountsRs: 300, offersRs: 12 });
+    expect(SUMMARY_SYSTEM).toMatch(/offers/i);
   });
 
   it("daySummaryInput has totals, top and bottom dishes, the weekday average, and staff first names, and no customer details", () => {

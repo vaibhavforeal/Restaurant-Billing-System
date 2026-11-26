@@ -34,6 +34,12 @@ when adding a dish; each is its own bill line with its own price, GST rate, kitc
 station and stock. See [item add-ons](docs/operations/item-addons.md) (developer notes:
 [docs/item-addons/README.md](docs/item-addons/README.md)).
 
+**Offers:** Set up buy-one-get-one, buy X get Y, item or category discounts and bill
+discounts above a minimum, with dates, days, times and order types. They apply on bills
+by themselves; the cashier can remove one for a single bill, and an Offers report shows
+what each gave. See [offers](docs/operations/offers.md) (developer notes:
+[docs/offers/README.md](docs/offers/README.md)).
+
 Commercial direction: **cloud plus offline**, with Basic (2 devices) and Pro
 (5 devices, recipe editing and QR ordering entitlements). The Windows setup file asks for
 the Customer ID and Order ID from MasalaPOS's setup card and activates the PC

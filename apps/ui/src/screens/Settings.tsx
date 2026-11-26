@@ -1,8 +1,12 @@
-import { ActivityAlertSettings } from "./ActivityAlertSettings";
 import { AiSuggestionSettings } from "./AiSuggestionSettings";
 import { BillSettings } from "./BillSettings";
 import { TableSettings } from "./TableSettings";
 import { useCan } from "../permissions";
+import { useModules } from "../modules";
+import { DiscountCaps } from "./DiscountCaps";
+import { CustomerTypesSettings } from "./CustomerTypesSettings";
+import { LoyaltySettings } from "./LoyaltySettings";
+import { DeviceSettings } from "./DeviceSettings";
 import { settingsForSave } from "../settings-save";
 import { useAction } from "../use-action";
 import { InfoTip } from "../InfoTip";
@@ -18,12 +22,12 @@ import { UpdateSettings } from "./UpdateSettings";
 import { SupportSettings } from "../support";
 import { DEFAULT_PRINT_PROFILE, PrintProfileControls, WindowsPrinterPicker } from "./PrinterControls";
 import { Icon } from "../Icon";
-import { initialSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId } from "../settings-sections";
+import { initialSettingsSection, SETTINGS_SECTIONS, visibleSettingsSections, type SettingsSectionId } from "../settings-sections";
 import "../printer-settings.css";
 import "../settings-cards.css";
 import type { SettingsData, PrinterInfo, StationInfo, PrintJobInfo } from "../types";
 
-const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptHeader: "", receiptFooter: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "", packagingChargeLabel: "", packagingPerItem: false };
+const EMPTY_SETTINGS: SettingsData = { restaurantName: "", address: "", city: "", stateCode: "", pincode: "", phone: "", gstin: "", fssai: "", receiptHeader: "", receiptFooter: "", billShowFssai: true, billShowCustomer: true, billShowTable: true, billShowServedBy: false, billShowItemGst: false, upiId: "", receiptStyle: "classic", gstMode: "included", gstRate: 5, kotEditPrint: "ask", holdOrdersEnabled: true, popularItemsEnabled: true, popularByTimeEnabled: true, orderedTogetherEnabled: true, customerUsualEnabled: true, sacCode: "996331", zomatoGstin: "", invoicePrefix: "", roundOff: "rupee", serviceChargeBp: 0, packagingChargePaise: 0, serviceChargeLabel: "", packagingChargeLabel: "", packagingPerItem: false, orderWarnMinutes: 15, orderLateMinutes: 25, kotPrintWithKds: true, paymentModes: ["cash", "card", "upi"], qrAutoAccept: false, dayStartHour: 0 };
 
 const SETTINGS_FIELDS: Array<{ key: "restaurantName" | "address" | "city" | "pincode" | "phone" | "gstin" | "fssai"; label: string; inputMode?: "numeric" | "tel" }> = [
   { key: "restaurantName", label: "Restaurant name" },
@@ -42,9 +46,11 @@ const STATE_OPTIONS = Object.entries(GST_STATES).sort(([, a], [, b]) => a.locale
 const EMPTY_PRINTER = { name: "", kind: "network" as const, connection: "", paperWidth: 80 as const,
   receiptProfile: DEFAULT_PRINT_PROFILE, kotProfile: DEFAULT_PRINT_PROFILE };
 
-/** Opens on a grid of section cards; `section: "plan"` opens Plan & devices directly, e.g. from a Marketplace card that needs a different plan. */
-export function Settings({ section }: { section?: "plan" | undefined } = {}) {
+/** Opens on a grid of section cards; a `section` opens that card directly, e.g. Plan & devices from a Marketplace card that needs a different plan. */
+export function Settings({ section }: { section?: SettingsSectionId | undefined } = {}) {
   const can = useCan();
+  const { isActive } = useModules();
+  const crmActive = isActive("crm");
   const [tableBusy, setTableBusy] = useState(false);
   const [active, setActive] = useState<SettingsSectionId | null>(() => initialSettingsSection(section));
   const sectionHeading = useRef<HTMLHeadingElement>(null);
@@ -64,6 +70,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   // Stations section
   const [stations, setStations] = useState<StationInfo[]>([]);
   const [newStationName, setNewStationName] = useState("");
+  const [newStationPrinter, setNewStationPrinter] = useState("");
+  const [stationStatus, setStationStatus] = useState("");
 
   // Jobs section
   const [jobs, setJobs] = useState<PrintJobInfo[]>([]);
@@ -207,22 +215,34 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   function addStation() {
     const name = newStationName.trim();
     if (!name) return setError("Station name is required");
+    setStationStatus("");
     void run(async () => {
-      await apiFetch("/api/kot-stations", { method: "POST", body: JSON.stringify({ name }) });
+      const { station } = await apiFetch<{ station: StationInfo }>("/api/kot-stations", {
+        method: "POST",
+        body: JSON.stringify({ name, printerId: newStationPrinter || null }),
+      });
+      setStations((current) => [...current, station].sort((a, b) => a.name.localeCompare(b.name)));
       setNewStationName("");
-      await loadAll();
+      setNewStationPrinter("");
+      setStationStatus(`${station.name} added`);
     }, "Failed to add station");
   }
 
-  async function updateStationPrinter(stationId: string, printerId: string) {
-    const saved = await run(async () => {
-      await apiFetch(`/api/kot-stations/${stationId}`, { method: "PATCH", body: JSON.stringify({ printerId: printerId || null }) });
-      await loadAll();
-    }, "Failed to update station");
-    if (!saved) await loadAll();
+  function updateStationPrinter(stationId: string, printerId: string) {
+    setStationStatus("");
+    void run(async () => {
+      const { station } = await apiFetch<{ station: StationInfo }>(`/api/kot-stations/${stationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ printerId: printerId || null }),
+      });
+      setStations((current) => current.map((item) => item.id === station.id ? station : item));
+      const printer = printers.find((item) => item.id === station.printerId);
+      setStationStatus(`${station.name}: ${printer?.name ?? "No printer"} saved`);
+    }, "Failed to update station printer");
   }
 
   async function toggleStation(s: StationInfo) {
+    setStationStatus("");
     const saved = await run(async () => {
       await apiFetch(`/api/kot-stations/${s.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !s.isActive }) });
       await loadAll();
@@ -256,7 +276,7 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       <div className="page-header"><div><h2>Settings</h2></div></div>
       {active === null ? (
         <ul className="settings-cards">
-          {SETTINGS_SECTIONS.filter(item => item.id !== "tables" || can("tables.manage")).map(({ id, title, blurb, icon }) => (
+          {visibleSettingsSections({ canManageTables: can("tables.manage"), crmActive }).map(({ id, title, blurb, icon }) => (
             <li key={id}>
               <button type="button" className="settings-card" data-section={id} onClick={() => { returnToCard.current = id; setActive(id); }}>
                 <span className="settings-card-icon"><Icon name={icon} size={22} /></span>
@@ -279,6 +299,12 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {active === "support" && <SupportSettings />}
       {active === "bill" && <BillSettings onOpenPrinters={() => setActive("printers")} />}
       {active === "ai-suggestions" && <AiSuggestionSettings />}
+      {active === "discounts" && <>
+        <DiscountCaps />
+        {crmActive ? <CustomerTypesSettings /> : <p className="panel muted">Customer-type discounts come with the CRM &amp; Loyalty add-on.</p>}
+      </>}
+      {active === "loyalty" && (crmActive ? <LoyaltySettings /> : <p className="panel muted">Loyalty comes with the CRM &amp; Loyalty add-on. Turn it on in the Marketplace.</p>)}
+      {active === "device" && <DeviceSettings />}
       {/* Profile section */}
       {active === "profile" && <div className="panel">
 
@@ -310,7 +336,6 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             {profileStatus === "error" && profileError}
           </div>
         </div>
-        <ActivityAlertSettings />
       </div>}
 
       {/* Printers section */}
@@ -461,6 +486,21 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {/* KOT stations section */}
       {active === "printers" && printerSection === "stations" && <div className="panel" role="region" aria-label="KOT stations">
 
+        <form className="station-form" onSubmit={(event) => { event.preventDefault(); addStation(); }}>
+          <label>Station name
+            <input required value={newStationName} onChange={(event) => setNewStationName(event.target.value)} disabled={busy} />
+          </label>
+          <label>Printer
+            <select value={newStationPrinter} onChange={(event) => setNewStationPrinter(event.target.value)} disabled={busy}>
+              <option value="">No printer</option>
+              {activePrinters.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+            </select>
+          </label>
+          <button type="submit" disabled={busy}>Add station</button>
+        </form>
+        {!activePrinters.length && <p>No active printers. <button type="button" onClick={() => setPrinterSection("devices")}>Configure printers</button></p>}
+        <div role="status">{stationStatus}</div>
+        <div className="station-table-scroll" role="region" aria-label="Station printer assignments" tabIndex={0}>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
@@ -482,6 +522,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                     disabled={!s.isActive || busy}
                   >
                     <option value="">No printer</option>
+                    {s.printerId && !activePrinters.some((printer) => printer.id === s.printerId) &&
+                      <option value={s.printerId} disabled>{printers.find((printer) => printer.id === s.printerId)?.name ?? "Printer"} (inactive)</option>}
                     {activePrinters.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -497,16 +539,6 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             ))}
           </tbody>
         </table>
-
-        {/* Add station form */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            placeholder="Station name" aria-label="Station name"
-            value={newStationName}
-            onChange={(e) => setNewStationName(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <button onClick={() => void addStation()} disabled={busy}>Add station</button>
         </div>
       </div>}
 

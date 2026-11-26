@@ -117,7 +117,7 @@ export function registerReservations(app: FastifyInstance) {
       assertReservationSlot(app.db, row.table_id, Math.min(now, row.starts_at), row.ends_at, id);
       const orderId = uuidv7(), ref = `reservation:${id}`, label = nextSplitLabel(app.db, row.table_id);
       if (!label || app.db.prepare("SELECT id FROM orders WHERE client_ref = ?").get(ref)) throw httpError(409, "Could not open this table. Refresh and review the reservation.");
-      app.db.prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier) VALUES (?, ?, 'dine_in', ?, ?, ?, ?, ?)").run(orderId, ref, row.table_id, label, req.user.id, now, tablePriceTier(app.db, row.table_id));
+      app.db.prepare("INSERT INTO orders (id, client_ref, type, table_id, split_label, opened_by, opened_at, price_tier, guest_count) VALUES (?, ?, 'dine_in', ?, ?, ?, ?, ?, ?)").run(orderId, ref, row.table_id, label, req.user.id, now, tablePriceTier(app.db, row.table_id), row.party_size);
       app.db.prepare("UPDATE reservations SET status='seated', order_id=?, version=version+1, updated_at=?, updated_by=? WHERE id=?").run(orderId, now, req.user.id, id);
       created = true; return orderId;
     })();

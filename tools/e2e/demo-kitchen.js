@@ -35,6 +35,9 @@
   if (!table) throw new Error("Unused fixture table required");
   if (!button("tables")?.disabled) await click("tables");
   (await wait(() => [...document.querySelectorAll(".table-card")].find((card) => card.querySelector("strong")?.textContent === table.name), "table card")).click();
+  const guestCount = await wait(() => document.querySelector(".table-opening-dialog[open] input"), "guest count");
+  guestCount.value = "4";
+  guestCount.form.requestSubmit();
   await wait(previewButton, "billing panel");
   await click("All items");
   (await wait(() => [...document.querySelectorAll(".menu-card")].find((card) => card.querySelector(".menu-card-name")?.textContent.trim() === "Paneer tikka"), "kitchen item")).click();
