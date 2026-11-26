@@ -83,17 +83,16 @@ export function CustomReports({ canManage, initialPeriod, onPeriodChange }: { ca
   const groupable = source.fields.filter((f) => f.role === "dimension" && f.groupable !== false);
 
   return <div className="custom-report">
-    <div className="page-header"><h3>Custom reports</h3>{table && <button disabled={loading} onClick={exportCsv}>Export CSV</button>}</div>
-    <div className="custom-report-bar">
+    <header className="page-header custom-report-bar">
+      <h3>Custom reports</h3>
       <label>Saved report <select aria-label="Saved report" value={selectedId} onChange={(e) => chooseSaved(e.target.value)}>
         <option value="">New report</option>{saved.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
       </select></label>
-        <label>Data source <select aria-label="Data source" value={draft.source} onChange={(e) => edit(newDraft(e.target.value))}>
-          {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-        </select></label>
-
-    </div>
-
+      <label>Data source <select aria-label="Data source" value={draft.source} onChange={(e) => edit(newDraft(e.target.value))}>
+        {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+      </select></label>
+      {table && <button type="button" disabled={loading} onClick={exportCsv}>Export CSV</button>}
+    </header>
 
     <details className="custom-report-builder">
       <summary>Customize columns and filters <small>({draft.columns.length} columns · {draft.filters.length} filters)</small></summary>

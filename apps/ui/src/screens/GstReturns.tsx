@@ -62,21 +62,22 @@ export function GstReturns() {
 
   return <div className="operational-report gst-returns">
     {auditorReport && <GstAuditorDialog report={auditorReport} onClose={() => setAuditorReport(null)} />}
-    <div className="page-header"><h3>GST returns</h3>
+    <header className="report-toolbar">
+      <h3>GST returns</h3>
+      <div className="sales-period" role="group" aria-label="Return period">
+        <label>Month <input type="month" value={month} max={localToday().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} /></label>
+        <label>Period <select value={span} onChange={(e) => setSpan(e.target.value as GstSpan)}>
+          <option value="month">Month</option><option value="quarter">Quarter (quarterly filers)</option>
+        </select></label>
+        <button className="sales-refresh" disabled={loading} onClick={() => setRevision((v) => v + 1)}>{loading ? "Loading…" : "Refresh"}</button>
+      </div>
       <div className="gst-returns-actions">
         <button className="primary" disabled={!report || loading || report.regime === "unregistered"} onClick={() => setAuditorReport(report)} aria-haspopup="dialog">Send to auditor</button>
         <button disabled={!report || loading} onClick={exportCsv}>Export CSV</button>
         {report?.regime === "regular" && <button disabled={loading || !report.gstr1Available} onClick={() => void downloadGstr1()}
           title={report.gstr1Available ? undefined : "Fix the restaurant's GSTIN in Settings first"}>Download GSTR-1 JSON</button>}
       </div>
-    </div>
-    <div className="sales-period gst-returns-period" role="group" aria-label="Return period">
-      <label>Month <input type="month" value={month} max={localToday().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} /></label>
-      <label>Period <select value={span} onChange={(e) => setSpan(e.target.value as GstSpan)}>
-        <option value="month">Month</option><option value="quarter">Quarter (quarterly filers)</option>
-      </select></label>
-      <button className="sales-refresh" disabled={loading} onClick={() => setRevision((v) => v + 1)}>{loading ? "Loading…" : "Refresh"}</button>
-    </div>
+    </header>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {loading && <p role="status">Loading GST returns…</p>}
     {report && <>

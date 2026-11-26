@@ -228,7 +228,7 @@ html[data-theme] {
   .dashboard-actions { gap: var(--space-4); }
   .dashboard-actions button { min-height: var(--control-touch); padding: var(--space-4) var(--space-6); }
   .kitchen-grid { gap: var(--space-4); }
-  .kitchen-ticket { padding: var(--space-6); border-radius: var(--radius-panel); }
+  .kitchen-ticket { padding: var(--space-4); border-radius: var(--radius-panel); }
   .kitchen-ticket button { min-height: var(--control-touch); }
   .ticket-header span { color: var(--pos-warning); background: var(--pos-warning-bg); }
   .catalog-layout { grid-template-columns: var(--column-small) minmax(0, 1fr); gap: var(--space-6); }

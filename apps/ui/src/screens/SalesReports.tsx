@@ -18,7 +18,6 @@ import { CashDrawer } from "./CashDrawer";
 import { Bills } from "./Bills";
 import { ZomatoReconciliationPanel } from "./ZomatoReconciliation";
 import { CustomReports } from "./CustomReports";
-import { OverflowMenu } from "../PosControls";
 import "../sales-dashboard.css";
 import { useCan } from "../permissions";
 
@@ -78,7 +77,6 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
   return <section className="sales-reports">
     <div className="page-header"><h2>Reports &amp; Analytics</h2>
       <div className="report-heading-actions">
-        {view === "reports" && (tab === "sales" || tab === "collections") && <OverflowMenu label="Export"><button disabled={!report || loading} onClick={exportReport}>Export {tab === "sales" ? "sales" : "collections"} CSV</button></OverflowMenu>}
         {canAsk && <AskSidePanel setup={askMode === "setup"} />}
       </div>
     </div>
@@ -97,7 +95,11 @@ function FullReports({ initialTab = "sales", initialPeriod, canSeeCosts, canSeeS
       </select>
     </div>
     {view === "analytics" ? <OrderAnalytics initialPeriod={period ?? (report ? { from: report.from, to: report.to } : undefined)} onPeriodChange={setPeriod} /> : tab === "bills" ? <Bills onOpenOrder={onOpenOrder} /> : tab === "cash" ? <CashDrawer canSettle={canSettle} canCloseDay={can("reports.close_day")} /> : tab === "custom" ? <CustomReports canManage={can("reports.manage")} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "zomato" && canSeeZomato ? <ZomatoReconciliationPanel /> : profit && status?.features.recipes !== true ? <section aria-label={COST_REPORTS.find((r) => r.id === tab)!.title}><p className="recipe-access-note">{COSTING_PRO_NOTE}</p></section> : operational ? <OperationalReports key={tab} kind={tab as OperationalReportKind | CostReportKind | "staff-activity"} initialPeriod={detailPeriod ?? period ?? undefined} onPeriodChange={setDetailPeriod} /> : tab === "day-end" ? <DayEnd key={day ?? "today"} initialDate={day} /> : tab === "gst" ? <GstReturns /> : <>
-      <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { setMessage(""); setExportError(""); setPeriod(next); }} onRefresh={() => { setMessage(""); refresh(); }} />
+      <header className="report-toolbar">
+        <h3>{tab === "sales" ? "Sales" : "Collections"}</h3>
+        <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { setMessage(""); setExportError(""); setPeriod(next); }} onRefresh={() => { setMessage(""); refresh(); }} />
+        <button type="button" disabled={!report || loading || (tab !== "sales" && tab !== "collections")} onClick={exportReport}>Export CSV</button>
+      </header>
       {(error || exportError) && <p role="alert">{error || exportError}</p>}
       {message && <p role="status">{message}</p>}
       {loading && <p className="sales-report-empty" role="status">Loading report…</p>}

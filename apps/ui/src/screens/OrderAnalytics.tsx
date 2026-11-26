@@ -48,9 +48,12 @@ export function OrderAnalytics({ initialPeriod, onPeriodChange }: { initialPerio
   const maxItem = Math.max(1, ...items.map((row) => ranking === "sales" ? row.totalPaise : row.qty));
   const totalOrders = report?.comparison.reduce((sum, row) => sum + row.orderCount, 0) ?? 0;
   return <div className="order-analytics">
-    <div className="analytics-heading"><div><h3>Order analytics</h3></div><button disabled={!report || loading} onClick={exportReport}>Export analytics CSV</button></div>
-    <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((value) => value + 1); }} onRefresh={() => { invalidate(); setRevision((value) => value + 1); }} />
-    <div className="analytics-filter"><SegmentedControl<AnalyticsOrderType> label="Analytics order type" value={orderType} options={orderOptions} onChange={(value) => { if (value !== orderType) { invalidate(); setOrderType(value); setShowAll(false); } }} /><InfoTip>Comparison always shows both types; the filter applies to the other sections.</InfoTip></div>
+    <header className="report-toolbar">
+      <h3>Order analytics</h3>
+      <SalesPeriodControls period={report ?? period ?? recentPeriod(7)} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((value) => value + 1); }} onRefresh={() => { invalidate(); setRevision((value) => value + 1); }} />
+      <div className="analytics-filter"><SegmentedControl<AnalyticsOrderType> label="Analytics order type" value={orderType} options={orderOptions} onChange={(value) => { if (value !== orderType) { invalidate(); setOrderType(value); setShowAll(false); } }} /><InfoTip>Comparison always shows both types; the filter applies to the other sections.</InfoTip></div>
+      <button type="button" disabled={!report || loading} onClick={exportReport}>Export analytics CSV</button>
+    </header>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {loading && <p className="sales-report-empty" role="status">Loading analytics…</p>}
     {report && <>

@@ -4,7 +4,6 @@
 .kitchen-app-header strong { font-size: 20px; }
 .kitchen-app-header small { display: block; color: var(--muted); }
 .kitchen-app-main { flex: 1; min-height: 0; overflow: auto; padding: 20px; }
-.kitchen-app .kitchen-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; }
 .kitchen-app .kitchen-ticket { font-size: 16px; }
 .kitchen-app .ticket-items small { font-size: 15px; font-weight: 600; }
 .kitchen-app .kitchen-ticket button { min-height: 48px; font-size: 16px; }

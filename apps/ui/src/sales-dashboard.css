@@ -62,7 +62,7 @@ html[data-theme] .sales-report-table :is(th, td):first-child { text-align: left;
 .sales-report-table caption { text-align: left; padding: var(--space-4); color: var(--muted); }
 .sales-report-table .sales-date-button { min-height: var(--control-small); padding: 0; border: 0; background: transparent; color: var(--pos-accent); text-decoration: underline; }
 html[data-theme] .sales-report-table .sales-date-button { min-height: var(--control-small); }
-html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; background: transparent; }
+html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; border-radius: 0; background: transparent; }
 @media (min-width: 1001px) { html[data-theme] .sales-reports { height: 100%; min-height: 0; } .sales-reports .sales-report-table { flex: 1; min-height: 0; max-height: none; } .sales-reports > .legacy-screen { overflow: auto; } }
 @media (max-width: 760px) {
   html[data-theme] .sales-metrics, html[data-theme] .sales-metrics-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -88,17 +88,37 @@ html[data-theme] .sales-reports > .legacy-screen { padding: 0; border: 0; backgr
 .cash-drawer-form legend { font-weight: 600; margin-bottom: 4px; }
 .cash-drawer-form label { display: grid; gap: 4px; }
 
-.custom-report-bar { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin: 12px 0; }
-.custom-report-bar label { display: grid; gap: 4px; font-size: 13px; }
-.custom-report-builder { margin: 12px 0; }
+.custom-report-bar { justify-content: flex-start; }
+.custom-report-bar label { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.custom-report-bar.page-header > button { margin-inline-start: auto; }
 .custom-report-builder > summary { cursor: pointer; font-weight: 600; }
-.custom-report-builder fieldset { margin: 12px 0; display: grid; gap: var(--space-2); }
-.custom-report-fields { display: flex; flex-wrap: wrap; gap: 6px 16px; }
-.custom-report-fields label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
-.custom-report-order { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 20px; }
-.custom-report-order li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.custom-report-builder fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+}
+.custom-report-builder fieldset > :is(.custom-report-fields, details, .custom-report-filter, .report-notes) { flex: 0 0 100%; min-width: 0; }
+.custom-report-fields { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); }
+.custom-report-fields label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-small);
+  padding-inline: var(--space-1);
+  font-size: var(--text-base);
+}
+html[data-theme] .sales-reports .custom-report-fields input[type="checkbox"] {
+  flex: none;
+  min-height: 0;
+  margin: 0;
+}
+.custom-report-order { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding-inline-start: var(--space-8); }
+.custom-report-order li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .custom-report-order li > span { min-width: 140px; }
-.custom-report-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.custom-report-filter { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 
 /* Compact report workspace: navigation, filters and totals stay above the ledger. */
 html[data-theme] .sales-reports { gap: var(--space-4); font-size: var(--text-base); line-height: 1.3; }
@@ -146,21 +166,18 @@ html[data-theme] .sales-reports > .sales-report-table .sales-date-button { min-h
 .custom-report-run { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: 12px 0; }
 
 /* GST returns */
-.gst-returns-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.gst-returns-period { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-.gst-returns-period label { display: grid; gap: 4px; }
+.gst-returns-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-inline-start: auto; }
 .gst-returns-warnings { border: 1px solid #d97706; background: #fffbeb; color: #78350f; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
 .gst-returns-warnings p { margin: 4px 0; }
 
 .custom-report > .custom-report-builder {
   border-block-start: 1px solid var(--line);
-  padding-block: 12px;
+  padding-block: var(--space-2);
   margin: 0;
 }
 .custom-report-builder summary { cursor: pointer; }
 .custom-report-builder summary small { font-weight: 400; }
-.custom-report > .custom-report-bar label { flex: 1 1 13rem; min-width: 0; }
-.custom-report > .custom-report-bar select { width: 100%; }
+.custom-report-bar select { width: 10rem; min-width: 0; }
 
 /* Shared density for every Reports & Analytics view, including nested report builders. */
 html[data-theme] .sales-reports {
@@ -168,7 +185,7 @@ html[data-theme] .sales-reports {
   --table-row: 28px;
   gap: 8px;
 }
-html[data-theme] .sales-reports :is(button, .report-more, .sales-period input),
+html[data-theme] .sales-reports :is(button, .report-more, .sales-period input, .report-toolbar :is(input, select), .custom-report-bar select, .custom-report-builder :is(select, input:not([type="checkbox"])), .pos-toolbar :is(input, select, summary)),
 html[data-theme] .sales-reports > .sales-period :is(button, input) {
   min-height: var(--report-control-height);
   padding: 3px 8px;
@@ -178,24 +195,52 @@ html[data-theme] .sales-reports .sales-date-button { padding: 0; }
 html[data-theme] .sales-reports :is(.sales-period, .report-navigation, .custom-report-bar) { gap: 6px; }
 html[data-theme] .sales-reports .sales-metric { padding: 6px 10px; }
 html[data-theme] .sales-reports table :is(td, th) { height: var(--table-row); padding: 3px 7px; }
-html[data-theme] .sales-reports .custom-report-builder { padding-block: 7px; }
+html[data-theme] .sales-reports .custom-report-builder summary { min-height: var(--control-small); }
 @media (pointer: coarse) {
   html[data-theme] .sales-reports { --report-control-height: 36px; }
+  html[data-theme] .sales-reports .custom-report-builder :is(summary, .custom-report-fields label) { min-height: var(--report-control-height); }
 }
 
-html[data-theme] [data-report-kind="staff-activity"] > .sales-period {
+.report-toolbar {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  gap: var(--space-3) var(--space-6);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
 }
-[data-report-kind="staff-activity"] .sales-period label {
+html[data-theme] .sales-reports .report-toolbar,
+html[data-theme] .sales-reports > * > :is(.page-header, .pos-toolbar) {
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  min-height: var(--report-control-height);
+  gap: var(--space-4);
+  margin-block: 0 var(--space-4);
+}
+html[data-theme] .sales-reports .report-toolbar > h3,
+html[data-theme] .sales-reports > * > :is(.page-header, .pos-toolbar) :is(h2, h3) {
+  margin-block: 0;
+  font-size: var(--text-heading);
+  line-height: 1.2;
+}
+.sales-reports > .legacy-screen > .pos-toolbar > h2 { margin-inline-end: 0; }
+.sales-reports > .legacy-screen > .pos-toolbar label :is(input, select) { margin: 0; }
+.day-end-caption { margin-bottom: var(--space-4); }
+.report-toolbar > button { margin-inline-start: auto; }
+html[data-theme] .report-toolbar .sales-period { align-items: center; }
+html[data-theme] .report-toolbar > label,
+html[data-theme] .report-toolbar .sales-period label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  min-width: 0;
 }
-[data-report-kind="staff-activity"] .sales-period .sales-refresh { margin-left: 0; }
+.report-toolbar .sales-period input[type="date"] { width: 124px; }
+.report-toolbar .sales-period input[type="month"] { width: 150px; }
+.report-toolbar .sales-presets { width: auto; }
+.report-toolbar .sales-period .sales-refresh { margin-left: 0; }
 [data-report-kind="staff-activity"] > .sales-range-caption {
   justify-content: flex-start;
   gap: 4px 16px;

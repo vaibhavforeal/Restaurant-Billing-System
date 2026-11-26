@@ -179,12 +179,12 @@
   .inventory-screen > p:first-of-type { color: var(--muted); font-size: 13px; }
   @media (max-width: 960px) { .catalog-layout { grid-template-columns: 1fr; } .category-editor ul { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } }
   @media (max-width: 650px) { .settings-form { grid-template-columns: 1fr; } .system-settings label { display: grid; gap: 8px; } .system-settings fieldset { padding: 14px; } .category-editor ul { grid-template-columns: 1fr; } }
-  .kitchen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); gap: 20px; }
+  .kitchen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); align-items: start; gap: 12px; }
   .kitchen-ticket { background: white; border: 1px solid var(--line); border-top: 3px solid var(--red); border-radius: 10px; padding: 20px; }
-  .ticket-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; } .ticket-header strong { font-size: 18px; } .ticket-header span { font-size: 11px; color: #9c6826; background: #fff7e8; padding: 4px 7px; border-radius: 4px; }
-  .ticket-location { font-size: 12px; color: var(--muted); padding-bottom: 14px; border-bottom: 1px dashed #dcdfe5; }
+  .ticket-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; } .ticket-header strong { font-size: 18px; } .ticket-header span { font-size: 11px; color: #9c6826; background: #fff7e8; padding: 4px 7px; border-radius: 4px; }
+  .ticket-location { font-size: 12px; color: var(--muted); padding-bottom: 8px; border-bottom: 1px dashed #dcdfe5; }
   .ticket-location.kds-tag-zomato { color: var(--red); font-size: 14px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
-  .ticket-items { list-style: none; padding: 0; margin: 15px 0; } .ticket-items li { padding: 7px 0; font-weight: 600; } .ticket-items small { display: block; font-weight: 400; color: #8a8e98; margin-top: 4px; }
+  .ticket-items { list-style: none; padding: 0; margin: 8px 0; } .ticket-items li { padding: 4px 0; font-weight: 600; } .ticket-items small { display: block; font-weight: 400; color: #8a8e98; margin-top: 4px; }
   .kitchen-ticket button { width: 100%; }
   .legacy-screen { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 26px; min-width: 0; }
   .legacy-screen h2 { font-size: 24px; } .legacy-screen h3 { margin-top: 24px; }

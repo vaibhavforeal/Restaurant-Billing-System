@@ -200,9 +200,9 @@ export function CashDrawer({ canSettle, canCloseDay, canReadReports = true, onOp
       </fieldset></details>}
     </>}
 
-    {canReadReports && <><div className="page-header"><h3>Shifts and day close</h3>
+    {canReadReports && <><header className="report-toolbar"><h3>Shifts and day close</h3>
       <label>Date <input type="date" value={date} max={businessToday()} onChange={(e) => e.target.value && setDate(e.target.value)} /></label>
-    </div>
+    </header>
     <div className="sales-report-table" role="region" aria-label="Shifts" tabIndex={0}>
       <table>
         <thead><tr><th>Drawer</th><th>Cashier</th><th>Handover</th><th>Opened</th><th>Closed</th><th>Float</th><th>Cash sales</th><th>Refunds</th><th>Pay-in / out</th><th>Expected</th><th>Counted</th><th>Difference</th></tr></thead>

@@ -66,14 +66,19 @@ export function ZomatoReconciliationPanel() {
     downloadText(toCsv([header, ...rows]), `zomato-reconciliation-${period.from}-${period.to}.csv`, "text/csv;charset=utf-8");
   }
   return <section className="zomato-screen">
-    <div className="page-header"><div><h3>Zomato reconciliation</h3></div><button onClick={() => void refresh()} disabled={busy}>Refresh</button></div>
+    <header className="report-toolbar">
+      <h3>Zomato reconciliation</h3>
+      <div className="sales-period" role="group" aria-label="Reconciliation period">
+        <label>From<input type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))} /></label>
+        <label>To<input type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))} /></label>
+        <button onClick={() => void refresh()} disabled={busy}>Refresh</button>
+      </div>
+      <button onClick={exportReport} disabled={!currentReport || busy || !!error || !visible.length}>Export CSV</button>
+    </header>
     <div className="zomato-status"><strong>{settings?.adapterConfigured && settings.enabled ? "Live receiver enabled" : "Live activation pending"}</strong>
       <span>{settings?.restaurantId ? `${settings.restaurantName || "Restaurant"} · ${settings.restaurantId}` : "Add your restaurant ID in Marketplace, Zomato settings to get started."}</span></div>
     {error && <p role="alert">{error}. Displayed data may be out of date. Use Refresh to try again.</p>}
     {!settings && busy && <p role="status">Loading Zomato workspace…</p>}
-    <div className="zomato-toolbar"><label>From<input type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))} /></label>
-      <label>To<input type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))} /></label>
-      <button onClick={exportReport} disabled={!currentReport || busy || !!error || !visible.length}>Export CSV</button></div>
     <p className="muted">Orders placed or settled in this period, with all imported settlement entries for each order. Dates use {currentReport?.timezone ?? "the restaurant server timezone"}.</p>
     {currentReport && <>
       <div className="zomato-metrics">

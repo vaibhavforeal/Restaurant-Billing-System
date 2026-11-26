@@ -46,8 +46,11 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
     } catch (e) { setError(e instanceof Error ? e.message : "Could not export report"); }
   }
   return <div className="operational-report" data-report-kind={kind}>
-    <div className="page-header"><h3>{isDirect(kind) ? DIRECT_TITLES[kind] : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3><button disabled={!report || loading} onClick={exportReport}>Export CSV</button></div>
-    <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((v) => v + 1); }} onRefresh={() => { invalidate(); setRevision((v) => v + 1); }} />
+    <header className="report-toolbar">
+      <h3>{isDirect(kind) ? DIRECT_TITLES[kind] : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3>
+      <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((v) => v + 1); }} onRefresh={() => { invalidate(); setRevision((v) => v + 1); }} />
+      <button type="button" disabled={!report || loading} onClick={exportReport}>Export CSV</button>
+    </header>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {loading && <p role="status">Loading report…</p>}
     {report && <>

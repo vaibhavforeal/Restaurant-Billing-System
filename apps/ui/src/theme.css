@@ -45,6 +45,7 @@
     --danger-text: #ff9ca7; --warning-text: #f3c77e; --success-text: #96d9b2;
   }
   html[data-theme="dark"] :is(button, input, select, textarea) { color: var(--ink); background-color: var(--surface); border-color: var(--line); }
+  html[data-theme="dark"] select option:not(:disabled) { color: var(--ink); background-color: var(--surface); }
   html[data-theme="dark"] button:hover:not(:disabled) { background-color: #2d3340; border-color: #626d80; }
   html[data-theme="dark"] :is(.sidebar, .topbar, .panel, .stat-card, .welcome-panel, .table-card, .menu-card, .order-cart, .kitchen-ticket, .legacy-screen, .auth-card, .tables-parcels, .tables-request-summary, .workspace-dialog, .billing-dialog, .billing-panel.billing-footer) { background: var(--surface); }
   html[data-theme="dark"] .auth-shell { background: #14171d; }

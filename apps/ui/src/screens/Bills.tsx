@@ -30,7 +30,7 @@ export function Bills({ onOpenOrder }: { onOpenOrder: (id: string) => void }) {
   return <section className="legacy-screen pos-history">
     <div className="pos-toolbar"><h2>Bills</h2>
     <label>Show <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={busy}><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="all">All bills</option></select></label></div>
-    <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>
+    {error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>}
     {!bills.length && <p>No bills to show.</p>}
     <TableScroller><table style={{ width: "100%", textAlign: "left", borderSpacing: "8px 16px" }}>
       <thead><tr><th>Bill</th><th>Date</th><th>Table / parcel</th><th className="pos-money">Total</th><th>Status</th><th>Action</th></tr></thead>

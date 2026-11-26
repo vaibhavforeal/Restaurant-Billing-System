@@ -48,7 +48,7 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
     }
   }
   return <section className="legacy-screen">
-    <div className="pos-toolbar"><h2>Day-end report</h2>
+    <div className="pos-toolbar"><h3>Day-end report</h3>
       <label>Business date <input type="date" value={date} onChange={(e) => { setReport(null); setDate(e.target.value); }} /></label>
       <button disabled={!date} onClick={() => { setReport(null); setVersion((v) => v + 1); }}>Refresh report</button>
       <OverflowMenu label="Export"><button disabled={!report || report.date !== date} onClick={exportReport} title="Download this report as a CSV file for Excel">Export CSV</button></OverflowMenu>
@@ -61,10 +61,10 @@ export function DayEnd({ initialDate }: { initialDate?: string | undefined }) {
       </AiAnswerCard>
     </section>}
     {summary.error && <p role="alert" className="ask-error">{summary.error}</p>}
-    <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>
+    {error && <p role="alert" style={{ color: "var(--danger-text, crimson)" }}>{error}</p>}
     {message && <p role="status">{message}</p>}
     {report && <>
-      <p>{report.date} · Server timezone: {report.timezone}</p>
+      <div className="sales-range-caption day-end-caption"><span>{report.date} · Server timezone: {report.timezone}</span></div>
       <div className="pos-report-grid"><section><h3>Bills issued on this date</h3>
       <dl className="pos-totals">
         <dt>Number of bills</dt><dd>{report.sales.billCount}</dd>
