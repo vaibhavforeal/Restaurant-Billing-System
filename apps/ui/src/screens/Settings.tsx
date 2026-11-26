@@ -63,6 +63,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   // Stations section
   const [stations, setStations] = useState<StationInfo[]>([]);
   const [newStationName, setNewStationName] = useState("");
+  const [newStationPrinter, setNewStationPrinter] = useState("");
+  const [stationStatus, setStationStatus] = useState("");
 
   // Jobs section
   const [jobs, setJobs] = useState<PrintJobInfo[]>([]);
@@ -206,22 +208,34 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
   function addStation() {
     const name = newStationName.trim();
     if (!name) return setError("Station name is required");
+    setStationStatus("");
     void run(async () => {
-      await apiFetch("/api/kot-stations", { method: "POST", body: JSON.stringify({ name }) });
+      const { station } = await apiFetch<{ station: StationInfo }>("/api/kot-stations", {
+        method: "POST",
+        body: JSON.stringify({ name, printerId: newStationPrinter || null }),
+      });
+      setStations((current) => [...current, station].sort((a, b) => a.name.localeCompare(b.name)));
       setNewStationName("");
-      await loadAll();
+      setNewStationPrinter("");
+      setStationStatus(`${station.name} added`);
     }, "Failed to add station");
   }
 
-  async function updateStationPrinter(stationId: string, printerId: string) {
-    const saved = await run(async () => {
-      await apiFetch(`/api/kot-stations/${stationId}`, { method: "PATCH", body: JSON.stringify({ printerId: printerId || null }) });
-      await loadAll();
-    }, "Failed to update station");
-    if (!saved) await loadAll();
+  function updateStationPrinter(stationId: string, printerId: string) {
+    setStationStatus("");
+    void run(async () => {
+      const { station } = await apiFetch<{ station: StationInfo }>(`/api/kot-stations/${stationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ printerId: printerId || null }),
+      });
+      setStations((current) => current.map((item) => item.id === station.id ? station : item));
+      const printer = printers.find((item) => item.id === station.printerId);
+      setStationStatus(`${station.name}: ${printer?.name ?? "No printer"} saved`);
+    }, "Failed to update station printer");
   }
 
   async function toggleStation(s: StationInfo) {
+    setStationStatus("");
     const saved = await run(async () => {
       await apiFetch(`/api/kot-stations/${s.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !s.isActive }) });
       await loadAll();
@@ -459,6 +473,21 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
       {/* KOT stations section */}
       {active === "printers" && printerSection === "stations" && <div className="panel" role="region" aria-label="KOT stations">
 
+        <form className="station-form" onSubmit={(event) => { event.preventDefault(); addStation(); }}>
+          <label>Station name
+            <input required value={newStationName} onChange={(event) => setNewStationName(event.target.value)} disabled={busy} />
+          </label>
+          <label>Printer
+            <select value={newStationPrinter} onChange={(event) => setNewStationPrinter(event.target.value)} disabled={busy}>
+              <option value="">No printer</option>
+              {activePrinters.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+            </select>
+          </label>
+          <button type="submit" disabled={busy}>Add station</button>
+        </form>
+        {!activePrinters.length && <p>No active printers. <button type="button" onClick={() => setPrinterSection("devices")}>Configure printers</button></p>}
+        <div role="status">{stationStatus}</div>
+        <div className="station-table-scroll" role="region" aria-label="Station printer assignments" tabIndex={0}>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
@@ -480,6 +509,8 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
                     disabled={!s.isActive || busy}
                   >
                     <option value="">No printer</option>
+                    {s.printerId && !activePrinters.some((printer) => printer.id === s.printerId) &&
+                      <option value={s.printerId} disabled>{printers.find((printer) => printer.id === s.printerId)?.name ?? "Printer"} (inactive)</option>}
                     {activePrinters.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -495,16 +526,6 @@ export function Settings({ section }: { section?: "plan" | undefined } = {}) {
             ))}
           </tbody>
         </table>
-
-        {/* Add station form */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            placeholder="Station name" aria-label="Station name"
-            value={newStationName}
-            onChange={(e) => setNewStationName(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <button onClick={() => void addStation()} disabled={busy}>Add station</button>
         </div>
       </div>}
 

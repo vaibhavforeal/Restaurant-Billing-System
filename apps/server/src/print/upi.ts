@@ -1,12 +1,15 @@
 import { UpiId, type Bill } from "@masalapos/domain";
 import QRCode from "qrcode";
 
+export const SAMPLE_UPI_ID = "masalapos-sample@invalid";
+
 /** A payment request, never evidence that a payment was received. */
 export function billUpiPayment(bill: Bill) {
   const parsed = UpiId.safeParse(bill.receipt.upiId);
   if (bill.status !== "unpaid" || !parsed.success || !parsed.data) return null;
   const amountPaise = bill.totalPaise - bill.payments.reduce((sum, p) => sum + p.amountPaise, 0);
   if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) return null;
+  if (parsed.data === SAMPLE_UPI_ID) return { upiId: parsed.data, amountPaise, uri: `MasalaPOS Sample Data · Bill ${bill.invoiceNo}`, sample: true };
   const params = {
     pa: parsed.data,
     pn: Array.from(bill.receipt.restaurantName.replace(/[\x00-\x1f\x7f]/g, " ").trim()).slice(0, 50).join(""),
@@ -17,7 +20,7 @@ export function billUpiPayment(bill: Bill) {
   };
   // Percent-encode values (including spaces) for UPI app compatibility.
   const uri = `upi://pay?${Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;
-  return { upiId: parsed.data, amountPaise, uri };
+  return { upiId: parsed.data, amountPaise, uri, sample: false };
 }
 
 /** Locally generated black/white SVG with the required four-module quiet zone. */

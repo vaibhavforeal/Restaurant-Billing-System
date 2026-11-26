@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill, type BillCreditNote } from "@masalapos/domain";
-import { auth, freshAppWithFakeSink, setupAdmin } from "../test-helpers.js";
+import { auth, freshAppWithFakeSink, setupTradingAdmin } from "../test-helpers.js";
 import { creditNoteHtml, creditNoteSlip, type CreditNoteView } from "./credit-note.js";
 import { renderBytes } from "./render-bytes.js";
 
@@ -13,7 +13,7 @@ describe("credit note slip", () => {
 
   beforeEach(async () => {
     ({ app, fake } = freshAppWithFakeSink());
-    ({ token } = await setupAdmin(app));
+    ({ token } = await setupTradingAdmin(app));
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: category.json().category.id, pricePaise: 3500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201);

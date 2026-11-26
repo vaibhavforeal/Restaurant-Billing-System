@@ -61,6 +61,7 @@ import { registerZomato, type ZomatoProvider } from "./zomato.js";
 
 export interface ServerOptions {
   demo?: boolean;
+  sampleData?: boolean;
   db: Database;
   logger?: FastifyServerOptions["logger"];
   authTimeoutMs?: number;  // WS auth frame timeout (default 5000ms in registerWs)
@@ -127,7 +128,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   configureLicensing(app, opts.licensing, opts.appVersion);
   provideModuleAllowances(app.db, () => app.licensing.status().modules);
-  registerAuth(app, opts.demo ?? false);
+  registerAuth(app, opts.demo ?? false, opts.sampleData ?? false);
   registerWs(app, opts.authTimeoutMs);
   registerLicensing(app);
   registerSupport(app, {
@@ -139,7 +140,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
   registerCatalog(app);
   registerUsers(app);
-  registerSettings(app);
+  registerSettings(app, opts.sampleData);
   registerStaffActivity(app);
   // The AI assistant reaches MasalaPOS's AI service the same way support does: with the counter's installation ID and secret.
   const aiService = opts.ai?.service ?? (opts.licensing?.serviceUrl && opts.licensing.installationSecret
@@ -179,8 +180,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   registerStock(app);
   registerPrepForecast(app);
   registerCosting(app);
-  registerGuestOrdering(app, opts.port);
-  registerFeedback(app, opts.port);
+  registerGuestOrdering(app, opts.port, opts.sampleData);
+  registerFeedback(app, opts.port, opts.sampleData);
   registerGuestServices(app);
   registerModules(app);
   registerIntegrations(app);
@@ -191,8 +192,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     app.addHook("onReady", async () => { cloudBackups.start(); });
     app.addHook("preClose", async () => { await cloudBackups.close(); });
   }
-  const staging = opts.backups && opts.updateBridge ? new RestoreStaging(opts.backups.dataDir) : undefined;
-  registerSystem(app, opts.backups, opts.port, opts.generation, opts.captainHttps, cloudBackups, { ...(staging ? { staging } : {}), ...(opts.updateBridge ? { desktop: opts.updateBridge } : {}) });
+  const staging = opts.backups && opts.updateBridge && !opts.sampleData ? new RestoreStaging(opts.backups.dataDir) : undefined;
+  registerSystem(app, opts.backups, opts.port, opts.generation, opts.captainHttps, cloudBackups, { ...(staging ? { staging } : {}), ...(opts.updateBridge ? { desktop: opts.updateBridge } : {}), ...(opts.sampleData ? { localOnly: true } : {}) });
 
   app.get("/api/health", async () => ({ ok: true, ...(opts.instanceId ? { instanceId: opts.instanceId } : {}) }));
 

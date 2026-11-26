@@ -81,12 +81,12 @@ const requestJson = (db: Database, r: RequestRow): GuestRequest => ({ ...receipt
 const tableJson = (r: TableRow): QrTable => ({ id: r.id, name: r.name, area: r.area, isActive: r.is_active === 1,
   enabled: r.enabled === 1, path: r.token ? `/menu#${r.token}` : null });
 
-export function registerGuestOrdering(app: FastifyInstance, port = 4100) {
+export function registerGuestOrdering(app: FastifyInstance, port = 4100, localOnly = false) {
   const tableSql = "SELECT t.*, q.enabled, q.token FROM dining_tables t LEFT JOIN table_qr q ON q.table_id = t.id";
   const requestSql = "SELECT r.*, u.name AS reviewer_name FROM guest_requests r LEFT JOIN users u ON u.id = r.reviewed_by";
   const getRequest = (id: string) => app.db.prepare(`${requestSql} WHERE r.id = ?`).get(id) as RequestRow | undefined;
   const getTable = (id: string) => app.db.prepare(`${tableSql} WHERE t.id = ?`).get(id) as TableRow | undefined;
-  const origins = () => [...lanUrls(port), `http://localhost:${port}`, `http://127.0.0.1:${port}`];
+  const origins = () => [...(localOnly ? [] : lanUrls(port)), `http://localhost:${port}`, `http://127.0.0.1:${port}`];
   const changed = () => app.broadcast("guest-request.changed", {});
   function expire() {
     const result = app.db.prepare("UPDATE guest_requests SET status = 'expired', reason = 'This request expired before staff accepted it.' WHERE status = 'pending' AND expires_at <= ?").run(Date.now());

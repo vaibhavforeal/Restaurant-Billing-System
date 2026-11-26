@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { uuidv7, type Bill, type BillCreditNote, type PayMode } from "@masalapos/domain";
-import { auth, createUser, freshApp, setupAdmin, testLogin } from "./test-helpers.js";
+import { auth, createTradingUser, freshApp, setupTradingAdmin, testLogin } from "./test-helpers.js";
 import { loadBillCredit, resolveApprover } from "./credit-notes.js";
 
 describe("credit preview, approval and bill credit data", () => {
@@ -13,8 +13,8 @@ describe("credit preview, approval and bill credit data", () => {
 
   beforeEach(async () => {
     app = freshApp();
-    admin = await setupAdmin(app);
-    cashier = await createUser(app, admin.token, { name: "Cara", pin: "5678", role: "cashier" });
+    admin = await setupTradingAdmin(app);
+    cashier = await createTradingUser(app, admin.token, { name: "Cara", pin: "5678", role: "cashier" });
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(admin.token), payload: { name: "Food" } });
     categoryId = category.json().category.id;
     const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token), payload: { name: "Thali", categoryId, pricePaise: 3500, gstRate: 5, kotStationId: null } });
@@ -171,7 +171,7 @@ describe("credit preview, approval and bill credit data", () => {
 
     it("is not available to a waiter", async () => {
       const b = await bill();
-      const waiter = await createUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
+      const waiter = await createTradingUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
       expect((await preview(b.id, { kind: "void" }, waiter.token)).statusCode).toBe(403);
     });
 
@@ -301,7 +301,7 @@ describe("credit preview, approval and bill credit data", () => {
 
     it("is not available to a waiter", async () => {
       const b = await bill();
-      const waiter = await createUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
+      const waiter = await createTradingUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
       expect((await voidBill(b.id, { refunds: [{ mode: "cash", amountPaise: 10500 }] }, waiter.token)).statusCode).toBe(403);
     });
 
@@ -594,7 +594,7 @@ describe("credit preview, approval and bill credit data", () => {
       const wrong = await refundBill(b.id, { ...body, approverPin: "0000" });
       expect(wrong.statusCode).toBe(401);
       expect(wrong.json().error).toBe("Admin PIN is incorrect");
-      const waiter = await createUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
+      const waiter = await createTradingUser(app, admin.token, { name: "Wally", pin: "9012", role: "waiter" });
       expect((await refundBill(b.id, body, waiter.token)).statusCode).toBe(403);
       expect(count("SELECT COUNT(*) AS n FROM credit_notes")).toBe(0);
       const self = await refundBill(b.id, { ...body, approverPin: undefined }, admin.token);
@@ -698,7 +698,7 @@ describe("credit preview, approval and bill credit data", () => {
     });
 
     it("rejects a wrong PIN, a non-admin PIN and an inactive admin's PIN", async () => {
-      const second = await createUser(app, admin.token, { name: "Dev", pin: "3456", role: "admin" });
+      const second = await createTradingUser(app, admin.token, { name: "Dev", pin: "3456", role: "admin" });
       app.db.prepare("UPDATE users SET is_active = 0 WHERE id = ?").run(second.id);
       for (const pin of ["0000", "5678", "3456"]) {
         const err = await resolveApprover(app, cashierReq(), pin).catch((e: Error & { statusCode: number }) => e);

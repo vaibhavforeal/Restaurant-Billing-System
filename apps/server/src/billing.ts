@@ -1,8 +1,9 @@
+import { tradingShift } from "./cash-custody.js";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { BillCreate, BillPreview, BillSettle, BillPrint, calculateBill, nextSequence, uuidv7, roleFor,
   localDateKey, pointsEarned, nextInvoiceNo, GST_STATES, type BillShow, type BuyerDetailsInput, type Bill, type ChargeInput, type ChargeLine, type Database, type GstMode, type PaymentMode, type ReceiptCustomer, type ReceiptSnapshot, type TaxLine } from "@masalapos/domain";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { httpError } from "./http-error.js";
 import { loadBillCreditNotes } from "./credit-notes.js";
 import { readBillingSettings } from "./gst-settings.js";
@@ -231,7 +232,7 @@ export function issueBill(db: Database, orderId: string, opts: {
  * `clientRef` is the caller's job.
  */
 export function settleBill(db: Database, billId: string, opts: {
-  payments: Array<{ mode: PaymentMode; amountPaise: number; refNote?: string | null }>; clientRef: string; requestJson: string; actorId: string;
+  payments: Array<{ mode: PaymentMode; amountPaise: number; refNote?: string | null }>; clientRef: string; requestJson: string; actorId: string; shiftId?: string | undefined;
 }): string[] {
   const bill = db.prepare("SELECT * FROM bills WHERE id = ?").get(billId) as BillRow | undefined;
   if (!bill) throw httpError(404, "bill not found");
@@ -243,7 +244,9 @@ export function settleBill(db: Database, billId: string, opts: {
   const now = Date.now();
   const linkedTables = linkedTableIds(db, bill.order_id);
   db.prepare("INSERT INTO bill_settlements (bill_id, client_ref, request_json, created_by, created_at) VALUES (?, ?, ?, ?, ?)").run(billId, opts.clientRef, opts.requestJson, opts.actorId, now);
-  for (const payment of opts.payments) db.prepare("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(uuidv7(), billId, payment.mode, payment.amountPaise, payment.refNote || null, now);
+  const shiftId = opts.payments.some(p => p.mode === "cash") ? tradingShift(db, opts.actorId) : null;
+  if (opts.shiftId && shiftId !== opts.shiftId) throw httpError(409, "Drawer shift changed. Review the cash payment.");
+  for (const payment of opts.payments) db.prepare("INSERT INTO payments (id, bill_id, mode, amount_paise, ref_note, created_at, shift_id) VALUES (?, ?, ?, ?, ?, ?, ?)").run(uuidv7(), billId, payment.mode, payment.amountPaise, payment.refNote || null, now, payment.mode === "cash" ? shiftId : null);
   db.prepare("UPDATE bills SET status = 'paid' WHERE id = ?").run(billId);
   db.prepare("UPDATE orders SET status = 'settled', closed_at = ? WHERE id = ?").run(now, bill.order_id);
   return linkedTables;
@@ -315,11 +318,15 @@ export function registerBilling(app: FastifyInstance): void {
     const row = db.prepare("SELECT id FROM bills WHERE order_id = ?").get(id) as { id: string } | undefined;
     return { bill: row ? getBill(row.id) : null };
   });
-  app.post("/api/orders/:id/bill", { preHandler: create }, async (req, reply) => {
+  const settlementSchema = BillSettle.extend({ shiftId: z.string().min(1).optional() });
+  const checkoutSchema = BillCreate.safeExtend({ settlement: settlementSchema });
+  async function createBill(req: FastifyRequest, reply: FastifyReply, checkout: boolean) {
     const { id: orderId } = req.params as { id: string };
     const { approverPin, ...body } = BillCreate.parse(req.body);
+    const payment = checkout ? checkoutSchema.parse(req.body).settlement : null;
+    if (payment?.payments.some(row => row.mode === "cash") && !payment.shiftId) throw httpError(400, "Choose a drawer shift for cash checkout");
     // The PIN is a credential: it approves this request but is never stored in the replay record.
-    const requestJson = JSON.stringify({ orderId, ...body });
+    const requestJson = JSON.stringify({ orderId, ...body, ...(payment ? { payment, cashierId: req.user.id } : {}) });
     // A replay of an already-issued bill needs no approval; the transaction below answers it.
     const replayed = db.prepare("SELECT 1 FROM bills WHERE client_ref = ?").get(body.clientRef) !== undefined;
     if (!replayed) refuseZomato(orderType(orderId));
@@ -336,21 +343,34 @@ export function registerBilling(app: FastifyInstance): void {
       const pricingTime = Date.now();
       const value = preview(orderId, body, { id: req.user.id, role: req.user.role, approvedBy }, pricingTime);
       if (value.previewKey !== body.previewKey) throw httpError(409, "Order changed; review a fresh bill preview");
-      const target = body.printerId ? printer(body.printerId) : null;
+      const target = !checkout && body.printerId ? printer(body.printerId) : null;
       const issued = issueBill(db, orderId, { pricingTime, discountPaise: body.discountPaise, discountNote: body.discountNote ?? null, redeemPoints: body.redeemPoints, clientRef: body.clientRef, requestJson, actorId: req.user.id, role: req.user.role, approvedBy, buyer: body.buyer, serviceCharge: body.serviceCharge });
       changedStockIds.push(...issued.changedStockIds);
+      const tables = payment ? settleBill(db, issued.billId, {
+        ...payment, actorId: req.user.id, requestJson: JSON.stringify({billId: issued.billId, payments: payment.payments}),
+      }) : linkedTableIds(db, orderId);
       const print = target ? printNewBill(getBill(issued.billId), target) : { value: null, error: null };
-      return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: linkedTableIds(db, orderId) };
+      return { billId: issued.billId, created: true, job: print.value, printError: print.error, linkedTables: tables };
     })();
     const bill = getBill(result.billId);
     if (result.created) publishStock(app, changedStockIds);
     const order = result.created ? broadcast(orderId, result.linkedTables) : loadOrderJson(db, orderId);
-    const job = result.job;
-    return reply.status(result.created ? 201 : 200).send({ bill, order, job, printError: result.printError });
-  });
+    let job = result.job;
+    let printError = result.printError;
+    if (result.created && checkout && body.printerId) {
+      try {
+        const printed = printNewBill(bill, printer(body.printerId));
+        job = printed.value;
+        printError = printed.error;
+      } catch { printError = "Payment recorded. Receipt could not be queued."; }
+    }
+    return reply.status(result.created ? 201 : 200).send({ bill, order, job, printError });
+  }
+  app.post("/api/orders/:id/bill", { preHandler: create }, (req, reply) => createBill(req, reply, false));
+  app.post("/api/orders/:id/checkout", { preHandler: [create, app.requirePermission("bills.settle")] }, (req, reply) => createBill(req, reply, true));
   app.post("/api/bills/:id/settle", { preHandler: app.requirePermission("bills.settle") }, async (req) => {
     const { id } = req.params as { id: string };
-    const body = BillSettle.parse(req.body);
+    const body = settlementSchema.parse(req.body);
     const requestJson = JSON.stringify({ billId: id, payments: body.payments });
     // Settling deactivates the order's table links, so the linked tables are read inside the transaction.
     const changed = db.transaction((): string[] | null => {
@@ -360,7 +380,7 @@ export function registerBilling(app: FastifyInstance): void {
         return null;
       }
       refuseZomato((db.prepare("SELECT o.type FROM bills b JOIN orders o ON o.id = b.order_id WHERE b.id = ?").get(id) as { type: string } | undefined)?.type);
-      return settleBill(db, id, { payments: body.payments, clientRef: body.clientRef, requestJson, actorId: req.user.id });
+      return settleBill(db, id, { shiftId: body.shiftId, payments: body.payments, clientRef: body.clientRef, requestJson, actorId: req.user.id });
     })();
     const bill = getBill(id);
     return { bill, order: changed ? broadcast(bill.orderId, changed) : loadOrderJson(db, bill.orderId) };
@@ -377,7 +397,7 @@ export function registerBilling(app: FastifyInstance): void {
     const payment = billUpiPayment(bill);
     return { payment: payment ? {
       billId: bill.id, billNo: bill.billNo, invoiceNo: bill.invoiceNo, restaurantName: bill.receipt.restaurantName,
-      upiId: payment.upiId, amountPaise: payment.amountPaise,
+      upiId: payment.upiId, amountPaise: payment.amountPaise, ...(payment.sample ? { sample: true } : {}),
       qrDataUrl: `data:image/svg+xml;base64,${Buffer.from(upiQrSvg(payment.uri)).toString("base64")}`,
     } : null };
   });

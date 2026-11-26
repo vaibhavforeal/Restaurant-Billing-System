@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { saveReportLines, uuidv7, type Bill } from "@masalapos/domain";
-import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, freshAppWithFakeSink, setupTradingAdmin } from "./test-helpers.js";
 import { billUpiPayment } from "./print/upi.js";
 
 describe("billing and day-end", () => {
@@ -13,7 +13,7 @@ describe("billing and day-end", () => {
   beforeEach(async () => {
     ({ app, fake } = freshAppWithFakeSink());
     let admin;
-    ({ token, user: admin } = await setupAdmin(app)); adminName = admin.name;
+    ({ token, user: admin } = await setupTradingAdmin(app)); adminName = admin.name;
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Meal", categoryId: category.json().category.id, pricePaise: 10500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201); productId = product.json().product.id;
@@ -257,8 +257,8 @@ describe("billing and day-end", () => {
   });
 
   it("enforces roles and the cashier 10% discount limit at the API", async () => {
-    const waiter = await createUser(app, token, { name: "Waiter", pin: "2222", role: "waiter" });
-    const cashier = await createUser(app, token, { name: "Cashier", pin: "3333", role: "cashier" });
+    const waiter = await createTradingUser(app, token, { name: "Waiter", pin: "2222", role: "waiter" });
+    const cashier = await createTradingUser(app, token, { name: "Cashier", pin: "3333", role: "cashier" });
     const id = await order();
     expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(waiter.token), payload: {} })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: `/api/orders/${id}/bill-preview`, headers: auth(cashier.token), payload: { discountPaise: 1051, discountNote: "Test" } })).statusCode).toBe(403);

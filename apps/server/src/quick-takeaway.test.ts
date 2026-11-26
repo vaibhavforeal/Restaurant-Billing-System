@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { MIGRATIONS, PLANS, migrate, openDb, type Bill, type BillTotals, type GstMode, type LicenseClaims, type ReceiptSnapshot, planModules } from "@masalapos/domain";
 import { buildServer } from "./server.js";
 import { makeFakeSink } from "./print/sinks.js";
-import { SETUP , testLogin } from "./test-helpers.js";
+import { openTestDrawer, SETUP, testLogin } from "./test-helpers.js";
 
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -21,13 +21,14 @@ afterEach(async () => {
 
 // Every fixture uses a signed Basic license, proving core takeaway billing is
 // available without the recipe or QR ordering entitlements.
-async function fixture(gstMode: GstMode = "included") {
+async function fixture(gstMode: GstMode = "included", openDrawer = true) {
   const now = Date.now(), installationId = randomUUID(), db = openDb(":memory:"); migrate(db, MIGRATIONS);
   const fake = makeFakeSink();
   const app = buildServer({ db, sinkSend: fake.send, licensing: { publicKey, installationId } }); apps.push(app);
   const device = "a".repeat(64);
   const setup = await app.inject({ method: "POST", url: "/api/setup", payload: SETUP, headers: { "x-masalapos-device": device } });
   expect(setup.statusCode, setup.body).toBe(201);
+  if (openDrawer) openTestDrawer(app,setup.json().user.id);
   const headers: Headers = { authorization: `Bearer ${setup.json().token}`, "x-masalapos-device": device };
   const api = (method: "GET" | "POST" | "PATCH" | "PUT", url: string, payload?: object, as = headers) =>
     app.inject({ method, url, headers: as, ...(payload === undefined ? {} : { payload }) });
@@ -89,6 +90,7 @@ async function fixture(gstMode: GstMode = "included") {
     expect((await api("POST", "/api/users", { name: role, role, ...testLogin({ name: role, pin }) })).statusCode).toBe(201);
     const loggedIn = await api("POST", "/api/login", testLogin({ name: role, pin }));
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
+    if (role === "cashier") openTestDrawer(app,loggedIn.json().user.id);
     return { authorization: `Bearer ${loggedIn.json().token}`, "x-masalapos-device": device };
   }
   return { app, fake, api, headers, meal, drink, riceId, drinkStockId, stationId, balances, draft, punch, send, preview, issue, staff };
@@ -274,4 +276,41 @@ describe("quick takeaway orchestration", () => {
     expect(f.app.db.prepare("SELECT COUNT(*) AS n FROM kots").get()).toEqual({ n: 1 });
     expect(f.balances()).toEqual([4.75, 19]);
   });
+});
+
+it("rolls back cash checkout on shift change and replays a paid sale once", async () => {
+  const { api, app, punch, send, preview } = await fixture();
+  const { order } = await punch();
+  await send(order);
+  const { previewKey, totalPaise } = await preview(order.id);
+  const shift = (await api("GET", "/api/shifts/current")).json().shift;
+  const settlement = { clientRef: randomUUID(), shiftId: shift.id, payments: [
+    { mode: "cash", amountPaise: 100 }, { mode: "upi", amountPaise: totalPaise - 100 },
+  ] };
+  const body = { clientRef: randomUUID(), previewKey, settlement, printerId: "unavailable-printer" };
+  const path = `/api/orders/${order.id}/checkout`;
+  expect((await api("POST", path, { ...body, settlement: { ...settlement, shiftId: randomUUID() } })).statusCode).toBe(409);
+  expect((await api("GET", `/api/orders/${order.id}/bill`)).json().bill).toBeNull();
+  const paid = await api("POST", path, body);
+  expect(paid.statusCode, paid.body).toBe(201);
+  expect(paid.json().bill.status).toBe("paid");
+  expect(paid.json().printError).toBeTruthy();
+  expect((await api("POST", path, body)).statusCode).toBe(200);
+  expect(app.db.prepare("SELECT shift_id FROM payments WHERE mode='cash'").get()).toEqual({shift_id:shift.id});
+  expect(app.db.prepare("SELECT COUNT(*) AS n FROM bill_settlements").get()).toEqual({n:1});
+});
+
+it("accepts UPI-only checkout without a drawer and refuses cash before issuing", async () => {
+  const { api, punch, send, preview } = await fixture("included", false);
+  const { order } = await punch();
+  await send(order);
+  const { previewKey, totalPaise } = await preview(order.id);
+  const path = `/api/orders/${order.id}/checkout`;
+  const body = { clientRef: randomUUID(), previewKey };
+  const payment = { clientRef: randomUUID(), shiftId: randomUUID(), payments:[{mode:"cash", amountPaise:totalPaise}] };
+  expect((await api("POST", path, {...body, settlement:payment})).statusCode).toBe(409);
+  expect((await api("GET", `/api/orders/${order.id}/bill`)).json().bill).toBeNull();
+  const paid = await api("POST", path, {...body, settlement:{clientRef:randomUUID(), payments:[{mode:"upi", amountPaise:totalPaise}]}});
+  expect(paid.statusCode, paid.body).toBe(201);
+  expect(paid.json().bill.status).toBe("paid");
 });

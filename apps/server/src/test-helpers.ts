@@ -32,6 +32,24 @@ export async function setupAdmin(app: FastifyInstance) {
   return res.json() as { token: string; user: { id: string; name: string; role: string } };
 }
 
+/** Seed an independent drawer for fixtures that exercise cash sales or refunds. */
+export function openTestDrawer(app: FastifyInstance, cashierId: string) {
+  const id = randomUUID();
+  app.db.prepare("INSERT INTO drawers(id,name) VALUES (?,?)").run(id,`Test drawer ${id}`);
+  app.db.prepare("INSERT INTO shifts(id,cashier_id,drawer_id,opened_at,opening_float_paise,open_client_ref) VALUES(?,?,?,?,0,?)")
+    .run(randomUUID(),cashierId,id,Date.now(),randomUUID());
+}
+export async function setupTradingAdmin(app: FastifyInstance) {
+  const admin = await setupAdmin(app);
+  openTestDrawer(app,admin.user.id);
+  return admin;
+}
+export async function createTradingUser(...args: Parameters<typeof createUser>) {
+  const staff = await createUser(...args);
+  if (args[2].role === "admin" || args[2].role === "cashier") openTestDrawer(args[0],staff.id);
+  return staff;
+}
+
 export function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }

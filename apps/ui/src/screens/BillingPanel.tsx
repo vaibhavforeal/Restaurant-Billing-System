@@ -1,3 +1,5 @@
+import { CashDrawer, cashShiftForPayment, currentCashShift } from "./CashDrawer";
+import { WorkspaceDialog } from "../WorkspaceDialog";
 import { Fragment, useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { BILLING_CANCELLED, holdPrompt } from "../hold-order";
 import { createPortal } from "react-dom";
@@ -8,7 +10,7 @@ import { paiseToRupees, rupeesToPaise } from "../money";
 import type { Order, PrintJobInfo } from "../types";
 import { uuid } from "../uuid";
 import { connectWs } from "../ws";
-import { discardRequest, enqueueRequest, outcomeOrSaved } from "../retry-queue";
+import { discardRequest, enqueueRequest, outcomeOrSaved, queuedRequests, retryPayment } from "../retry-queue";
 import { isUnreachable } from "../offline-cache";
 import { SegmentedControl } from "../PosControls";
 import { useIntegrations } from "../integrations";
@@ -90,6 +92,7 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
   const [payments, setPayments] = useState<PaymentDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
+  const [openingCash, setOpeningCash] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [html, setHtml] = useState("");
@@ -220,9 +223,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       if (problem) throw new Error(`Buyer's GSTIN: ${problem}`);
       if (!buyer.name) throw new Error("Enter the business's legal name");
     }
-    const { preview: value } = await apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
+    const [{ preview: value }] = await Promise.all([apiFetch<{ preview: Preview }>(`/api/orders/${order.id}/bill-preview`, {
       method: "POST", body: JSON.stringify({ discountPaise, discountNote: reason, ...(pin ? { approverPin: pin } : {}), ...(redeemPoints ? { redeemPoints } : {}), ...(buyer ? { buyer } : {}), serviceCharge }),
-    });
+    }), can("bills.settle") ? currentCashShift().catch(() => null) : null]);
     setPreview(value);
     if (value.charges?.some((c) => c.kind === "service")) setServiceDue(true);
     setRedeemCap(value.maxRedeemPoints ?? null);
@@ -246,37 +249,37 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
     const received = cashReceived.trim() ? rupeesToPaise(cashReceived) : preview.totalPaise;
     if (quickMode === "cash" && (received === null || received < preview.totalPaise)) throw new Error("Cash received must cover the total");
     const rows = preview.totalPaise ? [{ mode: quickMode, amountPaise: preview.totalPaise, refNote: "" }] : [];
-    // Print after recording payment so the quick-flow receipt includes payment. Both steps are saved together: the
-    // payment waits for the bill and uses its id, so a reload or a lost connection between them still finishes both.
-    const fingerprint = JSON.stringify(rows);
+    const shiftId = rows.some(row => row.mode === "cash") ? await cashShiftForPayment() : undefined;
+    if (shiftId === null) { setOpeningCash(true); return; }
+    const fingerprint = JSON.stringify({ rows, shiftId });
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
-    const issuing = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null }>({ path: `/api/orders/${order.id}/bill`, body: { ...request, printerId: null }, label: "Issue takeaway bill" });
-    issuing.done.catch(() => { /* reported through the payment below and in the saved-actions list */ });
-    if (!issuing.id) await issuing.done;
-    const payment = enqueueRequest<{ bill: Bill }>({
-      path: "/api/bills/{after:bill.id}/settle", after: issuing.id, lane: order.id, label: "Record takeaway payment",
-      body: { clientRef: settlement.current.clientRef, payments: rows },
+    const handle = enqueueRequest<{ bill: Bill; job: PrintJobInfo | null; printError: string | null }>({
+      path: `/api/orders/${order.id}/checkout`, lane: order.id, label: "Checkout payment",
+      body: { ...request, printerId: printerId || null, settlement: { clientRef: settlement.current.clientRef, payments: rows, shiftId } },
     });
-    checkoutQueueIds.current = [payment.id, issuing.id];
-    const paying = await outcomeOrSaved(payment).catch(async error => {
-      // A dependent payment reports a generic failure. Show the original billing refusal.
-      if (error instanceof Error && error.message.includes("earlier step")) await issuing.done;
-      throw error;
-    });
+    checkoutQueueIds.current = [handle.id];
+    const paying = await outcomeOrSaved(handle);
     setPreview(null);
-    setPayments(rows.map((row) => ({ id: uuid(), mode: row.mode, amount: paiseToRupees(row.amountPaise), refNote: row.refNote })));
-    if (paying.saved) { setMessage(`Bill and payment saved on this device · ${WHEN_BACK}.`); return; }
-    const paid = paying.value.bill;
-    acceptBill(paid);
-    setMessage(`Payment recorded.${quickMode === "cash" && received !== null && received > paid.totalPaise ? ` Change: ${money(received - paid.totalPaise)}.` : ""}`);
-    try { await onChanged(); }
-    catch { setError("Payment is recorded. Reopen the order if its status has not refreshed."); }
-    if (printerId) {
-      try {
-        const result = await apiFetch<{ job: PrintJobInfo }>(`/api/bills/${paid.id}/print`, { method: "POST", body: JSON.stringify({ printerId }) });
-        setJob(result.job);
-      } catch { setError("Payment is recorded. Receipt printing was not confirmed; check the printer before printing again."); }
-    }
+    if (paying.saved) { setMessage("Payment pending sync."); return; }
+    acceptBill(paying.value.bill);
+    setJob(paying.value.job);
+    setMessage(`Payment recorded.${quickMode === "cash" && received !== null && received > paying.value.bill.totalPaise ? ` Change: ${money(received - paying.value.bill.totalPaise)}.` : ""}`);
+    if (paying.value.printError) setError(paying.value.printError);
+    await onChanged();
+  }
+  const savedPayment = bill?.status === "unpaid" ? queuedRequests().find(entry =>
+    entry.lane === order.id && entry.path.endsWith("/settle")) : undefined;
+
+  async function resumePayment() {
+    if (!bill || !savedPayment) return;
+    const current = await apiFetch<{ bill: Bill }>(`/api/bills/${bill.id}`);
+    if (current.bill.status !== "unpaid") { acceptBill(current.bill); await onChanged(); return; }
+    if (!await cashShiftForPayment()) { setOpeningCash(true); return; }
+    const retried = await outcomeOrSaved(retryPayment(savedPayment.id));
+    if (retried.saved) { setMessage("Payment pending sync."); return; }
+    acceptBill(retried.value.bill);
+    setMessage("Payment recorded.");
+    await onChanged();
   }
   async function settle() {
     if (!bill) return;
@@ -286,10 +289,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
       return { mode: p.mode, amountPaise, refNote: p.refNote };
     });
     if (rows.reduce((sum, p) => sum + p.amountPaise, 0) !== bill.totalPaise) throw new Error("Payments must exactly match the bill total");
-    const fingerprint = JSON.stringify(rows);
+    const shiftId = rows.some(row => row.mode === "cash") ? await cashShiftForPayment() : undefined;
+    if (shiftId === null) { setOpeningCash(true); return; }
+    const fingerprint = JSON.stringify({rows, shiftId});
     if (settlement.current?.fingerprint !== fingerprint) settlement.current = { clientRef: uuid(), fingerprint };
-    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({ path: `/api/bills/${bill.id}/settle`, body: { clientRef: settlement.current.clientRef, payments: rows }, label: "Record payment", lane: order.id }));
-    if (outcome.saved) { setMessage(`Payment saved on this device · ${WHEN_BACK}.`); return; }
+    const outcome = await outcomeOrSaved(enqueueRequest<{ bill: Bill }>({ path: `/api/bills/${bill.id}/settle`, body: { clientRef: settlement.current.clientRef, payments: rows, shiftId }, label: "Record payment", lane: order.id }));
+    if (outcome.saved) { setMessage("Payment pending sync."); return; }
     const value = outcome.value.bill;
     acceptBill(value); setMessage("Payment recorded. This group is settled."); await onChanged();
   }
@@ -381,6 +386,9 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
         {!bill && <button {...shortcutProps("discount")} title={shortcut("discount", "Discount and printer options")} disabled={blocked} onClick={() => { openDialog(true); options.current?.querySelector("input")?.focus(); }}>{shortcut("discount", "Discount")}</button>}
         <button disabled={blocked} onClick={closeDialog} aria-label="Close billing">Close</button>
       </header>
+      {openingCash && <WorkspaceDialog open className="cash-drawer-dialog" title="Open day cash" onClose={() => setOpeningCash(false)}>
+        <CashDrawer canSettle canCloseDay={false} canReadReports={false} onOpened={() => { setOpeningCash(false); setMessage("Drawer opened. Confirm payment to finish checkout."); }} />
+      </WorkspaceDialog>}
       <div className="billing-dialog-body">
         {error && <p className="billing-error" role="alert">{error}</p>}
         {message && <p className="billing-message" role="status">{message}</p>}
@@ -447,7 +455,12 @@ export function BillingPanel({ order, hasDraft, onChanged, onPrepare, heldCount 
             </fieldset> : <div className="billing-issue"><p>Issuing freezes the items and totals.</p><button className="primary pos-pay" {...shortcutProps("billing")} title={shortcut("billing", "Issue the reviewed bill")} disabled={blocked || hasDraft} onClick={() => void run(issue)}>{shortcut("billing", printerId ? "Save & print bill" : "Issue bill")}</button></div>}
           </div>}
           {bill && <div className="billing-payment">
-            {bill.status === "unpaid" && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
+            {savedPayment && <div>
+              <p role="status">{savedPayment.error ?? "Payment pending sync."}</p>
+              {savedPayment.error?.includes("Open a drawer shift") &&
+                <button disabled={blocked} onClick={() => void run(resumePayment)}>Retry saved cash payment · {money(bill.totalPaise)}</button>}
+            </div>}
+            {bill.status === "unpaid" && !savedPayment && <fieldset disabled={busy} className="billing-payment-form"><legend>Record payment</legend>
               {canShowQr && <><button onClick={() => setShowQr(true)}>Show UPI QR</button><p className="billing-note">Verify payment in your UPI app before settling.</p></>}
               {payments.map((p, index) => <div key={p.id} className="billing-payment-row">
                 <div className="billing-wide-field"><span className="pos-field-label">Mode {index + 1}</span><SegmentedControl label={`Mode ${index + 1}`} value={p.mode} options={paymentModes} onChange={(mode) => { setPayments((rows) => rows.map((r) => r.id === p.id ? { ...r, mode } : r)); savePreference("masalapos.payment-mode", mode); }} /></div>

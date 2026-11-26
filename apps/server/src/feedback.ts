@@ -11,28 +11,21 @@ import { lanUrls } from "./system.js";
 const FEEDBACK_WINDOW_MS = 7 * 86_400_000;
 const TOKEN = /^[A-Za-z0-9_-]{32}$/;
 
-let serverPort = 4100;
-/**
- * The link a receipt's QR code opens: this server's first LAN address, so it works for guests on the restaurant's Wi-Fi.
- * Worked out when the receipt is printed, so a changed IP address is picked up on the next print.
- */
-export function feedbackUrl(token: string): string {
-  const origin = lanUrls(serverPort)[0] ?? `http://localhost:${serverPort}`;
-  return `${origin}/feedback/${token}`;
-}
+// Resolve the current address on each print. Sample receipts use their local-only server.
+const origins = new WeakMap<Database, () => string>();
 
 /** The feedback link for a bill, when feedback is on and the bill can still be rated. */
 export function billFeedbackUrl(db: Database, billId: string): string | undefined {
   const row = db.prepare("SELECT feedback_token, status FROM bills WHERE id = ?").get(billId) as { feedback_token: string | null; status: string } | undefined;
   if (!row?.feedback_token || row.status === "void" || !loyaltySettings(db).feedbackEnabled || !crmEnabled(db)) return undefined;
-  return feedbackUrl(row.feedback_token);
+  return `${origins.get(db)?.() ?? "http://localhost:4100"}/feedback/${row.feedback_token}`;
 }
 
 interface TokenBill { id: string; bill_no: number; invoice_no: string; created_at: number; status: string; customer_id: string | null; restaurant_name: string }
 
-export function registerFeedback(app: FastifyInstance, port = 4100): void {
-  serverPort = port;
+export function registerFeedback(app: FastifyInstance, port = 4100, localOnly = false): void {
   const db = app.db;
+  origins.set(db, () => localOnly ? `http://127.0.0.1:${port}` : lanUrls(port)[0] ?? `http://localhost:${port}`);
   const billFor = (token: string) => {
     if (!TOKEN.test(token) || !loyaltySettings(db).feedbackEnabled || !crmEnabled(db)) return undefined;
     return db.prepare(`SELECT b.id, b.bill_no, COALESCE(b.invoice_no, CAST(b.bill_no AS TEXT)) AS invoice_no, b.created_at, b.status, b.customer_id, s.restaurant_name FROM bills b, settings s

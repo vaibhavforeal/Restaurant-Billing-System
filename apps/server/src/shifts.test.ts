@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type Bill } from "@masalapos/domain";
+import { buildServer } from "./server.js";
 import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
 
 describe("shifts and day close", () => {
-  let app: FastifyInstance; let token: string; let productId: string;
+  let adminId: string; let app: FastifyInstance; let token: string; let productId: string;
   let cashier: { id: string; token: string };
   const today = () => localDateKey(Date.now());
   beforeEach(async () => {
-    app = freshApp(); ({ token } = await setupAdmin(app));
+    app = freshApp(); const admin = await setupAdmin(app); token = admin.token; adminId = admin.user.id;
     const c = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const p = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: c.json().category.id, pricePaise: 25000, gstRate: 5, kotStationId: null } });
     productId = p.json().product.id;
@@ -22,19 +23,22 @@ describe("shifts and day close", () => {
     expect(res.statusCode).toBe(201); return res.json().shift as { id: string };
   }
   /** Bills and settles one thali (₹250) as `as`, paid by `mode`. */
-  async function sale(as: string, mode: "cash" | "upi" = "cash") {
+  async function sale(as: string, mode: "cash" | "upi" = "cash", expectedStatus = 200) {
     const o = await request("POST", "/api/orders", { clientRef: uuidv7(), type: "parcel" }, as);
     const id = o.json().order.id;
     await request("POST", `/api/orders/${id}/items`, { items: [{ productId, qty: 1, clientRef: uuidv7() }] }, as);
     const preview = await request("POST", `/api/orders/${id}/bill-preview`, {}, as);
     const bill = (await request("POST", `/api/orders/${id}/bill`, { clientRef: uuidv7(), previewKey: preview.json().preview.previewKey }, as)).json().bill as Bill;
-    expect((await request("POST", `/api/bills/${bill.id}/settle`, { clientRef: uuidv7(), payments: [{ mode, amountPaise: bill.totalPaise }] }, as)).statusCode).toBe(200);
+    expect((await request("POST", `/api/bills/${bill.id}/settle`, { clientRef: uuidv7(), payments: [{ mode, amountPaise: bill.totalPaise }] }, as)).statusCode).toBe(expectedStatus);
     return bill;
   }
 
   it("expects float + cash sales − cash refunds + pay-ins − pay-outs, and saves the variance at close", async () => {
     const shift = await open(cashier.token);
     await sale(cashier.token); await sale(cashier.token); await sale(cashier.token, "upi");
+    await request("POST","/api/drawers",{name:"Second drawer"});
+    const drawerId = (await request("GET","/api/drawers")).json().drawers[0].id;
+    await request("POST","/api/shifts",{drawerId, openingFloatPaise:0, clientRef:uuidv7()});
     await sale(token); // the admin's cash is not in Meena's drawer
     const refunded = await sale(cashier.token);
     expect((await request("POST", `/api/bills/${refunded.id}/void`, { clientRef: uuidv7(), reason: "Wrong order", approverPin: "1234", refunds: [{ mode: "cash", amountPaise: 25000 }] }, cashier.token)).statusCode).toBe(201);
@@ -45,26 +49,46 @@ describe("shifts and day close", () => {
     expect((await move("pay_out", 5000, ref)).statusCode).toBe(200);
     const current = (await request("GET", "/api/shifts/current", undefined, cashier.token)).json().shift;
     expect(current).toMatchObject({ cashSalesPaise: 75000, cashRefundsPaise: 25000, payInPaise: 20000, payOutPaise: 5000, expectedCashPaise: 165000 });
-    const close = { clientRef: uuidv7(), countedCashPaise: 164000, note: "₹10 short" };
-    const closed = await request("POST", `/api/shifts/${shift.id}/close`, close, cashier.token);
-    expect(closed.json().shift).toMatchObject({ expectedCashPaise: 165000, countedCashPaise: 164000, variancePaise: -1000, closedByName: "Meena" });
-    expect((await request("POST", `/api/shifts/${shift.id}/close`, close, cashier.token)).statusCode).toBe(200);
-    expect((await request("POST", `/api/shifts/${shift.id}/close`, { ...close, clientRef: uuidv7() }, cashier.token)).statusCode).toBe(409);
-    expect((await move("pay_in", 100)).statusCode).toBe(409);
-    // Later sales do not change a closed shift.
-    await sale(cashier.token);
-    expect((await request("GET", `/api/shifts?from=${today()}&to=${today()}`)).json().shifts[0]).toMatchObject({ expectedCashPaise: 165000, variancePaise: -1000 });
+    const recipient = await createUser(app,token,{name:"Ravi",pin:"4444",role:"cashier"});
+    const url = `/api/shifts/${shift.id}/handover`;
+    const revision = async () => (await request("GET","/api/shifts/current",undefined,cashier.token)).json().shift.handover?.seq ?? 0;
+    const post = async (change:object,as:string) => request("POST",url,{clientRef:uuidv7(),revision:await revision(),change},as);
+    const submit = {action:"submit",recipient:recipient.id,final:false,counted:164000,note:"₹10 short"};
+    expect((await post(submit,cashier.token)).statusCode).toBe(200);
+    expect((await move("pay_in",100)).statusCode).toBe(409);
+    expect((await post({action:"approve"},recipient.token)).statusCode).toBe(403);
+    expect((await post({action:"approve"},token)).statusCode).toBe(200);
+    expect((await post({action:"receive",received:165000},recipient.token)).statusCode).toBe(200);
+    expect((await post(submit,cashier.token)).statusCode).toBe(200);
+    expect((await post({action:"receive",received:164000},recipient.token)).statusCode).toBe(409);
+    expect((await post({action:"approve"},token)).statusCode).toBe(200);
+    const receipt = {clientRef:uuidv7(),revision:await revision(),change:{action:"receive",received:164000}};
+    for (const result of await Promise.all([request("POST",url,receipt,recipient.token),request("POST",url,receipt,recipient.token)]))
+      expect(result.statusCode).toBe(200);
+    expect((await request("GET","/api/shifts/current",undefined,recipient.token)).json().shift).toMatchObject({openingFloatPaise:164000,drawerName:"Main drawer"});
+    expect((await request("GET","/api/shifts/current",undefined,cashier.token)).json().shift).toBeNull();
+    expect((await request("GET","/api/shifts/current")).json().shift.cashSalesPaise).toBe(25000);
   });
 
-  it("allows one open shift per person; others cannot see or close it, an admin can", async () => {
+  it("keeps the drawer frozen across restart and rejects cash portions of split payments", async () => {
+    await sale(cashier.token,"cash",409);
     const shift = await open(cashier.token);
-    expect((await request("POST", "/api/shifts", { clientRef: uuidv7(), openingFloatPaise: 0 }, cashier.token)).statusCode).toBe(409);
-    const other = await createUser(app, token, { name: "Ravi", pin: "4444", role: "cashier" });
-    expect((await request("POST", `/api/shifts/${shift.id}/close`, { clientRef: uuidv7(), countedCashPaise: 0 }, other.token)).statusCode).toBe(404);
-    const waiter = await createUser(app, token, { name: "Arun", pin: "5555", role: "waiter" });
-    expect((await request("GET", "/api/shifts/current", undefined, waiter.token)).statusCode).toBe(403);
-    const closed = await request("POST", `/api/shifts/${shift.id}/close`, { clientRef: uuidv7(), countedCashPaise: 100000 });
-    expect(closed.json().shift).toMatchObject({ variancePaise: 0, closedByName: "Asha" });
+    const bill = await sale(cashier.token);
+    const transfer = {action:"submit",recipient:adminId,final:true,counted:125000,note:""};
+    const url = `/api/shifts/${shift.id}/handover`;
+    expect((await request("POST",url,{clientRef:uuidv7(),revision:0,change:transfer},cashier.token)).statusCode).toBe(200);
+    const db = app.db;
+    await app.close();
+    app = buildServer({db});
+    const unpaid = await sale(cashier.token,"cash",409);
+    expect((await request("POST",`/api/bills/${unpaid.id}/settle`,{clientRef:uuidv7(),payments:[
+      {mode:"cash",amountPaise:1},{mode:"upi",amountPaise:unpaid.totalPaise-1}
+    ]},cashier.token)).statusCode).toBe(409);
+    expect((await request("POST",`/api/bills/${bill.id}/void`,{clientRef:uuidv7(),reason:"Return",approverPin:"1234",refunds:[{mode:"cash",amountPaise:bill.totalPaise}]},cashier.token)).statusCode).toBe(409);
+    await sale(cashier.token,"upi");
+    const pending = (await request("GET","/api/drawers")).json().pending[0];
+    expect(pending.handover).toMatchObject({expected:125000,state:"awaiting receipt"});
+    expect((await request("POST",url,{clientRef:uuidv7(),revision:pending.handover.seq,change:{action:"receive",received:125000}})).statusCode).toBe(200);
   });
 
   it("closes a day only when drawers are closed and orders are finished, and saves the day-end report", async () => {
@@ -80,7 +104,11 @@ describe("shifts and day close", () => {
     expect(blocked.json().error).toContain("Meena");
     expect((await request("POST", "/api/day-close", { ...attempt, clientRef: uuidv7() }, cashier.token)).statusCode).toBe(403);
 
-    await request("POST", `/api/shifts/${shift.id}/close`, { clientRef: uuidv7(), countedCashPaise: 125000 }, cashier.token);
+    const url = `/api/shifts/${shift.id}/handover`;
+    expect((await request("POST",url,{clientRef:uuidv7(),revision:0,change:{action:"submit",final:true,recipient:adminId,counted:125000,note:""}},cashier.token)).statusCode).toBe(200);
+    expect((await request("POST","/api/day-close",attempt)).statusCode).toBe(409);
+    const revision = (await request("GET","/api/drawers")).json().pending[0].handover.seq;
+    expect((await request("POST",url,{clientRef:uuidv7(),revision,change:{action:"receive",received:125000}})).statusCode).toBe(200);
     await request("POST", `/api/orders/${pending.id}/cancel`, {});
     const closed = await request("POST", "/api/day-close", attempt);
     expect(closed.statusCode).toBe(201);

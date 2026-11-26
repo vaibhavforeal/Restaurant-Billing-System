@@ -1,4 +1,5 @@
 import type { Migration } from "../migrate.js";
+import { cashCustody } from "./cash-custody.js";
 import { baseline } from "./baseline.js";
 import { dashboardLayouts } from "./dashboard-layouts.js";
 import { holdOrders } from "./hold-orders.js";
@@ -22,4 +23,4 @@ import { offers } from "./offers.js";
 import { itemAddons } from "./item-addons.js";
 
 /** Every schema change, in order. The baseline holds versions 1 to 43; new migrations number from 54. */
-export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns, orderSummary, itemTransfers, billSettings, invoiceNumbering, gstExclusive, billCharges, billChargeRounding, perItemPackaging, itemAddons, offers];
+export const MIGRATIONS: Migration[] = [baseline, dashboardLayouts, holdOrders, popularItems, orderedTogether, popularByTime, restaurantProfile, passwordLogin, customerUsual, activityAlerts, gstReturns, orderSummary, itemTransfers, billSettings, invoiceNumbering, gstExclusive, billCharges, billChargeRounding, perItemPackaging, itemAddons, offers, cashCustody];

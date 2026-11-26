@@ -22,21 +22,22 @@ export const startupStyles = `
 @media (prefers-reduced-motion: reduce) { .ff-startup-line::after { animation: none; transform: translateX(50%); } }
 `;
 
-export function startupMarkup(mode: "opening" | "restoring" = "opening") {
+export function startupMarkup(mode: "opening" | "restoring" | "sample" = "opening") {
   const restoring = mode === "restoring";
+  const sample = mode === "sample";
   return `<div class="ff-startup">
     <main class="ff-startup-main" aria-label="MasalaPOS startup">
       <h1 class="ff-startup-name"><span class="ff-startup-masala">Masala</span>POS</h1><p class="ff-startup-descriptor">A little masala. A lot of business.</p>
       <div class="ff-startup-status" role="status" aria-live="polite">
-        <p class="ff-startup-title">${restoring ? "Restoring your backup…" : "Preparing your workspace…"}</p>
+        <p class="ff-startup-title">${sample ? "Creating the sample restaurant…" : restoring ? "Restoring your backup…" : "Preparing your workspace…"}</p>
         <div class="ff-startup-line" aria-hidden="true"></div>
-        <p class="ff-startup-support">${restoring ? "Please keep MasalaPOS open while your data is restored" : "Getting things ready for service"}</p>
+        <p class="ff-startup-support">${sample ? "Setting up the menu, customers and sales history. This can take a few minutes." : restoring ? "Please keep MasalaPOS open while your data is restored" : "Getting things ready for service"}</p>
       </div>
     </main>
     <footer class="ff-startup-footer"><span>Orders</span><span class="ff-startup-dot" aria-hidden="true"></span><span>Billing</span><span class="ff-startup-dot" aria-hidden="true"></span><span>Kitchen</span></footer>
   </div>`;
 }
 
-export function startupDocument(mode: "opening" | "restoring" = "opening") {
+export function startupDocument(mode: "opening" | "restoring" | "sample" = "opening") {
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>MasalaPOS</title><style>html,body{margin:0;background:#f6f7f9}${startupStyles}</style></head><body>${startupMarkup(mode)}</body></html>`;
 }

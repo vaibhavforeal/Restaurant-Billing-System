@@ -45,7 +45,7 @@ export function OperationalReports({ kind, initialPeriod, onPeriodChange }: { ki
       setMessage("CSV downloaded. Amounts are in rupees.");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not export report"); }
   }
-  return <div className="operational-report">
+  return <div className="operational-report" data-report-kind={kind}>
     <div className="page-header"><h3>{isDirect(kind) ? DIRECT_TITLES[kind] : OPERATIONAL_REPORTS.find((r) => r.id === kind)!.title}</h3><button disabled={!report || loading} onClick={exportReport}>Export CSV</button></div>
     <SalesPeriodControls period={period} today={report?.today} loading={loading} onChange={(next) => { invalidate(); setPeriod(next); onPeriodChange(next); setRevision((v) => v + 1); }} onRefresh={() => { invalidate(); setRevision((v) => v + 1); }} />
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}

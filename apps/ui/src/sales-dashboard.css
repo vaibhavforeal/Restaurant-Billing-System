@@ -182,3 +182,22 @@ html[data-theme] .sales-reports .custom-report-builder { padding-block: 7px; }
 @media (pointer: coarse) {
   html[data-theme] .sales-reports { --report-control-height: 36px; }
 }
+
+html[data-theme] [data-report-kind="staff-activity"] > .sales-period {
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+[data-report-kind="staff-activity"] .sales-period label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-report-kind="staff-activity"] .sales-period .sales-refresh { margin-left: 0; }
+[data-report-kind="staff-activity"] > .sales-range-caption {
+  justify-content: flex-start;
+  gap: 4px 16px;
+  padding: 6px 0;
+}

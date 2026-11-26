@@ -36,6 +36,29 @@ and recreate the samples. Connected demo devices sign in again afterward.
 The reset refuses unmarked data directories; the regular POS database is never
 selected by the demo launcher. Database archives remain available for inspection.
 
+## Open the Dev sample restaurant
+
+Install the Dev build and open **MasalaPOS Dev Sample Data** from the Windows
+Start menu. You can also start the Dev executable with `--sample-data`. For a
+workspace build, run `npm run dev:desktop -- --sample-data`.
+
+The first launch creates 320 dishes, 600 fictional customers and 3,000 settled
+bills spanning about 13 months. It also sets up live tables, held orders, unpaid
+bills, kitchen tickets, QR requests, reservations and cash drawers. Sign in with
+`admin`, `cashier`, `captain` or `kitchen` using `demo1234`. Admin approvals use
+`1234`.
+
+The server listens only on this PC at `http://127.0.0.1:4120`. Use its
+`/kitchen/` address for the Kitchen Display in a browser on the same PC. Printing
+and payment QR codes are simulated. Daily backups and sales, GST and stock
+exports are local.
+
+Sample edits persist when you quit. **Sample Data → Reset sample data** archives
+the previous `data` folder, including backups, beside it under
+`%APPDATA%\masalapos-dev-sample` and regenerates the restaurant relative to the
+reset date. To recover an archived copy, quit the sample app, move the current
+`data` folder aside, then move the chosen `archive-*` folder back to `data`.
+
 ## Connect a Windows kitchen display
 
 1. Keep the main POS or Demo app running.

@@ -2,6 +2,7 @@ import { GSTIN_STATE_MESSAGE, SettingsUpdate, gstinMatchesState, type Database, 
 import type { FastifyInstance } from "fastify";
 import { sampleBill } from "./print/bill-preview.js";
 import { receiptHtml } from "./print/receipt.js";
+import { SAMPLE_UPI_ID } from "./print/upi.js";
 
 interface SettingsRow {
   gst_mode: GstMode;
@@ -89,8 +90,9 @@ export function readSettings(db: Database) {
   };
 }
 
-export function registerSettings(app: FastifyInstance): void {
+export function registerSettings(app: FastifyInstance, sampleData = false): void {
   const manage = app.requirePermission("settings.manage");
+  const upiId = (value: string | undefined) => sampleData && value ? SAMPLE_UPI_ID : value;
 
   app.get("/api/settings", { preHandler: manage }, async () => ({ settings: readSettings(app.db) }));
 
@@ -105,7 +107,7 @@ export function registerSettings(app: FastifyInstance): void {
       gstMode: body.gstMode ?? saved.gstMode,
       gstRate: body.gstRate ?? (saved.gstRate as 5 | 12 | 18), serviceChargeBp: body.serviceChargeBp ?? saved.serviceChargeBp, packagingChargePaise: body.packagingChargePaise ?? saved.packagingChargePaise,
       serviceChargeLabel: previewLabel(body.serviceChargeLabel, saved.serviceChargeLabel, DEFAULT_SERVICE_LABEL), packagingChargeLabel: previewLabel(body.packagingChargeLabel, saved.packagingChargeLabel, DEFAULT_PACKAGING_LABEL),
-      upiId: body.upiId ?? saved.upiId, receiptStyle: body.receiptStyle ?? saved.receiptStyle })) };
+      upiId: upiId(body.upiId) ?? saved.upiId, receiptStyle: body.receiptStyle ?? saved.receiptStyle })) };
   });
 
   app.put("/api/settings", { preHandler: manage }, async (req, reply) => {
@@ -121,7 +123,7 @@ export function registerSettings(app: FastifyInstance): void {
       .prepare("UPDATE settings SET restaurant_name = ?, address = ?, city = COALESCE(?, city), state_code = COALESCE(?, state_code), pincode = COALESCE(?, pincode), phone = COALESCE(?, phone), gstin = ?, fssai = ?, receipt_footer = ?, receipt_header = ?, bill_show_fssai = COALESCE(?, bill_show_fssai), bill_show_customer = COALESCE(?, bill_show_customer), bill_show_table = COALESCE(?, bill_show_table), bill_show_served_by = COALESCE(?, bill_show_served_by), bill_show_item_gst = COALESCE(?, bill_show_item_gst), upi_id = COALESCE(?, upi_id), receipt_style = COALESCE(?, receipt_style), gst_mode = COALESCE(?, gst_mode), gst_rate = COALESCE(?, gst_rate), kot_edit_print = COALESCE(?, kot_edit_print), hold_orders_enabled = COALESCE(?, hold_orders_enabled), popular_items_enabled = COALESCE(?, popular_items_enabled), popular_by_time_enabled = COALESCE(?, popular_by_time_enabled), ordered_together_enabled = COALESCE(?, ordered_together_enabled), customer_usual_enabled = COALESCE(?, customer_usual_enabled), sac_code = COALESCE(?, sac_code), zomato_gstin = COALESCE(?, zomato_gstin), invoice_prefix = COALESCE(?, invoice_prefix), round_off = COALESCE(?, round_off), service_charge_bp = COALESCE(?, service_charge_bp), packaging_charge_paise = COALESCE(?, packaging_charge_paise), service_charge_label = COALESCE(?, service_charge_label), packaging_charge_label = COALESCE(?, packaging_charge_label), packaging_per_item = COALESCE(?, packaging_per_item) WHERE id = 1")
       .run(body.restaurantName, body.address, body.city ?? null, body.stateCode ?? null, body.pincode ?? null, body.phone ?? null, body.gstin, body.fssai, body.receiptFooter, body.receiptHeader,
         ...[body.billShowFssai, body.billShowCustomer, body.billShowTable, body.billShowServedBy, body.billShowItemGst].map((v) => (v === undefined ? null : v ? 1 : 0)),
-        body.upiId ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
+        upiId(body.upiId) ?? null, body.receiptStyle ?? null, body.gstMode ?? null, body.gstRate ?? null, body.kotEditPrint ?? null,
         body.holdOrdersEnabled === undefined ? null : body.holdOrdersEnabled ? 1 : 0,
         body.popularItemsEnabled === undefined ? null : body.popularItemsEnabled ? 1 : 0,
         body.popularByTimeEnabled === undefined ? null : body.popularByTimeEnabled ? 1 : 0,

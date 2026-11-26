@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type StockItem, type Bill } from "@masalapos/domain";
-import { freshAppWithFakeSink, setupAdmin, auth, createUser } from "./test-helpers.js";
+import { freshAppWithFakeSink, setupTradingAdmin, auth, createTradingUser } from "./test-helpers.js";
 
 describe("inventory", () => {
   let app: FastifyInstance; let token: string; let productId: string;
   beforeEach(async () => {
-    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app));
+    ({ app } = freshAppWithFakeSink()); ({ token } = await setupTradingAdmin(app));
     const c = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const p = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Meal", categoryId: c.json().category.id, pricePaise: 10000, gstRate: 5, kotStationId: null } });
     productId = p.json().product.id;
@@ -151,8 +151,8 @@ describe("inventory", () => {
   });
   it("enforces permissions, immutable units and low-stock updates without broadcasting full balances", async () => {
     const s = await stock(0, "Rice", null);
-    const cashier = await createUser(app, token, { name: "Cashier", role: "cashier", pin: "2222" });
-    const waiter = await createUser(app, token, { name: "Waiter", role: "waiter", pin: "3333" });
+    const cashier = await createTradingUser(app, token, { name: "Cashier", role: "cashier", pin: "2222" });
+    const waiter = await createTradingUser(app, token, { name: "Waiter", role: "waiter", pin: "3333" });
     expect((await request("GET", "/api/stock-items", undefined, cashier.token)).statusCode).toBe(200);
     expect((await request("GET", "/api/stock-items", undefined, waiter.token)).statusCode).toBe(403);
     expect((await app.inject({ url: "/api/stock-items" })).statusCode).toBe(401);

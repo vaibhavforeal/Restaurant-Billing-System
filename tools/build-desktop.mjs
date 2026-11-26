@@ -48,7 +48,7 @@ for (const name of Object.keys(deps)) deps[name] = copyDependency(name, root);
 const google = googleOAuthClient(root);
 console.log(google.clientId ? `Google Drive backup: enabled (${google.clientId.split("-")[0]}…, from ${google.source === "environment" ? "environment" : relative(root, google.source)})` : "Google Drive backup: not configured (no Google OAuth client)");
 await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: join(stage, "server/main.mjs"), bundle: true, packages: "external", platform: "node", format: "esm", target: "node24", sourcemap: true,
-  define: { __MASALAPOS_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __MASALAPOS_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial),
+  define: { __MASALAPOS_LICENSE_PUBLIC_KEY__: JSON.stringify(publicKey), __MASALAPOS_LICENSE_SERVICE_URL__: JSON.stringify(serviceUrl), __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial), __MASALAPOS_DEV__: JSON.stringify(edition === "development"),
     // Google "Desktop app" OAuth client for Drive backups. Google treats a desktop client secret as public; PKCE protects sign-in.
     __MASALAPOS_GOOGLE_CLIENT_ID__: JSON.stringify(google.clientId), __MASALAPOS_GOOGLE_CLIENT_SECRET__: JSON.stringify(google.clientSecret) },
   // Workspace packages are bundled from source, including subpath imports (@masalapos/domain/vendor-codes): the installer ships no copy of them.
@@ -57,10 +57,11 @@ await build({ entryPoints: [join(root, "apps/server/src/main.ts")], outfile: joi
 // The installer has no workspace packages: an import of one left in the bundle means a server that cannot start.
 const leftover = readFileSync(join(stage, "server/main.mjs"), "utf8").match(/from\s*["']@masalapos\/[^"']*["']/g);
 if (leftover) throw new Error(`The server bundle still imports workspace packages: ${[...new Set(leftover)].join(", ")}`);
-await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial) } });
+await build({ entryPoints: [join(root, "apps/desktop/src/main.ts")], outfile: join(stage, "main.js"), bundle: true, platform: "node", format: "esm", target: "node24", external: ["electron", "electron-updater"], sourcemap: true, define: { __MASALAPOS_DEMO__: JSON.stringify(demo), __MASALAPOS_COMMERCIAL__: JSON.stringify(commercial), __MASALAPOS_DEV__: JSON.stringify(edition === "development") } });
 // The preload runs sandboxed, so it is CommonJS. Remote support is the separate Support Connector (tools/build-connector.mjs).
 await build({ entryPoints: [join(root, "apps/desktop/src/preload.ts")], outfile: join(stage, "preload.cjs"), bundle: true, platform: "node", format: "cjs", target: "node24", external: ["electron"] });
 cpSync(join(root, "apps/ui/dist"), join(stage, "ui"), { recursive: true });
+if (edition === "development") cpSync(join(root, "apps/server/sample-photos"), join(stage, "sample-photos"), { recursive: true });
 // The Captain Android app, when built for this release by tools/build-captain-android.mjs.
 console.log(stageCaptainAndroid(join(root, "apps/captain-android/app/build/outputs/apk/release"), join(stage, "ui"), pkg.version));
 writeFileSync(join(stage, "package.json"), JSON.stringify({ name: demo ? "masalapos-demo" : "masalapos-desktop", version: pkg.version, type: "module", main: "main.js", description: demo ? "MasalaPOS customer demo with isolated sample data" : "Local restaurant billing, kitchen and stock management", author: "MasalaPOS", private: true, dependencies: deps }, null, 2));

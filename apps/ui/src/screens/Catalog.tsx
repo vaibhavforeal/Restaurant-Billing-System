@@ -153,7 +153,7 @@ export function Catalog() {
           {categories.map((c) => (
             <li key={c.id} style={{ display: "flex", gap: 4, alignItems: "center", padding: "4px 0", opacity: c.isActive ? 1 : 0.45 }}>
               <button
-                className={c.id === selectedCat ? "primary soft" : ""} onClick={() => { setSearch(""); setSelectedCat(c.id); }}
+                aria-pressed={c.id === selectedCat} onClick={() => { setSearch(""); setSelectedCat(c.id); }}
                 style={{ flex: 1, textAlign: "left", padding: 8, fontWeight: c.id === selectedCat ? 700 : 400 }}
               >
                 {c.name}

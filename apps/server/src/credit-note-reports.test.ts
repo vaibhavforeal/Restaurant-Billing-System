@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type Bill, type OperationalReport, type PayMode } from "@masalapos/domain";
 import type { OrderAnalyticsReport } from "@masalapos/domain/operational-reports";
-import { auth, createUser, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, freshApp, setupTradingAdmin } from "./test-helpers.js";
 
 /** Reports with credit notes: issued bills stay on their issue date; voids and refunds subtract on their own date. */
 describe("reports net of credit notes", () => {
@@ -17,8 +17,8 @@ describe("reports net of credit notes", () => {
 
   beforeEach(async () => {
     app = freshApp();
-    admin = await setupAdmin(app);
-    cashier = await createUser(app, admin.token, { name: "Cara", pin: "5678", role: "cashier" });
+    admin = await setupTradingAdmin(app);
+    cashier = await createTradingUser(app, admin.token, { name: "Cara", pin: "5678", role: "cashier" });
     const category = await app.inject({ method: "POST", url: "/api/categories", headers: auth(admin.token), payload: { name: "Food" } });
     const product = await app.inject({ method: "POST", url: "/api/products", headers: auth(admin.token), payload: { name: "Thali", categoryId: category.json().category.id, pricePaise: 3500, gstRate: 5, kotStationId: null } });
     expect(product.statusCode).toBe(201);

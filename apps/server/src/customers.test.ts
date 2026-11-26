@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, type Bill } from "@masalapos/domain";
-import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, enableIntegration, freshApp, setupTradingAdmin } from "./test-helpers.js";
 import { receiptHtml, receiptSlip } from "./print/receipt.js";
 
 describe("customers and loyalty", () => {
   let app: FastifyInstance; let token: string; let productId: string;
   beforeEach(async () => {
-    app = freshApp(); ({ token } = await setupAdmin(app)); enableIntegration(app, "crm");
+    app = freshApp(); ({ token } = await setupTradingAdmin(app)); enableIntegration(app, "crm");
     const c = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const p = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: c.json().category.id, pricePaise: 50000, gstRate: 5, kotStationId: null } });
     productId = p.json().product.id;
@@ -40,10 +40,10 @@ describe("customers and loyalty", () => {
     expect((await request("GET", "/api/customers?q=98765")).json().customers.map((c: { id: string }) => c.id)).toEqual([priya.id]);
     expect((await request("GET", "/api/customers?q=pri")).json().customers).toHaveLength(1);
     expect((await request("GET", "/api/customers?q=+91%209876543210")).json().customers).toHaveLength(1);
-    const waiter = await createUser(app, token, { name: "Arun", pin: "5555", role: "waiter" });
+    const waiter = await createTradingUser(app, token, { name: "Arun", pin: "5555", role: "waiter" });
     expect((await request("GET", "/api/customers", undefined, waiter.token)).statusCode).toBe(200);
     expect((await request("POST", "/api/customers", { name: "X", phone: "9123456780" }, waiter.token)).statusCode).toBe(403);
-    const cashier = await createUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
+    const cashier = await createTradingUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
     expect((await request("POST", "/api/customers", { name: "X", phone: "9123456780" }, cashier.token)).statusCode).toBe(201);
     expect((await request("PUT", "/api/loyalty-settings", { enabled: true, pointsPer100: 1, pointValuePaise: 100, minRedeemPoints: 0 }, cashier.token)).statusCode).toBe(403);
   });
@@ -52,7 +52,7 @@ describe("customers and loyalty", () => {
     const type = await request("POST", "/api/customer-types", { name: "Regular", slabs: [{ minBillPaise: 0, percent: 5 }, { minBillPaise: 100000, percent: 10 }] });
     expect(type.statusCode).toBe(201);
     const priya = await customer("Priya", "9876543210", type.json().customerType.id);
-    const cashier = await createUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
+    const cashier = await createTradingUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
     const small = await bill(await order(priya.id), {}, cashier.token);
     expect(small.discountPaise).toBe(2500);
     expect(small.discountNote).toBe("Regular 5%");

@@ -143,6 +143,10 @@
     if (state.phase === 'normal') {
       if (!window.__m10BasicLicense) throw new Error('Seed window.__m10BasicLicense from the disposable :4121 fixture first');
       if (queues().length) throw new Error('Disposable test browser must begin without queued requests');
+      if (!(await api('/shifts/current')).shift) {
+        const {drawers} = await api('/drawers');
+        await api('/shifts', 'POST', {clientRef: crypto.randomUUID(), drawerId: drawers[0].id, openingFloatPaise: 0});
+      }
       const stamp = Date.now();
       state.category = (await api('/categories', 'POST', { name: 'Takeaway gate ' + stamp })).category;
       const station = (await api('/kot-stations')).stations[0];
@@ -211,18 +215,18 @@
       check(attempts.length === 1 && attempts[0] === state.createRecovery.body, 'Create recovery replays the exact immutable request body');
       check((await api('/orders')).orders.filter(order => order.clientRef === state.createRecovery.clientRef).length === 1, 'Create recovery does not duplicate parcels');
       await add(state.meal); await add(state.water); await checkout();
-      const orderId = savedTakeaway().orderId, path = '/api/orders/' + orderId + '/bill';
+      const orderId = savedTakeaway().orderId, path = '/api/orders/' + orderId + '/checkout';
       const fault = loseResponse(path);
       await segment('Payment method', 'Cash'); await click('Record payment', true);
       const queued = await wait(() => fault.lost && queues().find(request => request.path === path), 'saved lost bill response');
       const bill = (await api('/orders/' + orderId + '/bill')).bill;
-      check(queues().some(request => request.after === queued.id), 'The payment is saved to follow the bill');
+      check(bill.status === 'paid' && JSON.parse(queued.body).settlement.shiftId, 'The saved checkout includes the confirmed drawer and committed payment');
       check(queued.body === fault.bodies[0], 'Bill retry keeps the original bill reference and preview snapshot');
       state.billRecovery = { orderId, billId: bill.id, billNo: bill.billNo, invoiceNo: bill.invoiceNo, body: queued.body };
       return reloadNext('bill_reload');
     }
     if (state.phase === 'bill_reload') {
-      // The payment was saved with the bill and waits for it, so after a reload both finish on their own.
+      // Replaying the combined checkout returns the original paid bill.
       await wait(() => !queues().some(request => request.lane === state.billRecovery.orderId), 'bill and payment replay after reload');
       const bill = (await api('/bills/' + state.billRecovery.billId)).bill;
       check(bill.billNo === state.billRecovery.billNo && bill.status === 'paid' && bill.payments.length === 1 && bill.payments[0].mode === 'cash', 'Reload finishes the saved payment on the original bill once');
@@ -238,7 +242,7 @@
       check((await stockMoves(state.rice.id, state.settleRecovery.orderId)).length === 1 && (await stockMoves(state.bottles.id, state.settleRecovery.orderId)).length === 1, 'Bill and settlement recovery do not duplicate either stock deduction');
       await closeBilling(); await click('Reports & Analytics'); await click('Bills'); await fill('Show', 'paid'); await click('Open bill ' + bill.invoiceNo);
       await wait(() => button('Next takeaway'), 'recovered paid order'); await click('View bill'); await click('View receipt');
-      await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes('CARD'), 'recovered paid receipt');
+      await wait(() => actionScope().querySelector('.billing-receipt-frame')?.contentDocument?.body?.innerText.includes(state.settleRecovery.mode.toUpperCase()), 'recovered paid receipt');
       check(true, 'Recovered paid receipt and Next takeaway are available');
       check(queues().length === 0, 'All reliable requests reconcile after response losses');
       state.phase = 'complete'; save();

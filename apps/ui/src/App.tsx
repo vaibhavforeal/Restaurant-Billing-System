@@ -96,6 +96,7 @@ function StaffApp() {
   usePosShortcuts();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [demo, setDemo] = useState(false);
+  const [sampleData, setSampleData] = useState(false);
   const navigationGuard = useRef(new Set<NavigationGuard>());
   const captainEntry = isCaptainPath();
   const androidBack = useRef<() => boolean>(() => false);
@@ -129,8 +130,9 @@ function StaffApp() {
 
     void (async () => {
       try {
-        const { needsSetup, demo, activation = "none", licensed = true } = await apiFetch<{ needsSetup: boolean; demo?: boolean; activation?: SetupActivation; licensed?: boolean }>("/api/needs-setup");
+        const { needsSetup, demo, sampleData, activation = "none", licensed = true } = await apiFetch<{ needsSetup: boolean; demo?: boolean; sampleData?: boolean; activation?: SetupActivation; licensed?: boolean }>("/api/needs-setup");
         setDemo(!!demo);
+        setSampleData(!!sampleData);
         if (needsSetup) return setState({ kind: "setup", activation, licensed });
         if (session.token) {
           try {
@@ -164,7 +166,7 @@ function StaffApp() {
     case "setup":
       return <Setup activation={state.activation} licensed={state.licensed} onDone={(user) => setState({ kind: "in", user, page: { name: "home" } })} />;
     case "login":
-      return <><DemoBanner demo={demo} login /><Login captain={captainEntry} onLogin={enter} /></>;
+      return <><DemoBanner demo={demo} sampleData={sampleData} login /><Login captain={captainEntry} onLogin={enter} /></>;
     case "offline":
       return <CaptainReconnect />;
     case "in": {
@@ -181,7 +183,7 @@ function StaffApp() {
         <CurrentUserProvider user={user}><NavigationGuardContext.Provider value={navigationGuard}><IntegrationsProvider key={user.id} user={user}><ModulesProvider key={user.id}><div className={`app-shell${captain ? " captain-shell" : " sales-shell"}${page.name === "tables" || page.name === "order" || page.name === "takeaway" ? " compact-workspace" : ""}${page.name === "tables" ? " tables-workspace" : page.name === "order" || page.name === "takeaway" ? " order-workspace" : ""}`}>
           {captain ? <CaptainNav user={user} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} /> : <NavBar user={user} page={page} onNavigate={go} beforeLogout={canLeave} onLogout={() => setState({ kind: "login" })} />}
           <div className="app-body">
-          <DemoBanner demo={demo} />
+          <DemoBanner demo={demo} sampleData={sampleData} />
           {/* Outside the licence gate: support must reach a counter whose licence stopped billing. */}
           <RemoteConsent user={user} />
           <LicenseGate key={user.id} user={user}>

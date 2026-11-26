@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { uuidv7 } from "@masalapos/domain";
-import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, enableIntegration, freshApp, setupTradingAdmin } from "./test-helpers.js";
 import { nextZomatoStatus } from "./zomato-desk.js";
 import { loadBill } from "./billing.js";
 
@@ -9,7 +9,7 @@ afterEach(async () => { await app?.close(); });
 
 async function setup(opts: { zomato?: boolean } = {}) {
   app = freshApp();
-  const admin = await setupAdmin(app);
+  const admin = await setupTradingAdmin(app);
   if (opts.zomato !== false) enableIntegration(app, "zomato");
   return admin;
 }
@@ -41,7 +41,7 @@ describe("creating Zomato orders", () => {
 
   it("lets a cashier create one and gives other orders null Zomato fields", async () => {
     const admin = await setup();
-    const cashier = await createUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
+    const cashier = await createTradingUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
     expect((await createOrder(cashier.token, "A-1")).statusCode).toBe(201);
     const parcel = await app.inject({ method: "POST", url: "/api/orders", headers: auth(admin.token), payload: { clientRef: uuidv7(), type: "parcel" } });
     expect(parcel.json().order).toMatchObject({ type: "parcel", priceTier: "takeaway", zomatoOrderId: null, zomatoStatus: null });
@@ -78,8 +78,8 @@ describe("creating Zomato orders", () => {
 
   it("keeps Zomato order creation away from waiters and kitchen staff", async () => {
     const admin = await setup();
-    const waiter = await createUser(app, admin.token, { name: "Wai", pin: "3333", role: "waiter" });
-    const kitchen = await createUser(app, admin.token, { name: "Kit", pin: "4444", role: "kitchen" });
+    const waiter = await createTradingUser(app, admin.token, { name: "Wai", pin: "3333", role: "waiter" });
+    const kitchen = await createTradingUser(app, admin.token, { name: "Kit", pin: "4444", role: "kitchen" });
     expect((await createOrder(waiter.token, "5821")).statusCode).toBe(403);
     expect((await createOrder(kitchen.token, "5822")).statusCode).toBe(403);
     expect(app.db.prepare("SELECT COUNT(*) n FROM orders").get()).toEqual({ n: 0 });
@@ -330,7 +330,7 @@ describe("Zomato status and Picked up", () => {
 
   it("replays the same clientRef and refuses a second Picked up, leaving one bill and one payment", async () => {
     const admin = await setup();
-    const cashier = await createUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
+    const cashier = await createTradingUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
     const order = await zomatoOrder(admin.token);
     setDbStatus(order.id, "ready");
     const clientRef = uuidv7();
@@ -363,8 +363,8 @@ describe("Zomato status and Picked up", () => {
 
   it("keeps the status route away from waiters and kitchen staff", async () => {
     const admin = await setup();
-    const waiter = await createUser(app, admin.token, { name: "Wai", pin: "3333", role: "waiter" });
-    const kitchen = await createUser(app, admin.token, { name: "Kit", pin: "4444", role: "kitchen" });
+    const waiter = await createTradingUser(app, admin.token, { name: "Wai", pin: "3333", role: "waiter" });
+    const kitchen = await createTradingUser(app, admin.token, { name: "Kit", pin: "4444", role: "kitchen" });
     const order = await zomatoOrder(admin.token);
     expect((await setStatus(waiter.token, order.id, "ready")).statusCode).toBe(403);
     expect((await setStatus(kitchen.token, order.id, "ready")).statusCode).toBe(403);
@@ -431,7 +431,7 @@ describe("billing guards on Zomato orders", () => {
       expect(res.json().error).toBe("Zomato handles refunds for Zomato orders");
     }
     // A cashier is told before being asked for an admin PIN.
-    const cashier = await createUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
+    const cashier = await createTradingUser(app, admin.token, { name: "Cash", pin: "2222", role: "cashier" });
     const cashierVoid = await app.inject({ method: "POST", url: `/api/bills/${bill.id}/void`, headers: auth(cashier.token), payload: { clientRef: uuidv7(), reason: "Wrong" } });
     expect(cashierVoid.statusCode).toBe(409);
     expect(cashierVoid.json()).toMatchObject({ error: "Zomato handles refunds for Zomato orders", code: "zomato_order" });

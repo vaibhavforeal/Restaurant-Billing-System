@@ -3,7 +3,7 @@ import { z } from "zod";
 const Ref = z.string().min(8).max(64);
 const Paise = z.number().int().min(0).max(1_000_000_000);
 
-export const ShiftOpen = z.object({ clientRef: Ref, openingFloatPaise: Paise });
+export const ShiftOpen = z.object({ clientRef: Ref, drawerId: z.string().default("main"), openingFloatPaise: Paise });
 export const CashMovementCreate = z.object({
   clientRef: Ref,
   kind: z.enum(["pay_in", "pay_out"]),

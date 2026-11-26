@@ -186,7 +186,7 @@ export function receiptSlip(bill: Bill, paperWidth: 58 | 80, profile: PrintProfi
   pos.bold(false); rule().align("center");
   const payment = billUpiPayment(bill);
   if (payment) {
-    pos.bold(true); line(`SCAN & PAY Rs. ${money(payment.amountPaise)}`); pos.bold(false);
+    pos.bold(true); line(payment.sample ? "SAMPLE QR - NO PAYMENT" : `SCAN & PAY Rs. ${money(payment.amountPaise)}`); pos.bold(false);
     const qr = upiQrRaster(payment.uri, paperWidth);
     // The bitmap already includes centered padding across the full print width.
     pos.align("left").raster(qr.widthBytes, qr.height, qr.data).align("center");
@@ -260,7 +260,7 @@ export function receiptHtml(bill: Bill): string {
     <p class="payment-state"><strong>${bill.status === "paid" ? "PAID IN FULL" : bill.status === "void" ? "VOID - NOT PAYABLE" : `AMOUNT DUE ₹${money(due)}`}</strong></p></section>
   ${bill.discountNote ? `<p class="discount-note">Discount reason: ${e(bill.discountNote)}</p>` : ""}
   ${customerLines(bill).map((text) => `<p class="discount-note">${e(text)}</p>`).join("")}
-  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>Scan &amp; pay with UPI</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill ${e(bill.invoiceNo)} · Amount filled in automatically</p></section>` : ""}
+  ${payment ? `<section class="upi-payment" aria-label="UPI payment"><h2>${payment.sample ? "Sample payment QR" : "Scan &amp; pay with UPI"}</h2><p class="upi-amount">₹${money(payment.amountPaise)}</p><div class="upi-qr">${upiQrSvg(payment.uri)}</div><p class="upi-id">${e(payment.upiId)}</p><p class="tax-note">Bill ${e(bill.invoiceNo)} · ${payment.sample ? "Payments are simulated" : "Amount filled in automatically"}</p></section>` : ""}
   ${bill.feedbackUrl ? `<section class="upi-payment" aria-label="Feedback"><h2>Rate your visit</h2><div class="upi-qr">${upiQrSvg(bill.feedbackUrl)}</div><p class="tax-note">Scan on the restaurant Wi-Fi</p></section>` : ""}
   <footer>${e(footerLines(bill).join("\n"))}</footer></main></body></html>`;
 }

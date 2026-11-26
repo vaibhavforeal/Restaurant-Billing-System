@@ -49,9 +49,11 @@ function carriedStatusFor(orderId: string): string {
 /** How often an open order screen re-reads the menu hints (Popular follows the time of day). */
 const INSIGHTS_REFRESH_MS = 15 * 60 * 1000;
 
-function MenuCardPhoto({ src }: { src: string }) {
+function MenuCardPhoto({ src }: { src?: string | null }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return null;
+  if (!src?.startsWith("/api/menu-images/") || failed) {
+    return <span className="menu-card-photo menu-card-photo-placeholder" aria-hidden="true">No image</span>;
+  }
 
   return <img className="menu-card-photo" src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 }
@@ -96,7 +98,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
   const cartItems = useRef<HTMLDivElement>(null);
   const menuSearch = useRef<HTMLInputElement>(null);
   const menuResults = useRef<HTMLDivElement>(null);
-  const [removed, setRemoved] = useState<DraftItem | null>(null);
   const [noteEditor, setNoteEditor] = useState<{ clientRef: string; name: string; note: string; savedItemId?: string } | null>(null);
   /** The combo whose slots staff are choosing before it goes in the cart. */
   const [addonGroupsByProduct, setAddonGroupsByProduct] = useState<Record<string, AddonPickerGroup[]>>({});
@@ -361,7 +362,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
     if (actionLock.current || billingLock.current || !rows.length) return false;
     const soldOut = rows.find((row) => products.find((product) => product.id === row.productId)?.isSoldOut);
     if (soldOut) { setError(`${soldOut.name} is sold out and cannot be added to a new order.`); return false; }
-    if (queuedRequests(user.id).some((r) => r.path === `/api/orders/${orderId}/bill` && !r.error)) {
+    if (queuedRequests(user.id).some((r) => (r.path === `/api/orders/${orderId}/bill` || r.path === `/api/orders/${orderId}/checkout`) && !r.error)) {
       setError("A bill is queued for this order. Wait for it to finish before starting another order."); return false;
     }
     return saveDraft(addDraftRows(readDraft(), rows, laneState().punchedRefs, uuid));
@@ -400,11 +401,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
 
   function removeDraft(clientRef: string) {
     if (actionLock.current || billingLock.current) return;
-    if (!queuedRefs.has(clientRef)) {
-      const current = readDraft();
-      const item = current.find((row) => row.clientRef === clientRef);
-      if (saveDraft(current.filter((row) => row.clientRef !== clientRef))) setRemoved(item ?? null);
-    }
+    if (!queuedRefs.has(clientRef)) saveDraft(readDraft().filter((row) => row.clientRef !== clientRef));
   }
 
   /** Adds the cart to the order. `saved`: the hub does not have every row yet (they are saved on this device). */
@@ -848,7 +845,7 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
                 {isPopular && <span className="menu-popular-label">Popular</span>}
                 {p.isSoldOut && <span className="menu-sold-out-label">Sold out</span>}
               </div>
-              {p.photoUrl?.startsWith("/api/menu-images/") && <MenuCardPhoto key={`${photoAttempt}:${p.photoUrl}`} src={p.photoUrl} />}
+              <MenuCardPhoto key={`${photoAttempt}:${p.photoUrl}`} src={p.photoUrl} />
               <div className="menu-card-name">{p.name}{portion !== undefined && <small className="menu-card-portion">{portion}</small>}</div>
               <div className="menu-card-bottom"><span>{price}</span><span className="add-indicator"><Icon name="plus" size={16} /></span></div>
             </button>;
@@ -901,7 +898,6 @@ export function OrderScreen({ user, orderId, onBack, onOpenOrder, quickBilling =
           <div>{suggestions.map((dish) => <button key={dish.productId} disabled={locked} aria-label={`Also add ${dish.name}, ₹${paiseToRupees(dish.pricePaise)}`} onClick={() => addToDraft(dish.productId, dish.variantId, dish.name, dish.pricePaise)}><Icon name="plus" size={14} />{dish.name}<span className="pos-money">₹{paiseToRupees(dish.pricePaise)}</span></button>)}</div>
         </div>}
         {message && <p className="captain-message" role="status"><Icon name="check" size={16} />{message}</p>}
-        {removed && order.status === "open" && <div className="pos-undo" role="status"><span>{removed.name} removed</span><button disabled={locked} onClick={() => { if (locked || queuedRefs.has(removed.clientRef)) return; const current = readDraft(); if (!current.some((row) => row.clientRef === removed.clientRef) && saveDraft([...current, removed])) setRemoved(null); }}>Undo</button><button aria-label="Dismiss undo" title="Dismiss" onClick={() => setRemoved(null)}>×</button></div>}
         <div className="cart-total">{useOrderControls && <p className="order-total-count">Total number of items <strong>{itemCount}</strong></p>}<div><span>Items subtotal</span><span>₹{paiseToRupees(total + draftTotal)}</span></div>{order.status === "open" && draft.length > 0 && <p>Includes ₹{paiseToRupees(draftTotal)} in cart</p>}</div>
         {order.status === "open" && (captain ? <div className="cart-actions captain-send"><button className="primary button-icon" {...shortcutProps("send_kitchen")} title={shortcut("send_kitchen", "Save items and send to kitchen")} onClick={sendToKitchen} disabled={locked || !canSendKitchen}><Icon name="kitchen" size={16} />{pending ? "Saving & sending…" : "Send to kitchen"}</button>{showFire && <button className="fire-held" disabled={locked} onClick={fireAll}>Fire all held ({held.count})</button>}</div> : <div className="cart-actions">
           {(useOrderControls || (!isQuick && draft.length > 0)) && <button className="primary" {...shortcutProps("save_items")} title={shortcut("save_items", "Save draft items to order")} onClick={punch} disabled={locked || !draft.length}>{shortcut("save_items", useOrderControls ? "Save order" : "Punch")}</button>}

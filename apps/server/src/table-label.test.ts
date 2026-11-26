@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { localDateKey, uuidv7, type Bill } from "@masalapos/domain";
-import { auth, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, enableIntegration, freshAppWithFakeSink, setupTradingAdmin } from "./test-helpers.js";
 import { activeLinkedTableNames, activeLinkForTable, orderTableLabel } from "./table-label.js";
 
 describe("table labels and link-aware table status", () => {
@@ -16,7 +16,7 @@ describe("table labels and link-aware table status", () => {
 
   beforeEach(async () => {
     ({ app } = freshAppWithFakeSink());
-    const admin = await setupAdmin(app);
+    const admin = await setupTradingAdmin(app);
     enableIntegration(app, "kds");
     token = admin.token; userId = admin.user.id;
     const category = (await request("POST", "/api/categories", { name: "Food" })).json().category.id as string;

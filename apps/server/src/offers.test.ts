@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { uuidv7, type Bill } from "@masalapos/domain";
 import type { OfferRule } from "@masalapos/domain/offers";
-import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, enableIntegration, freshApp, setupTradingAdmin } from "./test-helpers.js";
 import { receiptHtml, receiptSlip } from "./print/receipt.js";
 
 let app: ReturnType<typeof freshApp>, token: string, meal: string, soda: string;
@@ -12,7 +12,7 @@ const rule: OfferRule = { name: "Lunch offer", state: "active", benefit: { kind:
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2026, 10, 20, 12));
-  app = freshApp(); ({ token } = await setupAdmin(app));
+  app = freshApp(); ({ token } = await setupTradingAdmin(app));
   const categoryId = (await request("POST", "/api/categories", { name: "Lunch" })).json().category.id;
   const product = async (name: string, pricePaise: number, gstRate: number) => (await request("POST", "/api/products",
     { name, pricePaise, gstRate, categoryId, kotStationId: null })).json().product.id as string;
@@ -28,7 +28,7 @@ async function basket() {
 it("gates offer management and rejects a stale rule edit or bill preview", async () => {
   expect((await request("GET", "/api/offers")).statusCode).toBe(409);
   enableIntegration(app, "offers");
-  const staff = await createUser(app, token, { name:"Cara", role:"cashier", pin:"9876" });
+  const staff = await createTradingUser(app, token, { name:"Cara", role:"cashier", pin:"9876" });
   expect((await app.inject({ url:"/api/offers", headers:auth(staff.token) })).statusCode).toBe(403);
   const offer = (await request("POST", "/api/offers", rule)).json().id;
   const id = await basket();

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7 } from "@masalapos/domain";
-import { auth, createUser, enableIntegration, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, enableIntegration, freshAppWithFakeSink, setupTradingAdmin } from "./test-helpers.js";
 
 type Fake = ReturnType<typeof freshAppWithFakeSink>["fake"];
 
@@ -21,7 +21,7 @@ describe("moving an order to another table", () => {
 
   beforeEach(async () => {
     ({ app, fake } = freshAppWithFakeSink());
-    const admin = await setupAdmin(app);
+    const admin = await setupTradingAdmin(app);
     enableIntegration(app, "kds");
     token = admin.token; userId = admin.user.id;
     const category = (await request("POST", "/api/categories", { name: "Food" })).json().category.id as string;
@@ -216,7 +216,7 @@ describe("moving an order to another table", () => {
   });
 
   it("lets a waiter move tables", async () => {
-    const waiter = await createUser(app, token, { name: "Ravi", pin: "4321", role: "waiter" });
+    const waiter = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "waiter" });
     const orderId = await openOrder(tables["T3"]!);
     const res = await move(orderId, tables["T7"]!, uuidv7(), waiter.token);
     expect(res.statusCode, res.body).toBe(200);
@@ -529,7 +529,7 @@ describe("moving an order to another table", () => {
     });
 
     it("lets a waiter merge orders", async () => {
-      const waiter = await createUser(app, token, { name: "Ravi", pin: "4321", role: "waiter" });
+      const waiter = await createTradingUser(app, token, { name: "Ravi", pin: "4321", role: "waiter" });
       const receiving = await openOrder(tables["T3"]!);
       const folded = await openOrder(tables["T4"]!);
       const res = await merge(folded, receiving, uuidv7(), waiter.token);

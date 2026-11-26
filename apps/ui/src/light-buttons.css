@@ -12,7 +12,7 @@
   html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(button, .pos-overflow > summary):not(:where(
     [class~="boardui-root"] *, .menu-card, .table-card, .settings-card, .nav-item,
     .sales-tabs > button, .sales-menu-toggle, .sales-profile,
-    .category-rail > button, .recipe-product-list > button,
+    .category-rail > button, .category-editor li > button, .recipe-product-list > button,
     .report-tabs > button, .menu-view-controls > button,
     .order-board-rail > button, .order-board-chips > button, .order-card-open,
     .table-status-button, .pos-segments > button, .tabs > button,
@@ -28,7 +28,7 @@
   html[data-theme="light"] :is(.app-shell, .auth-shell, .workspace-dialog, .billing-dialog) :is(button, .pos-overflow > summary):not(:where(
     [class~="boardui-root"] *, .menu-card, .table-card, .settings-card, .nav-item,
     .sales-tabs > button, .sales-menu-toggle, .sales-profile,
-    .category-rail > button, .recipe-product-list > button,
+    .category-rail > button, .category-editor li > button, .recipe-product-list > button,
     .report-tabs > button, .menu-view-controls > button,
     .order-board-rail > button, .order-board-chips > button, .order-card-open,
     .table-status-button, .pos-segments > button, .tabs > button,

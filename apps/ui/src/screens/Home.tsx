@@ -4,6 +4,8 @@ import { apiFetch, session, type User } from "../api";
 import { Icon, type IconName } from "../Icon";
 import type { Order, TableInfo } from "../types";
 import { connectWs } from "../ws";
+import { WorkspaceDialog } from "../WorkspaceDialog";
+import { CashDrawer, currentCashShift, type Shift } from "./CashDrawer";
 import { SalesDashboard } from "../SalesDashboard";
 import { loadDashboard } from "../dynamic-dashboard/load-dashboard";
 // Loaded on demand so Tailwind, BoardUI and React Aria stay out of the main POS bundle.
@@ -20,6 +22,14 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
   const financial = userCan(user, "reports.read");
   const canQuickBill = userCan(user, "bills.settle");
   const [stats, setStats] = useState<{ free: number; orders: number; billed: number } | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [shift, setShift] = useState<Shift | null>(null);
+  useEffect(() => {
+    if (!canQuickBill) return;
+    let active = true;
+    currentCashShift().then(current => { if (active) setShift(current); }).catch(() => {});
+    return () => { active = false; };
+  }, [canQuickBill, drawerOpen, user.id]);
   const [error, setError] = useState("");
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
@@ -44,18 +54,24 @@ export function Home({ user, onNavigate }: { user: User; onNavigate: (page: Page
       { page: { name: "reports" } as Page, icon: "reports" as const, title: "Reports & Analytics" },
     ] : []),
   ];
-  return <section className={`screen dashboard${financial ? " financial-home" : ""}`}>
-    <div className="page-header">
-      <h2>Dashboard</h2>
-      <div className="actions">
-        <button className="button-icon" onClick={() => onNavigate({ name: "tables" })}><Icon name="plus" size={17} />New order</button>
-        {canQuickBill && modules.isActive("takeaway") && <button className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => onNavigate({ name: "takeaway" })}><Icon name="bag" size={17} />{shortcut("takeaway", "Takeaway")}</button>}
-      </div>
+  const showSalesDashboard = financial && modules.isActive("dashboard");
+  const showDynamicDashboard = showSalesDashboard && modules.isActive("dynamicReports") && userCan(user, "reports.dashboard") && !unavailable;
+  const orderActions = <div className="actions dashboard-top-actions">
+    <div className="actions dashboard-order-actions">
+      <button type="button" className="button-icon" onClick={() => onNavigate({ name: "tables" })}><Icon name="plus" size={17} />New order</button>
+      {canQuickBill && modules.isActive("takeaway") && <button type="button" className="primary button-icon" {...shortcutProps("takeaway")} title={shortcut("takeaway", "Takeaway")} onClick={() => onNavigate({ name: "takeaway" })}><Icon name="bag" size={17} />{shortcut("takeaway", "Takeaway")}</button>}
     </div>
+    {canQuickBill && <button type="button" className="button-icon dashboard-drawer-action" onClick={() => setDrawerOpen(true)}>{shift ? `My cash drawer · ${shift.drawerName}` : "Open day cash"}</button>}
+  </div>;
+  return <section className={`screen dashboard${financial ? " financial-home" : ""}`} aria-label="Dashboard">
+    {(!showSalesDashboard || showDynamicDashboard) && <div className="page-header">{orderActions}</div>}
+    {drawerOpen && <WorkspaceDialog open className="cash-drawer-dialog" title={shift ? "My cash drawer" : "Open day cash"} onClose={() => setDrawerOpen(false)}>
+      <CashDrawer canSettle canCloseDay={false} canReadReports={false} onOpened={() => setDrawerOpen(false)} />
+    </WorkspaceDialog>}
     {!financial && error && <p className="alert" role="status">{error}</p>}
-    {financial && modules.isActive("dashboard") && (modules.isActive("dynamicReports") && userCan(user, "reports.dashboard") && !unavailable
+    {showSalesDashboard && (showDynamicDashboard
       ? <Suspense fallback={<p role="status">Loading dashboard…</p>}><DynamicDashboard onUnavailable={() => setUnavailable(true)} /></Suspense>
-      : <SalesDashboard onNavigate={onNavigate} canManage={userCan(user, "integrations.configure")} />)}
+      : <SalesDashboard onNavigate={onNavigate} canManage={userCan(user, "integrations.configure")} orderActions={orderActions} />)}
     {!financial && <div className="stat-grid" aria-label="Live service counts">
       {[
         { label: "Open orders", value: stats?.orders },

@@ -79,7 +79,7 @@ export function sessionUser(db: Database, token: string): AuthedUser | null {
   return sessionRecord(db, token)?.user ?? null;
 }
 
-export function registerAuth(app: FastifyInstance, demo = false): void {
+export function registerAuth(app: FastifyInstance, demo = false, sampleData = false): void {
   // Plugin-scoped: each server instance gets its own throttle state. Admin approval of refunds and voids has an independent
   // counter, so a successful sign-in can never reset approval failures.
   const throttle = createPinThrottle();
@@ -140,12 +140,12 @@ export function registerAuth(app: FastifyInstance, demo = false): void {
   app.get("/api/needs-setup", async () => {
     // users-count is the canonical signal; settings.setup_complete is informational only
     const needsSetup = noUsers();
-    if (!needsSetup) return { needsSetup, ...(demo ? { demo: true } : {}) };
+    if (!needsSetup) return { needsSetup, ...(demo ? { demo: true } : {}), ...(sampleData ? { sampleData: true } : {}) };
     // How setup starts: "online" asks for the Customer ID and Order ID, "offline" (no licensing service in this build) uses a licence
     // file after setup, and "none" (development and demo builds) needs no activation.
     const status = app.licensing.status();
     return {
-      needsSetup, ...(demo ? { demo: true } : {}),
+      needsSetup, ...(demo ? { demo: true } : {}), ...(sampleData ? { sampleData: true } : {}),
       activation: status.mode === "development" ? "none" : status.onlineActivation ? "online" : "offline",
       licensed: status.state === "active" || status.state === "grace" || status.state === "development",
     };

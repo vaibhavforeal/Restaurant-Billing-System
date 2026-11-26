@@ -15,11 +15,14 @@ import { loadCaptainHttps, startCaptainHttps, type CaptainHttpsInfo } from "./ca
 import { seedDemo } from "./demo-seed.js";
 import { makeFakeSink } from "./print/sinks.js";
 import { driveProvider } from "./drive-config.js";
+import { checkSampleDirectory, populateSampleDirectory } from "./sample-profile.js";
 
-declare const __MASALAPOS_COMMERCIAL__: boolean;
+declare const __MASALAPOS_DEV__: boolean;
 
 declare const __MASALAPOS_DEMO__: boolean;
 const demo = typeof __MASALAPOS_DEMO__ !== "undefined" && __MASALAPOS_DEMO__;
+const sampleData = typeof __MASALAPOS_DEV__ !== "undefined" && __MASALAPOS_DEV__ && process.env["MASALAPOS_SAMPLE_DATA"] === "1";
+const isolated = demo || sampleData;
 // Handed over by the desktop shell (Windows-protected at rest); keep it out of anything this process spawns.
 const secretKey = process.env["MASALAPOS_SECRET_KEY"];
 delete process.env["MASALAPOS_SECRET_KEY"];
@@ -27,35 +30,45 @@ delete process.env["MASALAPOS_SECRET_KEY"];
 const here = dirname(fileURLToPath(import.meta.url));
 const dataDir = resolve(process.env["MASALAPOS_DATA_DIR"] ?? "./data");
 const port = Number(process.env["MASALAPOS_PORT"] ?? 4100);
+// Electron utility process message port for startup progress, shutdown and updates.
+const parent = (process as unknown as { parentPort?: { postMessage(message: unknown): void; on(event: string, fn: (event: { data: unknown }) => void): void } }).parentPort;
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid MASALAPOS_PORT");
+if (sampleData) checkSampleDirectory(dataDir);
 mkdirSync(dataDir, { recursive: true });
 const release = await lockDataDirectory(dataDir);
 let db: ReturnType<typeof openDb> | undefined;
 let closing = false;
 try {
-  restoreDatabase(dataDir);
-  if (process.env["MASALAPOS_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["MASALAPOS_RESTORE"]));
+  if (sampleData) {
+    await populateSampleDirectory(dataDir, async (target) => {
+      const { createSampleRestaurant } = await import("./sample-seed.js");
+      await createSampleRestaurant(target, resolve(here, "../sample-photos"), {
+        onProgress: () => parent?.postMessage({ type: "sample-seed-progress" }),
+      });
+    });
+  } else {
+    restoreDatabase(dataDir);
+    if (process.env["MASALAPOS_RESTORE"]) restoreDatabase(dataDir, resolve(process.env["MASALAPOS_RESTORE"]));
+  }
   db = openDb(join(dataDir, "masalapos.db"));
   const backups = new Backups(db, dataDir);
   const version = process.env["MASALAPOS_APP_VERSION"] ?? "development";
   prepareDatabase(db, backups, version);
   const generationPath = join(dataDir, "recovery-generation.json");
   const generation = existsSync(generationPath) ? JSON.parse(readFileSync(generationPath, "utf8")).generation as string : "initial";
-  const licensing = demo ? undefined : licenseConfig(dataDir);
+  const licensing = isolated ? undefined : licenseConfig(dataDir);
   let captainTls: ReturnType<typeof loadCaptainHttps> = null;
   const captainInfo: CaptainHttpsInfo = { enabled: false };
-  try { captainTls = loadCaptainHttps(dataDir); if (captainTls) Object.assign(captainInfo, captainTls.info); }
+  try { captainTls = sampleData ? null : loadCaptainHttps(dataDir); if (captainTls) Object.assign(captainInfo, captainTls.info); }
   catch (error) { captainInfo.error = error instanceof Error ? error.message : "Captain HTTPS configuration could not be loaded"; }
-  // The desktop shell's message port: shutdown requests and the auto-updater's status arrive here.
-  const parent = (process as unknown as { parentPort?: { on(event: string, fn: (event: { data: unknown }) => void): void; postMessage(message: unknown): void } }).parentPort;
   const updateBridge = parent ? { send: (message: unknown) => parent.postMessage(message), onMessage: (listener: (message: unknown) => void) => parent.on("message", ({ data }) => listener(data)) } : undefined;
   const liveDb = db;
-  const cloudBackupProvider = demo ? undefined : driveProvider({ dataDir, secretKey,
+  const cloudBackupProvider = isolated ? undefined : driveProvider({ dataDir, secretKey,
     restaurantName: () => (liveDb.prepare("SELECT restaurant_name FROM settings WHERE id = 1").get() as { restaurant_name?: string } | undefined)?.restaurant_name ?? "",
     warn: (message) => console.warn(message) });
   // The AI assistant keeps its switch and usage in the data folder; requests go to MasalaPOS's AI service (no key on this counter).
-  const ai = demo ? undefined : { dataDir };
-  const app = buildServer({ db, backups, port, generation, demo, appVersion: version, ...(ai ? { ai } : {}), ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(demo ? { sinkSend: makeFakeSink().send } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
+  const ai = isolated ? undefined : { dataDir };
+  const app = buildServer({ db, backups, port, generation, demo, sampleData, appVersion: version, ...(ai ? { ai } : {}), ...(cloudBackupProvider ? { cloudBackupProvider } : {}), ...(updateBridge ? { updateBridge } : {}), ...(sampleData ? { sinkSend: async () => {} } : demo ? { sinkSend: makeFakeSink().send } : {}), ...(sampleData ? { discoverPrinters: async () => ({ supported: false, printers: [] }) } : {}), captainHttps: captainInfo, ...(licensing ? { licensing } : {}), instanceId: process.env["MASALAPOS_INSTANCE_ID"] ?? "standalone", logger: {
     serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, url: redactUrl(req.url) }) },
   } });
   const daily = () => { try { backups.daily(); } catch (error) { app.log.error(error, "Daily backup failed; see Settings"); } };
@@ -83,9 +96,9 @@ try {
   if (demo) await seedDemo(app);
   // The customer installer activates the PC before installing; its licence is applied here, before any counter connects.
   if (licensing) adoptStagedActivation(app.licensing, licensing.installationId, (message) => app.log.warn(message));
-  await app.listen({ host: "0.0.0.0", port });
+  await app.listen({ host: sampleData ? "127.0.0.1" : "0.0.0.0", port });
   // Billing never waits on the licensing service: this only fetches in the background and logs failures.
-  if (!demo) stopRenewals = app.licensing.startRenewalChecks((message) => app.log.warn(message));
+  if (!isolated) stopRenewals = app.licensing.startRenewalChecks((message) => app.log.warn(message));
   if (captainTls) {
     try {
       if (captainTls.port === port) throw new Error("Captain HTTPS must use a different port from the desktop POS");

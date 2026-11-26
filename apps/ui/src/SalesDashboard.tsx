@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChannelCards } from "./ChannelCards";
 import { AlertsPanel, type OperationalAlert } from "./AlertsPanel";
 import { DashboardStrip } from "./DashboardStrip";
@@ -14,7 +14,7 @@ import { useDashboard, useNow } from "./useDashboard";
 import "./sales-dashboard.css";
 import "./dashboard.css";
 
-export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: Page) => void; canManage: boolean }) {
+export function SalesDashboard({ onNavigate, canManage, orderActions }: { onNavigate: (page: Page) => void; canManage: boolean; orderActions: ReactNode }) {
   const today = localDay(new Date(useNow(60_000)));
   const [date, setDate] = useState(today);
   // Left open past midnight, a dashboard that was showing "today" moves on to the new day; a picked date stays.
@@ -26,7 +26,7 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
   }, [today]);
   const { ready, isEnabled } = useIntegrations();
   const zomatoEnabled = isEnabled("zomato");
-  const { analytics, dayEnd, sales, orders, error, loading, updatedAt, refresh } = useDashboard(date, zomatoEnabled);
+  const { analytics, dayEnd, sales, orders, error, loading, refresh } = useDashboard(date, zomatoEnabled);
   const aggregator = useAggregatorOrders(zomatoEnabled);
 
   const cards = useMemo(() => analytics ? channelCards(analytics.dineIn.comparison, zomatoEnabled) : null, [analytics, zomatoEnabled]);
@@ -37,7 +37,7 @@ export function SalesDashboard({ onNavigate, canManage }: { onNavigate: (page: P
     ? [{ key: "awaiting-payment", message: `${awaiting} billed ${awaiting === 1 ? "order" : "orders"} awaiting payment` }] : [];
 
   return <div className="sales-dashboard dash" aria-busy={loading}>
-    <DashboardStrip date={date} today={today} updatedAt={updatedAt} loading={loading} onDate={setDate} onRefresh={refresh} />
+    <DashboardStrip date={date} today={today} orderActions={orderActions} loading={loading} onDate={setDate} onRefresh={refresh} />
     {error && <p className="dash-error" role="alert">{error}. Figures shown may be incomplete. <button type="button" onClick={refresh}>Retry</button></p>}
     <div className="dash-layout">
       <div className="dash-main">

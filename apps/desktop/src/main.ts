@@ -5,20 +5,28 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { app, BrowserWindow, dialog, Menu, nativeImage, safeStorage, shell, Tray, utilityProcess, type UtilityProcess } from "electron";
 import { startupDocument } from "../../ui/src/startup-screen.js";
 import { prepareDemoDirectory, resetDemoDatabase } from "./demo-data.js";
+import { archiveSampleDirectory, checkSampleDirectory, SAMPLE_PROFILE } from "../../server/src/sample-profile.js";
 import { createUpdater, type AutoUpdaterLike } from "./updater.js";
 import { isToDesktop } from "../../../packages/domain/src/updates.js";
 import { isRemoteToDesktop } from "../../../packages/domain/src/remote-support.js";
 
 declare const __MASALAPOS_DEMO__: boolean;
 declare const __MASALAPOS_COMMERCIAL__: boolean;
+declare const __MASALAPOS_DEV__: boolean;
 const demo = typeof __MASALAPOS_DEMO__ !== "undefined" && __MASALAPOS_DEMO__;
 const commercial = typeof __MASALAPOS_COMMERCIAL__ !== "undefined" && __MASALAPOS_COMMERCIAL__;
+const sample = typeof __MASALAPOS_DEV__ !== "undefined" && __MASALAPOS_DEV__ && process.argv.includes("--sample-data");
+const isolated = demo || sample;
+if (sample) {
+  app.setName("MasalaPOS Dev Sample Data");
+  app.setPath("userData", join(app.getPath("appData"), SAMPLE_PROFILE));
+}
 if (demo) { app.setName("MasalaPOS Demo"); app.setPath("userData", join(app.getPath("appData"), "masalapos-demo")); }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const port = demo ? "4110" : process.env["MASALAPOS_PORT"] ?? "4100";
+const port = sample ? "4120" : demo ? "4110" : process.env["MASALAPOS_PORT"] ?? "4100";
 const url = `http://127.0.0.1:${port}`;
-const dataDir = demo ? prepareDemoDirectory(join(app.getPath("userData"), "data")) : process.env["MASALAPOS_DATA_DIR"] ?? join(app.getPath("userData"), "data");
+const dataDir = sample ? join(app.getPath("userData"), "data") : demo ? prepareDemoDirectory(join(app.getPath("userData"), "data")) : process.env["MASALAPOS_DATA_DIR"] ?? join(app.getPath("userData"), "data");
 let server: UtilityProcess | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -33,6 +41,7 @@ let updates: ReturnType<typeof createUpdater> | null = null;
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   mkdirSync(dataDir, { recursive: true });
+  if (sample) checkSampleDirectory(dataDir, true);
   const log = join(dataDir, "server.log");
   const writeLog = (text: string) => {
     try {
@@ -45,7 +54,7 @@ else {
   /** Key that seals cloud-backup credentials, protected by Windows for this user and PC. Kept outside the data folder. */
   let secretKey: string | undefined;
   function cloudSecretKey(): string | undefined {
-    if (secretKey !== undefined || demo) return secretKey || undefined;
+    if (secretKey !== undefined || isolated) return secretKey || undefined;
     secretKey = "";
     try {
       if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows credential protection is unavailable");
@@ -60,11 +69,11 @@ else {
     if (errorShown || quitting || recovering) return;
     errorShown = true;
     const { response } = await dialog.showMessageBox({ type: "error", title: "MasalaPOS needs attention", message,
-      detail: `Your data is in ${dataDir}. See server.log for details.`, buttons: ["Retry", "Open data folder", "Restore backup", "Quit"], cancelId: 3 });
+      detail: `Your data is in ${dataDir}. See server.log for details.`, buttons: ["Retry", "Open data folder", ...(sample ? [] : ["Restore backup"]), "Quit"], cancelId: sample ? 2 : 3 });
     errorShown = false;
     if (response === 0) { restarts = 0; startServer(); }
     else if (response === 1) { await shell.openPath(dataDir); void failure(message); }
-    else if (response === 2) await restore();
+    else if (response === 2 && !sample) await restore();
     else app.quit();
   }
   function startServer(restorePath?: string) {
@@ -72,9 +81,10 @@ else {
     writeLog("Starting server utility process\n");
     const instanceId = randomUUID();
     const child = utilityProcess.fork(join(here, "server", "main.mjs"), [], {
-      cwd: dataDir, stdio: "pipe", serviceName: "MasalaPOS server",
+      // The sample data directory is renamed on reset. Keep the Windows process working directory outside it.
+      cwd: sample ? dirname(dataDir) : dataDir, stdio: "pipe", serviceName: "MasalaPOS server",
       env: { ...process.env, MASALAPOS_DATA_DIR: dataDir, MASALAPOS_UI_DIR: join(here, "ui"), MASALAPOS_PORT: port,
-        MASALAPOS_APP_VERSION: app.getVersion(), MASALAPOS_INSTANCE_ID: instanceId, ...(restorePath ? { MASALAPOS_RESTORE: restorePath } : {}),
+        MASALAPOS_APP_VERSION: app.getVersion(), MASALAPOS_INSTANCE_ID: instanceId, MASALAPOS_SAMPLE_DATA: sample ? "1" : "", ...(restorePath ? { MASALAPOS_RESTORE: restorePath } : {}),
         ...(cloudSecretKey() ? { MASALAPOS_SECRET_KEY: cloudSecretKey() } : {}) },
     });
     server = child;
@@ -82,7 +92,7 @@ else {
     let healthy = false;
     let healthyAt = 0;
     let failures = 0;
-    const started = Date.now();
+    let lastStartupProgress = Date.now();
     const spawnCheck = setTimeout(() => {
       if (server === child && child.pid === undefined) {
         server = null; clearInterval(watchdog);
@@ -93,6 +103,10 @@ else {
     // The server relays Settings -> Updates; the shell answers with the updater's status.
     child.on("message", (data: unknown) => {
       if (server !== child) return;
+      if (sample && data && typeof data === "object" && "type" in data && data.type === "sample-seed-progress") {
+        lastStartupProgress = Date.now();
+        return;
+      }
       // Remote support: the server only sends a start for a session someone at this PC has just allowed.
       if (isRemoteToDesktop(data)) {
         if (data.type === "connector-open") {
@@ -126,7 +140,7 @@ else {
         failures++;
         // Allow migration/backup work to finish at startup. A live hung server is
         // killed only after repeated failed probes; its OS data lock then releases.
-        if ((healthy && failures >= 15) || (!healthy && Date.now() - started > 120_000)) child.kill();
+        if ((healthy && failures >= 15) || (!healthy && Date.now() - lastStartupProgress > 120_000)) child.kill();
       }
     })(); }, 2000);
     child.once("exit", (code) => {
@@ -172,24 +186,29 @@ else {
     recovering = false;
   }
   async function resetDemo() {
-    if (!demo || recovering) return;
-    const { response } = await dialog.showMessageBox({ type: "question", title: "Reset MasalaPOS Demo", message: "Start a fresh customer demo?", detail: "Demo orders and edits will be archived, then replaced with the sample restaurant. Connected demo kitchen displays will need to sign in again.", buttons: ["Cancel", "Reset sample data"], defaultId: 0, cancelId: 0 });
+    if (!isolated || recovering) return;
+    const { response } = await dialog.showMessageBox({ type: "question", title: "Reset sample data", message: "Start a fresh sample restaurant?", detail: "The current sample database will be archived. Sample accounts will need to sign in again.", buttons: ["Cancel", "Reset sample data"], defaultId: 0, cancelId: 0 });
     if (response !== 1) return;
     recovering = true;
     try {
       await stopServer();
-      resetDemoDatabase(dataDir);
-      await window?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument("restoring"))}`);
+      if (sample) archiveSampleDirectory(dataDir);
+      else resetDemoDatabase(dataDir);
+      await window?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument(sample ? "sample" : "restoring"))}`);
       restarts = 0; startServer();
-    } catch (error) { recovering = false; void failure(error instanceof Error ? error.message : "Demo reset failed."); }
+    } catch (error) {
+      writeLog(`Sample reset failed: ${String(error)}\n`);
+      recovering = false;
+      void failure(error instanceof Error ? error.message : "Sample reset failed.");
+    }
     finally { recovering = false; }
   }
   app.on("second-instance", showWindow);
   app.whenReady().then(async () => {
     window = new BrowserWindow({ width: 1280, height: 800, show: false, backgroundColor: "#f6f7f9", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: join(here, "preload.cjs") } });
-    if (demo) {
+    if (isolated) {
       window.setAutoHideMenuBar(false);
-      Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "Demo", submenu: [
+      Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: sample ? "Sample Data" : "Demo", submenu: [
         { label: "Open Kitchen display in browser", click: () => { void shell.openExternal(`${url}/kitchen/`); } },
         { label: "Reset sample data", click: () => { void resetDemo(); } },
         { type: "separator" }, { role: "quit" },
@@ -200,8 +219,8 @@ else {
     window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(url + "/") && target !== url) event.preventDefault(); });
     window.on("close", (event) => { if (!quitting) { event.preventDefault(); window?.hide(); } });
     // Paint the self-contained splash before starting the server; no blank window or CDN dependency.
-    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument())}`);
-    if (!demo && app.isPackaged && process.env["MASALAPOS_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
+    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupDocument(sample && !existsSync(join(dataDir, "masalapos.db")) ? "sample" : "opening"))}`);
+    if (!isolated && app.isPackaged && process.env["MASALAPOS_DISABLE_AUTOSTART"] !== "1" && !existsSync(join(dataDir, "desktop-initialized"))) {
       app.setLoginItemSettings({ openAtLogin: true });
       appendFileSync(join(dataDir, "desktop-initialized"), "1");
     }
@@ -227,11 +246,11 @@ else {
     startServer();
     writeLog("Creating tray menu\n");
     tray = new Tray(nativeImage.createFromPath(join(here, "icon.png")));
-    tray.setToolTip("MasalaPOS — restaurant POS server");
+    tray.setToolTip(sample ? "MasalaPOS Dev Sample Data" : "MasalaPOS — restaurant POS server");
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Open MasalaPOS", click: showWindow },
       { label: "Open data and backups", click: () => { void shell.openPath(dataDir); } },
-      ...(demo ? [{ label: "Reset sample data", click: () => { void resetDemo(); } }] : [
+      ...(isolated ? [{ label: "Reset sample data", click: () => { void resetDemo(); } }] : [
         { label: "Restore backup…", click: () => { void restore(); } },
         { label: "Start with Windows", type: "checkbox" as const, checked: app.getLoginItemSettings().openAtLogin, click: (item: Electron.MenuItem) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
       ]),

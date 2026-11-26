@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7 } from "@masalapos/domain";
-import { auth, createUser, freshAppWithFakeSink, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, freshAppWithFakeSink, setupTradingAdmin } from "./test-helpers.js";
 
 describe("sales and collection reports", () => {
   let app: FastifyInstance, token: string, productId: string;
@@ -26,7 +26,7 @@ describe("sales and collection reports", () => {
   }
   const report = async (from = "2026-09-27", to = "2026-09-29") => (await app.inject({ url: `/api/reports/sales?from=${from}&to=${to}`, headers: auth(token) })).json().report;
   beforeEach(async () => {
-    ({ app } = freshAppWithFakeSink()); ({ token } = await setupAdmin(app));
+    ({ app } = freshAppWithFakeSink()); ({ token } = await setupTradingAdmin(app));
     const { category } = await post("/api/categories", { name: "Meals" });
     const { product } = await post("/api/products", { name: "Meal", categoryId: category.id, pricePaise: 10001, gstRate: 5, kotStationId: null }); productId = product.id;
   });
@@ -89,7 +89,7 @@ describe("sales and collection reports", () => {
   });
   it("allows cashiers and denies waiter, kitchen and anonymous financial access", async () => {
     for (const [role, pin, status] of [["cashier", "2345", 200], ["waiter", "3456", 403], ["kitchen", "4567", 403]] as const) {
-      const user = await createUser(app, token, { name: role, role, pin });
+      const user = await createTradingUser(app, token, { name: role, role, pin });
       expect((await app.inject({ url: "/api/reports/sales", headers: auth(user.token) })).statusCode).toBe(status);
     }
     expect((await app.inject("/api/reports/sales")).statusCode).toBe(401);

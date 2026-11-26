@@ -311,7 +311,7 @@ real POS database. Staff PINs: admin 1234, waiter 3456, cashier 2345, kitchen 45
 
 Use a fresh agent-browser session at 1024×768, sign in as waiter, and open T01.
 Run `tools/e2e/captain-app.js` through `agent-browser eval --stdin`. It checks
-typed quantity, note, variant, remove/undo, unchanged ₹630 subtotal, one KOT,
+typed quantity, note, variant, removal and re-adding from the menu, ₹630 subtotal, one KOT,
 print-queue output, denied billing and absence of cached API data. Start a fresh
 fixture for each main run. Loopback HTTP supports service workers for this test;
 real tablets require trusted HTTPS.

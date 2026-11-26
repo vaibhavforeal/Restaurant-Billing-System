@@ -5,6 +5,7 @@ import { movedTableOrder } from "../table-order";
 import { useCan } from "../permissions";
 import { useModules } from "../modules";
 import { useNavigationGuard } from "../navigation-guard";
+import { WorkspaceDialog } from "../WorkspaceDialog";
 import { QrTableManager } from "./QrRequests";
 import "../tables-screen.css";
 import "../table-settings.css";
@@ -18,6 +19,8 @@ export function TableSettings({ onBusyChange }: { onBusyChange: (busy: boolean) 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [renameTable, setRenameTable] = useState<TableInfo | null>(null);
+  const [tableName, setTableName] = useState("");
   const [newTable, setNewTable] = useState<{ name: string; area: string; priceTier: "non_ac" | "ac" }>({ name: "", area: "", priceTier: "non_ac" });
   const lock = useRef(false);
   function working(value: boolean) { lock.current = value; setBusy(value); onBusyChange(value); }
@@ -76,9 +79,19 @@ export function TableSettings({ onBusyChange }: { onBusyChange: (busy: boolean) 
     void run(() => apiFetch("/api/tables/order", { method: "PUT", body: JSON.stringify({ ids }) }));
   }
 
-  function rename(table: TableInfo) {
-    const name = window.prompt("Table name", table.name)?.trim();
-    if (name && name !== table.name) patchTable(table.id, { name });
+  function openRename(table: TableInfo) {
+    setError("");
+    setTableName(table.name);
+    setRenameTable(table);
+  }
+
+  function saveName() {
+    const name = tableName.trim();
+    if (!renameTable || !name || name === renameTable.name) return;
+    void run(async () => {
+      await apiFetch(`/api/tables/${renameTable.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      setRenameTable(null);
+    });
   }
 
   if (!canManage) return <p role="status">You need Manage tables permission to change table settings.</p>;
@@ -89,7 +102,7 @@ export function TableSettings({ onBusyChange }: { onBusyChange: (busy: boolean) 
     </div>
     {view === "tables" ? <section aria-label="Manage tables">
       <div className="table-settings-heading"><button disabled={busy || loading} onClick={() => void run()}>Refresh</button></div>
-      {error && <p role="alert">{error}</p>}
+      {error && !renameTable && <p role="alert">{error}</p>}
       {loading ? <p role="status">Loading tables…</p> : <>
       <form className="table-add-form" onSubmit={(event) => { event.preventDefault(); if (!busy) addTable(); }}>
         <label>Table name<input required disabled={busy} placeholder="e.g. Table 12" value={newTable.name} onChange={(e) => setNewTable({ ...newTable, name: e.target.value })} /></label>
@@ -99,12 +112,21 @@ export function TableSettings({ onBusyChange }: { onBusyChange: (busy: boolean) 
       </form>
       <h3 className="table-list-heading">All tables · {tables.length}</h3><ul className="table-manager-list">{tables.map((table, index) => <li key={table.id} className={table.isActive ? "" : "inactive"}>
         <span><strong>{table.name}</strong><small>{table.area ?? "Main"} · {table.priceTier === "ac" ? "AC" : "Non-AC"}{!table.isActive ? " · Inactive" : ""}</small></span>
-        <div className="actions"><select aria-label={`Pricing for ${table.name}`} title={table.activeOrders.length ? "Close all orders before changing pricing" : "Table pricing"} disabled={busy || table.activeOrders.length > 0} value={table.priceTier} onChange={(e) => patchTable(table.id, { priceTier: e.target.value as "ac" | "non_ac" })}><option value="non_ac">Non-AC</option><option value="ac">AC</option></select><button disabled={busy || index === 0} onClick={() => move(table, -1)} title="Move up" aria-label={`Move ${table.name} up`}>▲</button><button disabled={busy || index === tables.length - 1} onClick={() => move(table, 1)} title="Move down" aria-label={`Move ${table.name} down`}>▼</button><button disabled={busy} onClick={() => rename(table)} aria-label={`Rename ${table.name}`}>Rename</button><button disabled={busy} onClick={() => patchTable(table.id, { isActive: !table.isActive })} aria-label={`${table.isActive ? "Deactivate" : "Activate"} ${table.name}`}>{table.isActive ? "Deactivate" : "Activate"}</button></div>
+        <div className="actions"><select aria-label={`Pricing for ${table.name}`} title={table.activeOrders.length ? "Close all orders before changing pricing" : "Table pricing"} disabled={busy || table.activeOrders.length > 0} value={table.priceTier} onChange={(e) => patchTable(table.id, { priceTier: e.target.value as "ac" | "non_ac" })}><option value="non_ac">Non-AC</option><option value="ac">AC</option></select><button disabled={busy || index === 0} onClick={() => move(table, -1)} title="Move up" aria-label={`Move ${table.name} up`}>▲</button><button disabled={busy || index === tables.length - 1} onClick={() => move(table, 1)} title="Move down" aria-label={`Move ${table.name} down`}>▼</button><button disabled={busy} onClick={() => openRename(table)} aria-label={`Rename ${table.name}`}>Rename</button><button disabled={busy} onClick={() => patchTable(table.id, { isActive: !table.isActive })} aria-label={`${table.isActive ? "Deactivate" : "Activate"} ${table.name}`}>{table.isActive ? "Deactivate" : "Activate"}</button></div>
       </li>)}</ul>
       </>}
     </section> : <section aria-label="Table QR codes">
       {modules.isActive("qrOrdering") ? <QrTableManager disabled={busy} onBusyChange={working} />
         : <p>Enable QR Ordering in Marketplace to manage table QR codes.</p>}
     </section>}
+    <WorkspaceDialog open={!!renameTable} title="Rename table" className="table-opening-dialog" busy={busy} onClose={() => { setRenameTable(null); setError(""); }}>
+      <form onSubmit={(event) => { event.preventDefault(); saveName(); }}>
+        <label>Table name<input required disabled={busy} value={tableName} onChange={(event) => setTableName(event.target.value)} /></label>
+        {renameTable && error && <p className="error-message" role="alert">{error}</p>}
+        <div className="actions">
+          <button type="submit" className="primary" disabled={busy || !tableName.trim() || tableName.trim() === renameTable?.name}>Save</button>
+        </div>
+      </form>
+    </WorkspaceDialog>
   </div>;
 }

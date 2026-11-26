@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { uuidv7, localDateKey } from "@masalapos/domain";
-import { auth, createUser, enableIntegration, freshApp, setupAdmin } from "./test-helpers.js";
+import { auth, createTradingUser, enableIntegration, freshApp, setupTradingAdmin } from "./test-helpers.js";
 
 describe("customer segments and CRM insights", () => {
   let app: FastifyInstance; let token: string; let productId: string;
   beforeEach(async () => {
-    app = freshApp(); ({ token } = await setupAdmin(app)); enableIntegration(app, "crm");
+    app = freshApp(); ({ token } = await setupTradingAdmin(app)); enableIntegration(app, "crm");
     const c = await app.inject({ method: "POST", url: "/api/categories", headers: auth(token), payload: { name: "Food" } });
     const p = await app.inject({ method: "POST", url: "/api/products", headers: auth(token), payload: { name: "Thali", categoryId: c.json().category.id, pricePaise: 50000, gstRate: 5, kotStationId: null } });
     productId = p.json().product.id;
@@ -85,7 +85,7 @@ describe("customer segments and CRM insights", () => {
     const all = (await request("POST", "/api/customer-segments/export", { filter: {}, all: true })).body;
     expect(all).toContain(`"'=cmd"`);
 
-    const cashier = await createUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
+    const cashier = await createTradingUser(app, token, { name: "Meena", pin: "3333", role: "cashier" });
     expect((await request("POST", "/api/customer-segments/export", { filter: {} }, cashier.token)).statusCode).toBe(403);
     expect((await request("POST", "/api/customer-segments/preview", { filter: {} }, cashier.token)).statusCode).toBe(200);
     expect((await request("DELETE", `/api/customer-segments/${id}`)).statusCode).toBe(204);
@@ -104,7 +104,7 @@ describe("customer segments and CRM insights", () => {
     expect(report.points).toMatchObject({ issued: 20, redeemed: 0, outstanding: 20, liabilityPaise: 1000 });
     expect(report.tiers).toEqual([{ name: "Gold", customers: 1 }, { name: "No tier", customers: 1 }]);
     expect(report.topCustomers[0]).toMatchObject({ name: "Priya", visits: 2, spendPaise: 150_000, tierName: "Gold" });
-    const waiter = await createUser(app, token, { name: "Arun", pin: "5555", role: "waiter" });
+    const waiter = await createTradingUser(app, token, { name: "Arun", pin: "5555", role: "waiter" });
     expect((await request("GET", "/api/reports/crm", undefined, waiter.token)).statusCode).toBe(403);
   });
 });

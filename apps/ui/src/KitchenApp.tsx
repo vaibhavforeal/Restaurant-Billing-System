@@ -13,6 +13,7 @@ export function KitchenApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [demo, setDemo] = useState(false);
+  const [sampleData, setSampleData] = useState(false);
   const [busy, setBusy] = useState(false);
   function enter(next: User) {
     if (next.role === "waiter") { session.clear(); setError("Use a kitchen, cashier or admin PIN for this display."); return; }
@@ -23,9 +24,10 @@ export function KitchenApp() {
     session.onUnauthorized = () => { if (active) setUser(null); };
     void (async () => {
       try {
-        const info = await apiFetch<{ needsSetup: boolean; demo?: boolean }>("/api/needs-setup");
+        const info = await apiFetch<{ needsSetup: boolean; demo?: boolean; sampleData?: boolean }>("/api/needs-setup");
         if (!active) return;
         setDemo(!!info.demo);
+        setSampleData(!!info.sampleData);
         if (info.needsSetup) { setError("Finish restaurant setup on the main POS, then reload this display."); return; }
         if (session.token) {
           const result = await apiFetch<{ user: User }>("/api/me");
@@ -45,12 +47,12 @@ export function KitchenApp() {
     finally { session.clear(); setUser(null); setBusy(false); }
   }
   if (loading) return <main className="kitchen-start" role="status">Connecting to the main POS…</main>;
-  if (!user) return <><DemoBanner demo={demo} login />
+  if (!user) return <><DemoBanner demo={demo} sampleData={sampleData} login />
     {error && <div className="kitchen-start"><p role="alert">{error}</p><button onClick={() => location.reload()}>Retry connection</button></div>}
     <Login kitchen onLogin={enter} />
     <footer className="kitchen-start">Main POS: {location.host}<KitchenInstall /></footer>
   </>;
-  return <div className="kitchen-app"><DemoBanner demo={demo} />
+  return <div className="kitchen-app"><DemoBanner demo={demo} sampleData={sampleData} />
     <header className="kitchen-app-header"><div><strong>MasalaPOS Kitchen</strong><small>Main POS: {location.host}</small></div>
       <div className="actions"><span>{user.name}</span><ThemeToggle /><KitchenInstall />
         <button disabled={busy} onClick={() => void logout()}>Sign out</button></div></header>
